@@ -1,40 +1,189 @@
 name: HELIOS Azure
+
 on:
   pull_request:
-    paths: ['integration/hermes-xcore-monado-azure/**']
+    paths:
+      - .github/workflows/helios-azure.yml
+      - integration/hermes-xcore-monado-azure/**
   workflow_dispatch:
     inputs:
-      deploy: { description: Deploy to Azure, type: boolean, default: false }
-permissions: { contents: read, id-token: write }
+      deploy:
+        description: Deploy the reviewed main branch to azure-dev
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  BICEP_VERSION: v0.45.6
+  SLICE_PATH: integration/hermes-xcore-monado-azure
+
 jobs:
   validate:
+    name: Validate Bicep, API, and container
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-bicep@v2
-      - run: bicep build integration/hermes-xcore-monado-azure/infra/main.bicep
-      - run: python -m py_compile integration/hermes-xcore-monado-azure/services/control-api/app.py
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Install and compile Bicep
+        run: |
+          set -euo pipefail
+          az bicep install --version "$BICEP_VERSION"
+          az bicep version
+          az bicep build --file "$SLICE_PATH/infra/main.bicep"
+
+      - name: Compile and smoke the control center
+        run: |
+          set -euo pipefail
+          python -m py_compile "$SLICE_PATH/services/control-api/app.py"
+          docker build --tag helios-monado-control:ci "$SLICE_PATH/services/control-api"
+          docker run --detach --name helios-monado-control-ci \
+            --publish 127.0.0.1:8080:8080 \
+            helios-monado-control:ci
+          trap 'docker logs helios-monado-control-ci; docker rm --force helios-monado-control-ci' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:8080/health/live >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:8080/health/ready >/dev/null
+          python - <<'PY'
+          import json
+          from urllib.request import urlopen
+
+          with urlopen("http://127.0.0.1:8080/api/status", timeout=3) as response:
+              payload = json.load(response)
+          assert payload["status"] == "standby"
+          assert payload["hermes"]["status"] == "unbound"
+          assert payload["xcore"]["status"] == "safe-standby"
+          assert payload["xcore"]["trainingEnabled"] is False
+          PY
+          test "$(curl --path-as-is --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/%2e%2e/%2e%2e/etc/passwd)" = "404"
+          test "$(docker inspect --format '{{.Config.User}}' helios-monado-control-ci)" = "10001:10001"
+
   deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    name: What-if and deploy azure-dev
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: azure-dev
+    concurrency:
+      group: helios-azure-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/login@v2
+      - name: Require exact environment configuration
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_ID AZURE_RESOURCE_GROUP AZURE_SUBSCRIPTION_ID AZURE_TENANT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required azure-dev variable: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Check out reviewed main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Deploy foundation
+          persist-credentials: false
+
+      - name: Install Bicep
+        run: az bicep install --version "$BICEP_VERSION"
+
+      - name: Sign in with the azure-dev federated identity
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure scope
+        run: |
+          set -euo pipefail
+          test "$(az account show --query id --output tsv)" = "$AZURE_SUBSCRIPTION_ID"
+          az group show --name "$AZURE_RESOURCE_GROUP" --query '{id:id,location:location}' --output json
+
+      - name: What-if and deploy foundation
         id: infra
         run: |
-          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f integration/hermes-xcore-monado-azure/infra/main.bicep -p environmentName=dev
-          echo "registry=$(az deployment group show -g '${{ vars.AZURE_RESOURCE_GROUP }}' -n main --query properties.outputs.registryName.value -o tsv)" >> "$GITHUB_OUTPUT"
-      - name: Build and push control center
+          set -euo pipefail
+          template="$SLICE_PATH/infra/main.bicep"
+          deployment="helios-dev-foundation"
+          az deployment group what-if \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment" \
+            --template-file "$template" \
+            --parameters environmentName=dev deployControl=false
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment" \
+            --template-file "$template" \
+            --parameters environmentName=dev deployControl=false \
+            --only-show-errors
+          registry=$(az deployment group show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment" \
+            --query properties.outputs.registryName.value \
+            --output tsv)
+          test -n "$registry"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+
+      - name: Build and resolve immutable image
+        id: image
         run: |
-          az acr build --registry "${{ steps.infra.outputs.registry }}" --image helios-control:${{ github.sha }} integration/hermes-xcore-monado-azure/services/control-api
-      - name: Release immutable revision
+          set -euo pipefail
+          registry="${{ steps.infra.outputs.registry }}"
+          repository=helios-control
+          az acr build \
+            --registry "$registry" \
+            --image "$repository:$GITHUB_SHA" \
+            "$SLICE_PATH/services/control-api"
+          digest=$(az acr repository show \
+            --name "$registry" \
+            --image "$repository:$GITHUB_SHA" \
+            --query digest \
+            --output tsv)
+          server=$(az acr show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$registry" \
+            --query loginServer \
+            --output tsv)
+          test -n "$digest"
+          test -n "$server"
+          echo "reference=$server/$repository@$digest" >> "$GITHUB_OUTPUT"
+
+      - name: What-if and release immutable revision
+        env:
+          IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
         run: |
-          LOGIN_SERVER=$(az acr show -g "${{ vars.AZURE_RESOURCE_GROUP }}" -n "${{ steps.infra.outputs.registry }}" --query loginServer -o tsv)
-          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f integration/hermes-xcore-monado-azure/infra/main.bicep -p environmentName=dev image="$LOGIN_SERVER/helios-control:${{ github.sha }}"
+          set -euo pipefail
+          template="$SLICE_PATH/infra/main.bicep"
+          deployment="helios-dev-release"
+          az deployment group what-if \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment" \
+            --template-file "$template" \
+            --parameters environmentName=dev deployControl=true externalIngress=false image="$IMAGE_REFERENCE"
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment" \
+            --template-file "$template" \
+            --parameters environmentName=dev deployControl=true externalIngress=false image="$IMAGE_REFERENCE" \
+            --only-show-errors

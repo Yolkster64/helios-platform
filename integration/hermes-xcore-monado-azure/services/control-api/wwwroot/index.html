@@ -1,5 +1,22 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monado Control Center</title>
-<style>body{margin:0;background:#050812;color:#d8f7ff;font:16px system-ui}main{max-width:1100px;margin:auto;padding:48px}h1{font-size:42px;color:#69e7ff}section{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{background:linear-gradient(145deg,#0d1830,#09101e);border:1px solid #1f6075;border-radius:18px;padding:20px;box-shadow:0 0 25px #00c8ff18}.ok{color:#62ffb0}.muted{color:#8fa9b8}button{background:#0bb6df;color:#031018;border:0;border-radius:10px;padding:10px 14px;font-weight:700}</style>
-<main><p class="muted">HELIOS / HERMES XCORE</p><h1>Monado Control Center</h1><section id="cards"><div class="card">Connecting to the control plane…</div></section><p><button onclick="load()">Refresh fabric</button></p></main>
-<script>async function load(){const d=await fetch('/api/status').then(r=>r.json());cards.innerHTML=[['Fabric',d.status],['Hermes',d.hermes.status+' · '+d.hermes.mode],['XCore',d.xcore.trainingEnabled?'training':'safe standby'],['Environment',d.environment]].map(x=>`<div class="card"><p class="muted">${x[0]}</p><h2 class="ok">${x[1]}</h2></div>`).join('')}load()</script></html>
-
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monado Control Center</title>
+<style>
+body{margin:0;background:#050812;color:#d8f7ff;font:16px system-ui}main{max-width:1100px;margin:auto;padding:48px}h1{font-size:42px;color:#69e7ff}section{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{background:linear-gradient(145deg,#0d1830,#09101e);border:1px solid #1f6075;border-radius:18px;padding:20px;box-shadow:0 0 25px #00c8ff18}.ok{color:#62ffb0}.muted{color:#8fa9b8}.warning{color:#ffd166}button{background:#0bb6df;color:#031018;border:0;border-radius:10px;padding:10px 14px;font-weight:700}
+</style>
+<main>
+  <p class="muted">HELIOS / HERMES XCORE</p>
+  <h1>Monado Control Center</h1>
+  <section id="cards"><div class="card">Connecting to the read-only status plane…</div></section>
+  <p><button id="refresh" type="button">Refresh fabric</button></p>
+</main>
+<script>
+const cards=document.getElementById('cards');
+function card(label,value,warning=false){const node=document.createElement('div');node.className='card';const caption=document.createElement('p');caption.className='muted';caption.textContent=label;const heading=document.createElement('h2');heading.className=warning?'warning':'ok';heading.textContent=String(value);node.append(caption,heading);return node}
+async function load(){try{const response=await fetch('/api/status',{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.json();cards.replaceChildren(card('Fabric',data.status,data.status!=='ready'),card('Hermes',`${data.hermes.status} · ${data.hermes.mode}`,data.hermes.status!=='bound'),card('XCore',data.xcore.status,data.xcore.trainingEnabled),card('Environment',data.environment))}catch(error){cards.replaceChildren(card('Status API',`unavailable · ${error.message}`,true))}}
+document.getElementById('refresh').addEventListener('click',load);
+load();
+</script>
+</html>

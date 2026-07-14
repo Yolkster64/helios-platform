@@ -102,6 +102,7 @@ tmp/
 
 ## Docker
 .dockerignore
+!**/.dockerignore
 
 ## Generated files
 .next/
