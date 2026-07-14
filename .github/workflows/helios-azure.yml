@@ -1,7 +1,7 @@
 name: HELIOS Azure
 on:
   pull_request:
-    paths: ['helios-azure-integration/**']
+    paths: ['integration/hermes-xcore-monado-azure/**']
   workflow_dispatch:
     inputs:
       deploy: { description: Deploy to Azure, type: boolean, default: false }
@@ -12,8 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-bicep@v2
-      - run: bicep build helios-azure-integration/infra/main.bicep
-      - run: python -m py_compile helios-azure-integration/services/control-api/app.py
+      - run: bicep build integration/hermes-xcore-monado-azure/infra/main.bicep
+      - run: python -m py_compile integration/hermes-xcore-monado-azure/services/control-api/app.py
   deploy:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy
     needs: validate
@@ -29,12 +29,12 @@ jobs:
       - name: Deploy foundation
         id: infra
         run: |
-          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f helios-azure-integration/infra/main.bicep -p environmentName=dev
+          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f integration/hermes-xcore-monado-azure/infra/main.bicep -p environmentName=dev
           echo "registry=$(az deployment group show -g '${{ vars.AZURE_RESOURCE_GROUP }}' -n main --query properties.outputs.registryName.value -o tsv)" >> "$GITHUB_OUTPUT"
       - name: Build and push control center
         run: |
-          az acr build --registry "${{ steps.infra.outputs.registry }}" --image helios-control:${{ github.sha }} helios-azure-integration/services/control-api
+          az acr build --registry "${{ steps.infra.outputs.registry }}" --image helios-control:${{ github.sha }} integration/hermes-xcore-monado-azure/services/control-api
       - name: Release immutable revision
         run: |
           LOGIN_SERVER=$(az acr show -g "${{ vars.AZURE_RESOURCE_GROUP }}" -n "${{ steps.infra.outputs.registry }}" --query loginServer -o tsv)
-          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f helios-azure-integration/infra/main.bicep -p environmentName=dev image="$LOGIN_SERVER/helios-control:${{ github.sha }}"
+          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f integration/hermes-xcore-monado-azure/infra/main.bicep -p environmentName=dev image="$LOGIN_SERVER/helios-control:${{ github.sha }}"
