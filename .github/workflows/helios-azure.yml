@@ -1,0 +1,40 @@
+name: HELIOS Azure
+on:
+  pull_request:
+    paths: ['helios-azure-integration/**']
+  workflow_dispatch:
+    inputs:
+      deploy: { description: Deploy to Azure, type: boolean, default: false }
+permissions: { contents: read, id-token: write }
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-bicep@v2
+      - run: bicep build helios-azure-integration/infra/main.bicep
+      - run: python -m py_compile helios-azure-integration/services/control-api/app.py
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: azure-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy foundation
+        id: infra
+        run: |
+          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f helios-azure-integration/infra/main.bicep -p environmentName=dev
+          echo "registry=$(az deployment group show -g '${{ vars.AZURE_RESOURCE_GROUP }}' -n main --query properties.outputs.registryName.value -o tsv)" >> "$GITHUB_OUTPUT"
+      - name: Build and push control center
+        run: |
+          az acr build --registry "${{ steps.infra.outputs.registry }}" --image helios-control:${{ github.sha }} helios-azure-integration/services/control-api
+      - name: Release immutable revision
+        run: |
+          LOGIN_SERVER=$(az acr show -g "${{ vars.AZURE_RESOURCE_GROUP }}" -n "${{ steps.infra.outputs.registry }}" --query loginServer -o tsv)
+          az deployment group create -g "${{ vars.AZURE_RESOURCE_GROUP }}" -f helios-azure-integration/infra/main.bicep -p environmentName=dev image="$LOGIN_SERVER/helios-control:${{ github.sha }}"
