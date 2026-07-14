@@ -1,0 +1,12 @@
+name: helios-monado-control
+metadata:
+  template: helios-monado-control@0.1.0
+infra:
+  provider: bicep
+  path: infra
+services:
+  control:
+    project: services/control-api
+    host: containerapp
+    language: python
+
