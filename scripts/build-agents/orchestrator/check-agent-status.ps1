@@ -132,7 +132,7 @@ function Show-StatusOverview {
             default { "Gray" }
         }
         
-        Write-Host "$statusIcon $agentName: " -NoNewline -ForegroundColor $color
+        Write-Host "$statusIcon ${agentName}: " -NoNewline -ForegroundColor $color
         Write-Host $agent.Status -ForegroundColor $color
         
         if ($agent.Status -eq "Failed" -and $agent.Error) {

@@ -11,13 +11,13 @@
 class VersionUpgradeManager {
     [hashtable] $RegisteredUpgrades
     [hashtable] $VersionGraph
-    [MigrationProgressTracker] $ProgressTracker
+    [object] $ProgressTracker
     [hashtable] $UpgradeHistory
 
     VersionUpgradeManager([string]$logPath) {
         $this.RegisteredUpgrades = @{}
         $this.VersionGraph = @{}
-        $this.ProgressTracker = [MigrationProgressTracker]::new($logPath)
+        $this.ProgressTracker = New-Object MigrationProgressTracker $logPath
         $this.UpgradeHistory = @{}
     }
 
@@ -214,7 +214,7 @@ class IncrementalUpgradeOrchestrator {
     [VersionUpgradeManager] $UpgradeManager
     [hashtable] $PhaseDefinitions
     [int] $CurrentPhase
-    [MigrationContext] $MigrationContext
+    [object] $MigrationContext
 
     IncrementalUpgradeOrchestrator([VersionUpgradeManager]$manager) {
         $this.UpgradeManager = $manager
@@ -259,7 +259,7 @@ class IncrementalUpgradeOrchestrator {
             }
 
             try {
-                Write-Host "Executing phase $phaseNum: $($phase.Name)" -ForegroundColor Cyan
+                Write-Host "Executing phase ${phaseNum}: $($phase.Name)" -ForegroundColor Cyan
 
                 # Process data subsets
                 $phasedData = $this.ExtractDataSubsets($fullData, $phase.DataSubsets)
@@ -313,7 +313,7 @@ class IncrementalUpgradeOrchestrator {
         return $extracted
     }
 
-    [void] SetMigrationContext([MigrationContext]$context) {
+    [void] SetMigrationContext([object]$context) {
         $this.MigrationContext = $context
     }
 }

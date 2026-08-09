@@ -101,7 +101,7 @@ function Get-ServiceStats {
                 $totalTokens += [int]$matches[1]
             }
             
-            if ($entry.Line -match "Cost:.*?\$([\d.]+)") {
+            if ($entry.Line -match 'Cost:.*?\$([\d.]+)') {
                 $totalCost += [double]$matches[1]
             }
         }

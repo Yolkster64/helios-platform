@@ -66,7 +66,7 @@ class CudaMemoryPool {
     [long] $AllocatedSize
     [long] $FreeSize
     [hashtable] $Allocations
-    [lock] $Lock
+    [object] $Lock
     
     CudaMemoryPool([long]$size) {
         $this.TotalSize = $size
@@ -223,9 +223,9 @@ class CudaRuntime {
                         $this.Devices.Add($device)
                         $deviceCount++
                         
-                        $this.Logger.LogSuccess("Device $id: $name (CC $cc, $($totalMem / 1GB)GB)")
+                        $this.Logger.LogSuccess("Device ${id}: $name (CC $cc, $($totalMem / 1GB)GB)")
                     } else {
-                        $this.Logger.LogWarning("Device $id: Compute capability $cc not supported (requires 5.0+)")
+                        $this.Logger.LogWarning("Device ${id}: Compute capability $cc not supported (requires 5.0+)")
                     }
                 }
             }
@@ -255,7 +255,7 @@ class CudaRuntime {
             }
             
             $this.ActiveDeviceId = $deviceId
-            $this.Logger.LogInfo("Selected device $deviceId: $($this.Devices[$deviceId].Name)")
+            $this.Logger.LogInfo("Selected device ${deviceId}: $($this.Devices[$deviceId].Name)")
             return $true
         }
         

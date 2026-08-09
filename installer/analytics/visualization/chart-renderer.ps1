@@ -129,15 +129,15 @@ OVERALL: ✓ SLA COMPLIANT (+0.02% margin)
 Cost Breakdown Analysis (30-day)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Total Cost: \$11,280.73 (Monthly)
+Total Cost: `$11,280.73 (Monthly)
 
-AI Models: \$5,879.50 (52.1%)
-  GPT-4            $3.75  ████████████
+AI Models: `$5,879.50 (52.1%)
+  GPT-4            `$3.75  ████████████
   Claude-3-Opus    1.88   ██████
   Gemini-Pro       0.11   ░
   Llama-2-Large    0.88   ███
 
-Operations: \$5,401.23 (47.9%)
+Operations: `$5,401.23 (47.9%)
   Storage        2,875    ████████████████████
   Processing       555    ███
   Transfer       230      █
@@ -147,8 +147,8 @@ Operations: \$5,401.23 (47.9%)
 Trend: -8.9% (Cost optimization initiatives working)
 
 Projection: 
-  Monthly Average: \$376.03
-  Annual Cost: \$135,368.80
+  Monthly Average: `$376.03
+  Annual Cost: `$135,368.80
 "@
         
         $costPath = Join-Path $this.OutputPath "cost-breakdown.txt"

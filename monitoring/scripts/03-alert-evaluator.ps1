@@ -217,7 +217,7 @@ function Send-TeamsNotification {
         $TeamsPayload = @{
             "@type"      = "MessageCard"
             "@context"   = "https://schema.org/extensions"
-            "summary"    = "$AlertSeverity: $AlertName"
+            "summary"    = "${AlertSeverity}: $AlertName"
             "themeColor" = $SeverityColor
             "sections"   = @(
                 @{
