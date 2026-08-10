@@ -7,10 +7,10 @@ score it, and record an advisory learning outcome.
 The absorption pipeline's engine (docs/architecture/ABSORPTION_PIPELINE.md).
 Fetches refs/pull/<N>/head from the upstream repo, trial-merges it onto the
 current branch in a DISPOSABLE git worktree, runs the same gate CI runs
-(solution build, .NET tests, Python tests), and writes a scored report under
-.helios/absorption/. Nothing ever merges into the real working tree: -Apply only
-keeps the scratch worktree around (merge staged, conflicts included) so a human
-can inspect, cherry-pick, and commit deliberately.
+(solution build, Bicep compile, .NET tests, Python tests), and writes a scored
+report under .helios/absorption/. Nothing ever merges into the real working
+tree: -Apply only keeps the scratch worktree around (merge staged, conflicts
+included) so a human can inspect, cherry-pick, and commit deliberately.
 
 If helios-ai-api is reachable (HELIOS_API_URL, default http://localhost:5170),
 the verdict is also recorded as an ADVISORY outcome via POST /v1/learning with
@@ -82,12 +82,30 @@ try {
     $steps.Add([ordered]@{ step = 'trial-merge'; ok = $mergeClean; conflicts = $conflicts; diffstat = "$stat".Trim() })
 
     if ($mergeClean) {
-        # --- the gate (same commands CI runs) --------------------------------
+        # --- the gate (same categories CI runs) -----------------------------
         $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)/root/.dotnet"
+
         $steps.Add((Invoke-Step 'dotnet-build' {
             $out = dotnet build (Join-Path $worktree 'HELIOS.sln') -c Release --nologo 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 5 | Out-String) }
         }))
+
+        # Infrastructure candidates must never receive a full-green absorption
+        # verdict unless the merged Bicep compiles too. Build into the scratch
+        # report directory so this validation does not alter the candidate tree.
+        $bicepFile = Join-Path $worktree 'infra/main.bicep'
+        if (Test-Path $bicepFile) {
+            $steps.Add((Invoke-Step 'bicep-build' {
+                if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+                    throw 'Azure CLI is required to compile infra/main.bicep.'
+                }
+                $bicepOut = Join-Path $reportDir "pr-$PrNumber-main.arm.json"
+                $out = az bicep build --file $bicepFile --outfile $bicepOut 2>&1
+                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+                Remove-Item -LiteralPath $bicepOut -Force -ErrorAction SilentlyContinue
+            }))
+        }
+
         if (-not $SkipTests) {
             $steps.Add((Invoke-Step 'dotnet-test' {
                 $out = dotnet test (Join-Path $worktree 'tests/HELIOS.AIHub.Tests') -c Release --nologo -v q 2>&1
