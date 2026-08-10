@@ -102,6 +102,28 @@ across a `compare` fan-out's embeddings, and UTF-8-safe token/prefix estimation.
 builds independently of the .NET solution and nothing calls into it yet — wiring `compare`
 to use it for response dedup is PR3 scope. See `src/ai/HELIOS.AIHub.Native/README.md`.
 
+## REST orchestration API
+
+`src/ai/HELIOS.AIHub.Api` (`helios-ai-api`) exposes the same `AIHubService` singleton the
+CLI and MCP server use as a minimal-API HTTP surface, so anything that speaks HTTP — a
+WinUI 3 shell, Python agents, Cloud Shell scripts, other services — orchestrates through
+one door with shared circuit-breaker and learning state:
+
+| Endpoint | Verb | Purpose |
+|---|---|---|
+| `/healthz` | GET | Liveness (no hub touch) |
+| `/v1/status` | GET | Provider readiness, no network calls |
+| `/v1/routing` | GET | Default chain + task-routing table |
+| `/v1/learning?taskType=&limit=` | GET | Recent routing outcomes, newest first |
+| `/v1/ask` | POST | One provider (or default chain): `{prompt, provider?, model?, system?}` |
+| `/v1/route` | POST | Task-type chain with learned reorder + fallback: `{taskType, prompt, system?}` |
+| `/v1/tandem` | POST | Whole chain concurrently, learned winner reported |
+| `/v1/compare` | POST | Parallel fan-out with duplicate flagging: `{prompt, providers?, system?}` |
+
+Provider failures are payload (`200` + `success:false` + `error`), not transport errors;
+`4xx` is reserved for malformed requests. Config resolution matches the CLI:
+`--aihub-config`, then `AIHUB_CONFIG`, then walking up to `config/aihub.json`.
+
 ## Testing
 
 41 unit tests, no network: fallback switching regression, breaker transitions, routing

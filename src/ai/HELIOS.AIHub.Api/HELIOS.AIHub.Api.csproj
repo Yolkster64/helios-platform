@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>helios-ai-api</AssemblyName>
+    <RootNamespace>HELIOS.AIHub.Api</RootNamespace>
+    <Description>REST orchestration surface over the AIHub: every provider, route, tandem, compare, and learning read-out as HTTP endpoints.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../HELIOS.AIHub/HELIOS.AIHub.csproj" />
+  </ItemGroup>
+
+</Project>

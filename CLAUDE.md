@@ -32,6 +32,10 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 
 - `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `compare` /
   `status` / `routing`. Providers and the task-routing table live in `config/aihub.json`.
+- `helios-ai-api` (src/ai/HELIOS.AIHub.Api): the same hub as REST — `GET /healthz`,
+  `/v1/status`, `/v1/routing`, `/v1/learning?taskType=`, `POST /v1/ask`, `/v1/route`,
+  `/v1/tandem`, `/v1/compare`. Provider failures return 200 with `success=false`;
+  4xx means the request itself was malformed.
 - MCP server (src/mcp/HELIOS.Mcp, registered in `.mcp.json`): `helios_ai_ask`,
   `helios_ai_route`, `helios_ai_compare`, `helios_ai_status`, `helios_providers_list`,
   `helios_task_routing_get`, `helios_infra_validate`.
