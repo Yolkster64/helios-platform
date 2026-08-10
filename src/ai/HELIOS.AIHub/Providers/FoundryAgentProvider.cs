@@ -43,7 +43,7 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
     protected override async Task<ChatResult> ChatCoreAsync(ChatRequest request, CancellationToken cancellationToken)
     {
         var client = _client!.Value;
-        var model = request.Model ?? DefaultModel ?? "gpt-4o-mini";
+        var model = request.Model ?? DefaultModel ?? "gpt-5-mini";
         var stopwatch = Stopwatch.StartNew();
 
         var agent = await GetOrCreateAgentAsync(client, model, request.System, cancellationToken).ConfigureAwait(false);

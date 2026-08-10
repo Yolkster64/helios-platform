@@ -44,14 +44,21 @@ public sealed class AIHubService
         }
     }
 
-    /// <summary>Loads config/aihub.json (walking up from the current directory) and builds the hub.</summary>
+    /// <summary>Loads the hub config and builds the hub. Resolution order: explicit path,
+    /// then the AIHUB_CONFIG environment variable (how .helios/azure.env selects the
+    /// cloud-only profile), then config/aihub.json walking up from the current directory.</summary>
     public static AIHubService CreateFromConfig(string? configPath = null)
+        => new(AIHubOptions.Load(ResolveConfigPath(configPath)));
+
+    /// <summary>Explicit --config beats AIHUB_CONFIG beats walking up the directory tree.</summary>
+    public static string ResolveConfigPath(string? configPath = null)
     {
-        var path = configPath
-                   ?? AIHubOptions.FindConfigFile()
-                   ?? throw new FileNotFoundException(
-                       "config/aihub.json not found in this directory or any parent. Run from the repo, or pass --config.");
-        return new AIHubService(AIHubOptions.Load(path));
+        var fromEnv = Environment.GetEnvironmentVariable("AIHUB_CONFIG");
+        return configPath
+               ?? (string.IsNullOrWhiteSpace(fromEnv) ? null : fromEnv)
+               ?? AIHubOptions.FindConfigFile()
+               ?? throw new FileNotFoundException(
+                   "config/aihub.json not found in this directory or any parent. Run from the repo, set AIHUB_CONFIG, or pass --config.");
     }
 
     public IRoutingTableView RoutingTable => new RoutingTableView(_options.Routing);

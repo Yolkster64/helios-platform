@@ -15,7 +15,7 @@
     },
     "azure-openai": {
       "type": "azure-openai",
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "endpointEnv": "AZURE_OPENAI_ENDPOINT",
       "apiKeyEnv": "AZURE_OPENAI_API_KEY"
     },
@@ -32,7 +32,7 @@
     },
     "azure-foundry": {
       "type": "azure-foundry-agent",
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "endpointEnv": "AZURE_FOUNDRY_PROJECT_ENDPOINT"
     }
   },

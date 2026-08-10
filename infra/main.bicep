@@ -58,15 +58,17 @@ param modelLocation string = ''
 @description('Set of tags to apply to all resources.')
 param tags object = {}
 
-// Primary model deployment — quintet preserved verbatim from the legacy template.
+// Primary model deployment — param names preserved verbatim from the legacy template.
+// Defaults must point at a GA model: Azure rejects new deployments of models in
+// 'Deprecating' state (which is what killed gpt-4o-mini/2024-07-18 here).
 @description('Model name for the primary deployment.')
-param modelName string = 'gpt-4o-mini'
+param modelName string = 'gpt-5-mini'
 
 @description('Model format for the primary deployment.')
 param modelFormat string = 'OpenAI'
 
 @description('Model version for the primary deployment.')
-param modelVersion string = '2024-07-18'
+param modelVersion string = '2025-08-07'
 
 @description('SKU name for the primary model deployment.')
 param modelSkuName string = 'GlobalStandard'
@@ -77,7 +79,7 @@ param modelCapacity int = 30
 @description('Additional model deployments beyond the primary one (multi-LLM surface).')
 param additionalModelDeployments modelDeployment[] = [
   {
-    name: 'text-embedding-3-large'
+    name: 'text-embedding-3-small'
     version: '1'
     capacity: 120
   }

@@ -63,11 +63,11 @@
     },
     {
       "provider": "azure-openai",
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "class": "fast",
-      "contextTokens": 128000,
-      "inputPerMillionUsd": 0.15,
-      "outputPerMillionUsd": 0.6,
+      "contextTokens": 400000,
+      "inputPerMillionUsd": 0.25,
+      "outputPerMillionUsd": 2.0,
       "relativeSpeed": "fast",
       "strengths": ["enterprise_data", "general_query"]
     },

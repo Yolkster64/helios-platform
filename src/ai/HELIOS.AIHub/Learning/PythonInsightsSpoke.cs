@@ -113,6 +113,10 @@ public sealed class PythonInsightsSpoke
         {
             return null; // spoke timeout is advisory-data loss, not an orchestration failure
         }
+        catch (IOException)
+        {
+            return null; // broken pipe: the spoke process died before/while reading the request
+        }
         catch (JsonException)
         {
             return null;

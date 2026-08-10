@@ -52,7 +52,10 @@ the fix.
 using 'main.bicep'                  // main.dev.bicepparam — enables the type checking
 param env = 'dev'
 param deployments = [
-  { name: 'gpt-4o-mini', format: 'OpenAI', version: '2024-07-18', capacity: 30 }
+  // Pick a GA model: Azure rejects new deployments of 'Deprecating' models,
+  // and preflight fails on models whose regional quota is 0 — check with
+  // `az cognitiveservices model list` / `usage list` first.
+  { name: 'gpt-5-mini', format: 'OpenAI', version: '2025-08-07', capacity: 30 }
 ]
 param adminPassword = getSecret('<subId>', '<rg>', '<kvName>', 'admin-password')
 ```
