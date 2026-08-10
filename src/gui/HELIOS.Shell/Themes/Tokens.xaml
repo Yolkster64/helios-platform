@@ -1,0 +1,58 @@
+<!--
+    Design tokens (GUI_THEME_ANALYSIS.md "Theme system"):
+
+    - Semantic brushes only; pages reference them exclusively via {ThemeResource} so they
+      re-resolve on theme change. No XAML outside this file names a literal color.
+    - "Default" (WinUI's dark dictionary) carries the Xenoblade-derived identity mined
+      from the orphaned MonadoBlade.GUI: deep blues + the #00D9FF cyan accent from the
+      docs/WinUI3-Design AIHubPage mockup.
+    - Light is a faithful counterpart; HighContrast maps every token to a system color so
+      contrast themes stay legible (winui3-shell skill: always provide the HighContrast
+      entry).
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- Default == Dark in WinUI. The Xenoblade identity lives here. -->
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#00D9FF" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#0D1117" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#16202D" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#26364A" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E8F1F8" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8FA3B8" />
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#3DDC97" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#FFB454" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#5C6B7A" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#0087A8" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#F4F7FA" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#D5DEE8" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#14212E" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#54687C" />
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#1B8A5A" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#B25E00" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#7A8894" />
+        </ResourceDictionary>
+
+        <!-- Every token maps to a system color; no literals, so user contrast themes win. -->
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>
