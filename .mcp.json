@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "helios": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
+      "env": {}
+    }
+  }
+}
