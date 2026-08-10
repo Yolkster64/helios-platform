@@ -47,11 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      # Plain npm install instead of the Docker-based action — same rationale
+      # as ci-validation.yml: docker.io pulls flake on runners and the action's
+      # container build fails outside continue-on-error's reach.
       - name: Run Markdown Linter
-        uses: nosborn/github-action-markdown-cli@v3.3.0
-        with:
-          files: .
-          config_file: .markdownlint.json
+        run: |
+          npm install --global --no-fund --no-audit markdownlint-cli@0.33.0
+          markdownlint --config .markdownlint.json .
         continue-on-error: true
 
   json-validate:
