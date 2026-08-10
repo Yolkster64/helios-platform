@@ -10,6 +10,9 @@ on:
       - 'phases/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   update-indexes:
     runs-on: ubuntu-latest
@@ -18,28 +21,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-      
       - name: Generate Documentation Indexes
         run: |
           Write-Host "Generating documentation indexes..." -ForegroundColor Cyan
           
           # Create main index
           $index = @"
-# Documentation Index
+          # Documentation Index
 
-## Getting Started
-- [README.md](../README.md)
-- [00-KICKOFF-START-HERE.md](../00-KICKOFF-START-HERE.md)
-- [GETTING_STARTED.md](../GETTING_STARTED.md)
+          ## Getting Started
+          - [README.md](../README.md)
+          - [00-KICKOFF-START-HERE.md](../00-KICKOFF-START-HERE.md)
+          - [GETTING_STARTED.md](../GETTING_STARTED.md)
 
-## Architecture
-- [MODULAR_ARCHITECTURE.md](../MODULAR_ARCHITECTURE.md)
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
+          ## Architecture
+          - [MODULAR_ARCHITECTURE.md](../MODULAR_ARCHITECTURE.md)
+          - [ARCHITECTURE.md](./ARCHITECTURE.md)
 
-## Phases
-"@
+          ## Phases
+          "@
           
           Get-ChildItem -Path "phases" -Directory | ForEach-Object {
             $index += "`n- [$($_.Name)](../$($_.FullName.Replace('\', '/')))"
@@ -81,9 +81,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-      
       - name: Generate Wiki Pages
         run: |
           Write-Host "Generating wiki documentation..." -ForegroundColor Cyan
@@ -95,11 +92,11 @@ jobs:
           
           # Create wiki index
           $wikiIndex = @"
-# HELIOS Platform Wiki
+          # HELIOS Platform Wiki
 
-## Phases
+          ## Phases
 
-"@
+          "@
           
           $phases | ForEach-Object {
             $phaseNum = $_.Name.Split('-')[0]
@@ -130,10 +127,12 @@ jobs:
           echo "Updating status badges..."
           echo "✅ Documentation Up to Date"
 
-jobs:
   sync-to-wiki:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     name: Sync Documentation to GitHub Wiki
+    permissions:
+      contents: write
     
     steps:
       - uses: actions/checkout@v4
@@ -146,8 +145,7 @@ jobs:
           git config --global user.email "actions@github.com"
       
       - name: Checkout Wiki
-        run: |
-          git clone https://github.com/M0nado/helios-platform.wiki.git wiki
+        run: git clone "https://github.com/${GITHUB_REPOSITORY}.wiki.git" wiki
       
       - name: Copy Documentation to Wiki
         run: |
@@ -159,7 +157,9 @@ jobs:
         run: |
           cd wiki
           git add -A
-          git commit -m "Auto-sync documentation from main repo" || true
-          git push origin master || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if git diff --cached --quiet; then
+            echo "No wiki changes to publish."
+            exit 0
+          fi
+          git commit -m "Auto-sync documentation from main repo"
+          git push origin HEAD:master
