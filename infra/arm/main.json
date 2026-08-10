@@ -1,0 +1,752 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "3705911590441554423"
+    }
+  },
+  "definitions": {
+    "modelDeployment": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "metadata": {
+            "description": "Deployment name (also the default model name)."
+          }
+        },
+        "modelName": {
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "description": "Model name if it differs from the deployment name."
+          }
+        },
+        "format": {
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "description": "Model format. Defaults to OpenAI."
+          }
+        },
+        "version": {
+          "type": "string",
+          "metadata": {
+            "description": "Model version."
+          }
+        },
+        "skuName": {
+          "type": "string",
+          "nullable": true,
+          "metadata": {
+            "description": "Deployment SKU. Defaults to GlobalStandard."
+          }
+        },
+        "capacity": {
+          "type": "int",
+          "nullable": true,
+          "metadata": {
+            "description": "Deployment capacity in thousands of tokens-per-minute. Defaults to 30."
+          }
+        }
+      },
+      "metadata": {
+        "description": "A single model deployment on the Foundry account."
+      }
+    }
+  },
+  "parameters": {
+    "aiServicesName": {
+      "type": "string",
+      "defaultValue": "helios-ai",
+      "minLength": 2,
+      "maxLength": 12,
+      "metadata": {
+        "description": "Base name for the Azure AI Services (Foundry) account; a unique suffix is appended."
+      }
+    },
+    "aiProjectName": {
+      "type": "string",
+      "defaultValue": "helios-project",
+      "metadata": {
+        "description": "Name for the Foundry project."
+      }
+    },
+    "aiProjectFriendlyName": {
+      "type": "string",
+      "defaultValue": "HELIOS AI Project",
+      "metadata": {
+        "description": "Friendly name for the Foundry project, shown in the Foundry portal."
+      }
+    },
+    "aiProjectDescription": {
+      "type": "string",
+      "defaultValue": "Multi-LLM hub project for the HELIOS platform.",
+      "metadata": {
+        "description": "Description of the Foundry project, shown in the Foundry portal."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "modelLocation": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Region for the Foundry account when model availability requires a different region. Empty string means use location."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Set of tags to apply to all resources."
+      }
+    },
+    "modelName": {
+      "type": "string",
+      "defaultValue": "gpt-5-mini",
+      "metadata": {
+        "description": "Model name for the primary deployment."
+      }
+    },
+    "modelFormat": {
+      "type": "string",
+      "defaultValue": "OpenAI",
+      "metadata": {
+        "description": "Model format for the primary deployment."
+      }
+    },
+    "modelVersion": {
+      "type": "string",
+      "defaultValue": "2025-08-07",
+      "metadata": {
+        "description": "Model version for the primary deployment."
+      }
+    },
+    "modelSkuName": {
+      "type": "string",
+      "defaultValue": "GlobalStandard",
+      "metadata": {
+        "description": "SKU name for the primary model deployment."
+      }
+    },
+    "modelCapacity": {
+      "type": "int",
+      "defaultValue": 30,
+      "metadata": {
+        "description": "Capacity for the primary model deployment, in thousands of tokens-per-minute."
+      }
+    },
+    "additionalModelDeployments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/modelDeployment"
+      },
+      "defaultValue": [
+        {
+          "name": "text-embedding-3-small",
+          "version": "1",
+          "capacity": 120
+        }
+      ],
+      "metadata": {
+        "description": "Additional model deployments beyond the primary one (multi-LLM surface)."
+      }
+    },
+    "aiServiceAccountResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Full ARM resource ID of an existing Foundry/AI Services account. Empty string means create a new account (and project) here; when set, no account, deployments, or project are created — see infra/README.md."
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Key Vault name for provider API keys. Empty string means a name is generated."
+      }
+    },
+    "anthropicApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Anthropic API key to store in Key Vault. Empty string means the secret is not created."
+      }
+    },
+    "openaiApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OpenAI API key to store in Key Vault. Empty string means the secret is not created."
+      }
+    },
+    "githubModelsToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub token for GitHub Models to store in Key Vault. Empty string means the secret is not created."
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created."
+      }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[substring(uniqueString(resourceGroup().id), 0, 4)]",
+    "accountName": "[toLower(format('{0}{1}', parameters('aiServicesName'), variables('uniqueSuffix')))]",
+    "projectName": "[toLower(parameters('aiProjectName'))]",
+    "effectiveModelLocation": "[if(empty(parameters('modelLocation')), parameters('location'), parameters('modelLocation'))]",
+    "effectiveKeyVaultName": "[if(empty(parameters('keyVaultName')), format('kv-helios-{0}', variables('uniqueSuffix')), parameters('keyVaultName'))]",
+    "aiServiceExists": "[not(empty(parameters('aiServiceAccountResourceId')))]",
+    "allModelDeployments": "[concat(createArray(createObject('name', parameters('modelName'), 'modelName', parameters('modelName'), 'format', parameters('modelFormat'), 'version', parameters('modelVersion'), 'skuName', parameters('modelSkuName'), 'capacity', parameters('modelCapacity'))), parameters('additionalModelDeployments'))]"
+  },
+  "resources": {
+    "foundryAccount": {
+      "condition": "[not(variables('aiServiceExists'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('foundry-account-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "accountName": {
+            "value": "[variables('accountName')]"
+          },
+          "location": {
+            "value": "[variables('effectiveModelLocation')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "modelDeployments": {
+            "value": "[variables('allModelDeployments')]"
+          },
+          "principalId": {
+            "value": "[parameters('principalId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "255219783070478043"
+            }
+          },
+          "definitions": {
+            "modelDeployment": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "modelName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "format": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "version": {
+                  "type": "string"
+                },
+                "skuName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "capacity": {
+                  "type": "int",
+                  "nullable": true
+                }
+              },
+              "metadata": {
+                "description": "A single model deployment on the Foundry account."
+              }
+            }
+          },
+          "parameters": {
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Globally unique Foundry account name (also used as the custom subdomain)."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the account."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags applied to the account."
+              }
+            },
+            "modelDeployments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/modelDeployment"
+              },
+              "defaultValue": [],
+              "metadata": {
+                "description": "Model deployments to create on the account."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Object ID of the principal granted Azure AI User on the account. Empty string skips the role assignment."
+              }
+            }
+          },
+          "variables": {
+            "azureAiUserRoleId": "53ca6127-db72-4b80-b1b0-d745d6d5456d"
+          },
+          "resources": {
+            "account": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2025-06-01",
+              "name": "[parameters('accountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "AIServices",
+              "sku": {
+                "name": "S0"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "allowProjectManagement": true,
+                "customSubDomainName": "[parameters('accountName')]",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            "deployments": {
+              "copy": {
+                "name": "deployments",
+                "count": "[length(parameters('modelDeployments'))]",
+                "mode": "serial",
+                "batchSize": 1
+              },
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}', parameters('accountName'), parameters('modelDeployments')[copyIndex()].name)]",
+              "sku": {
+                "name": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'skuName'), 'GlobalStandard')]",
+                "capacity": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'capacity'), 30)]"
+              },
+              "properties": {
+                "model": {
+                  "format": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'format'), 'OpenAI')]",
+                  "name": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'modelName'), parameters('modelDeployments')[copyIndex()].name)]",
+                  "version": "[parameters('modelDeployments')[copyIndex()].version]"
+                }
+              },
+              "dependsOn": [
+                "account"
+              ]
+            },
+            "aiUserRoleAssignment": {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), parameters('principalId'), variables('azureAiUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiUserRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "account"
+              ]
+            }
+          },
+          "outputs": {
+            "accountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]"
+            },
+            "accountName": {
+              "type": "string",
+              "value": "[parameters('accountName')]"
+            },
+            "endpoint": {
+              "type": "string",
+              "value": "[reference('account').endpoint]"
+            },
+            "openAiEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.openai.azure.com/', parameters('accountName'))]"
+            },
+            "accountPrincipalId": {
+              "type": "string",
+              "value": "[reference('account', '2025-06-01', 'full').identity.principalId]"
+            },
+            "deploymentNames": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('modelDeployments'))]",
+                "input": "[parameters('modelDeployments')[copyIndex()].name]"
+              }
+            }
+          }
+        }
+      }
+    },
+    "foundryProject": {
+      "condition": "[not(variables('aiServiceExists'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('foundry-project-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "accountName": "[if(variables('aiServiceExists'), createObject('value', ''), createObject('value', reference('foundryAccount').outputs.accountName.value))]",
+          "projectName": {
+            "value": "[variables('projectName')]"
+          },
+          "projectFriendlyName": {
+            "value": "[parameters('aiProjectFriendlyName')]"
+          },
+          "projectDescription": {
+            "value": "[parameters('aiProjectDescription')]"
+          },
+          "location": {
+            "value": "[variables('effectiveModelLocation')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "8697996503144452484"
+            }
+          },
+          "parameters": {
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the parent Foundry account."
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name for the Foundry project."
+              }
+            },
+            "projectFriendlyName": {
+              "type": "string",
+              "metadata": {
+                "description": "Friendly display name for the project."
+              }
+            },
+            "projectDescription": {
+              "type": "string",
+              "metadata": {
+                "description": "Description shown in the Foundry portal."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the project (must match the account region)."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags applied to the project."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}', parameters('accountName'), parameters('projectName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "displayName": "[parameters('projectFriendlyName')]",
+                "description": "[parameters('projectDescription')]"
+              }
+            }
+          ],
+          "outputs": {
+            "projectId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName'))]"
+            },
+            "projectName": {
+              "type": "string",
+              "value": "[parameters('projectName')]"
+            },
+            "projectPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), '2025-06-01', 'full').identity.principalId]"
+            },
+            "projectEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.services.ai.azure.com/api/projects/{1}', parameters('accountName'), parameters('projectName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "foundryAccount"
+      ]
+    },
+    "keyVault": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('keyvault-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('effectiveKeyVaultName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "principalId": {
+            "value": "[parameters('principalId')]"
+          },
+          "anthropicApiKey": {
+            "value": "[parameters('anthropicApiKey')]"
+          },
+          "openaiApiKey": {
+            "value": "[parameters('openaiApiKey')]"
+          },
+          "githubModelsToken": {
+            "value": "[parameters('githubModelsToken')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "4554442128740985687"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the vault."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags applied to the vault."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Object ID of the principal granted Key Vault Secrets User. Empty string skips the role assignment."
+              }
+            },
+            "anthropicApiKey": {
+              "type": "securestring",
+              "defaultValue": ""
+            },
+            "openaiApiKey": {
+              "type": "securestring",
+              "defaultValue": ""
+            },
+            "githubModelsToken": {
+              "type": "securestring",
+              "defaultValue": ""
+            }
+          },
+          "variables": {
+            "keyVaultSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('keyVaultName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "tenantId": "[subscription().tenantId]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('anthropicApiKey')))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'anthropic-api-key')]",
+              "properties": {
+                "value": "[parameters('anthropicApiKey')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('openaiApiKey')))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'openai-api-key')]",
+              "properties": {
+                "value": "[parameters('openaiApiKey')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('githubModelsToken')))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'github-models-token')]",
+              "properties": {
+                "value": "[parameters('githubModelsToken')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), variables('keyVaultSecretsUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vaultUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2024-11-01').vaultUri]"
+            },
+            "vaultName": {
+              "type": "string",
+              "value": "[parameters('keyVaultName')]"
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "aiServicesEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry account endpoint (empty when an existing account was supplied)."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryAccount').outputs.endpoint.value)]"
+    },
+    "openAiEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI-compatible endpoint on the Foundry account (empty when an existing account was supplied)."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryAccount').outputs.openAiEndpoint.value)]"
+    },
+    "projectEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry project endpoint — the modern replacement for the legacy \"project connection string\"."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryProject').outputs.projectEndpoint.value)]"
+    },
+    "projectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry project resource ID (empty when an existing account was supplied)."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryProject').outputs.projectId.value)]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault URI for provider API keys."
+      },
+      "value": "[reference('keyVault').outputs.vaultUri.value]"
+    },
+    "modelDeploymentNames": {
+      "type": "array",
+      "metadata": {
+        "description": "Names of all model deployments created on the account."
+      },
+      "value": "[if(variables('aiServiceExists'), createArray(), reference('foundryAccount').outputs.deploymentNames.value)]"
+    }
+  }
+}

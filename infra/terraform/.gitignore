@@ -1,0 +1,11 @@
+# Terraform working directory (provider binaries) — never commit.
+# .terraform.lock.hcl IS committed (pins provider versions for CI validate).
+.terraform/
+
+# Local state and plans can contain secret values (key_vault_secret values
+# land in state) — never commit.
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
