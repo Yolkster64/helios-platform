@@ -22,6 +22,7 @@ public sealed class AIHubService
     private readonly FallbackChain _fallback = new();
     private readonly AIHubOptions _options;
     private readonly ILearningStore _learning;
+    private readonly NeuralRoutingLearner _neuralLearner = new();
     private readonly ModelCatalog? _catalog;
 
     public AIHubService(
@@ -148,9 +149,11 @@ public sealed class AIHubService
     }
 
     /// <summary>
-    /// Reorder the configured chain from recorded outcomes, via the F# routing policy.
-    /// Any failure here falls back to the configured order — learning must never be able
-    /// to break routing, only improve it.
+    /// Reorder the configured chain from recorded outcomes. The neural learner (native
+    /// MLP + F# fusion) goes first because it can express signal interactions the linear
+    /// policy averages away; whenever it abstains — no native library, thin history —
+    /// the F# linear policy answers instead. Any failure here falls back to the
+    /// configured order — learning must never be able to break routing, only improve it.
     /// </summary>
     private async Task<List<string>> ApplyLearningAsync(
         string? taskType, List<string> configuredChain, CancellationToken cancellationToken)
@@ -170,14 +173,15 @@ public sealed class AIHubService
                 return configuredChain;
             }
 
-            var reordered = RoutingPolicyInterop.ReorderChain(
-                taskType,
-                configuredChain.ToArray(),
-                history.Select(h => h.Provider).ToArray(),
-                history.Select(h => h.Success).ToArray(),
-                history.Select(h => h.LatencyMs).ToArray(),
-                history.Select(h => h.CostUsd).ToArray(),
-                history.Select(h => h.Quality ?? double.NaN).ToArray());
+            var reordered = _neuralLearner.Reorder(taskType, configuredChain, history)
+                ?? RoutingPolicyInterop.ReorderChain(
+                    taskType,
+                    configuredChain.ToArray(),
+                    history.Select(h => h.Provider).ToArray(),
+                    history.Select(h => h.Success).ToArray(),
+                    history.Select(h => h.LatencyMs).ToArray(),
+                    history.Select(h => h.CostUsd).ToArray(),
+                    history.Select(h => h.Quality ?? double.NaN).ToArray());
 
             return reordered.Where(_byProvider.ContainsKey).ToList() is { Count: > 0 } valid
                 ? valid

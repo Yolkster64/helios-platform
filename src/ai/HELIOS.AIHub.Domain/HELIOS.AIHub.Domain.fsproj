@@ -13,6 +13,7 @@
     <Compile Include="ContextBudget.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="RoutingPolicy.fs" />
+    <Compile Include="LearnerFusion.fs" />
   </ItemGroup>
 
 </Project>
