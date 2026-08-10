@@ -71,9 +71,42 @@ class (metrics, readiness, error conversion) is inherited and unchanged.
   half-open probe).
 - **Fleet-level parallelism** (many agents, not many calls): HERMES_FLEET_AND_XCORE.md.
 
+## Learning loop (opt-in)
+
+`config/aihub.json`'s `learning` block turns routing into a feedback loop instead of a
+static table. When `enabled: true`, every routed call's outcome (provider, success,
+latency, cost, optional quality) is appended via `ILearningStore` — `local` (JSONL under
+`.helios/learning/`), `azure` (Table Storage, partitioned by task type), or `hybrid`
+(both; local is authoritative, Azure syncs best-effort and never blocks a call).
+
+Before each routed call, `AIHubService.RouteAsync` asks the **F# `RoutingPolicy`**
+(`src/ai/HELIOS.AIHub.Domain`) to reorder the configured chain from recent history.
+Providers with fewer than 5 recorded attempts keep their configured position — thin
+evidence must not demote a good provider on one unlucky run — so day one behaves exactly
+like the static table, and the chain only starts moving once there's something to learn
+from. `RoutingPolicy.explain` is available for surfacing *why* a chain was reordered.
+
+F# domain logic is exposed to C# through a thin interop surface
+(`RoutingPolicyInterop`, `PricingInterop`) that takes only primitives and arrays — no
+F#-only types cross the boundary, per the fsharp-functional skill's interop rule. The
+same module's `Pricing` functions (with units of measure — see PR3 for wiring
+`CostUsd` from real provider usage instead of the current placeholder `0`) turn raw token
+counts into dollar estimates without the token/million unit-mixing bug that plagues
+hand-rolled cost math.
+
+## Native spoke (optional, not yet wired)
+
+`src/ai/HELIOS.AIHub.Native` is a C++ library (CMake, flat C ABI, `LibraryImport`
+P/Invoke) for the numeric hot paths that belong outside managed code: cosine similarity
+across a `compare` fan-out's embeddings, and UTF-8-safe token/prefix estimation. It
+builds independently of the .NET solution and nothing calls into it yet — wiring `compare`
+to use it for response dedup is PR3 scope. See `src/ai/HELIOS.AIHub.Native/README.md`.
+
 ## Testing
 
-31 unit tests, no network: fallback switching regression, breaker transitions, routing
+41 unit tests, no network: fallback switching regression, breaker transitions, routing
 strategy, real-config binding (drift fails CI), CLI process fixtures, fake `IChatClient`
-mapping tests. Live-API calls are deliberately untested in CI; `helios-ai status` +
+mapping tests, the local learning store's round-trip/filter/limit/torn-line behavior, and
+the F# routing policy's promotion/thin-evidence/empty-history cases through its C#
+interop surface. Live-API calls are deliberately untested in CI; `helios-ai status` +
 smoke runs cover wiring.

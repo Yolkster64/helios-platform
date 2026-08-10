@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>HELIOS.AIHub</RootNamespace>
+    <!-- Required by LibraryImport's source-generated marshalling stubs (SYSLIB1062).
+         Scoped to this project; no hand-written unsafe blocks live here. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Multi-LLM provider hub for the HELIOS platform: OpenAI, Anthropic, Azure OpenAI/Foundry, GitHub Models, Ollama, and CLI agents behind the core IAgent/IRouter seams.</Description>
   </PropertyGroup>
 
@@ -17,7 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- F# domain spoke: pure cost/routing logic, consumed in-process. -->
+    <ProjectReference Include="../HELIOS.AIHub.Domain/HELIOS.AIHub.Domain.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
+    <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
     <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />

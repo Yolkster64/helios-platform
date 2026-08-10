@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HELIOS.AIHub.Domain</RootNamespace>
+    <Description>F# domain model for AIHub cost and routing decisions. Pure functions only — the C# orchestrator owns all I/O.</Description>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Pricing.fs" />
+    <Compile Include="ModelSelection.fs" />
+    <Compile Include="RoutingPolicy.fs" />
+  </ItemGroup>
+
+</Project>
