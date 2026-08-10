@@ -165,14 +165,18 @@ jobs:
           foreach ($File in $Files) {
             $Content = Get-Content $File.FullName
             
-            # Check for hardcoded paths without env variables
-            if ($Content -match "['\"]C:\\Users\\[^'\"]*['\"]" -and 
+            # Check for hardcoded paths without env variables. Single-quoted:
+            # in PowerShell double-quoted strings \" does not escape the quote
+            # (backtick is the escape char), so the original never parsed.
+            if ($Content -match '[''"]C:\\Users\\[^''"]*[''"]' -and
                 $File.Name -notmatch '^test-') {
               $PathIssues += "$($File.Name): Consider using environment variables"
             }
-            
-            # Check for invalid characters
-            if ($Content -match "['\"].*[<>:|?*].*['\"]") {
+
+            # Check for invalid filename characters in quoted paths. Anchor to
+            # a drive-style prefix: bare [<>:|?*] between any two quotes on a
+            # line matches every quoted URL ("https://...") in the repo.
+            if ($Content -match '[''"][A-Za-z]:\\[^''"]*[<>|?*][^''"]*[''"]') {
               $PathIssues += "$($File.Name): Path contains invalid characters"
             }
           }
