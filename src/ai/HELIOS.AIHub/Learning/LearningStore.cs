@@ -34,6 +34,16 @@ public sealed record RoutingOutcome
     /// <summary>Which fleet pool produced this, when dispatched by the fleet.</summary>
     [JsonPropertyName("pool")]
     public string? Pool { get; init; }
+
+    /// <summary>
+    /// Provenance for ADVISORY outcomes ingested from outside the hub — e.g.
+    /// "absorption-benchmark" or "fork-observation". Null means a live provider
+    /// outcome recorded by the hub itself. Advisory records inform /v1/insights
+    /// narratives; adaptive routing excludes them so external signals can never
+    /// steer the provider chains directly.
+    /// </summary>
+    [JsonPropertyName("source")]
+    public string? Source { get; init; }
 }
 
 /// <summary>

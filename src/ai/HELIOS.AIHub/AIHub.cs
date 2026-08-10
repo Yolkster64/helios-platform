@@ -214,6 +214,10 @@ public sealed class AIHubService
             var history = await _learning
                 .GetRecentAsync(taskType, _options.Learning.HistoryWindow, cancellationToken)
                 .ConfigureAwait(false);
+            // Advisory records (Source != null: absorption benchmarks, fork digests)
+            // inform insights only — routing must learn exclusively from the hub's own
+            // provider outcomes.
+            history = history.Where(h => h.Source is null).ToList();
             if (history.Count == 0)
             {
                 return configuredChain;

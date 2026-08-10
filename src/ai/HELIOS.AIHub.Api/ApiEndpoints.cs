@@ -36,6 +36,43 @@ public static class ApiEndpoints
             return Results.Ok(outcomes);
         });
 
+        app.MapPost("/v1/learning", async (
+            AIHubService hub, AdvisoryOutcomeRequest request, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.TaskType))
+            {
+                return Results.BadRequest(new ApiError("taskType is required."));
+            }
+            if (string.IsNullOrWhiteSpace(request.Source))
+            {
+                return Results.BadRequest(new ApiError(
+                    "source is required: this endpoint ingests ADVISORY outcomes only "
+                    + "(e.g. 'absorption-benchmark', 'fork-observation'); live provider "
+                    + "outcomes are recorded by the hub itself."));
+            }
+
+            await hub.Learning.RecordAsync(
+                new RoutingOutcome
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TaskType = request.TaskType,
+                    Provider = request.Provider ?? request.Source,
+                    Model = request.Model ?? "",
+                    Success = request.Success,
+                    LatencyMs = request.LatencyMs,
+                    CostUsd = request.CostUsd,
+                    Quality = request.Quality,
+                    Pool = request.Pool,
+                    Source = request.Source,
+                },
+                ct);
+
+            // A disabled learning config routes to NullLearningStore — accepted but
+            // dropped; tell the caller which happened.
+            var enabled = hub.Learning is not NullLearningStore;
+            return Results.Ok(new { recorded = enabled, learningEnabled = enabled });
+        });
+
         app.MapGet("/v1/insights", async (
             AIHubService hub, PythonInsightsSpoke spoke, string? taskType, int? limit,
             CancellationToken ct) =>

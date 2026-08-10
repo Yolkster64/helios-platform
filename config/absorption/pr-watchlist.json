@@ -1,0 +1,70 @@
+{
+  "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically.",
+  "upstream": "M0nado/helios-platform",
+  "candidates": [
+    {
+      "pr": 222,
+      "title": "Add bounded XCore-9 evaluation service with F# analytics and stable contracts",
+      "status": "candidate",
+      "why": "F# analytics service aligns with HELIOS.AIHub.Domain; evaluator contracts could back the fleet review pool.",
+      "absorb": ["service contracts", "F# scoring modules"],
+      "risks": ["may target the pre-consolidation layout; expect path conflicts with src/ai"]
+    },
+    {
+      "pr": 294,
+      "title": "Add governed XCore9 runtime matrix with CI and smoke evidence",
+      "status": "candidate",
+      "why": "Runtime matrix (local/Windows/Docker) with smoke evidence maps directly onto our fleet runtime + new Docker packaging.",
+      "absorb": ["runtime matrix definition", "smoke-evidence pattern"],
+      "risks": ["governance file layout differs from ours"]
+    },
+    {
+      "pr": 253,
+      "title": "XCore9 KNAA evaluator scoring telemetry and policy gates",
+      "status": "candidate",
+      "why": "Scoring telemetry feeds the learning loop's Quality field; policy gates pair with the review pool.",
+      "absorb": ["scoring rubric", "telemetry shape"],
+      "risks": ["policy-gate wiring assumes upstream CI"]
+    },
+    {
+      "pr": 250,
+      "title": "Define Hermes/XCore v1 contracts and migrate canonical x-tier environments",
+      "status": "candidate",
+      "why": "Federation contracts versus our config/fleet/fleet-topology.json v2 — reconcile or absorb the deltas.",
+      "absorb": ["contract fields we lack"],
+      "risks": ["contract divergence: ours is v2 and live"]
+    },
+    {
+      "pr": 215,
+      "title": "Add fail-closed pinned submodule approval gate",
+      "status": "candidate",
+      "why": "We deleted the inert .gitmodules; if real submodules ever return, this gate is the governance to bring with them.",
+      "absorb": ["approval-gate workflow"],
+      "risks": ["irrelevant until a real submodule exists"]
+    },
+    {
+      "pr": 218,
+      "title": "Require reviewed Container Apps subnet for production deployments",
+      "status": "candidate",
+      "why": "Subnet review discipline informs the fleet VMSS/hybrid networking story.",
+      "absorb": ["subnet review workflow pattern"],
+      "risks": ["targets Container Apps, we deploy Foundry + VMSS"]
+    },
+    {
+      "pr": 292,
+      "title": "Add operator JSON Schema validation and policy-enforcement for plans",
+      "status": "candidate",
+      "why": "JSON Schema validation for operator plans could harden config/fleet and config/absorption files.",
+      "absorb": ["schema validation harness"],
+      "risks": ["plan format is upstream-specific"]
+    },
+    {
+      "pr": 295,
+      "title": "feat(security): add fail-closed governed capability profiles and validator",
+      "status": "candidate",
+      "why": "Capability profiles map to the fleet pools' tool allowlists (review pool is read-only by design).",
+      "absorb": ["profile validator"],
+      "risks": ["security model differs; needs careful review"]
+    }
+  ]
+}

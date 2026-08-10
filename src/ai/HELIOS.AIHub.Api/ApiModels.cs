@@ -14,6 +14,22 @@ public sealed record CompareRequest(
 public sealed record ApiError(string Error);
 
 /// <summary>
+/// Advisory outcome ingested from outside the hub (absorption benchmarks, fork
+/// digests). Source is REQUIRED: live provider outcomes are recorded only by the
+/// hub itself, and adaptive routing ignores everything that carries a Source.
+/// </summary>
+public sealed record AdvisoryOutcomeRequest(
+    string? TaskType,
+    string? Source,
+    string? Provider,
+    string? Model,
+    bool Success,
+    double LatencyMs = 0,
+    double CostUsd = 0,
+    double? Quality = null,
+    string? Pool = null);
+
+/// <summary>
 /// <see cref="ChatResult"/> shaped for the wire: latency as plain milliseconds instead of
 /// a serialized TimeSpan, so any HTTP client reads it without .NET conventions.
 /// </summary>

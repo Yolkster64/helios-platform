@@ -100,6 +100,31 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task PostLearning_RejectsMissingSource()
+    {
+        // Advisory-only ingestion: without provenance the record would be
+        // indistinguishable from a live provider outcome.
+        var response = await _client.PostAsJsonAsync("/v1/learning",
+            new AdvisoryOutcomeRequest(TaskType: "absorption", Source: null,
+                Provider: "M0nado/helios-platform#222", Model: "abc", Success: true), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostLearning_AcceptsAdvisoryOutcome_AndReportsStoreState()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/learning",
+            new AdvisoryOutcomeRequest(TaskType: "absorption", Source: "absorption-benchmark",
+                Provider: "M0nado/helios-platform#222", Model: "abc", Success: true), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.TryGetProperty("recorded", out _));
+        Assert.True(body.RootElement.TryGetProperty("learningEnabled", out _));
+    }
+
+    [Fact]
     public async Task Ask_RejectsMissingPrompt()
     {
         var response = await _client.PostAsJsonAsync("/v1/ask", new AskRequest(Prompt: null), Json);
