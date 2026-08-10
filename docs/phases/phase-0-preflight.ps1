@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 0: Pre-Flight Checklist - DETAILED NARRATION
+
+.DESCRIPTION
+This script checks everything before deployment
+#>
+
 # HELIOS Phase 0: Pre-Flight Checklist - DETAILED NARRATION
 # This script checks everything before deployment
 

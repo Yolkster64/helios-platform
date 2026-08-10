@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 5: Monitoring & Dashboards - DETAILED NARRATION
+
+.DESCRIPTION
+This phase sets up real-time observability and dashboards
+#>
+
 # HELIOS Phase 5: Monitoring & Dashboards - DETAILED NARRATION
 # This phase sets up real-time observability and dashboards
 

@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 4: Security Framework Activation - DETAILED NARRATION
+
+.DESCRIPTION
+This phase deploys 8-layer security protection
+#>
+
 # HELIOS Phase 4: Security Framework Activation - DETAILED NARRATION
 # This phase deploys 8-layer security protection
 

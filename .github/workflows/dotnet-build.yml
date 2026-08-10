@@ -102,12 +102,13 @@ jobs:
           path: publish/helios-ai/
 
   # The legacy core project (src/core/HELIOS.Platform) does not compile today
-  # (~323 pre-existing errors). This job tracks its state without failing the PR;
-  # remove continue-on-error once the core is repaired (see ROADMAP_MULTI_LLM.md).
+  # (~323 pre-existing errors). This job tracks its state in the step summary
+  # without ever failing: a red X here reads as a PR problem when it is not.
+  # Make the build outcome gating again once the core is repaired
+  # (see ROADMAP_MULTI_LLM.md).
   legacy-core-status:
     name: Legacy core build (informational)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,5 +118,12 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Build core (known broken)
-        run: dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj -c Release
+      - name: Build core (known broken, never fails the job)
+        run: |
+          dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj -c Release 2>&1 | tee core-build.log
+          if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+            echo "## Legacy core build: PASSED — consider making this job gating again" >> "$GITHUB_STEP_SUMMARY"
+          else
+            errors=$(grep -c " error " core-build.log || true)
+            echo "## Legacy core build: still broken (~${errors} errors) — informational only" >> "$GITHUB_STEP_SUMMARY"
+          fi

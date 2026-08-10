@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 2: Agent Fleet Deployment - DETAILED NARRATION
+
+.DESCRIPTION
+This phase launches all 6 build agents in Docker containers
+#>
+
 # HELIOS Phase 2: Agent Fleet Deployment - DETAILED NARRATION
 # This phase launches all 6 build agents in Docker containers
 

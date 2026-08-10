@@ -32,9 +32,22 @@ jobs:
     outputs:
       variants: ${{ steps.variants.outputs.variants }}
       matrix: ${{ steps.matrix.outputs.matrix }}
+      has_node: ${{ steps.detect.outputs.has_node }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # This matrix builds Node.js modules; the repo is .NET-first, so skip the
+      # whole variant matrix cleanly when there is no package.json to build
+      # (mirrors build-all-modules.yml).
+      - name: Detect Node.js modules
+        id: detect
+        run: |
+          if [ -f package.json ] || compgen -G "*/package.json" > /dev/null; then
+            echo "has_node=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_node=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Define Build Variants
         id: variants
@@ -70,7 +83,13 @@ jobs:
               "coverage": true
             }
           ]'
-          echo "variants=$VARIANTS" >> $GITHUB_OUTPUT
+          # Multi-line values need the heredoc form; plain `name=value` only
+          # accepts a single line and fails the job with "Invalid format".
+          {
+            echo 'variants<<VARIANTS_EOF'
+            echo "$VARIANTS"
+            echo 'VARIANTS_EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build Matrix
         id: matrix
@@ -80,12 +99,17 @@ jobs:
             {"os": "ubuntu-latest", "node": "20"},
             {"os": "windows-latest", "node": "18"}
           ]'
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          {
+            echo 'matrix<<MATRIX_EOF'
+            echo "$MATRIX"
+            echo 'MATRIX_EOF'
+          } >> "$GITHUB_OUTPUT"
 
   test-variants:
     name: Test ${{ matrix.variant.name }} on Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
     needs: setup-variants
+    if: needs.setup-variants.outputs.has_node == 'true'
     strategy:
       matrix:
         variant: ${{ fromJson(needs.setup-variants.outputs.variants) }}

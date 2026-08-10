@@ -78,24 +78,30 @@ jobs:
           
           $Files = Get-ChildItem -Recurse -Filter "*.ps1"
           $SecurityIssues = @()
-          
+
+          # The value must be captured and non-empty: empty parameter defaults
+          # ($Password = "") and documentation placeholders (ghp_xxxxx) are not
+          # leaked credentials.
           $PatternMap = @{
-            'password\s*=\s*[''"][^''\"]*[''"]' = "Hardcoded password"
-            'apikey\s*=\s*[''"][^''\"]*[''"]' = "Hardcoded API key"
-            'secret\s*=\s*[''"][^''\"]*[''"]' = "Hardcoded secret"
-            'token\s*=\s*[''"][^''\"]*[''"]' = "Hardcoded token"
+            'password\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded password"
+            'apikey\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded API key"
+            'secret\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded secret"
+            'token\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded token"
           }
-          
+          $Placeholder = 'xxx|^\*+$|^<[^>]*>$|placeholder|example|changeme|dummy|your[-_]'
+
           foreach ($File in $Files) {
-            $Content = Get-Content $File.FullName
-            
-            if ($File.Name -notmatch '^test-' -and $Content -notmatch '# EXAMPLE CODE') {
-              foreach ($Pattern in $PatternMap.Keys) {
-                if ($Content -match $Pattern) {
-                  $SecurityIssues += @{
-                    File = $File.Name
-                    Issue = $PatternMap[$Pattern]
-                    Pattern = $Pattern
+            $Raw = Get-Content $File.FullName -Raw
+
+            if ($File.Name -notmatch '^test-' -and $Raw -notmatch '# EXAMPLE CODE') {
+              foreach ($Line in (Get-Content $File.FullName)) {
+                foreach ($Pattern in $PatternMap.Keys) {
+                  if ($Line -match $Pattern -and $Matches[1] -notmatch $Placeholder) {
+                    $SecurityIssues += @{
+                      File = $File.Name
+                      Issue = $PatternMap[$Pattern]
+                      Pattern = $Pattern
+                    }
                   }
                 }
               }
@@ -127,8 +133,9 @@ jobs:
           foreach ($File in $Files) {
             $Content = Get-Content $File.FullName
             
-            # Find registry modifications
-            if ($Content -match '(New-Item|Set-ItemProperty|Remove-Item).*HKLM|HKCU|HKU') {
+            # Find registry modifications (grouped: the bare alternation matched
+            # any file that merely mentioned HKCU/HKU anywhere)
+            if ($Content -match '(New-Item|Set-ItemProperty|Remove-Item).*(HKLM|HKCU|HKU)') {
               # Check for documentation
               if ($Content -notmatch '# Registry:') {
                 Write-Host "✗ $($File.Name): Missing '# Registry:' documentation"

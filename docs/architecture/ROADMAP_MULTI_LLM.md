@@ -49,7 +49,9 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 | Workflow | Problem | Disposition |
 |---|---|---|
 | `deploy.yml` | All-echo fake deployment incl. fake "AI initialized" lines | Replace or delete in PR2 |
-| `ai-code-review.yml` | Regex-only "AI review", canned comment | Replace with real `code_review` routing in PR2 |
+| `ai-code-review.yml` | Regex-only "AI review", canned comment (its comment-post 403 is fixed — workflow now declares `permissions`) | Replace with real `code_review` routing in PR2 |
+| `nuget.yml` | Builds/packs the broken core project, for net6/7 the csproj doesn't even target; can only go red | PR trigger removed and restores made explicit in PR1 (PR builds live in `dotnet-build.yml`); main/tag path stays red until the core compiles — PR2 |
+| `build-variant-test.yml` | Node.js variant matrix in a .NET-first repo; its `$GITHUB_OUTPUT` multi-line bug is fixed and a package.json guard skips the matrix cleanly | Delete or repurpose for real Node modules in PR2 |
 | `microsoft-ecosystem/.github/workflows/azure-deploy.yml` | Nested path (never runs), missing `./infrastructure/main.bicep` | Salvage OIDC/staging patterns, then delete |
 | `publish-to-packagemanagers.yml` | **Invalid YAML** — embedded PowerShell here-string (`@'`) starts at column 0 (line 62), de-indenting out of the `run: |` block scalar. Workflow cannot parse, so it has never run | Re-indent the here-string body inside the block scalar, or move the script to a `.ps1` file and call it (preferred) — PR2 |
 | `documentation-update.yml` | **Invalid YAML** — block mapping broken at line 33 (same embedded-script class of defect) | Same fix as above — PR2 |
