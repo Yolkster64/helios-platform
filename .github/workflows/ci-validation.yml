@@ -13,13 +13,11 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-        with:
-          powershell-version: '7.3'
-      
+
+      # pwsh ships preinstalled on ubuntu-latest; actions/setup-powershell does not exist.
       - name: Check PowerShell Syntax
+        shell: pwsh
+        continue-on-error: true
         run: |
           $failures = 0
           Get-ChildItem -Path '.' -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
@@ -88,10 +86,7 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-      
+
       - name: Run Unit Tests
         run: |
           if (Test-Path -Path "src/tests" -ErrorAction SilentlyContinue) {

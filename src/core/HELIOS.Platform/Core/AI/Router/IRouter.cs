@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using HELIOS.Platform.Core.AI.Interfaces;
 
 namespace HELIOS.Platform.Core.AI.Router
 {

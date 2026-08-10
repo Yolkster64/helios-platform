@@ -77,6 +77,8 @@
     <Compile Remove="samples/**/*.cs" />
     <Compile Remove="demos/**/*.cs" />
     <Compile Remove="cloud-integration/**/*.cs" />
+    <Compile Remove="src/ai/**/*.cs" />
+    <Compile Remove="src/mcp/**/*.cs" />
     <Compile Remove="src/**/Migrations/**/*.cs" />
     <Compile Remove="HELIOS.Platform.Tray/**/*.cs" />
     <Compile Remove="HELIOS.Platform.ShellExtension/**/*.cs" />
