@@ -7,61 +7,68 @@ body:
     attributes:
       value: |
         Thanks for reporting an issue! Please provide as much detail as possible.
-  
+
   - type: textarea
+    id: description
     attributes:
       label: "Description"
       description: "What happened?"
       placeholder: "Clear description of the bug"
     validations:
       required: true
-  
+
   - type: textarea
+    id: steps-to-reproduce
     attributes:
       label: "Steps to Reproduce"
       description: "How do you reproduce the bug?"
       value: |
-        1. 
-        2. 
-        3. 
+        1.
+        2.
+        3.
     validations:
       required: true
-  
+
   - type: textarea
+    id: expected-behavior
     attributes:
       label: "Expected Behavior"
       description: "What should happen?"
       placeholder: "What did you expect to see?"
     validations:
       required: true
-  
+
   - type: textarea
+    id: actual-behavior
     attributes:
       label: "Actual Behavior"
       description: "What actually happened?"
       placeholder: "What did you actually see?"
     validations:
       required: true
-  
+
   - type: textarea
+    id: error-logs
     attributes:
       label: "Error Message/Logs"
       description: "Any error messages or relevant logs?"
       render: shell
-  
+
   - type: textarea
+    id: environment
     attributes:
       label: "Environment"
       description: "System information"
       value: |
-        - OS: 
-        - PowerShell Version: 
-        - Azure CLI Version: 
-        - Docker Version: 
+        - OS:
+        - PowerShell Version:
+        - Azure CLI Version:
+        - Docker Version:
     validations:
       required: true
-  
+
   - type: textarea
+    id: additional-context
     attributes:
       label: "Additional Context"
       description: "Any other information that might help?"

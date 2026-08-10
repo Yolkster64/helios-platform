@@ -1,0 +1,93 @@
+name: Absorption Benchmark
+
+# On-demand benchmark of one upstream PR from the absorption watchlist
+# (config/absorption/pr-watchlist.json): trial-merge in a disposable worktree,
+# run the local gate, upload the scored report. Keyless and deterministic — the
+# report artifact is authoritative; the script's advisory POST to helios-ai-api
+# is best-effort and simply skips when no API is reachable in CI.
+# See docs/architecture/ABSORPTION_PIPELINE.md and ABSORPTION_LEDGER.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Upstream PR number (M0nado/helios-platform) to benchmark'
+        required: true
+        type: number
+      skip_tests:
+        description: 'Skip test steps (yields at most a partial verdict)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absorption-benchmark-${{ github.ref }}-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Benchmark upstream PR ${{ inputs.pr_number }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The trial merge needs real history, not a shallow tip.
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python benchmark dependencies
+        run: python -m pip install pytest
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Run absorption benchmark
+        shell: pwsh
+        # Same requirement dotnet-build.yml sets: without it the C#->Python
+        # spoke tests return quietly when the spoke cannot round-trip, letting
+        # a candidate that breaks the subprocess contract score a green gate.
+        env:
+          HELIOS_REQUIRE_PYTHON_SPOKE: 1
+        run: |
+          $skip = [bool]::Parse('${{ inputs.skip_tests }}')
+          $params = @{ PrNumber = ${{ inputs.pr_number }} }
+          if ($skip) { $params.SkipTests = $true }
+          # Exit 2 = gate not fully green (conflicts or failures) - that is a
+          # valid benchmark OUTCOME, not a workflow failure; the report says why.
+          pwsh scripts/absorption/absorb-pr.ps1 @params
+          if ($LASTEXITCODE -notin 0, 2) { exit $LASTEXITCODE }
+          "verdict recorded (exit $LASTEXITCODE)" | Out-Host
+
+      - name: Report to step summary
+        shell: pwsh
+        run: |
+          $report = Get-Content -Raw ".helios/absorption/pr-${{ inputs.pr_number }}.json" | ConvertFrom-Json
+          @(
+            "## Absorption benchmark: $($report.upstream)#$($report.pr)"
+            ""
+            "- **Verdict**: $($report.verdict)"
+            "- **Gate passed**: $($report.gatePassed)"
+            "- **PR head**: ``$($report.prHead)``"
+            "- **Our head**: ``$($report.ourHead)``"
+          ) | Set-Content -Path $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: absorption-report-pr-${{ inputs.pr_number }}
+          path: .helios/absorption/pr-${{ inputs.pr_number }}.json
+          include-hidden-files: true
+          retention-days: 90

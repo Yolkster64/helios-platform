@@ -191,6 +191,12 @@ and exit 0 on SIGTERM or after `HERMES_KANBAN_MAX_IDLE_POLLS` empty polls
 (start-fleet defaults the stub to 2s polls, ~2 minutes idle). The stub does no
 model work — it exists to exercise the fleet wiring end to end.
 
+Environment-specific bring-up lives in CLOUD_SHELL_AND_LOCAL_FLEET.md: the Azure
+Cloud Shell device-code auth bootstrap (`scripts/bootstrap/`), the WSL2 / Docker
+(`fleet-stub` compose profile) / native-Windows fleet paths, and the runbook for
+the opt-in Azure-VM burst capacity (`deployFleetVmss` + `scale-fleet.ps1`'s
+`HELIOS_FLEET_VMSS_*` wiring). This page stays the fleet *design* reference.
+
 Feed a live board through the lock-aware enqueue — workers mutate the board
 under the claim lock, which a hand editor does not take, so hand-appending to
 a board whose workers are running can be silently lost to a concurrent worker

@@ -7,10 +7,11 @@ score it, and record an advisory learning outcome.
 The absorption pipeline's engine (docs/architecture/ABSORPTION_PIPELINE.md).
 Fetches refs/pull/<N>/head from the upstream repo, trial-merges it onto the
 current branch in a DISPOSABLE git worktree, runs the same gate CI runs
-(solution build, .NET tests, Python tests), and writes a scored report under
-.helios/absorption/. Nothing ever merges into the real working tree: -Apply only
-keeps the scratch worktree around (merge staged, conflicts included) so a human
-can inspect, cherry-pick, and commit deliberately.
+(native C++ build, solution build, Bicep compile, .NET tests, Python tests),
+and writes a scored report under .helios/absorption/. Nothing ever merges into
+the real working tree: -Apply only keeps the scratch worktree around (merge
+staged, conflicts included) so a human can inspect, cherry-pick, and commit
+deliberately.
 
 If helios-ai-api is reachable (HELIOS_API_URL, default http://localhost:5170),
 the verdict is also recorded as an ADVISORY outcome via POST /v1/learning with
@@ -53,7 +54,6 @@ $worktree = Join-Path $reportDir "wt-pr-$PrNumber"
 
 Write-Host "== Absorption benchmark: $Upstream#$PrNumber =="
 
-# --- fetch the PR head -------------------------------------------------------
 git -C $RepoRoot fetch $upstreamUrl "refs/pull/$PrNumber/head" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Could not fetch refs/pull/$PrNumber/head from $upstreamUrl."
@@ -62,7 +62,6 @@ if ($LASTEXITCODE -ne 0) {
 $prSha = (git -C $RepoRoot rev-parse FETCH_HEAD).Trim()
 Write-Host "PR head: $prSha"
 
-# --- disposable worktree at our HEAD ----------------------------------------
 if (Test-Path $worktree) {
     git -C $RepoRoot worktree remove --force $worktree 2>$null
     Remove-Item -Recurse -Force $worktree -ErrorAction SilentlyContinue
@@ -72,7 +71,6 @@ git -C $RepoRoot worktree add --detach $worktree HEAD | Out-Null
 $steps = [System.Collections.Generic.List[object]]::new()
 $conflicts = @()
 try {
-    # --- trial merge ---------------------------------------------------------
     git -C $worktree merge --no-commit --no-ff $prSha 2>&1 | Out-Null
     $mergeClean = ($LASTEXITCODE -eq 0)
     if (-not $mergeClean) {
@@ -82,12 +80,75 @@ try {
     $steps.Add([ordered]@{ step = 'trial-merge'; ok = $mergeClean; conflicts = $conflicts; diffstat = "$stat".Trim() })
 
     if ($mergeClean) {
-        # --- the gate (same commands CI runs) --------------------------------
         $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)/root/.dotnet"
+
+        # The native entrypoint is required, like it is in dotnet-build.yml: a
+        # candidate that deletes or renames it must fail the gate rather than
+        # silently skipping the native paths (whose tests no-op without the .so).
+        $nativeBuild = Join-Path $worktree 'scripts/build/build-native.sh'
+        $steps.Add((Invoke-Step 'native-build' {
+            if (-not (Test-Path -LiteralPath $nativeBuild)) {
+                throw 'Required native build entrypoint scripts/build/build-native.sh is missing from the merged tree.'
+            }
+            if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+                throw 'bash is required to build the native C++ spoke.'
+            }
+            $out = bash $nativeBuild 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+        }))
+
         $steps.Add((Invoke-Step 'dotnet-build' {
             $out = dotnet build (Join-Path $worktree 'HELIOS.sln') -c Release --nologo 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 5 | Out-String) }
+            # Same assert CI makes: the runtime degrades gracefully without the
+            # library, which would let a broken native change score a green gate.
+            $so = Join-Path $worktree 'tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so'
+            if (-not (Test-Path -LiteralPath $so)) {
+                throw 'Native library did not reach test output (libhelios_aihub_native.so missing).'
+            }
         }))
+
+        # infra/main.bicep is a required repository entrypoint. A candidate that
+        # deletes or renames it must fail the absorption gate rather than silently
+        # skipping infrastructure validation.
+        $bicepFile = Join-Path $worktree 'infra/main.bicep'
+        $steps.Add((Invoke-Step 'bicep-build' {
+            if (-not (Test-Path -LiteralPath $bicepFile)) {
+                throw 'Required Bicep entrypoint infra/main.bicep is missing from the merged tree.'
+            }
+            if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+                throw 'Azure CLI is required to compile infra/main.bicep.'
+            }
+            $bicepOut = Join-Path $reportDir "pr-$PrNumber-main.arm.json"
+            try {
+                $out = az bicep build --file $bicepFile --outfile $bicepOut 2>&1
+                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+            }
+            finally {
+                Remove-Item -LiteralPath $bicepOut -Force -ErrorAction SilentlyContinue
+            }
+        }))
+
+        # infra-validate.yml also compiles the parameter entrypoint; a candidate
+        # that breaks main.bicepparam must not score a green gate.
+        $bicepParamFile = Join-Path $worktree 'infra/main.bicepparam'
+        $steps.Add((Invoke-Step 'bicep-build-params' {
+            if (-not (Test-Path -LiteralPath $bicepParamFile)) {
+                throw 'Required Bicep parameters entrypoint infra/main.bicepparam is missing from the merged tree.'
+            }
+            if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+                throw 'Azure CLI is required to compile infra/main.bicepparam.'
+            }
+            $paramOut = Join-Path $reportDir "pr-$PrNumber-main.params.json"
+            try {
+                $out = az bicep build-params --file $bicepParamFile --outfile $paramOut 2>&1
+                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+            }
+            finally {
+                Remove-Item -LiteralPath $paramOut -Force -ErrorAction SilentlyContinue
+            }
+        }))
+
         if (-not $SkipTests) {
             $steps.Add((Invoke-Step 'dotnet-test' {
                 $out = dotnet test (Join-Path $worktree 'tests/HELIOS.AIHub.Tests') -c Release --nologo -v q 2>&1
@@ -111,9 +172,6 @@ finally {
     }
 }
 
-# --- verdict + report --------------------------------------------------------
-# A skipped test run can never claim the full gate: -SkipTests yields at most a
-# partial verdict, and the advisory outcome reports success only for the FULL gate.
 $allStepsOk = ($steps | Where-Object { -not $_.ok } | Measure-Object).Count -eq 0
 $gatePassed = $allStepsOk -and -not $SkipTests
 $elapsed = [math]::Round(((Get-Date) - $started).TotalMilliseconds)
@@ -139,7 +197,6 @@ if ($Apply -and (Test-Path $worktree)) {
     Write-Host "Worktree kept for review: $worktree (merge staged; commit deliberately or 'git worktree remove --force' it)"
 }
 
-# --- advisory learning record (best effort) ----------------------------------
 $apiBase = if ($env:HELIOS_API_URL) { $env:HELIOS_API_URL.TrimEnd('/') } else { 'http://localhost:5170' }
 try {
     [Uri]$apiUri = $null

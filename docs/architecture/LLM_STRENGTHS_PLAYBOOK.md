@@ -16,7 +16,8 @@ machine-readable form; this document is the reasoning, so future edits stay prin
 | Keystrokes saved while typing | **Copilot** (`inline_completion`) | In-editor latency beats every API path |
 | Answers grounded in enterprise/Azure data | **Azure Foundry agent** (`enterprise_data`) | Runs inside the tenant boundary; Entra ID auth; agent tools reach Azure data sources (PR3 adds AI Search) |
 | Work done with zero cloud dependency | **Ollama** (`offline`) | Local; also the "is the network the problem?" control |
-| Many similar tasks executed in bulk | **Hermes fleet** (`agent_fleet_dispatch`) | Nine Xcore lanes beat one giant prompt (HERMES_FLEET_AND_XCORE.md) |
+| Many cheap, similar completions in bulk | **GitHub Models** (`bulk_processing`) | Free-tier hosted small models — $0 with a request cap; falls back to `azure-openai` then `ollama` when rate-limited |
+| Many similar *agentic* tasks executed in bulk | **Hermes fleet** (`agent_fleet_dispatch`) | Nine Xcore lanes beat one giant prompt (HERMES_FLEET_AND_XCORE.md) |
 | Confidence via disagreement | `helios-ai compare` | Parallel fan-out; treat divergent answers as a signal to think, not to average |
 
 ## Decision matrix by moment
@@ -63,11 +64,28 @@ the F# `RoutingPolicy` reordering from *observed* outcomes in this codebase befo
 falling back to the static chain. Use `--optimize` for "what's objectively cheapest for
 this kind of task", and `route` for "what has actually worked here."
 
+## Current model families (mirrors config/model-catalog.json)
+
+The catalog is the machine-readable registry; CI validates its structure via
+`scripts/build/validate-model-catalog.py` against `config/schemas/model-catalog.schema.json`.
+Current entries:
+
+| Provider | Models | Role |
+|---|---|---|
+| **Anthropic (Claude 5 family)** | `claude-opus-5` (frontier, 1M ctx, $5/$25), `claude-sonnet-5` (balanced, 1M ctx, $3/$15 — the `anthropic` provider default), `claude-haiku-4-5-20251001` (fast, 200K ctx, $1/$5) | Review, long-context, architecture, security at Opus/Sonnet tier; Haiku for cheap fast turns |
+| **OpenAI (gpt-5.x family)** | `gpt-5.4` (frontier), `gpt-5.1-codex-max` (codegen specialist), `gpt-5-mini` (fast — the `openai` provider default) | Codegen, refactors, tests; mini for general/doc queries |
+| **Azure OpenAI / Azure Foundry** | `gpt-5-mini` on both | Enterprise/tenant-boundary work; Foundry adds agent tools over Azure data |
+| **GitHub Models** | `openai/gpt-5-mini` (free tier, rate-limited) | `inline_completion` fallback and `bulk_processing` primary |
+| **Ollama** | `llama3.2` (local) | `offline` |
+
+When a family ships a new generation, update the catalog (prices/context/strengths),
+this table, and the affected `config/aihub.json` chains in the same PR.
+
 ## Cost & latency ladder
 
 Cheapest/fastest first, for when the task tolerates it: Copilot inline → small models via
-GitHub Models / `gpt-4o-mini` → Ollama local (free, hardware-bound) → frontier models
-(Claude, GPT-4-class) → agentic CLI sessions (highest token spend, highest capability).
+GitHub Models / `gpt-5-mini` → Ollama local (free, hardware-bound) → frontier models
+(Claude Opus/Sonnet 5, GPT-5-class) → agentic CLI sessions (highest token spend, highest capability).
 The routing table encodes this: chains lead with the cheapest provider that usually
 succeeds and fall back upward. Budget guardrails: model `capacity` in Bicep bounds
 Azure spend structurally; per-provider circuit breakers stop retry storms.

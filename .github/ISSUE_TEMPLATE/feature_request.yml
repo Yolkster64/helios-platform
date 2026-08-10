@@ -7,32 +7,36 @@ body:
     attributes:
       value: |
         Thanks for your interest in HELIOS! Please fill in the following information.
-  
+
   - type: textarea
+    id: description
     attributes:
       label: "Description"
       description: "Describe the feature you'd like to see"
       placeholder: "Clear and concise description of what you want to add"
     validations:
       required: true
-  
+
   - type: textarea
+    id: problem-context
     attributes:
       label: "Problem/Context"
       description: "What problem does this solve?"
       placeholder: "Describe the problem or use case"
     validations:
       required: true
-  
+
   - type: textarea
+    id: proposed-solution
     attributes:
       label: "Proposed Solution"
       description: "How should this feature work?"
       placeholder: "Describe your proposed implementation"
     validations:
       required: true
-  
+
   - type: dropdown
+    id: component
     attributes:
       label: "Component"
       options:
@@ -45,8 +49,9 @@ body:
         - Other
     validations:
       required: true
-  
+
   - type: dropdown
+    id: priority
     attributes:
       label: "Priority"
       options:

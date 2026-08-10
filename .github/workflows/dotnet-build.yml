@@ -64,6 +64,11 @@ jobs:
       - name: Restore
         run: dotnet restore HELIOS.sln
 
+      # Catalog drift (bad field name, unknown provider, empty id) would otherwise
+      # surface only at runtime as a silently degraded --optimize path.
+      - name: Validate model catalog
+        run: python3 scripts/build/validate-model-catalog.py
+
       - name: Build
         run: dotnet build HELIOS.sln -c Release --no-restore
 

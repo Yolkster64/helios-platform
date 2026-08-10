@@ -1,0 +1,103 @@
+name: Copilot Dispatch
+
+# Automates GitHub Copilot's role in the loop, both directions:
+#  - Issues: adding the `copilot` label IS the delegation decision — this
+#    workflow assigns the Copilot coding agent to the issue so it starts a
+#    session and opens a draft PR. Remove the label / unassign to take it back.
+#  - Pull requests: every non-draft PR automatically gets a Copilot code
+#    review requested, so the review happens without anyone remembering to ask.
+#
+# Both paths skip green with a ::notice:: when Copilot isn't available in this
+# repo (no Copilot subscription, coding agent disabled, or the API declines) —
+# automation must degrade, not fail the pipeline. If GITHUB_TOKEN is refused
+# for coding-agent assignment, set a COPILOT_DISPATCH_TOKEN secret (fine-graine
+# PAT of a user with Copilot access: repo issues write) and it is used instead.
+
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: copilot-dispatch-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  assign-coding-agent:
+    name: Assign Copilot coding agent
+    if: github.event_name == 'issues' && github.event.label.name == 'copilot'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign via suggestedActors
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          gql() { # query variables-json
+            curl -sS https://api.github.com/graphql \
+              -H "Authorization: bearer $GH_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "$(jq -n --arg q "$1" --argjson v "$2" '{query:$q, variables:$v}')"
+          }
+
+          # The coding agent appears as a suggested assignable actor only when
+          # it is enabled for the repository.
+          actors=$(gql 'query($o:String!,$r:String!){
+              repository(owner:$o, name:$r){
+                id
+                issue: issue(number: '"$ISSUE_NUMBER"') { id }
+                suggestedActors(capabilities:[CAN_BE_ASSIGNED], first:100){
+                  nodes { login __typename ... on Bot { id } ... on User { id } }
+                }
+              }
+            }' "$(jq -n --arg o "$REPO_OWNER" --arg r "$REPO_NAME" '{o:$o,r:$r}')")
+
+          bot_id=$(jq -r '.data.repository.suggestedActors.nodes[]?
+                          | select(.login=="copilot-swe-agent") | .id' <<< "$actors")
+          issue_id=$(jq -r '.data.repository.issue.id // empty' <<< "$actors")
+
+          if [ -z "$bot_id" ] || [ -z "$issue_id" ]; then
+            echo "::notice::Copilot coding agent is not assignable in this repository — skipping (enable Copilot coding agent, or check token scopes)."
+            exit 0
+          fi
+
+          result=$(gql 'mutation($issueId:ID!, $botId:ID!){
+              replaceActorsForAssignable(input:{assignableId:$issueId, actorIds:[$botId]}){
+                assignable { ... on Issue { number } }
+              }
+            }' "$(jq -n --arg issueId "$issue_id" --arg botId "$bot_id" '{issueId:$issueId, botId:$botId}')")
+
+          if jq -e '.data.replaceActorsForAssignable.assignable.number' <<< "$result" > /dev/null; then
+            echo "Copilot coding agent assigned to #$ISSUE_NUMBER."
+          else
+            echo "::notice::Assignment declined by the API — $(jq -c '.errors // []' <<< "$result")"
+          fi
+
+  request-review:
+    name: Request Copilot review
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Copilot as reviewer
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          status=$(curl -sS -o /tmp/resp.json -w '%{http_code}' \
+            -X POST "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+            -H "Authorization: bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            --data '{"reviewers":["copilot-pull-request-reviewer[bot]"]}')
+          if [ "$status" = "201" ]; then
+            echo "Copilot review requested on #$PR_NUMBER."
+          else
+            echo "::notice::Copilot review request declined (HTTP $status) — $(head -c 200 /tmp/resp.json). Copilot code review may not be enabled here."
+          fi
