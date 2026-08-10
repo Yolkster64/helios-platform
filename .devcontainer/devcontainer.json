@@ -1,68 +1,33 @@
 {
-  "name": "HELIOS Platform Codespace",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:1-8.0-bookworm",
+  "name": "HELIOS Platform",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0",
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {
-      "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/azure-cli:1": {
-      "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/powershell:1": {
-      "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "version": "latest",
-      "moby": true
-    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/powershell:1": {},
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.11"
-    }
+    },
+    "ghcr.io/devcontainers/features/terraform:1": {}
   },
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-dotnettools.csharp",
         "ms-dotnettools.csdevkit",
-        "ms-vscode.powershell",
-        "ms-azuretools.vscode-docker",
-        "ms-azuretools.vscode-azurefunctions",
-        "ms-azuretools.vscode-azureappservice",
+        "Ionide.Ionide-fsharp",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.black-formatter",
-        "GitHub.copilot",
-        "GitHub.vscode-pull-request-github",
-        "eamodio.gitlens",
-        "redhat.vscode-yaml",
-        "DavidAnson.vscode-markdownlint"
+        "ms-azuretools.vscode-bicep",
+        "HashiCorp.terraform",
+        "ms-vscode.powershell"
       ],
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "pwsh",
-        "terminal.integrated.profiles.linux": {
-          "pwsh": {
-            "path": "/usr/bin/pwsh"
-          },
-          "bash": {
-            "path": "/bin/bash"
-          }
-        },
-        "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
-        "editor.formatOnSave": true,
-        "files.autoSave": "onFocusChange",
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "[powershell]": {
-          "editor.defaultFormatter": "ms-vscode.powershell"
-        },
-        "[csharp]": {
-          "editor.defaultFormatter": "ms-dotnettools.csharp"
-        },
-        "[json]": {
-          "editor.defaultFormatter": "vscode.json-language-features"
-        },
+        "dotnet.defaultSolution": "HELIOS.sln",
+        "terminal.integrated.defaultProfile.linux": "bash",
         "[yaml]": {
           "editor.insertSpaces": true,
           "editor.tabSize": 2
@@ -71,39 +36,17 @@
     }
   },
   "remoteEnv": {
-    "HELIOS_ENV": "development",
-    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-    "DOTNET_NOLOGO": "1"
+    "DOTNET_NOLOGO": "1",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
   },
   "forwardPorts": [
-    3000,
-    5000,
-    5173,
-    8080,
-    8443
+    5000
   ],
   "portsAttributes": {
-    "3000": {
-      "label": "Web UI",
-      "onAutoForward": "notify"
-    },
     "5000": {
-      "label": "API Server",
-      "onAutoForward": "notify"
-    },
-    "5173": {
-      "label": "Vite Dev Server",
-      "onAutoForward": "notify"
-    },
-    "8080": {
-      "label": "HELIOS Dashboard",
-      "onAutoForward": "notify"
-    },
-    "8443": {
-      "label": "Secure API",
+      "label": "helios-ai-api",
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "pwsh -NoLogo -NoProfile -Command \"Write-Host 'HELIOS Codespace ready: restoring primary .NET projects...' -ForegroundColor Cyan; if (Test-Path 'src/core/HELIOS.Platform/HELIOS.Platform.csproj') { dotnet restore 'src/core/HELIOS.Platform/HELIOS.Platform.csproj' }; if (Test-Path 'tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj') { dotnet restore 'tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj' }; Write-Host 'Next: run ./scripts/build/build.ps1 or dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj' -ForegroundColor Green\"",
-  "postStartCommand": "pwsh -NoLogo -NoProfile -Command \"Write-Host 'Welcome back to HELIOS Platform Codespace' -ForegroundColor Green; gh --version | Select-Object -First 1; dotnet --version\""
+  "postCreateCommand": "echo '== [1/4] native C++ spoke (optional; AIHub falls back to managed paths) =='; { command -v cmake >/dev/null 2>&1 && ./scripts/build/build-native.sh || echo 'SKIP: cmake missing or native build failed (non-fatal)'; }; echo '== [2/4] restore + build HELIOS.sln =='; dotnet restore HELIOS.sln || true; dotnet build HELIOS.sln -c Release --no-restore || true; echo '== [3/4] python spoke (ml extras, falling back to dependency-free) =='; python3 -m pip install -e 'src/ai/python[ml]' || python3 -m pip install -e src/ai/python || true; echo '== [4/4] helios-ai on PATH =='; sudo ln -sf \"$PWD/src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai\" /usr/local/bin/helios-ai || true; { command -v helios-ai >/dev/null 2>&1 && test -x src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai && echo 'helios-ai ready (try: helios-ai status)' || echo 'helios-ai symlinked; run: dotnet build HELIOS.sln -c Release'; }"
 }
