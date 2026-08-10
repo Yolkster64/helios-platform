@@ -13,6 +13,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="HELIOS.AIHub.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Source-linked core seams: contract types only. The core project does not build
          today, so AIHub must not take a ProjectReference on it. -->
     <Compile Include="../../core/HELIOS.Platform/Core/AI/Interfaces/IAgent.cs" Link="CoreSeams/IAgent.cs" />

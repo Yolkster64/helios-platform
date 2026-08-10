@@ -131,6 +131,139 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task TandemAsync_FiltersProviderWhosePromptExceedsContextWindow()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var options = new AIHubOptions
+        {
+            CliAgents = new List<CliAgentOptions>
+            {
+                new() { Name = "small-agent", Command = "echo", ArgsTemplate = "{prompt}", Model = "tiny-model", TimeoutSeconds = 10 },
+                new() { Name = "big-agent", Command = "echo", ArgsTemplate = "{prompt}", Model = "huge-model", TimeoutSeconds = 10 },
+            },
+            Routing = new RoutingOptions
+            {
+                DefaultChain = new List<string> { "small-agent", "big-agent" },
+            },
+        };
+        var catalog = new ModelCatalog(new List<ModelProfile>
+        {
+            new() { Provider = "small-agent", Model = "tiny-model", ContextTokens = 100 },
+            new() { Provider = "big-agent", Model = "huge-model", ContextTokens = 1_000_000 },
+        });
+        var hub = new AIHubService(options, catalog: catalog);
+
+        // ~500 estimated tokens either way (byte-count heuristic or native estimator):
+        // fits big-agent's window (995,904 usable) but not small-agent's (75 usable).
+        var prompt = new string('a', 2000);
+
+        var tandem = await hub.TandemAsync("unrouted_task", prompt);
+
+        Assert.Single(tandem.Results);
+        Assert.Equal("big-agent", tandem.Results[0].Provider);
+    }
+
+    [Fact]
+    public async Task TandemAsync_AllProvidersExceedWindow_FallsBackToFullChain()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var options = new AIHubOptions
+        {
+            CliAgents = new List<CliAgentOptions>
+            {
+                new() { Name = "small-agent", Command = "echo", ArgsTemplate = "{prompt}", Model = "tiny-model", TimeoutSeconds = 10 },
+            },
+            Routing = new RoutingOptions
+            {
+                DefaultChain = new List<string> { "small-agent" },
+            },
+        };
+        var catalog = new ModelCatalog(new List<ModelProfile>
+        {
+            new() { Provider = "small-agent", Model = "tiny-model", ContextTokens = 100 },
+        });
+        var hub = new AIHubService(options, catalog: catalog);
+
+        // Losing the only candidate is worse than trying it anyway — filterFits must
+        // return the chain unfiltered when nothing fits.
+        var tandem = await hub.TandemAsync("unrouted_task", new string('a', 2000));
+
+        Assert.Single(tandem.Results);
+        Assert.Equal("small-agent", tandem.Results[0].Provider);
+    }
+
+    [Fact]
+    public void FlagDuplicates_LeavesUniqueResultsUnmarked()
+    {
+        var results = new[]
+        {
+            new ChatResult(true, "The quick brown fox jumps over the lazy dog", "a", "m", TimeSpan.Zero),
+            new ChatResult(true, "Completely unrelated text about ocean tides and weather patterns", "b", "m", TimeSpan.Zero),
+        };
+
+        var flagged = AIHubService.FlagDuplicates(results);
+
+        Assert.All(flagged, r => Assert.Null(r.DuplicateOfProvider));
+    }
+
+    [Fact]
+    public void FlagDuplicates_SkipsFailedAndBlankResults_WithoutThrowing()
+    {
+        var results = new[]
+        {
+            new ChatResult(false, null, "a", "m", TimeSpan.Zero, Error: "boom"),
+            new ChatResult(true, "   ", "b", "m", TimeSpan.Zero),
+        };
+
+        var flagged = AIHubService.FlagDuplicates(results);
+
+        Assert.Equal(2, flagged.Count);
+        Assert.All(flagged, r => Assert.Null(r.DuplicateOfProvider));
+    }
+
+    [Fact]
+    public void HashedFrequencyVector_IsDeterministic_AndOrderAndCaseInsensitive()
+    {
+        var a = new float[8];
+        var b = new float[8];
+
+        AIHubService.HashedFrequencyVector("Hello world, hello WORLD!", a);
+        AIHubService.HashedFrequencyVector("world hello, World hello", b);
+
+        Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public void HashedFrequencyVector_DifferentTextProducesDifferentVector()
+    {
+        var a = new float[16];
+        var b = new float[16];
+
+        AIHubService.HashedFrequencyVector("apples and oranges are fruit", a);
+        AIHubService.HashedFrequencyVector("quantum entanglement in superconductors", b);
+
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void HashedFrequencyVector_EmptyText_StaysZero()
+    {
+        var vector = new float[8];
+
+        AIHubService.HashedFrequencyVector(" ... !!! ", vector);
+
+        Assert.All(vector, v => Assert.Equal(0f, v));
+    }
+
+    [Fact]
     public void ShippedConfig_BuildsHub_WithAllProvidersRegistered()
     {
         var path = AIHubOptions.FindConfigFile(AppContext.BaseDirectory);

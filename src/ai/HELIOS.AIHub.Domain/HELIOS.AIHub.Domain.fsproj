@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Include="Pricing.fs" />
+    <Compile Include="ContextBudget.fs" />
     <Compile Include="ModelSelection.fs" />
     <Compile Include="RoutingPolicy.fs" />
   </ItemGroup>

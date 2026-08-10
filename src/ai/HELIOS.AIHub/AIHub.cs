@@ -1,6 +1,8 @@
+using System.Text;
 using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Configuration;
 using HELIOS.AIHub.Learning;
+using HELIOS.AIHub.Native;
 using HELIOS.AIHub.Providers;
 using HELIOS.AIHub.Resilience;
 using HELIOS.AIHub.Routing;
@@ -121,6 +123,7 @@ public sealed class AIHubService
                     : $"No registered providers for task type '{taskType}' (chain empty). Check config/aihub.json.");
         }
 
+        chain = FilterChainByContext(chain, prompt);
         chain = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
 
         var request = new ChatRequest(prompt, System: system, TaskType: taskType);
@@ -190,6 +193,269 @@ public sealed class AIHubService
         }
     }
 
+    /// <summary>Tokens reserved for the completion when checking whether a prompt fits a window.</summary>
+    private const int DefaultReservedOutputTokens = 4096;
+
+    /// <summary>
+    /// Drop chain entries whose provider/model context window can't fit the prompt, via the
+    /// F# ContextBudget module. A 200k-token prompt routed to a 128k-window model wastes a
+    /// round-trip that fallback would otherwise have to absorb. Mirrors ApplyLearningAsync's
+    /// philosophy: this can only narrow the chain toward providers that fit, never break
+    /// routing — providers with no known window are always treated as fitting, and if every
+    /// window resolves too small ContextBudget.filterFits hands back the original chain.
+    /// </summary>
+    private List<string> FilterChainByContext(List<string> chain, string prompt)
+    {
+        if (_catalog is null || chain.Count == 0)
+        {
+            return chain;
+        }
+
+        var promptTokens = EstimateTokenCount(prompt);
+        if (promptTokens <= 0)
+        {
+            return chain;
+        }
+
+        var providerNames = new List<string>();
+        var maxContextTokens = new List<int>();
+        var reservedOutputTokens = new List<int>();
+        foreach (var name in chain)
+        {
+            var window = ResolveContextWindow(name);
+            if (window is not { } w)
+            {
+                continue;
+            }
+            providerNames.Add(name);
+            maxContextTokens.Add(w.MaxContextTokens);
+            reservedOutputTokens.Add(w.ReservedOutputTokens);
+        }
+
+        if (providerNames.Count == 0)
+        {
+            return chain;
+        }
+
+        try
+        {
+            return ContextBudgetInterop.FilterFits(
+                promptTokens,
+                chain.ToArray(),
+                providerNames.ToArray(),
+                maxContextTokens.ToArray(),
+                reservedOutputTokens.ToArray()).ToList();
+        }
+        catch (ArithmeticException)
+        {
+            // Context filtering is an optimization, not a correctness requirement.
+            return chain;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a provider's context window from config/model-catalog.json, matched against
+    /// its configured/default model. A provider key can carry several catalog entries with
+    /// different windows (e.g. anthropic's opus vs. haiku), so an exact model match is tried
+    /// first; when the configured model isn't in the catalog, the smallest window among that
+    /// provider's entries is used — underestimating capacity is safe, overestimating causes
+    /// truncated requests.
+    /// </summary>
+    private (int MaxContextTokens, int ReservedOutputTokens)? ResolveContextWindow(string providerName)
+    {
+        if (_catalog is null)
+        {
+            return null;
+        }
+
+        var configuredModel = _options.Providers.TryGetValue(providerName, out var providerOptions)
+            ? providerOptions.Model
+            : null;
+        var defaultModel = configuredModel
+            ?? (_byProvider.TryGetValue(providerName, out var agent) ? (agent as ProviderAgentBase)?.DefaultModel : null);
+
+        var candidates = _catalog.AllModels
+            .Where(m => string.Equals(m.Provider, providerName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var match = defaultModel is not null
+            ? candidates.FirstOrDefault(m => string.Equals(m.Model, defaultModel, StringComparison.OrdinalIgnoreCase))
+            : null;
+        var contextTokens = (match ?? candidates.MinBy(m => m.ContextTokens))!.ContextTokens;
+
+        var reserved = Math.Min(DefaultReservedOutputTokens, contextTokens / 4);
+        return (contextTokens, reserved);
+    }
+
+    /// <summary>
+    /// Estimates a prompt's token count via the C++ native estimator (src/ai/HELIOS.AIHub.Native),
+    /// falling back to the same ~4-bytes-per-token heuristic it uses internally when the native
+    /// library isn't present at runtime — it's documented as optional, so its absence must degrade
+    /// gracefully rather than break routing.
+    /// </summary>
+    private static int EstimateTokenCount(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        var utf8 = Encoding.UTF8.GetBytes(text);
+        try
+        {
+            if (NativeMethods.EstimateTokens(utf8, (nuint)utf8.Length, out var tokens) == 0)
+            {
+                return tokens;
+            }
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+
+        return utf8.Length / 4;
+    }
+
+    /// <summary>Feature-hash vector width for dedup — fixed so every result maps to the same space.</summary>
+    private const int DedupVectorDimension = 64;
+
+    /// <summary>Cosine-similarity threshold above which two responses count as duplicates.</summary>
+    private const float DedupSimilarityThreshold = 0.90f;
+
+    /// <summary>
+    /// Marks near-duplicate responses within a CompareAsync fan-out using the native
+    /// cosine-similarity kernel (src/ai/HELIOS.AIHub.Native). There's no embedding model wired
+    /// into AIHub, so this hashes each response into a fixed-width word-frequency vector — cheap,
+    /// deterministic, and enough to catch providers that returned essentially the same text.
+    /// Falls back to returning results unmarked when the native library isn't present.
+    /// </summary>
+    internal static IReadOnlyList<ChatResult> FlagDuplicates(ChatResult[] results)
+    {
+        var candidates = results
+            .Select((result, index) => (result, index))
+            .Where(x => x.result.Success && !string.IsNullOrWhiteSpace(x.result.Text))
+            .ToList();
+
+        if (candidates.Count < 2)
+        {
+            return results;
+        }
+
+        var vectors = new float[candidates.Count * DedupVectorDimension];
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            HashedFrequencyVector(candidates[i].result.Text!, vectors.AsSpan(i * DedupVectorDimension, DedupVectorDimension));
+        }
+
+        var matrix = new float[candidates.Count * candidates.Count];
+        try
+        {
+            if (NativeMethods.SimilarityMatrix(vectors, (nuint)candidates.Count, (nuint)DedupVectorDimension, matrix) != 0)
+            {
+                return results;
+            }
+        }
+        catch (DllNotFoundException)
+        {
+            return results;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return results;
+        }
+
+        var updated = (ChatResult[])results.Clone();
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            for (var j = 0; j < i; j++)
+            {
+                if (matrix[(i * candidates.Count) + j] >= DedupSimilarityThreshold)
+                {
+                    var originalIndex = candidates[i].index;
+                    var earlierProvider = candidates[j].result.Provider;
+                    updated[originalIndex] = updated[originalIndex] with { DuplicateOfProvider = earlierProvider };
+                    break;
+                }
+            }
+        }
+
+        return updated;
+    }
+
+    /// <summary>Deterministic hashed word-frequency vector — FNV-1a into buckets, then L2-normalized.</summary>
+    internal static void HashedFrequencyVector(string text, Span<float> vector)
+    {
+        vector.Clear();
+        foreach (var word in Tokenize(text))
+        {
+            var bucket = (int)(Fnv1aHash(word) % (uint)vector.Length);
+            vector[bucket] += 1f;
+        }
+
+        var normSquared = 0.0;
+        foreach (var v in vector)
+        {
+            normSquared += (double)v * v;
+        }
+
+        if (normSquared < 1e-12)
+        {
+            return;
+        }
+
+        var norm = (float)Math.Sqrt(normSquared);
+        for (var i = 0; i < vector.Length; i++)
+        {
+            vector[i] /= norm;
+        }
+    }
+
+    private static IEnumerable<string> Tokenize(string text)
+    {
+        var start = -1;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (char.IsLetterOrDigit(text[i]))
+            {
+                if (start < 0)
+                {
+                    start = i;
+                }
+            }
+            else if (start >= 0)
+            {
+                yield return text[start..i].ToLowerInvariant();
+                start = -1;
+            }
+        }
+
+        if (start >= 0)
+        {
+            yield return text[start..].ToLowerInvariant();
+        }
+    }
+
+    private static uint Fnv1aHash(string value)
+    {
+        const uint offsetBasis = 2166136261;
+        const uint prime = 16777619;
+
+        var hash = offsetBasis;
+        foreach (var c in value)
+        {
+            hash ^= c;
+            hash *= prime;
+        }
+
+        return hash;
+    }
+
     private async Task RecordOutcomeAsync(
         string? taskType, ChatResult result, CancellationToken cancellationToken)
     {
@@ -238,7 +504,8 @@ public sealed class AIHubService
                 : Task.FromResult(new ChatResult(false, null, name, "", TimeSpan.Zero,
                     Error: $"Unknown provider '{name}'.")));
 
-        return await Task.WhenAll(tasks).ConfigureAwait(false);
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        return FlagDuplicates(results);
     }
 
     /// <summary>
@@ -258,6 +525,8 @@ public sealed class AIHubService
         {
             return new TandemResult(taskType, Array.Empty<ChatResult>(), null);
         }
+
+        chain = FilterChainByContext(chain, prompt);
 
         var request = new ChatRequest(prompt, System: system, TaskType: taskType);
         var tasks = chain.Select(async name =>

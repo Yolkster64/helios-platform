@@ -12,6 +12,11 @@ public sealed record ChatRequest(
     double? Temperature = null);
 
 /// <summary>Normalized result from any provider.</summary>
+/// <param name="DuplicateOfProvider">
+/// Set by <c>CompareAsync</c>'s dedup pass when this result's text is a near-duplicate of
+/// another provider's response (native cosine-similarity check). Names the earliest provider
+/// it duplicates; null when the result is unique or dedup didn't run.
+/// </param>
 public sealed record ChatResult(
     bool Success,
     string? Text,
@@ -20,7 +25,8 @@ public sealed record ChatResult(
     TimeSpan Latency,
     long? InputTokens = null,
     long? OutputTokens = null,
-    string? Error = null);
+    string? Error = null,
+    string? DuplicateOfProvider = null);
 
 /// <summary>Configuration/readiness state of a provider.</summary>
 public enum ProviderReadiness
