@@ -39,6 +39,12 @@ parallel — locally, or on burst capacity once the fleet VMSS
 (`infra/modules/fleet-vmss.bicep`) is enabled. Review of the reports belongs on
 the read-only `xcore-review` board.
 
+`scripts/fleet/seed-absorption-tasks.ps1` automates the seeding: it turns
+watchlist candidates (filterable by `-Epic`/`-Status`, cap with `-Max`) into
+board tasks with deterministic ids (`absorb-pr-<N>`) through the lock-aware
+enqueue, against the latest running fleet run's board (or `-RunId`). Re-seeding
+is idempotent — existing task ids are skipped.
+
 ## Boundaries
 
 - **No auto-merge.** The pipeline produces evidence and staged worktrees;
