@@ -1,0 +1,58 @@
+name: "Feature Request"
+description: "Request a new feature or enhancement"
+title: "[FEATURE] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in HELIOS! Please fill in the following information.
+
+  - type: textarea
+    attributes:
+      label: "Description"
+      description: "Describe the feature you'd like to see"
+      placeholder: "Clear and concise description of what you want to add"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Problem/Context"
+      description: "What problem does this solve?"
+      placeholder: "Describe the problem or use case"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Proposed Solution"
+      description: "How should this feature work?"
+      placeholder: "Describe your proposed implementation"
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: "Component"
+      options:
+        - Deployment
+        - Agents
+        - AI Services
+        - Security
+        - Monitoring
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: "Priority"
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
