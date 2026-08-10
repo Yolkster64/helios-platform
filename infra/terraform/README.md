@@ -18,6 +18,7 @@ here. If the two ever disagree, the Bicep wins.
 | `Microsoft.KeyVault/vaults@2024-11-01` (RBAC, standard, 90-day soft delete) + conditional secrets | `azurerm_key_vault.main` + `azurerm_key_vault_secret.*` |
 | Azure AI User + Key Vault Secrets User role assignments (same role GUIDs, conditional on `principalId`) | `azurerm_role_assignment.*` |
 | `aiServiceAccountResourceId` BYO short-circuit | `count` on the account/project resources + `local.effective_account_id` |
+| `modules/fleet-vmss.bicep` (opt-in Flexible VMSS + vnet/NSG + CPU autoscale; `deployFleetVmss` gate) | `azapi_resource.fleet_vmss` + `azurerm_virtual_network`/`azurerm_subnet`/`azurerm_network_security_group` + `azurerm_monitor_autoscale_setting`, all `count`-gated on `local.fleet_vmss_enabled` |
 
 Every Bicep parameter exists as a variable with the same name in snake_case
 (`aiServicesName` → `ai_services_name`), the same default, and the same type;
@@ -71,6 +72,12 @@ Plans and applies that touch no deployments do not need the flag.
 - **Secret write path.** `azurerm_key_vault_secret` writes via the data plane and
   stores the value in Terraform state (see the state warning below); ARM writes via
   the control plane and keeps no state.
+- **Fleet VMSS via azapi.** `azurerm_orchestrated_virtual_machine_scale_set`'s
+  `identity` block is UserAssigned-only and cannot express the SystemAssigned
+  identity the Bicep module carries, so the scale set itself is an `azapi_resource`
+  (same pattern as the Foundry account). The Bicep module's `sshSourceAddressPrefix`
+  and vnet-prefix knobs are module-internal (not `main.bicep` parameters), so they
+  appear here as locals, not variables.
 
 ## Quickstart
 
@@ -112,6 +119,8 @@ terraform validate
 ## Outputs
 
 `ai_services_endpoint`, `open_ai_endpoint`, `project_endpoint`, `project_id`,
-`key_vault_uri`, `model_deployment_names` — the same six as the Bicep. When
+`key_vault_uri`, `model_deployment_names`, `fleet_vmss_name`,
+`fleet_vmss_principal_id` — the same eight as the Bicep. When
 `ai_service_account_resource_id` is set (BYO account), account/project/deployment
-outputs are empty, matching the Bicep behavior.
+outputs are empty, and the two fleet outputs are empty strings while
+`deploy_fleet_vmss` is off, matching the Bicep behavior.

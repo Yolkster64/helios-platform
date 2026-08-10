@@ -147,3 +147,91 @@ variable "principal_id" {
   type        = string
   default     = ""
 }
+
+# --- Fleet burst VMSS (opt-in; mirrors the deployFleetVmss surface of main.bicep) ---
+
+variable "deploy_fleet_vmss" {
+  description = "Deploy the Hermes/Xcore fleet burst VM scale set (cloud fleet-worker lanes). OFF by default; also requires vmss_admin_public_key."
+  type        = bool
+  default     = false
+}
+
+variable "vmss_admin_username" {
+  description = "Admin username on fleet VMSS instances. SSH-key-only; password auth is disabled."
+  type        = string
+  default     = "heliosadmin"
+}
+
+variable "vmss_admin_public_key" {
+  description = "SSH public key for vmss_admin_username (e.g. contents of ~/.ssh/id_ed25519.pub). Deliberately NOT sensitive — public keys are not secrets, which also keeps the count gate free of nonsensitive() unwrapping. Empty string (the default) keeps the VMSS off even when deploy_fleet_vmss is true."
+  type        = string
+  default     = ""
+}
+
+variable "fleet_vm_sku" {
+  description = "VM size for fleet burst instances."
+  type        = string
+  default     = "Standard_B2s"
+}
+
+variable "fleet_burst_min_instances" {
+  description = "Autoscale floor and default instance count for the fleet VMSS. 0 = scale-to-zero when idle."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.fleet_burst_min_instances >= 0
+    error_message = "fleet_burst_min_instances must be >= 0 (Bicep @minValue(0))."
+  }
+}
+
+variable "fleet_burst_max_instances" {
+  description = "Autoscale ceiling for the fleet VMSS — the topology default maxBurstLanes (config/fleet/fleet-topology.json)."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.fleet_burst_max_instances >= 1
+    error_message = "fleet_burst_max_instances must be >= 1 (Bicep @minValue(1))."
+  }
+}
+
+variable "fleet_scale_down_idle_seconds" {
+  description = "Idle window in seconds before the fleet VMSS scales in — the topology default scaleDownIdleSeconds. Azure autoscale requires windows of at least 300 seconds."
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.fleet_scale_down_idle_seconds >= 300 && var.fleet_scale_down_idle_seconds <= 43200
+    error_message = "fleet_scale_down_idle_seconds must be 300-43200 (Bicep @minValue(300)/@maxValue(43200))."
+  }
+}
+
+variable "fleet_workers_per_instance" {
+  description = "Stub fleet worker lanes started per VMSS instance."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.fleet_workers_per_instance >= 1
+    error_message = "fleet_workers_per_instance must be >= 1 (Bicep @minValue(1))."
+  }
+}
+
+variable "fleet_pool" {
+  description = "Pool name exported as HELIOS_FLEET_POOL on cloud lanes, so fleet outcomes attribute to the burst pool."
+  type        = string
+  default     = "cloud-burst"
+}
+
+variable "fleet_repo_url" {
+  description = "Git repository cloned onto each VMSS instance. Must be public — cloud-init clones anonymously and never carries credentials."
+  type        = string
+  default     = "https://github.com/Yolkster64/helios-platform"
+}
+
+variable "fleet_repo_ref" {
+  description = "Git ref (branch or tag) checked out on each VMSS instance."
+  type        = string
+  default     = "main"
+}

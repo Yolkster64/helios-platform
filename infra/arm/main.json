@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "3705911590441554423"
+      "templateHash": "12854500008313447680"
     }
   },
   "definitions": {
@@ -203,6 +203,88 @@
       "metadata": {
         "description": "Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created."
       }
+    },
+    "deployFleetVmss": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy the Hermes/Xcore fleet burst VM scale set (cloud fleet-worker lanes). OFF by default; also requires vmssAdminPublicKey."
+      }
+    },
+    "vmssAdminUsername": {
+      "type": "string",
+      "defaultValue": "heliosadmin",
+      "metadata": {
+        "description": "Admin username on fleet VMSS instances. SSH-key-only; password auth is disabled."
+      }
+    },
+    "vmssAdminPublicKey": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SSH public key for vmssAdminUsername (e.g. contents of ~/.ssh/id_ed25519.pub). Not @secure() on purpose — public keys are not secrets, and the module is gated on this being non-empty. Empty string (the default) keeps the VMSS off even when deployFleetVmss is true."
+      }
+    },
+    "fleetVmSku": {
+      "type": "string",
+      "defaultValue": "Standard_B2s",
+      "metadata": {
+        "description": "VM size for fleet burst instances."
+      }
+    },
+    "fleetBurstMinInstances": {
+      "type": "int",
+      "defaultValue": 0,
+      "minValue": 0,
+      "metadata": {
+        "description": "Autoscale floor and default instance count for the fleet VMSS. 0 = scale-to-zero when idle."
+      }
+    },
+    "fleetBurstMaxInstances": {
+      "type": "int",
+      "defaultValue": 5,
+      "minValue": 1,
+      "metadata": {
+        "description": "Autoscale ceiling for the fleet VMSS — the topology default maxBurstLanes (config/fleet/fleet-topology.json)."
+      }
+    },
+    "fleetScaleDownIdleSeconds": {
+      "type": "int",
+      "defaultValue": 300,
+      "minValue": 300,
+      "maxValue": 43200,
+      "metadata": {
+        "description": "Idle window in seconds before the fleet VMSS scales in — the topology default scaleDownIdleSeconds. Azure autoscale requires windows of at least 300 seconds."
+      }
+    },
+    "fleetWorkersPerInstance": {
+      "type": "int",
+      "defaultValue": 2,
+      "minValue": 1,
+      "metadata": {
+        "description": "Stub fleet worker lanes started per VMSS instance."
+      }
+    },
+    "fleetPool": {
+      "type": "string",
+      "defaultValue": "cloud-burst",
+      "metadata": {
+        "description": "Pool name exported as HELIOS_FLEET_POOL on cloud lanes, so fleet outcomes attribute to the burst pool."
+      }
+    },
+    "fleetRepoUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/Yolkster64/helios-platform",
+      "metadata": {
+        "description": "Git repository cloned onto each VMSS instance. Must be public — cloud-init clones anonymously and never carries credentials."
+      }
+    },
+    "fleetRepoRef": {
+      "type": "string",
+      "defaultValue": "main",
+      "metadata": {
+        "description": "Git ref (branch or tag) checked out on each VMSS instance."
+      }
     }
   },
   "variables": {
@@ -212,6 +294,7 @@
     "effectiveModelLocation": "[if(empty(parameters('modelLocation')), parameters('location'), parameters('modelLocation'))]",
     "effectiveKeyVaultName": "[if(empty(parameters('keyVaultName')), format('kv-helios-{0}', variables('uniqueSuffix')), parameters('keyVaultName'))]",
     "aiServiceExists": "[not(empty(parameters('aiServiceAccountResourceId')))]",
+    "fleetVmssEnabled": "[and(parameters('deployFleetVmss'), not(equals(parameters('vmssAdminPublicKey'), '')))]",
     "allModelDeployments": "[concat(createArray(createObject('name', parameters('modelName'), 'modelName', parameters('modelName'), 'format', parameters('modelFormat'), 'version', parameters('modelVersion'), 'skuName', parameters('modelSkuName'), 'capacity', parameters('modelCapacity'))), parameters('additionalModelDeployments'))]"
   },
   "resources": {
@@ -703,6 +786,415 @@
           }
         }
       }
+    },
+    "fleetVmss": {
+      "condition": "[variables('fleetVmssEnabled')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('fleet-vmss-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "vmssName": {
+            "value": "[format('vmss-helios-{0}', variables('uniqueSuffix'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "vmSku": {
+            "value": "[parameters('fleetVmSku')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('vmssAdminUsername')]"
+          },
+          "adminPublicKey": {
+            "value": "[parameters('vmssAdminPublicKey')]"
+          },
+          "workersPerInstance": {
+            "value": "[parameters('fleetWorkersPerInstance')]"
+          },
+          "fleetPool": {
+            "value": "[parameters('fleetPool')]"
+          },
+          "repoUrl": {
+            "value": "[parameters('fleetRepoUrl')]"
+          },
+          "repoRef": {
+            "value": "[parameters('fleetRepoRef')]"
+          },
+          "burstMinInstances": {
+            "value": "[parameters('fleetBurstMinInstances')]"
+          },
+          "burstMaxInstances": {
+            "value": "[parameters('fleetBurstMaxInstances')]"
+          },
+          "scaleDownIdleSeconds": {
+            "value": "[parameters('fleetScaleDownIdleSeconds')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "10577496021233635545"
+            }
+          },
+          "parameters": {
+            "vmssName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the VM scale set. Derived names (vnet, NSG, autoscale) hang off it."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for all fleet resources."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags applied to all fleet resources."
+              }
+            },
+            "vmSku": {
+              "type": "string",
+              "defaultValue": "Standard_B2s",
+              "metadata": {
+                "description": "VM size for burst instances. B2s (2 vCPU / 4 GiB) fits two stub lanes."
+              }
+            },
+            "adminUsername": {
+              "type": "string",
+              "metadata": {
+                "description": "Admin username on the instances. SSH-key-only; password auth is disabled."
+              }
+            },
+            "adminPublicKey": {
+              "type": "string",
+              "minLength": 1,
+              "metadata": {
+                "description": "SSH public key for adminUsername (e.g. contents of ~/.ssh/id_ed25519.pub). Deliberately NOT @secure(): public keys are not secrets, and keeping the param plain lets main.bicep gate the module on its emptiness."
+              }
+            },
+            "workersPerInstance": {
+              "type": "int",
+              "defaultValue": 2,
+              "minValue": 1,
+              "metadata": {
+                "description": "Stub fleet worker lanes started per instance (systemd template units)."
+              }
+            },
+            "fleetPool": {
+              "type": "string",
+              "defaultValue": "cloud-burst",
+              "metadata": {
+                "description": "Pool name exported as HELIOS_FLEET_POOL so fleet outcomes carry the cloud pool."
+              }
+            },
+            "repoUrl": {
+              "type": "string",
+              "defaultValue": "https://github.com/Yolkster64/helios-platform",
+              "metadata": {
+                "description": "Git repository cloned onto each instance. Must be public — cloud-init clones anonymously and must never carry credentials."
+              }
+            },
+            "repoRef": {
+              "type": "string",
+              "defaultValue": "main",
+              "metadata": {
+                "description": "Git ref (branch or tag) checked out on each instance."
+              }
+            },
+            "burstMinInstances": {
+              "type": "int",
+              "defaultValue": 0,
+              "minValue": 0,
+              "metadata": {
+                "description": "Autoscale floor and default instance count. 0 = scale-to-zero when idle."
+              }
+            },
+            "burstMaxInstances": {
+              "type": "int",
+              "defaultValue": 5,
+              "minValue": 1,
+              "metadata": {
+                "description": "Autoscale ceiling — the topology default maxBurstLanes (config/fleet/fleet-topology.json)."
+              }
+            },
+            "scaleDownIdleSeconds": {
+              "type": "int",
+              "defaultValue": 300,
+              "minValue": 300,
+              "maxValue": 43200,
+              "metadata": {
+                "description": "Idle window in seconds before scale-in — the topology default scaleDownIdleSeconds. Azure autoscale requires windows of at least 300 seconds."
+              }
+            },
+            "vnetAddressPrefix": {
+              "type": "string",
+              "defaultValue": "10.44.0.0/24",
+              "metadata": {
+                "description": "Address space of the fleet virtual network."
+              }
+            },
+            "subnetAddressPrefix": {
+              "type": "string",
+              "defaultValue": "10.44.0.0/24",
+              "metadata": {
+                "description": "Address prefix of the fleet subnet (may equal the vnet space)."
+              }
+            },
+            "sshSourceAddressPrefix": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "CIDR allowed to SSH to instances (e.g. an operator IP). Empty string (the default) adds no inbound rule, leaving the NSG default DenyAllInbound in force."
+              }
+            },
+            "osDiskStorageAccountType": {
+              "type": "string",
+              "defaultValue": "StandardSSD_LRS",
+              "metadata": {
+                "description": "Managed disk SKU for the OS disk."
+              }
+            }
+          },
+          "variables": {
+            "cloudInitTemplate": "#cloud-config\npackage_update: true\npackages:\n  - git\n  - python3\n  - dotnet-runtime-8.0\nwrite_files:\n  - path: /etc/systemd/system/helios-fleet-worker@.service\n    permissions: '0644'\n    content: |\n      [Unit]\n      Description=HELIOS fleet worker lane %i (cloud-burst stub)\n      After=network-online.target\n      Wants=network-online.target\n\n      [Service]\n      Type=simple\n      User=heliosfleet\n      WorkingDirectory=/opt/helios/src/ai/python\n      Environment=HELIOS_FLEET_POOL=__FLEET_POOL__\n      Environment=HERMES_KANBAN_DB=/var/lib/helios-fleet/boards/__FLEET_POOL__.json\n      Environment=HERMES_KANBAN_CLAIM_LOCK=/var/lib/helios-fleet/boards/__FLEET_POOL__.json.lock\n      Environment=HERMES_KANBAN_TASK=*\n      Environment=HERMES_KANBAN_RUN_ID=__FLEET_POOL__-%H\n      Environment=HERMES_KANBAN_ASSIGNEE=%H-lane-%i\n      Environment=HERMES_KANBAN_MAX_IDLE_POLLS=0\n      ExecStart=/usr/bin/python3 -m helios_agents.fleet_worker\n      Restart=always\n      RestartSec=5\n\n      [Install]\n      WantedBy=multi-user.target\n  - path: /var/lib/helios-fleet/boards/__FLEET_POOL__.json\n    permissions: '0664'\n    content: |\n      { \"tasks\": [] }\nruncmd:\n  - snap install powershell --classic\n  - useradd --system --create-home --shell /usr/sbin/nologin heliosfleet\n  - git clone --depth 1 --branch __REPO_REF__ __REPO_URL__ /opt/helios\n  - chown -R heliosfleet:heliosfleet /var/lib/helios-fleet\n  - systemctl daemon-reload\n  - for i in $(seq 1 __WORKERS_PER_INSTANCE__); do systemctl enable --now helios-fleet-worker@$i.service; done\n",
+            "cloudInit": "[replace(replace(replace(replace(variables('cloudInitTemplate'), '__FLEET_POOL__', parameters('fleetPool')), '__REPO_URL__', parameters('repoUrl')), '__REPO_REF__', parameters('repoRef')), '__WORKERS_PER_INSTANCE__', string(parameters('workersPerInstance')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-nsg', parameters('vmssName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "securityRules": "[if(empty(parameters('sshSourceAddressPrefix')), createArray(), createArray(createObject('name', 'allow-ssh-from-operator', 'properties', createObject('priority', 1000, 'direction', 'Inbound', 'access', 'Allow', 'protocol', 'Tcp', 'sourceAddressPrefix', parameters('sshSourceAddressPrefix'), 'sourcePortRange', '*', 'destinationAddressPrefix', '*', 'destinationPortRange', '22'))))]"
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-vnet', parameters('vmssName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('vnetAddressPrefix')]"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "fleet",
+                    "properties": {
+                      "addressPrefix": "[parameters('subnetAddressPrefix')]"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachineScaleSets",
+              "apiVersion": "2024-07-01",
+              "name": "[parameters('vmssName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('vmSku')]",
+                "tier": "Standard",
+                "capacity": "[parameters('burstMinInstances')]"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "orchestrationMode": "Flexible",
+                "platformFaultDomainCount": 1,
+                "virtualMachineProfile": {
+                  "osProfile": {
+                    "computerNamePrefix": "hfleet",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "customData": "[base64(variables('cloudInit'))]",
+                    "linuxConfiguration": {
+                      "disablePasswordAuthentication": true,
+                      "ssh": {
+                        "publicKeys": [
+                          {
+                            "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
+                            "keyData": "[parameters('adminPublicKey')]"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "storageProfile": {
+                    "imageReference": {
+                      "publisher": "Canonical",
+                      "offer": "ubuntu-24_04-lts",
+                      "sku": "server",
+                      "version": "latest"
+                    },
+                    "osDisk": {
+                      "createOption": "FromImage",
+                      "caching": "ReadWrite",
+                      "managedDisk": {
+                        "storageAccountType": "[parameters('osDiskStorageAccountType')]"
+                      }
+                    }
+                  },
+                  "networkProfile": {
+                    "networkApiVersion": "2020-11-01",
+                    "networkInterfaceConfigurations": [
+                      {
+                        "name": "[format('{0}-nic', parameters('vmssName'))]",
+                        "properties": {
+                          "primary": true,
+                          "networkSecurityGroup": {
+                            "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-nsg', parameters('vmssName')))]"
+                          },
+                          "ipConfigurations": [
+                            {
+                              "name": "ipconfig1",
+                              "properties": {
+                                "primary": true,
+                                "subnet": {
+                                  "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('vmssName'))), '2024-05-01').subnets[0].id]"
+                                },
+                                "publicIPAddressConfiguration": {
+                                  "name": "[format('{0}-pip', parameters('vmssName'))]",
+                                  "sku": {
+                                    "name": "Standard"
+                                  },
+                                  "properties": {
+                                    "idleTimeoutInMinutes": 15
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-nsg', parameters('vmssName')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('vmssName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/autoscalesettings",
+              "apiVersion": "2022-10-01",
+              "name": "[format('{0}-autoscale', parameters('vmssName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "enabled": true,
+                "targetResourceUri": "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName'))]",
+                "profiles": [
+                  {
+                    "name": "fleet-burst",
+                    "capacity": {
+                      "minimum": "[string(parameters('burstMinInstances'))]",
+                      "maximum": "[string(parameters('burstMaxInstances'))]",
+                      "default": "[string(parameters('burstMinInstances'))]"
+                    },
+                    "rules": [
+                      {
+                        "metricTrigger": {
+                          "metricName": "Percentage CPU",
+                          "metricNamespace": "microsoft.compute/virtualmachinescalesets",
+                          "metricResourceUri": "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName'))]",
+                          "timeGrain": "PT1M",
+                          "statistic": "Average",
+                          "timeWindow": "PT5M",
+                          "timeAggregation": "Average",
+                          "operator": "GreaterThan",
+                          "threshold": 70
+                        },
+                        "scaleAction": {
+                          "direction": "Increase",
+                          "type": "ChangeCount",
+                          "value": "1",
+                          "cooldown": "PT5M"
+                        }
+                      },
+                      {
+                        "metricTrigger": {
+                          "metricName": "Percentage CPU",
+                          "metricNamespace": "microsoft.compute/virtualmachinescalesets",
+                          "metricResourceUri": "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName'))]",
+                          "timeGrain": "PT1M",
+                          "statistic": "Average",
+                          "timeWindow": "[format('PT{0}S', parameters('scaleDownIdleSeconds'))]",
+                          "timeAggregation": "Average",
+                          "operator": "LessThan",
+                          "threshold": 25
+                        },
+                        "scaleAction": {
+                          "direction": "Decrease",
+                          "type": "ChangeCount",
+                          "value": "1",
+                          "cooldown": "[format('PT{0}S', parameters('scaleDownIdleSeconds'))]"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vmssName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the VM scale set."
+              },
+              "value": "[parameters('vmssName')]"
+            },
+            "vmssId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the VM scale set (the az vmss scale target for scale-fleet.ps1)."
+              },
+              "value": "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the system-assigned managed identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys."
+              },
+              "value": "[reference(resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('vmssName')), '2024-07-01', 'full').identity.principalId]"
+            },
+            "autoscaleName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the autoscale setting."
+              },
+              "value": "[format('{0}-autoscale', parameters('vmssName'))]"
+            }
+          }
+        }
+      }
     }
   },
   "outputs": {
@@ -747,6 +1239,20 @@
         "description": "Names of all model deployments created on the account."
       },
       "value": "[if(variables('aiServiceExists'), createArray(), reference('foundryAccount').outputs.deploymentNames.value)]"
+    },
+    "fleetVmssName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the fleet burst VM scale set — the az vmss scale target for scripts/fleet/scale-fleet.ps1 (empty string when the VMSS is disabled)."
+      },
+      "value": "[if(variables('fleetVmssEnabled'), reference('fleetVmss').outputs.vmssName.value, '')]"
+    },
+    "fleetVmssPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Principal ID of the fleet VMSS system-assigned identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys (empty string when the VMSS is disabled)."
+      },
+      "value": "[if(variables('fleetVmssEnabled'), reference('fleetVmss').outputs.principalId.value, '')]"
     }
   }
 }

@@ -29,3 +29,13 @@ output "model_deployment_names" {
   description = "Names of all model deployments created on the account."
   value       = local.ai_service_exists ? [] : [for d in local.all_model_deployments : d.name]
 }
+
+output "fleet_vmss_name" {
+  description = "Name of the fleet burst VM scale set — the az vmss scale target for scripts/fleet/scale-fleet.ps1 (empty string when the VMSS is disabled)."
+  value       = local.fleet_vmss_enabled ? local.fleet_vmss_name : ""
+}
+
+output "fleet_vmss_principal_id" {
+  description = "Principal ID of the fleet VMSS system-assigned identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys (empty string when the VMSS is disabled)."
+  value       = local.fleet_vmss_enabled ? try(one(azapi_resource.fleet_vmss[*].identity[0].principal_id), "") : ""
+}

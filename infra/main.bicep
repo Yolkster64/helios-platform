@@ -106,6 +106,49 @@ param githubModelsToken string = ''
 @description('Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created.')
 param principalId string = ''
 
+// --- Fleet burst VMSS (opt-in; docs/architecture/HERMES_FLEET_AND_XCORE.md) -------
+// OFF by default and doubly gated (deployFleetVmss AND a non-empty SSH key), so the
+// live rg-helios-ai stack redeploys unchanged until an operator opts in. See
+// infra/README.md, "Fleet burst capacity (VMSS)".
+
+@description('Deploy the Hermes/Xcore fleet burst VM scale set (cloud fleet-worker lanes). OFF by default; also requires vmssAdminPublicKey.')
+param deployFleetVmss bool = false
+
+@description('Admin username on fleet VMSS instances. SSH-key-only; password auth is disabled.')
+param vmssAdminUsername string = 'heliosadmin'
+
+@description('SSH public key for vmssAdminUsername (e.g. contents of ~/.ssh/id_ed25519.pub). Not @secure() on purpose — public keys are not secrets, and the module is gated on this being non-empty. Empty string (the default) keeps the VMSS off even when deployFleetVmss is true.')
+param vmssAdminPublicKey string = ''
+
+@description('VM size for fleet burst instances.')
+param fleetVmSku string = 'Standard_B2s'
+
+@minValue(0)
+@description('Autoscale floor and default instance count for the fleet VMSS. 0 = scale-to-zero when idle.')
+param fleetBurstMinInstances int = 0
+
+@minValue(1)
+@description('Autoscale ceiling for the fleet VMSS — the topology default maxBurstLanes (config/fleet/fleet-topology.json).')
+param fleetBurstMaxInstances int = 5
+
+@minValue(300)
+@maxValue(43200)
+@description('Idle window in seconds before the fleet VMSS scales in — the topology default scaleDownIdleSeconds. Azure autoscale requires windows of at least 300 seconds.')
+param fleetScaleDownIdleSeconds int = 300
+
+@minValue(1)
+@description('Stub fleet worker lanes started per VMSS instance.')
+param fleetWorkersPerInstance int = 2
+
+@description('Pool name exported as HELIOS_FLEET_POOL on cloud lanes, so fleet outcomes attribute to the burst pool.')
+param fleetPool string = 'cloud-burst'
+
+@description('Git repository cloned onto each VMSS instance. Must be public — cloud-init clones anonymously and never carries credentials.')
+param fleetRepoUrl string = 'https://github.com/Yolkster64/helios-platform'
+
+@description('Git ref (branch or tag) checked out on each VMSS instance.')
+param fleetRepoRef string = 'main'
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -118,6 +161,10 @@ var projectName = toLower(aiProjectName)
 var effectiveModelLocation = empty(modelLocation) ? location : modelLocation
 var effectiveKeyVaultName = empty(keyVaultName) ? 'kv-helios-${uniqueSuffix}' : keyVaultName
 var aiServiceExists = !empty(aiServiceAccountResourceId)
+
+// Both gates must open: the flag, and an SSH key (SSH-key-only auth means a VMSS
+// without a key would be undeployable anyway).
+var fleetVmssEnabled = deployFleetVmss && vmssAdminPublicKey != ''
 
 var allModelDeployments = concat(
   [
@@ -173,6 +220,28 @@ module keyVault 'modules/keyvault.bicep' = {
   }
 }
 
+// Hermes/Xcore fleet burst capacity — VMSS + autoscale for cloud fleet-worker
+// lanes. Conditional on BOTH deployFleetVmss and a supplied SSH public key, so a
+// redeploy of the live stack with defaults creates nothing new.
+module fleetVmss 'modules/fleet-vmss.bicep' = if (fleetVmssEnabled) {
+  name: 'fleet-vmss-${uniqueSuffix}'
+  params: {
+    vmssName: 'vmss-helios-${uniqueSuffix}'
+    location: location
+    tags: tags
+    vmSku: fleetVmSku
+    adminUsername: vmssAdminUsername
+    adminPublicKey: vmssAdminPublicKey
+    workersPerInstance: fleetWorkersPerInstance
+    fleetPool: fleetPool
+    repoUrl: fleetRepoUrl
+    repoRef: fleetRepoRef
+    burstMinInstances: fleetBurstMinInstances
+    burstMaxInstances: fleetBurstMaxInstances
+    scaleDownIdleSeconds: fleetScaleDownIdleSeconds
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Outputs — never output secrets
 // ---------------------------------------------------------------------------
@@ -194,3 +263,9 @@ output keyVaultUri string = keyVault.outputs.vaultUri
 
 @description('Names of all model deployments created on the account.')
 output modelDeploymentNames array = aiServiceExists ? [] : foundryAccount!.outputs.deploymentNames
+
+@description('Name of the fleet burst VM scale set — the az vmss scale target for scripts/fleet/scale-fleet.ps1 (empty string when the VMSS is disabled).')
+output fleetVmssName string = fleetVmssEnabled ? fleetVmss!.outputs.vmssName : ''
+
+@description('Principal ID of the fleet VMSS system-assigned identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys (empty string when the VMSS is disabled).')
+output fleetVmssPrincipalId string = fleetVmssEnabled ? fleetVmss!.outputs.principalId : ''

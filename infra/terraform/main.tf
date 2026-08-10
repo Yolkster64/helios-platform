@@ -243,3 +243,283 @@ resource "azurerm_role_assignment" "key_vault_secrets_officer_deployer" {
   role_definition_id = "${local.role_definition_prefix}/${local.key_vault_secrets_officer_role_id}"
   principal_id       = data.azurerm_client_config.current.object_id
 }
+
+# ---------------------------------------------------------------------------
+# Fleet burst VMSS (modules/fleet-vmss.bicep) — opt-in cloud fleet-worker lanes
+# ---------------------------------------------------------------------------
+
+locals {
+  # Doubly gated like the Bicep (deployFleetVmss && vmssAdminPublicKey != ''):
+  # SSH-key-only auth means a VMSS without a key would be undeployable anyway.
+  # vmss_admin_public_key is NOT sensitive (public keys are not secrets), so —
+  # unlike the API-key emptiness checks above — no nonsensitive() unwrap is
+  # needed to use it in a count.
+  fleet_vmss_enabled = var.deploy_fleet_vmss && var.vmss_admin_public_key != ""
+  fleet_vmss_name    = "vmss-helios-${local.unique_suffix}"
+
+  # Mirrors the module defaults in modules/fleet-vmss.bicep (not surfaced as
+  # main.bicep parameters, so locals here, not variables).
+  fleet_vnet_address_prefix   = "10.44.0.0/24"
+  fleet_subnet_address_prefix = "10.44.0.0/24"
+
+  # cloud-init: lane toolchain (dotnet-runtime-8.0, python3, pwsh via snap), an
+  # anonymous clone of the public repo, and fleet_workers_per_instance stub
+  # fleet workers as systemd template units honoring the HERMES_KANBAN_* lane
+  # contract against a local seed board. HERMES_KANBAN_MAX_IDLE_POLLS=0 makes
+  # cloud lanes poll forever — scale-in is autoscale's job, not the worker's
+  # idle exit. NO secrets in cloud-init.
+  fleet_cloud_init = <<-CLOUDINIT
+    #cloud-config
+    package_update: true
+    packages:
+      - git
+      - python3
+      - dotnet-runtime-8.0
+    write_files:
+      - path: /etc/systemd/system/helios-fleet-worker@.service
+        permissions: '0644'
+        content: |
+          [Unit]
+          Description=HELIOS fleet worker lane %i (cloud-burst stub)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=heliosfleet
+          WorkingDirectory=/opt/helios/src/ai/python
+          Environment=HELIOS_FLEET_POOL=${var.fleet_pool}
+          Environment=HERMES_KANBAN_DB=/var/lib/helios-fleet/boards/${var.fleet_pool}.json
+          Environment=HERMES_KANBAN_CLAIM_LOCK=/var/lib/helios-fleet/boards/${var.fleet_pool}.json.lock
+          Environment=HERMES_KANBAN_TASK=*
+          Environment=HERMES_KANBAN_RUN_ID=${var.fleet_pool}-%H
+          Environment=HERMES_KANBAN_ASSIGNEE=%H-lane-%i
+          Environment=HERMES_KANBAN_MAX_IDLE_POLLS=0
+          ExecStart=/usr/bin/python3 -m helios_agents.fleet_worker
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      - path: /var/lib/helios-fleet/boards/${var.fleet_pool}.json
+        permissions: '0664'
+        content: |
+          { "tasks": [] }
+    runcmd:
+      - snap install powershell --classic
+      - useradd --system --create-home --shell /usr/sbin/nologin heliosfleet
+      - git clone --depth 1 --branch ${var.fleet_repo_ref} ${var.fleet_repo_url} /opt/helios
+      - chown -R heliosfleet:heliosfleet /var/lib/helios-fleet
+      - systemctl daemon-reload
+      - for i in $(seq 1 ${var.fleet_workers_per_instance}); do systemctl enable --now helios-fleet-worker@$i.service; done
+  CLOUDINIT
+}
+
+# NSG default rules deny all inbound from the internet; the Bicep module's
+# optional operator-SSH rule maps to a main.bicep-level knob that does not
+# exist, so this mirror ships the default-deny NSG only.
+resource "azurerm_network_security_group" "fleet" {
+  count = local.fleet_vmss_enabled ? 1 : 0
+
+  name                = "${local.fleet_vmss_name}-nsg"
+  location            = local.effective_location
+  resource_group_name = data.azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_virtual_network" "fleet" {
+  count = local.fleet_vmss_enabled ? 1 : 0
+
+  name                = "${local.fleet_vmss_name}-vnet"
+  location            = local.effective_location
+  resource_group_name = data.azurerm_resource_group.main.name
+  address_space       = [local.fleet_vnet_address_prefix]
+  tags                = var.tags
+}
+
+resource "azurerm_subnet" "fleet" {
+  count = local.fleet_vmss_enabled ? 1 : 0
+
+  name                 = "fleet"
+  resource_group_name  = data.azurerm_resource_group.main.name
+  virtual_network_name = one(azurerm_virtual_network.fleet[*].name)
+  address_prefixes     = [local.fleet_subnet_address_prefix]
+}
+
+# Flexible orchestration (Bicep: orchestrationMode 'Flexible'), Ubuntu 24.04
+# LTS Gen2, SSH-key-only, system-assigned identity. azapi rather than
+# azurerm_orchestrated_virtual_machine_scale_set because that resource's
+# identity block is UserAssigned-only and cannot express the SystemAssigned
+# identity the Bicep module carries (same azapi-where-azurerm-falls-short
+# pattern as the Foundry account above). The per-instance Standard public IP is
+# for OUTBOUND access only (NSG blocks inbound; default outbound access is
+# retired for new deployments) and — unlike a NAT gateway — costs nothing while
+# the set is scaled to zero. sku.capacity only seeds initial capacity: the
+# autoscale setting below owns the instance count afterwards, so a re-apply
+# resetting capacity toward the floor is benign and reconciled by autoscale
+# (identical behavior to redeploying the Bicep).
+resource "azapi_resource" "fleet_vmss" {
+  count = local.fleet_vmss_enabled ? 1 : 0
+
+  type      = "Microsoft.Compute/virtualMachineScaleSets@2024-07-01"
+  name      = local.fleet_vmss_name
+  parent_id = data.azurerm_resource_group.main.id
+  location  = local.effective_location
+  tags      = var.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  body = {
+    sku = {
+      name     = var.fleet_vm_sku
+      tier     = "Standard"
+      capacity = var.fleet_burst_min_instances
+    }
+    properties = {
+      orchestrationMode        = "Flexible"
+      platformFaultDomainCount = 1
+      virtualMachineProfile = {
+        osProfile = {
+          computerNamePrefix = "hfleet"
+          adminUsername      = var.vmss_admin_username
+          customData         = base64encode(local.fleet_cloud_init)
+          linuxConfiguration = {
+            disablePasswordAuthentication = true
+            ssh = {
+              publicKeys = [
+                {
+                  path    = "/home/${var.vmss_admin_username}/.ssh/authorized_keys"
+                  keyData = var.vmss_admin_public_key
+                }
+              ]
+            }
+          }
+        }
+        storageProfile = {
+          imageReference = {
+            # Ubuntu 24.04 LTS (noble); the 'server' SKU of this offer is Gen2 x64.
+            publisher = "Canonical"
+            offer     = "ubuntu-24_04-lts"
+            sku       = "server"
+            version   = "latest"
+          }
+          osDisk = {
+            createOption = "FromImage"
+            caching      = "ReadWrite"
+            managedDisk = {
+              storageAccountType = "StandardSSD_LRS"
+            }
+          }
+        }
+        networkProfile = {
+          # Required for Flexible orchestration.
+          networkApiVersion = "2020-11-01"
+          networkInterfaceConfigurations = [
+            {
+              name = "${local.fleet_vmss_name}-nic"
+              properties = {
+                primary = true
+                networkSecurityGroup = {
+                  id = one(azurerm_network_security_group.fleet[*].id)
+                }
+                ipConfigurations = [
+                  {
+                    name = "ipconfig1"
+                    properties = {
+                      primary = true
+                      subnet = {
+                        id = one(azurerm_subnet.fleet[*].id)
+                      }
+                      publicIPAddressConfiguration = {
+                        name = "${local.fleet_vmss_name}-pip"
+                        sku = {
+                          name = "Standard"
+                        }
+                        properties = {
+                          idleTimeoutInMinutes = 15
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  response_export_values = ["identity.principalId"]
+}
+
+# CPU proxy for lane pressure: >70% for 5 min -> +1; <25% for
+# fleet_scale_down_idle_seconds -> -1. Queue-depth-driven scaling
+# (scaleUpQueueDepth in config/fleet/fleet-topology.json) arrives via
+# scripts/fleet/scale-fleet.ps1 calling `az vmss scale` — Azure autoscale
+# cannot see board queue depth without custom metrics in Application Insights,
+# which is out of scope here.
+resource "azurerm_monitor_autoscale_setting" "fleet" {
+  count = local.fleet_vmss_enabled ? 1 : 0
+
+  name                = "${local.fleet_vmss_name}-autoscale"
+  location            = local.effective_location
+  resource_group_name = data.azurerm_resource_group.main.name
+  target_resource_id  = one(azapi_resource.fleet_vmss[*].id)
+  enabled             = true
+  tags                = var.tags
+
+  profile {
+    name = "fleet-burst"
+
+    capacity {
+      minimum = var.fleet_burst_min_instances
+      maximum = var.fleet_burst_max_instances
+      default = var.fleet_burst_min_instances
+    }
+
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_namespace   = "microsoft.compute/virtualmachinescalesets"
+        metric_resource_id = one(azapi_resource.fleet_vmss[*].id)
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = "PT5M"
+        time_aggregation   = "Average"
+        operator           = "GreaterThan"
+        threshold          = 70
+      }
+
+      scale_action {
+        direction = "Increase"
+        type      = "ChangeCount"
+        value     = 1
+        cooldown  = "PT5M"
+      }
+    }
+
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_namespace   = "microsoft.compute/virtualmachinescalesets"
+        metric_resource_id = one(azapi_resource.fleet_vmss[*].id)
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = format("PT%dS", var.fleet_scale_down_idle_seconds)
+        time_aggregation   = "Average"
+        operator           = "LessThan"
+        threshold          = 25
+      }
+
+      scale_action {
+        direction = "Decrease"
+        type      = "ChangeCount"
+        value     = 1
+        cooldown  = format("PT%dS", var.fleet_scale_down_idle_seconds)
+      }
+    }
+  }
+}

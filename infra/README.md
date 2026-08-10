@@ -42,6 +42,7 @@ Other deliberate changes:
 - `modules/ai-foundry-account.bicep` — Foundry account + serialized model deployments + Azure AI User role
 - `modules/ai-foundry-project.bicep` — Foundry project (endpoint output)
 - `modules/keyvault.bicep` — RBAC Key Vault + conditional `anthropic-api-key` / `openai-api-key` / `github-models-token` secrets
+- `modules/fleet-vmss.bicep` — opt-in fleet burst VMSS + autoscale, OFF by default (see "Fleet burst capacity (VMSS)" below)
 
 ## Three dialects
 
@@ -81,7 +82,58 @@ CI: `.github/workflows/infra-validate.yml` compiles + lints the Bicep, checks
 touching `infra/**` (all offline, no subscription). `.github/workflows/helios-deploy.yml` deploys on push to `main`
 (or dispatch with a what-if option) and skips gracefully when the `AZURE_CLIENT_ID` /
 `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` Actions variables are absent — see the
-next section for how those come to exist without any stored secret.
+OIDC section for how those come to exist without any stored secret.
+
+## Fleet burst capacity (VMSS)
+
+`modules/fleet-vmss.bicep` adds opt-in cloud lanes for the Hermes/Xcore fleets — the
+burst target for **fleet worker lanes** declared in `config/fleet/fleet-topology.json`
+(docs/architecture/HERMES_FLEET_AND_XCORE.md, "Autoscaling (local / hybrid)"). It is a
+Flexible-orchestration Linux VM scale set (Ubuntu 24.04 LTS Gen2, `Standard_B2s` by
+default, system-assigned identity) whose instances cloud-init the lane toolchain
+(dotnet-runtime-8.0, python3, pwsh), clone this repo anonymously (no secrets in
+cloud-init), and run `fleetWorkersPerInstance` stub fleet workers
+(`python3 -m helios_agents.fleet_worker`) with `HELIOS_FLEET_POOL` set (default
+`cloud-burst`), so outcome analytics attribute cloud lanes to their pool.
+
+**OFF by default — the live `rg-helios-ai` stack redeploys unchanged.** The module is
+doubly gated: `deployFleetVmss` (default `false`) **and** a non-empty
+`vmssAdminPublicKey`. Auth is SSH-key-only (password auth disabled); a public key is
+not a secret, so it is a plain parameter passed at deploy time:
+
+```bash
+az deployment group what-if -g rg-helios-ai \
+  --template-file infra/main.bicep --parameters infra/main.bicepparam \
+  --parameters deployFleetVmss=true vmssAdminPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
+az deployment group create -g rg-helios-ai \
+  --template-file infra/main.bicep --parameters infra/main.bicepparam \
+  --parameters deployFleetVmss=true vmssAdminPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
+```
+
+**What autoscale does vs what scale-fleet.ps1 adds.** The built-in Azure autoscale
+setting is a CPU proxy for lane pressure: average CPU > 70% for 5 minutes adds one
+instance (5-minute cooldown); average CPU < 25% for `fleetScaleDownIdleSeconds`
+(default 300 — the topology's `scaleDownIdleSeconds`) removes one. The floor and
+default are `fleetBurstMinInstances` (0) and the ceiling is `fleetBurstMaxInstances`
+(5 — the topology's `maxBurstLanes`). Azure autoscale cannot see board queue depth
+(`scaleUpQueueDepth`) without publishing custom metrics to Application Insights, so
+queue-depth-driven scaling arrives separately via `scripts/fleet/scale-fleet.ps1`
+calling `az vmss scale --new-capacity` against the `fleetVmssName` output.
+
+**Cost.** `Standard_B2s` (2 vCPU / 4 GiB) runs roughly US$30–40 per instance-month
+(region-dependent), plus small per-instance OS-disk and Standard public IP charges —
+all billed only while instances exist. With `fleetBurstMinInstances = 0` the set
+scales to zero: an idle enabled stack keeps only the vnet, NSG, and autoscale
+setting, which are free. Instances are unreachable from the internet (the NSG ships
+no inbound allow rules); the per-instance public IPs exist for outbound access only
+(apt/snap/git), chosen over a NAT gateway precisely because they cost nothing at
+zero instances.
+
+**Two burst targets, deliberately.** ARC runner scale sets (`infra/runners/`) remain
+the burst target for **CI lanes** (`runs-on: helios-runners`); this VMSS is the burst
+target for **fleet worker lanes** (the Hermes/Xcore pools). They scale on different
+signals — queued workflow jobs vs board queue depth and CPU — and must not be
+conflated.
 
 ## OIDC identity (GitHub Actions → Azure)
 
@@ -147,6 +199,9 @@ Boundaries and operations:
 ## Outputs
 
 `aiServicesEndpoint`, `openAiEndpoint`, `projectEndpoint`, `projectId`, `keyVaultUri`,
-`modelDeploymentNames`. Secrets are never output. Wire the endpoints into the AIHub via
+`modelDeploymentNames`, plus `fleetVmssName` / `fleetVmssPrincipalId` (both empty
+strings while the fleet VMSS is disabled — consumed by `scripts/fleet/scale-fleet.ps1`
+and by role assignments for cloud lanes respectively). Secrets are never output.
+Wire the endpoints into the AIHub via
 `.env` (see `.env.template`: `AZURE_OPENAI_ENDPOINT`, `AZURE_FOUNDRY_PROJECT_ENDPOINT`,
 `AZURE_KEY_VAULT_URI`).

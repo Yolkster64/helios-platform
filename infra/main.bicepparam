@@ -26,3 +26,21 @@ param tags = {
   platform: 'helios'
   workload: 'ai-hub'
 }
+
+// Fleet burst VMSS (infra/README.md, "Fleet burst capacity (VMSS)") — deliberately
+// OFF so the live rg-helios-ai stack redeploys unchanged. To enable, set
+// deployFleetVmss = true AND pass an SSH public key (both gates must open; a public
+// key is not a secret, but it is operator-specific, so pass it at deploy time:
+//   az deployment group create ... --parameters deployFleetVmss=true \
+//     vmssAdminPublicKey="$(cat ~/.ssh/id_ed25519.pub)"
+// ). Sizing knobs, uncommented here only when they need to differ from the defaults:
+param deployFleetVmss = false
+// param vmssAdminUsername = 'heliosadmin'
+// param fleetVmSku = 'Standard_B2s'
+// param fleetBurstMinInstances = 0      // autoscale floor; 0 = scale-to-zero
+// param fleetBurstMaxInstances = 5      // topology maxBurstLanes
+// param fleetScaleDownIdleSeconds = 300 // topology scaleDownIdleSeconds (>= 300)
+// param fleetWorkersPerInstance = 2
+// param fleetPool = 'cloud-burst'       // exported as HELIOS_FLEET_POOL on cloud lanes
+// param fleetRepoUrl = 'https://github.com/Yolkster64/helios-platform'
+// param fleetRepoRef = 'main'
