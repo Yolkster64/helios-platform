@@ -100,9 +100,25 @@ jobs:
                 echo "No Linear counterpart for #$ISSUE_NUMBER — nothing to update."
                 exit 0
               fi
+              # Move the Linear issue to a matching workflow state so the board
+              # reflects the GitHub transition instead of only carrying a comment.
+              # State names are per-team, so resolve by TYPE: closed maps to the
+              # team's first "completed" state (position order — canonically Done),
+              # reopened to its first "unstarted" state (canonically Todo).
+              state_type=$([ "$EVENT_ACTION" = "closed" ] && echo completed || echo unstarted)
+              state_id=$(gql 'query($id:String!){ team(id:$id){ states { nodes { id type position } } } }' \
+                "$(jq -n --arg id "$team_id" '{id:$id}')" |
+                jq -r --arg t "$state_type" \
+                  '.data.team.states.nodes | map(select(.type==$t)) | sort_by(.position) | .[0].id // empty')
+              if [ -n "$state_id" ]; then
+                gql 'mutation($id:String!, $stateId:String!){ issueUpdate(id:$id, input:{stateId:$stateId}){ success } }' \
+                  "$(jq -n --arg id "$existing_id" --arg stateId "$state_id" '{id:$id, stateId:$stateId}')" > /dev/null
+              else
+                echo "::warning::Team has no '$state_type' workflow state — leaving the Linear state unchanged."
+              fi
               gql 'mutation($id:String!, $body:String!){ commentCreate(input:{issueId:$id, body:$body}){ success } }' \
                 "$(jq -n --arg id "$existing_id" --arg body "GitHub issue was ${EVENT_ACTION}: ${ISSUE_URL}" \
                     '{id:$id, body:$body}')" > /dev/null
-              echo "Noted '${EVENT_ACTION}' on the Linear issue."
+              echo "Synced '${EVENT_ACTION}' to the Linear issue (state + comment)."
               ;;
           esac

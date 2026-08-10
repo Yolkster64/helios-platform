@@ -112,7 +112,10 @@ finally {
 }
 
 # --- verdict + report --------------------------------------------------------
-$gatePassed = ($steps | Where-Object { -not $_.ok } | Measure-Object).Count -eq 0
+# A skipped test run can never claim the full gate: -SkipTests yields at most a
+# partial verdict, and the advisory outcome reports success only for the FULL gate.
+$allStepsOk = ($steps | Where-Object { -not $_.ok } | Measure-Object).Count -eq 0
+$gatePassed = $allStepsOk -and -not $SkipTests
 $elapsed = [math]::Round(((Get-Date) - $started).TotalMilliseconds)
 $report = [ordered]@{
     upstream   = $Upstream
@@ -124,6 +127,7 @@ $report = [ordered]@{
     steps      = $steps
     verdict    = if ($gatePassed) { 'absorbable: trial merge clean and full gate green' }
                  elseif ($conflicts.Count -gt 0) { "conflicts in $($conflicts.Count) file(s): manual reconciliation required" }
+                 elseif ($allStepsOk -and $SkipTests) { 'partial: merge and build clean, but -SkipTests ran — rerun without it for a full verdict' }
                  else { 'gate failed on the merged tree: see steps' }
     worktree   = if ($Apply) { $worktree } else { $null }
 }

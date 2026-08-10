@@ -217,7 +217,6 @@ resource "azurerm_role_assignment" "ai_user" {
   scope              = one(azapi_resource.foundry_account[*].id)
   role_definition_id = "${local.role_definition_prefix}/${local.azure_ai_user_role_id}"
   principal_id       = var.principal_id
-  principal_type     = "User"
 }
 
 # Key Vault Secrets User — read secret contents via RBAC.
@@ -227,7 +226,6 @@ resource "azurerm_role_assignment" "key_vault_secrets_user" {
   scope              = azurerm_key_vault.main.id
   role_definition_id = "${local.role_definition_prefix}/${local.key_vault_secrets_user_role_id}"
   principal_id       = var.principal_id
-  principal_type     = "User"
 }
 
 # Key Vault Secrets Officer for the principal RUNNING terraform, only when any

@@ -40,10 +40,10 @@
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
   },
   "forwardPorts": [
-    5000
+    5170
   ],
   "portsAttributes": {
-    "5000": {
+    "5170": {
       "label": "helios-ai-api",
       "onAutoForward": "notify"
     }

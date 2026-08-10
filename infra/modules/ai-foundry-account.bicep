@@ -73,7 +73,6 @@ resource aiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAiUserRoleId)
     principalId: principalId
-    principalType: 'User'
   }
 }
 

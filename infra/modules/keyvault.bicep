@@ -71,7 +71,6 @@ resource secretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: principalId
-    principalType: 'User'
   }
 }
 

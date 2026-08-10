@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "12854500008313447680"
+      "templateHash": "8465091025183808006"
     }
   },
   "definitions": {
@@ -333,7 +333,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "255219783070478043"
+              "templateHash": "12379891679277951790"
             }
           },
           "definitions": {
@@ -462,8 +462,7 @@
               "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), parameters('principalId'), variables('azureAiUserRoleId'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiUserRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "User"
+                "principalId": "[parameters('principalId')]"
               },
               "dependsOn": [
                 "account"
@@ -658,7 +657,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "4554442128740985687"
+              "templateHash": "13434989070385833621"
             }
           },
           "parameters": {
@@ -766,8 +765,7 @@
               "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), variables('keyVaultSecretsUserRoleId'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]",
-                "principalId": "[parameters('principalId')]",
-                "principalType": "User"
+                "principalId": "[parameters('principalId')]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"

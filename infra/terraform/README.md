@@ -61,8 +61,10 @@ Plans and applies that touch no deployments do not need the flag.
 - **Role assignment names.** Bicep names the two role assignments with ARM's
   deterministic `guid(scope, principalId, roleId)`; that hash is not reproducible in
   Terraform, so `azurerm_role_assignment` auto-generates its UUID name and Terraform
-  state provides the idempotency instead. Role definition GUIDs, scope, principal,
-  and `principalType` are identical.
+  state provides the idempotency instead. Role definition GUIDs, scope, and
+  principal are identical. Neither dialect pins `principalType`: the deploying identity
+  may be a user or a service principal (OIDC), and a hardcoded `User` fails the
+  deployment for the latter.
 - **`enableSoftDelete`.** Bicep sets it explicitly; the azurerm provider has no such
   argument because soft delete cannot be disabled — only
   `soft_delete_retention_days = 90` is set. Net effect is identical.
