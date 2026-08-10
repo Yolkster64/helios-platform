@@ -13,11 +13,13 @@ this script only verifies the context.
 pwsh scripts/bootstrap/connect-azure.ps1
 pwsh scripts/bootstrap/connect-azure.ps1 -Subscription <id-or-name>
 pwsh scripts/bootstrap/connect-azure.ps1 -Force
+pwsh scripts/bootstrap/connect-azure.ps1 -VerifyOnly   # report auth state; never mutates
 #>
 [CmdletBinding()]
 param(
     [string]$Subscription,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +27,20 @@ $ErrorActionPreference = 'Stop'
 if (-not (Get-Command Connect-AzAccount -ErrorAction SilentlyContinue)) {
     Write-Error ("Az.Accounts module not found. Install-Module Az.Accounts -Scope CurrentUser " +
         "(or run scripts/bootstrap/cloud-shell-setup.sh; Cloud Shell ships it preinstalled).")
+}
+
+# Verify-only: report the auth state and stop — no login flow and no Set-AzContext
+# (which mutates the persisted context). Exits 0 authenticated, non-zero when not.
+if ($VerifyOnly) {
+    $verifyContext = Get-AzContext -ErrorAction SilentlyContinue
+    if (-not $verifyContext) {
+        Write-Error 'Azure PowerShell: not authenticated. Run scripts/bootstrap/connect-azure.ps1 to log in.'
+    }
+    Write-Host 'Azure PowerShell: authenticated.'
+    $verifyContext | Select-Object @{n = 'Subscription'; e = { $_.Subscription.Name } },
+        @{n = 'Tenant'; e = { $_.Tenant.Id } },
+        @{n = 'Account'; e = { $_.Account.Id } } | Format-Table -AutoSize
+    exit 0
 }
 
 $inCloudShell = [bool]($env:AZUREPS_HOST_ENVIRONMENT -or $env:ACC_CLOUD)

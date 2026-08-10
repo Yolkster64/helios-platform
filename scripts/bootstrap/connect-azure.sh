@@ -10,6 +10,7 @@
 #   scripts/bootstrap/connect-azure.sh                     # login if not already
 #   scripts/bootstrap/connect-azure.sh --subscription <id> # login + select subscription
 #   scripts/bootstrap/connect-azure.sh --force             # re-run login regardless
+#   scripts/bootstrap/connect-azure.sh --verify-only       # report auth state; never mutates
 set -euo pipefail
 
 if ! command -v az >/dev/null 2>&1; then
@@ -20,13 +21,27 @@ fi
 
 subscription=""
 force=""
+verify_only=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --subscription) subscription="${2:?--subscription needs a value}"; shift 2 ;;
     --force) force=1; shift ;;
+    --verify-only) verify_only=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+
+# Verify-only: report the auth state and stop — no login flow and no subscription
+# switch (az account set mutates the CLI profile). Exit 0 authenticated, 1 not.
+if [[ -n "$verify_only" ]]; then
+  if az account show --output none 2>/dev/null; then
+    echo "Azure: authenticated."
+    az account show --query '{subscription: name, tenant: tenantId, user: user.name}' --output table
+    exit 0
+  fi
+  echo "Azure: not authenticated. Run scripts/bootstrap/connect-azure.sh to log in." >&2
+  exit 1
+fi
 
 in_cloud_shell=""
 [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" || -n "${ACC_CLOUD:-}" ]] && in_cloud_shell=1

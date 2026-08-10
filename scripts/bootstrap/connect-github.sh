@@ -7,9 +7,10 @@
 # its own keyring/config, outside the working tree.
 #
 # Usage:
-#   scripts/bootstrap/connect-github.sh            # login if not already
-#   scripts/bootstrap/connect-github.sh --force    # re-run login even if logged in
-#   source scripts/bootstrap/connect-github.sh     # also exports GITHUB_MODELS_TOKEN
+#   scripts/bootstrap/connect-github.sh                # login if not already
+#   scripts/bootstrap/connect-github.sh --force        # re-run login even if logged in
+#   scripts/bootstrap/connect-github.sh --verify-only  # report auth state; never mutates
+#   source scripts/bootstrap/connect-github.sh         # also exports GITHUB_MODELS_TOKEN
 #
 # Sourcing is the deep AIHub integration: after browser auth, the gh token doubles
 # as the GitHub Models API key, so the `github-models` provider in config/aihub.json
@@ -24,7 +25,24 @@ main() {
     return 1
   fi
 
-  local force="${1:-}"
+  local mode="${1:-}"
+  case "$mode" in
+    ""|--force|--verify-only) ;;
+    *) echo "unknown argument: $mode" >&2; return 1 ;;
+  esac
+
+  # Verify-only: report the auth state and stop — no login flow, no token refresh,
+  # nothing written anywhere. Exit 0 when authenticated, 1 when not.
+  if [[ "$mode" == "--verify-only" ]]; then
+    if gh auth status --hostname github.com >/dev/null 2>&1; then
+      echo "GitHub: authenticated as $(gh api user --jq .login 2>/dev/null || echo '?')."
+      return 0
+    fi
+    echo "GitHub: not authenticated. Run scripts/bootstrap/connect-github.sh to log in." >&2
+    return 1
+  fi
+
+  local force="$mode"
   if gh auth status --hostname github.com >/dev/null 2>&1 && [[ "$force" != "--force" ]]; then
     echo "GitHub: already authenticated as $(gh api user --jq .login 2>/dev/null || echo '?')."
   else

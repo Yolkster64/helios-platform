@@ -13,16 +13,22 @@
 #
 # No secrets are written to disk at any step.
 #
-# Usage: scripts/bootstrap/cloud-shell-setup.sh [--skip-auth] [--skip-smoke]
+# Usage: scripts/bootstrap/cloud-shell-setup.sh [--skip-auth] [--skip-smoke] [--verify-only]
+#
+# --verify-only reports CLI presence and GitHub/Azure auth state without mutating
+# anything: no installs, no login flows, no builds. Exit 0 when both auths are
+# ready, 1 otherwise.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 skip_auth=""
 skip_smoke=""
+verify_only=""
 for arg in "$@"; do
   case "$arg" in
     --skip-auth) skip_auth=1 ;;
     --skip-smoke) skip_smoke=1 ;;
+    --verify-only) verify_only=1 ;;
     *) echo "unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
@@ -54,11 +60,14 @@ require az "install: https://aka.ms/azure-cli (pre-installed in Cloud Shell)" ||
 require gh "install: https://cli.github.com (pre-installed in Cloud Shell)" || missing_base=1
 
 # The agent CLIs ship via npm. Installs run sequentially on purpose: concurrent
-# `npm install -g` invocations race on the shared global prefix.
+# `npm install -g` invocations race on the shared global prefix. Verify-only mode
+# reports presence without installing.
 if command -v npm >/dev/null 2>&1; then
-  command -v claude >/dev/null 2>&1 || { echo "  claude: installing..."; npm install -g @anthropic-ai/claude-code >/dev/null; }
-  command -v codex  >/dev/null 2>&1 || { echo "  codex: installing...";  npm install -g @openai/codex >/dev/null; }
-  command -v copilot >/dev/null 2>&1 || { echo "  copilot: installing..."; npm install -g @github/copilot >/dev/null; }
+  if [[ -z "$verify_only" ]]; then
+    command -v claude >/dev/null 2>&1 || { echo "  claude: installing..."; npm install -g @anthropic-ai/claude-code >/dev/null; }
+    command -v codex  >/dev/null 2>&1 || { echo "  codex: installing...";  npm install -g @openai/codex >/dev/null; }
+    command -v copilot >/dev/null 2>&1 || { echo "  copilot: installing..."; npm install -g @github/copilot >/dev/null; }
+  fi
   for cli in claude codex copilot; do
     require "$cli" "npm install failed — rerun with npm output visible" || true
   done
@@ -69,6 +78,22 @@ command -v ollama >/dev/null 2>&1 && echo "  ollama: present (local models avail
   || echo "  ollama: not installed (optional — https://ollama.com)"
 
 [[ "$missing_base" == 1 ]] && { echo "error: az/gh are required. Fix the MISSING lines above." >&2; exit 1; }
+
+# --- Verify-only: read-only auth state, then stop --------------------------------
+if [[ -n "$verify_only" ]]; then
+  echo
+  echo "-- Authentication state (read-only) --"
+  auth_failed=0
+  "$repo_root/scripts/bootstrap/connect-github.sh" --verify-only || auth_failed=1
+  "$repo_root/scripts/bootstrap/connect-azure.sh" --verify-only || auth_failed=1
+  echo
+  if [[ "$auth_failed" == 0 ]]; then
+    echo "== Verify-only: GitHub and Azure authentication are ready. =="
+  else
+    echo "== Verify-only: authentication incomplete — rerun without --verify-only to log in. ==" >&2
+  fi
+  exit "$auth_failed"
+fi
 
 # --- 2. Browser authentication ----------------------------------------------------
 if [[ -z "$skip_auth" ]]; then
