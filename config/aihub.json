@@ -88,5 +88,14 @@
       "offline": ["ollama"],
       "general_query": ["azure-openai", "openai", "github-models", "ollama"]
     }
+  },
+  "learning": {
+    "$comment": "Off by default so routing never changes itself silently. mode: local (JSONL under .helios/) | azure (Table Storage) | hybrid (both; local is authoritative, Azure syncs best-effort). Reordering falls back to the configured chain whenever history is thin or unavailable.",
+    "enabled": false,
+    "mode": "local",
+    "localPath": ".helios/learning/outcomes.jsonl",
+    "tableEndpointEnv": "AZURE_LEARNING_TABLE_ENDPOINT",
+    "adaptiveRouting": true,
+    "historyWindow": 200
   }
 }

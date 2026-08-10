@@ -18,6 +18,9 @@ public sealed class AIHubOptions
     [JsonPropertyName("routing")]
     public RoutingOptions Routing { get; set; } = new();
 
+    [JsonPropertyName("learning")]
+    public LearningOptions Learning { get; set; } = new();
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -108,6 +111,36 @@ public sealed class CliAgentOptions
 
     [JsonPropertyName("timeoutSeconds")]
     public int TimeoutSeconds { get; set; } = 300;
+}
+
+/// <summary>
+/// Outcome recording and evidence-based chain reordering. Off by default: a hub that
+/// silently changes its own routing would be confusing, so operators opt in.
+/// </summary>
+public sealed class LearningOptions
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    /// <summary>local | azure | hybrid.</summary>
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "local";
+
+    /// <summary>Path for the JSONL outcome log (local and hybrid modes).</summary>
+    [JsonPropertyName("localPath")]
+    public string LocalPath { get; set; } = ".helios/learning/outcomes.jsonl";
+
+    /// <summary>Environment variable holding the Azure Table endpoint (azure and hybrid modes).</summary>
+    [JsonPropertyName("tableEndpointEnv")]
+    public string TableEndpointEnv { get; set; } = "AZURE_LEARNING_TABLE_ENDPOINT";
+
+    /// <summary>Reorder configured chains from recorded outcomes. Recording still happens when false.</summary>
+    [JsonPropertyName("adaptiveRouting")]
+    public bool AdaptiveRouting { get; set; } = true;
+
+    /// <summary>How many recent outcomes per task type feed a routing decision.</summary>
+    [JsonPropertyName("historyWindow")]
+    public int HistoryWindow { get; set; } = 200;
 }
 
 /// <summary>Task-type → provider-chain routing table.</summary>
