@@ -14,7 +14,7 @@
 
 namespace {
 
-constexpr int32_t kAbiVersion = 1;
+constexpr int32_t kAbiVersion = 2;
 
 // Empirical average bytes-per-token for English-ish UTF-8 across common BPE tokenizers.
 // Text that is mostly code or CJK diverges, which is why the header calls this an
@@ -35,6 +35,78 @@ size_t back_off_to_boundary(const char* text, size_t index) {
         ++steps;
     }
     return index;
+}
+
+// ---- MLP routing learner ----
+
+// Seed 0 would freeze xorshift at zero forever; remap it to a non-zero constant
+// (the 64-bit golden-ratio increment) so every seed value is usable.
+constexpr uint64_t kSeedFallback = 0x9E3779B97F4A7C15ULL;
+
+// xorshift64*: tiny, deterministic, and statistically good enough for weight init.
+// Not for cryptography — and deliberately not std::mt19937, whose stream is not
+// guaranteed bit-identical across standard library implementations.
+uint64_t next_random(uint64_t& state) {
+    state ^= state >> 12;
+    state ^= state << 25;
+    state ^= state >> 27;
+    return state * 0x2545F4914F6CDD1DULL;
+}
+
+// Uniform in [-limit, limit]. Top 53 bits => exactly representable fraction in [0,1).
+double uniform_in(uint64_t& state, double limit) {
+    const double fraction = static_cast<double>(next_random(state) >> 11) * 0x1.0p-53;
+    return (2.0 * fraction - 1.0) * limit;
+}
+
+// Branch on sign so exp() never overflows for large |x|.
+double stable_sigmoid(double x) {
+    if (x >= 0.0) {
+        return 1.0 / (1.0 + std::exp(-x));
+    }
+    const double e = std::exp(x);
+    return e / (1.0 + e);
+}
+
+// Offsets into the flat weight buffer. Layout (documented in the header):
+// W1[hidden][dim], b1[hidden], W2[hidden], b2.
+struct MlpLayout {
+    size_t dim;
+    size_t hidden;
+
+    size_t w1(size_t unit) const { return unit * dim; }
+    size_t b1() const { return hidden * dim; }
+    size_t w2() const { return hidden * dim + hidden; }
+    size_t b2() const { return hidden * (dim + 2); }
+    size_t count() const { return hidden * (dim + 2) + 1; }
+};
+
+helios_status validate_mlp_shape(size_t feature_dim, size_t hidden_units) {
+    if (feature_dim == 0 || hidden_units == 0 || hidden_units > HELIOS_MLP_MAX_HIDDEN) {
+        return HELIOS_ERR_BAD_LENGTH;
+    }
+    return HELIOS_OK;
+}
+
+// Forward pass: tanh hidden activations into caller scratch, sigmoid output.
+// Double accumulation for the same reason as cosine similarity above.
+double mlp_forward(const float* weights, const MlpLayout& layout,
+                   const float* features, double* hidden_act) {
+    for (size_t h = 0; h < layout.hidden; ++h) {
+        const float* row = weights + layout.w1(h);
+        double sum = static_cast<double>(weights[layout.b1() + h]);
+        for (size_t d = 0; d < layout.dim; ++d) {
+            sum += static_cast<double>(row[d]) * static_cast<double>(features[d]);
+        }
+        hidden_act[h] = std::tanh(sum);
+    }
+
+    double output = static_cast<double>(weights[layout.b2()]);
+    const float* w2 = weights + layout.w2();
+    for (size_t h = 0; h < layout.hidden; ++h) {
+        output += static_cast<double>(w2[h]) * hidden_act[h];
+    }
+    return stable_sigmoid(output);
 }
 
 }  // namespace
@@ -163,6 +235,163 @@ helios_status helios_fit_prefix_bytes(
     }
 
     *out_byte_length = back_off_to_boundary(utf8_text, index);
+    return HELIOS_OK;
+}
+
+helios_status helios_mlp_weight_count(
+    size_t feature_dim, size_t hidden_units, size_t* out_weight_count) {
+    if (out_weight_count == nullptr) {
+        return HELIOS_ERR_NULL_ARG;
+    }
+    const helios_status shape = validate_mlp_shape(feature_dim, hidden_units);
+    if (shape != HELIOS_OK) {
+        return shape;
+    }
+
+    const MlpLayout layout{feature_dim, hidden_units};
+    *out_weight_count = layout.count();
+    return HELIOS_OK;
+}
+
+helios_status helios_mlp_init(
+    float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units, uint64_t seed) {
+    if (weights == nullptr) {
+        return HELIOS_ERR_NULL_ARG;
+    }
+    const helios_status shape = validate_mlp_shape(feature_dim, hidden_units);
+    if (shape != HELIOS_OK) {
+        return shape;
+    }
+    const MlpLayout layout{feature_dim, hidden_units};
+    if (weight_count != layout.count()) {
+        return HELIOS_ERR_DIMENSION_MISMATCH;
+    }
+
+    uint64_t state = (seed == 0) ? kSeedFallback : seed;
+
+    // Xavier-uniform: limit sqrt(6 / (fan_in + fan_out)) per layer keeps early
+    // activations in tanh's linear region so gradients neither vanish nor explode.
+    const double w1_limit =
+        std::sqrt(6.0 / static_cast<double>(feature_dim + hidden_units));
+    const double w2_limit = std::sqrt(6.0 / static_cast<double>(hidden_units + 1));
+
+    for (size_t h = 0; h < hidden_units; ++h) {
+        float* row = weights + layout.w1(h);
+        for (size_t d = 0; d < feature_dim; ++d) {
+            row[d] = static_cast<float>(uniform_in(state, w1_limit));
+        }
+    }
+    for (size_t h = 0; h < hidden_units; ++h) {
+        weights[layout.b1() + h] = 0.0f;
+    }
+    for (size_t h = 0; h < hidden_units; ++h) {
+        weights[layout.w2() + h] = static_cast<float>(uniform_in(state, w2_limit));
+    }
+    weights[layout.b2()] = 0.0f;
+    return HELIOS_OK;
+}
+
+helios_status helios_mlp_train(
+    float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units,
+    const float* features, const float* targets, size_t sample_count,
+    int32_t epochs, float learning_rate, float l2_regularization, float* out_mean_loss) {
+    if (weights == nullptr || features == nullptr || targets == nullptr) {
+        return HELIOS_ERR_NULL_ARG;
+    }
+    const helios_status shape = validate_mlp_shape(feature_dim, hidden_units);
+    if (shape != HELIOS_OK) {
+        return shape;
+    }
+    if (sample_count == 0 || epochs <= 0 || !(learning_rate > 0.0f) ||
+        l2_regularization < 0.0f) {
+        return HELIOS_ERR_BAD_LENGTH;
+    }
+    const MlpLayout layout{feature_dim, hidden_units};
+    if (weight_count != layout.count()) {
+        return HELIOS_ERR_DIMENSION_MISMATCH;
+    }
+
+    const double lr = static_cast<double>(learning_rate);
+    const double l2 = static_cast<double>(l2_regularization);
+    double hidden_act[HELIOS_MLP_MAX_HIDDEN];
+    double epoch_loss = 0.0;
+
+    for (int32_t epoch = 0; epoch < epochs; ++epoch) {
+        epoch_loss = 0.0;
+        for (size_t s = 0; s < sample_count; ++s) {
+            const float* x = features + s * feature_dim;
+            double target = static_cast<double>(targets[s]);
+            target = (target < 0.0) ? 0.0 : (target > 1.0 ? 1.0 : target);
+
+            const double p = mlp_forward(weights, layout, x, hidden_act);
+
+            // Clamp before log: p can round to exactly 0 or 1 in float-adjacent math.
+            const double p_safe =
+                (p < 1e-12) ? 1e-12 : (p > 1.0 - 1e-12 ? 1.0 - 1e-12 : p);
+            epoch_loss -= target * std::log(p_safe) +
+                          (1.0 - target) * std::log(1.0 - p_safe);
+
+            // Sigmoid + cross-entropy: output delta collapses to (p - t).
+            const double delta_out = p - target;
+
+            for (size_t h = 0; h < hidden_units; ++h) {
+                // Read W2[h] before updating it: delta_h must use the value that
+                // produced this forward pass, or backprop is subtly wrong.
+                const double w2h = static_cast<double>(weights[layout.w2() + h]);
+                const double a_h = hidden_act[h];
+                const double grad_w2 = delta_out * a_h + l2 * w2h;
+                const double delta_h = delta_out * w2h * (1.0 - a_h * a_h);
+
+                weights[layout.w2() + h] = static_cast<float>(w2h - lr * grad_w2);
+
+                float* row = weights + layout.w1(h);
+                for (size_t d = 0; d < feature_dim; ++d) {
+                    const double w = static_cast<double>(row[d]);
+                    row[d] = static_cast<float>(
+                        w - lr * (delta_h * static_cast<double>(x[d]) + l2 * w));
+                }
+                // No L2 on biases: shrinking them only shifts the decision surface.
+                weights[layout.b1() + h] = static_cast<float>(
+                    static_cast<double>(weights[layout.b1() + h]) - lr * delta_h);
+            }
+            weights[layout.b2()] = static_cast<float>(
+                static_cast<double>(weights[layout.b2()]) - lr * delta_out);
+        }
+    }
+
+    if (out_mean_loss != nullptr) {
+        *out_mean_loss =
+            static_cast<float>(epoch_loss / static_cast<double>(sample_count));
+    }
+    return HELIOS_OK;
+}
+
+helios_status helios_mlp_predict(
+    const float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units,
+    const float* features, size_t sample_count, float* out_scores) {
+    if (weights == nullptr || features == nullptr || out_scores == nullptr) {
+        return HELIOS_ERR_NULL_ARG;
+    }
+    const helios_status shape = validate_mlp_shape(feature_dim, hidden_units);
+    if (shape != HELIOS_OK) {
+        return shape;
+    }
+    if (sample_count == 0) {
+        return HELIOS_ERR_BAD_LENGTH;
+    }
+    const MlpLayout layout{feature_dim, hidden_units};
+    if (weight_count != layout.count()) {
+        return HELIOS_ERR_DIMENSION_MISMATCH;
+    }
+
+    double hidden_act[HELIOS_MLP_MAX_HIDDEN];
+    for (size_t s = 0; s < sample_count; ++s) {
+        out_scores[s] = static_cast<float>(
+            mlp_forward(weights, layout, features + s * feature_dim, hidden_act));
+    }
     return HELIOS_OK;
 }
 

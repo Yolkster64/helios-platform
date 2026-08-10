@@ -75,6 +75,55 @@ HELIOS_API helios_status helios_estimate_tokens(
 HELIOS_API helios_status helios_fit_prefix_bytes(
     const char* utf8_text, size_t byte_length, int32_t max_tokens, size_t* out_byte_length);
 
+/*
+ * Online routing learner: a single-hidden-layer MLP (tanh hidden, sigmoid output)
+ * trained sample-by-sample with SGD on cross-entropy loss.
+ *
+ * Why a hidden layer instead of the linear scoring the F# domain already does: provider
+ * outcomes interact non-linearly — "fast but flaky under load" vs "slow but reliable on
+ * long prompts" is exactly the kind of feature interaction a linear score cannot
+ * represent (the classic XOR case, which the test suite uses as its proof of learning).
+ * The managed side owns feature engineering and persistence of the weight buffer; this
+ * code owns only the arithmetic.
+ *
+ * Weight buffer layout (caller-owned, sized via helios_mlp_weight_count):
+ *   W1[hidden][dim] , b1[hidden] , W2[hidden] , b2   — contiguous floats in that order.
+ *
+ * Determinism: same binary + same seed + same sample order => bit-identical weights.
+ * Samples are consumed in caller order (no internal shuffle) so replaying a learning
+ * store yields a reproducible model. Targets are clamped to [0,1]; soft targets are fine
+ * (cross-entropy generalizes), so a blended success/quality reward works as a label.
+ */
+
+/* Hidden-layer cap: keeps scratch on the stack, honoring the no-allocation contract. */
+#define HELIOS_MLP_MAX_HIDDEN 256
+
+HELIOS_API helios_status helios_mlp_weight_count(
+    size_t feature_dim, size_t hidden_units, size_t* out_weight_count);
+
+/* Xavier-uniform init from a deterministic PRNG; biases start at zero. */
+HELIOS_API helios_status helios_mlp_init(
+    float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units, uint64_t seed);
+
+/*
+ * Run `epochs` passes of online SGD over `sample_count` rows of `features`
+ * (row-major, feature_dim wide) against `targets` in [0,1]. Updates `weights` in
+ * place; writes the mean loss of the final epoch to *out_mean_loss when non-null,
+ * so callers can log convergence without recomputing it.
+ */
+HELIOS_API helios_status helios_mlp_train(
+    float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units,
+    const float* features, const float* targets, size_t sample_count,
+    int32_t epochs, float learning_rate, float l2_regularization, float* out_mean_loss);
+
+/* Sigmoid scores in (0,1), one per input row — higher means "expect success". */
+HELIOS_API helios_status helios_mlp_predict(
+    const float* weights, size_t weight_count,
+    size_t feature_dim, size_t hidden_units,
+    const float* features, size_t sample_count, float* out_scores);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

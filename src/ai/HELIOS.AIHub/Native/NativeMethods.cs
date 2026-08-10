@@ -14,7 +14,7 @@ internal static partial class NativeMethods
     internal const string Library = "helios_aihub_native";
 
     /// <summary>ABI version this managed code was written against.</summary>
-    internal const int ExpectedAbiVersion = 1;
+    internal const int ExpectedAbiVersion = 2;
 
     [LibraryImport(Library, EntryPoint = "helios_abi_version")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
@@ -39,4 +39,34 @@ internal static partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int FitPrefixBytes(
         ReadOnlySpan<byte> utf8Text, nuint byteLength, int maxTokens, out nuint fittedByteLength);
+
+    // MLP routing learner. Weight buffers are caller-owned float[] sized via
+    // MlpWeightCount; layout and determinism contract are documented in
+    // helios_aihub_native.h.
+
+    [LibraryImport(Library, EntryPoint = "helios_mlp_weight_count")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int MlpWeightCount(
+        nuint featureDim, nuint hiddenUnits, out nuint weightCount);
+
+    [LibraryImport(Library, EntryPoint = "helios_mlp_init")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int MlpInit(
+        Span<float> weights, nuint weightCount,
+        nuint featureDim, nuint hiddenUnits, ulong seed);
+
+    [LibraryImport(Library, EntryPoint = "helios_mlp_train")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int MlpTrain(
+        Span<float> weights, nuint weightCount,
+        nuint featureDim, nuint hiddenUnits,
+        ReadOnlySpan<float> features, ReadOnlySpan<float> targets, nuint sampleCount,
+        int epochs, float learningRate, float l2Regularization, out float meanLoss);
+
+    [LibraryImport(Library, EntryPoint = "helios_mlp_predict")]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int MlpPredict(
+        ReadOnlySpan<float> weights, nuint weightCount,
+        nuint featureDim, nuint hiddenUnits,
+        ReadOnlySpan<float> features, nuint sampleCount, Span<float> scores);
 }

@@ -1,8 +1,11 @@
 # HELIOS.AIHub.Native
 
-C++ spoke for the AIHub: cosine similarity (response dedup across a `compare` fan-out)
-and UTF-8-safe token estimation, exposed as a flat C ABI and called from C# via
-`LibraryImport` (see `src/ai/HELIOS.AIHub/Native/NativeMethods.cs`). See
+C++ spoke for the AIHub: cosine similarity (response dedup across a `compare` fan-out),
+UTF-8-safe token estimation, and an online MLP routing learner (`helios_mlp_*`: a
+deterministic single-hidden-layer network trained sample-by-sample on routing outcomes —
+see the header's doc block for the weight layout and determinism contract). All of it is
+exposed as a flat C ABI and called from C# via `LibraryImport`
+(see `src/ai/HELIOS.AIHub/Native/NativeMethods.cs`). See
 `.claude/skills/cpp-performance/SKILL.md` for the interop rules this follows.
 
 ## Build
