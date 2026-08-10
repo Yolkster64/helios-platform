@@ -57,6 +57,7 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 | `documentation-update.yml` | **Invalid YAML** — block mapping broken at line 33 (same embedded-script class of defect) | Same fix as above — PR2 |
 | `build-all-modules.yml`, `multi-repo-sync.yml`, others | Reference phase/module structures that don't exist | Audit in PR2; delete what cannot go green |
 | `ci-validation.yml` markdownlint step | `.markdownlint.json` missing | Add config or drop step (PR2) |
+| 54 legacy `.ps1` files | Genuine parse errors (broken `foreach`, unterminated here-strings, invalid class code) — masked for years because the old syntax checks used the shallow tokenizer or never gated | Baselined in `.github/ps1-parse-baseline.txt`; the ci-validation gate fails any NON-baseline parse error and reports repaired files. Repair scripts area-by-area in PR2+, deleting baseline lines as they fix |
 | `.gitmodules` | Declares 7 nonexistent `modules/` submodules; `.gitignore` ignores `.gitmodules` | Remove in PR2 |
 | `azure-pipelines.yml` | "Hello world" starter, git-ignored | Delete in PR2 |
 
