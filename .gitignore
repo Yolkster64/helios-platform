@@ -129,3 +129,6 @@ azure-pipelines.yml
 .git/
 .gitkeep
 .gitmodules
+
+## HELIOS runtime state (learning outcomes, azure-up env wiring) — never committed
+.helios/
