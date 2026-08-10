@@ -37,3 +37,10 @@ def test_group_similar_survives_degenerate_tokens():
     result = textwork.group_similar(["a b", "a b c"])
     assert result["groups"] == [[0, 1]]
     assert result["backend"] == "jaccard"
+
+
+def test_group_similar_is_transitive_across_chains():
+    # A~B and B~C but A and C share nothing: single-link puts all three together.
+    texts = ["alpha beta", "beta gamma", "gamma delta"]
+    result = textwork.group_similar(texts, threshold=0.3)
+    assert result["groups"] == [[0, 1, 2]]

@@ -73,12 +73,20 @@ def group_similar(texts: list[str], threshold: float = 0.6) -> dict:
     for i in range(len(texts)):
         if group_of[i] is not None:
             continue
+        # Single-link means transitive closure: expand through newly added members
+        # (A~B and B~C puts C with A even when A and C aren't directly similar),
+        # not just through the seed.
         members = [i]
         group_of[i] = len(groups)
-        for j in range(i + 1, len(texts)):
-            if group_of[j] is None and sim[i][j] >= threshold:
-                group_of[j] = len(groups)
-                members.append(j)
+        frontier = [i]
+        while frontier:
+            a = frontier.pop()
+            for j in range(len(texts)):
+                if group_of[j] is None and sim[a][j] >= threshold:
+                    group_of[j] = len(groups)
+                    members.append(j)
+                    frontier.append(j)
+        members.sort()
         groups.append(members)
     return {
         "groups": groups,

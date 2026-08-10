@@ -24,9 +24,23 @@ public sealed class SecretResolver : ISecretResolver
     {
         var uri = keyVaultUri ?? Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_URI");
         _keyVault = new Lazy<SecretClient?>(() =>
-            string.IsNullOrWhiteSpace(uri)
-                ? null
-                : new SecretClient(new Uri(uri), new DefaultAzureCredential()));
+        {
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return null;
+            }
+            try
+            {
+                return new SecretClient(new Uri(uri), new DefaultAzureCredential());
+            }
+            catch (Exception ex) when (ex is UriFormatException or ArgumentException)
+            {
+                // A malformed AZURE_KEY_VAULT_URI is just "no vault": this resolver's
+                // contract is that bad configuration surfaces as Unconfigured providers,
+                // never as a startup crash.
+                return null;
+            }
+        });
     }
 
     public string? Resolve(string? envName, string? secretName)

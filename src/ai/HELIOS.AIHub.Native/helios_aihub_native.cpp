@@ -184,16 +184,27 @@ helios_status helios_estimate_tokens(
         return HELIOS_OK;
     }
 
-    // Count characters, not bytes: a multi-byte character is usually one token, so byte
-    // length alone overestimates CJK and accented text badly.
-    size_t characters = 0;
+    // Two regimes, not one: ASCII text averages kBytesPerToken characters per
+    // token, while a multi-byte character (CJK, accented) is roughly one token
+    // by itself. Dividing a mixed character count by kBytesPerToken would
+    // undercount CJK-heavy prompts ~4x and route them into windows they can't
+    // fit.
+    size_t ascii_chars = 0;
+    size_t multibyte_chars = 0;
     for (size_t i = 0; i < byte_length; ++i) {
-        if (!is_utf8_continuation(static_cast<unsigned char>(utf8_text[i]))) {
-            ++characters;
+        const auto byte = static_cast<unsigned char>(utf8_text[i]);
+        if (is_utf8_continuation(byte)) {
+            continue;
+        }
+        if (byte < 0x80) {
+            ++ascii_chars;
+        } else {
+            ++multibyte_chars;
         }
     }
 
-    const double estimate = static_cast<double>(characters) / kBytesPerToken;
+    const double estimate =
+        static_cast<double>(ascii_chars) / kBytesPerToken + static_cast<double>(multibyte_chars);
     *out_tokens = static_cast<int32_t>(estimate < 1.0 ? 1.0 : estimate);
     return HELIOS_OK;
 }
@@ -221,15 +232,19 @@ helios_status helios_fit_prefix_bytes(
         return HELIOS_OK;
     }
 
-    const double allowed_characters = static_cast<double>(max_tokens) * kBytesPerToken;
-    size_t characters = 0;
+    // Walk with the same per-character weights as helios_estimate_tokens so a
+    // fitted prefix re-estimates within max_tokens.
+    const double budget = static_cast<double>(max_tokens);
+    double used = 0.0;
     size_t index = 0;
     while (index < byte_length) {
-        if (!is_utf8_continuation(static_cast<unsigned char>(utf8_text[index]))) {
-            if (static_cast<double>(characters) >= allowed_characters) {
+        const auto byte = static_cast<unsigned char>(utf8_text[index]);
+        if (!is_utf8_continuation(byte)) {
+            const double weight = byte < 0x80 ? 1.0 / kBytesPerToken : 1.0;
+            if (used + weight > budget) {
                 break;
             }
-            ++characters;
+            used += weight;
         }
         ++index;
     }

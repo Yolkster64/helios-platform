@@ -27,8 +27,12 @@ else()
     -Wall -Wextra -Wpedantic
     -fstack-protector-strong -D_FORTIFY_SOURCE=2
     $<$<CONFIG:Release>:-O3 -ffast-math>)
-  target_link_options(helios_aihub_native PRIVATE
-    $<$<CONFIG:Release>:-Wl,-z,relro,-z,now>)
+  if(NOT APPLE)
+    # ELF/GNU-ld hardening; Apple's linker rejects -z relro/now and would fail
+    # the .dylib link.
+    target_link_options(helios_aihub_native PRIVATE
+      $<$<CONFIG:Release>:-Wl,-z,relro,-z,now>)
+  endif()
 endif()
 
 # Sanitizer build for CI: catches the UB and overflow classes that the cpp-perf-reviewer

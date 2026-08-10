@@ -148,3 +148,49 @@ type ModelSelectionInterop =
         match ModelSelection.selectBest taskType (parsePreference preference) catalog with
         | Some m -> m.Provider
         | None -> ""
+
+    /// Like SelectBestProvider but keeps the ranked profile's model: the catalog ranks
+    /// provider/model pairs, and dropping the model would let a provider win on one
+    /// model's profile and then be invoked with a different configured default.
+    /// Returns [| provider; model |], or an empty array when the catalog has no entry.
+    static member SelectBestProfile
+        (taskType: string,
+         preference: string,
+         providers: string[], models: string[], classes: string[],
+         contextTokens: int[], inputCostPerM: float[], outputCostPerM: float[],
+         speeds: string[], strengthsCsv: string[]) : string[] =
+        let n = providers.Length
+        let parseClass =
+            function
+            | "frontier" -> ModelSelection.Frontier
+            | "balanced" -> ModelSelection.BalancedClass
+            | "specialist" -> ModelSelection.Specialist
+            | "local" -> ModelSelection.Local
+            | _ -> ModelSelection.FastClass
+        let parseSpeed =
+            function
+            | "fast" -> ModelSelection.Fast
+            | "slow" -> ModelSelection.Slow
+            | "hardware-bound" -> ModelSelection.HardwareBound
+            | _ -> ModelSelection.Medium
+        let parsePreference =
+            function
+            | "cost" -> ModelSelection.CostSensitive
+            | "latency" -> ModelSelection.LatencySensitive
+            | "quality" -> ModelSelection.QualitySensitive
+            | _ -> ModelSelection.Balanced
+
+        let catalog =
+            [ for i in 0 .. n - 1 ->
+                { ModelSelection.Provider = providers.[i]
+                  ModelSelection.Model = models.[i]
+                  ModelSelection.Class = parseClass classes.[i]
+                  ModelSelection.ContextTokens = contextTokens.[i]
+                  ModelSelection.InputPerMillionUsd = inputCostPerM.[i]
+                  ModelSelection.OutputPerMillionUsd = outputCostPerM.[i]
+                  ModelSelection.Speed = parseSpeed speeds.[i]
+                  ModelSelection.Strengths = strengthsCsv.[i].Split(',') |> Array.toList } ]
+
+        match ModelSelection.selectBest taskType (parsePreference preference) catalog with
+        | Some m -> [| m.Provider; m.Model |]
+        | None -> [||]

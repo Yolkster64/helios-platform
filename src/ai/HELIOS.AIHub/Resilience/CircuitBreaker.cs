@@ -22,6 +22,8 @@ public sealed class CircuitBreaker
     private int _consecutiveFailures;
     private DateTimeOffset _openedAt;
     private CircuitState _state = CircuitState.Closed;
+    private bool _probeInFlight;
+    private DateTimeOffset _probeStartedAt;
 
     public CircuitBreaker(int failureThreshold = 5, TimeSpan? openDuration = null, TimeProvider? clock = null)
     {
@@ -53,12 +55,24 @@ public sealed class CircuitBreaker
             switch (_state)
             {
                 case CircuitState.Closed:
-                case CircuitState.HalfOpen:
                     return true;
+                case CircuitState.HalfOpen:
+                    // One probe at a time: a burst arriving after the cooldown must not
+                    // stampede a provider that is still being tested. A probe that never
+                    // records (caller crashed) re-arms after another openDuration.
+                    if (!_probeInFlight || _clock.GetUtcNow() - _probeStartedAt >= _openDuration)
+                    {
+                        _probeInFlight = true;
+                        _probeStartedAt = _clock.GetUtcNow();
+                        return true;
+                    }
+                    return false;
                 case CircuitState.Open:
                     if (_clock.GetUtcNow() - _openedAt >= _openDuration)
                     {
                         _state = CircuitState.HalfOpen;
+                        _probeInFlight = true;
+                        _probeStartedAt = _clock.GetUtcNow();
                         return true;
                     }
                     return false;
@@ -74,6 +88,7 @@ public sealed class CircuitBreaker
         {
             _consecutiveFailures = 0;
             _state = CircuitState.Closed;
+            _probeInFlight = false;
         }
     }
 
@@ -85,6 +100,7 @@ public sealed class CircuitBreaker
             {
                 _state = CircuitState.Open;
                 _openedAt = _clock.GetUtcNow();
+                _probeInFlight = false;
                 return;
             }
 

@@ -37,19 +37,28 @@ public sealed class AIHubOptions
 
     /// <summary>
     /// Finds config/aihub.json walking up from <paramref name="startDirectory"/> (or the
-    /// current directory), so the CLI works from any subdirectory of the repo.
+    /// current directory, then the app base directory), so the CLI works from any
+    /// subdirectory of the repo AND as a published artifact that ships its own config/
+    /// folder next to the executable.
     /// </summary>
     public static string? FindConfigFile(string? startDirectory = null)
     {
-        var dir = new DirectoryInfo(startDirectory ?? Directory.GetCurrentDirectory());
-        while (dir is not null)
+        var starts = startDirectory is not null
+            ? new[] { startDirectory }
+            : new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };
+
+        foreach (var start in starts)
         {
-            var candidate = Path.Combine(dir.FullName, "config", "aihub.json");
-            if (File.Exists(candidate))
+            var dir = new DirectoryInfo(start);
+            while (dir is not null)
             {
-                return candidate;
+                var candidate = Path.Combine(dir.FullName, "config", "aihub.json");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+                dir = dir.Parent;
             }
-            dir = dir.Parent;
         }
         return null;
     }

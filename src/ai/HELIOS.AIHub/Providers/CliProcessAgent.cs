@@ -56,15 +56,23 @@ public sealed class CliProcessAgent : ProviderAgentBase
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Kill on BOTH cancellation paths: disposing Process does not terminate the
+            // child, so a caller-cancelled route would otherwise leave codex/claude/etc.
+            // running (and mutating the workspace) after the hub abandoned it.
             try
             {
                 process.Kill(entireProcessTree: true);
             }
             catch (InvalidOperationException)
             {
-                // Process already exited between the timeout and the kill.
+                // Process already exited between the cancellation and the kill.
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             return new ChatResult(false, null, Provider, model, stopwatch.Elapsed,
                 Error: $"'{_options.Command}' timed out after {_options.TimeoutSeconds}s.");

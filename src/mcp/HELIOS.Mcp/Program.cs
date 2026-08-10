@@ -17,6 +17,9 @@ public static class Program
         var builder = Host.CreateApplicationBuilder(args);
 
         // stdio transport: the protocol owns stdout, so all logging must go to stderr.
+        // CreateApplicationBuilder pre-registers a stdout console logger; clear it or
+        // hosting log lines interleave with the JSON-RPC stream and break clients.
+        builder.Logging.ClearProviders();
         builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
         builder.Services.AddSingleton(_ => AIHubService.CreateFromConfig());

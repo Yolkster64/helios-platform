@@ -55,6 +55,39 @@ public class CircuitBreakerTests
     }
 
     [Fact]
+    public void HalfOpen_AdmitsOnlyOneProbe_UntilItRecords()
+    {
+        var clock = new FakeClock();
+        var breaker = new CircuitBreaker(failureThreshold: 1, openDuration: TimeSpan.FromSeconds(10), clock);
+
+        breaker.RecordFailure();
+        clock.Now += TimeSpan.FromSeconds(11);
+
+        Assert.True(breaker.CanExecute());   // the single probe
+        Assert.False(breaker.CanExecute());  // concurrent burst is rejected
+        Assert.False(breaker.CanExecute());
+
+        breaker.RecordSuccess();
+        Assert.Equal(CircuitState.Closed, breaker.State);
+        Assert.True(breaker.CanExecute());
+    }
+
+    [Fact]
+    public void HalfOpen_ProbeThatNeverRecords_RearmsAfterCooldown()
+    {
+        var clock = new FakeClock();
+        var breaker = new CircuitBreaker(failureThreshold: 1, openDuration: TimeSpan.FromSeconds(10), clock);
+
+        breaker.RecordFailure();
+        clock.Now += TimeSpan.FromSeconds(11);
+        Assert.True(breaker.CanExecute());   // probe taken, caller dies without recording
+        Assert.False(breaker.CanExecute());
+
+        clock.Now += TimeSpan.FromSeconds(11);
+        Assert.True(breaker.CanExecute());   // a stuck probe must not wedge the circuit
+    }
+
+    [Fact]
     public void SuccessResetsConsecutiveFailureCount()
     {
         var breaker = new CircuitBreaker(failureThreshold: 2);

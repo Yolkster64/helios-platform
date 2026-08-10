@@ -105,5 +105,32 @@ public sealed class ModelCatalog
         return string.IsNullOrEmpty(result) ? null : result;
     }
 
+    /// <summary>
+    /// Best provider/model pair for a task — the model belongs to the profile that won
+    /// the ranking, so the caller can send the request to the model that was actually
+    /// scored rather than the provider's configured default.
+    /// </summary>
+    public (string Provider, string Model)? SelectProfile(string taskType, string preference)
+    {
+        if (_models.Count == 0)
+        {
+            return null;
+        }
+
+        var result = ModelSelectionInterop.SelectBestProfile(
+            taskType,
+            preference,
+            _models.Select(m => m.Provider).ToArray(),
+            _models.Select(m => m.Model).ToArray(),
+            _models.Select(m => m.Class).ToArray(),
+            _models.Select(m => m.ContextTokens).ToArray(),
+            _models.Select(m => m.InputPerMillionUsd).ToArray(),
+            _models.Select(m => m.OutputPerMillionUsd).ToArray(),
+            _models.Select(m => m.RelativeSpeed).ToArray(),
+            _models.Select(m => string.Join(',', m.Strengths)).ToArray());
+
+        return result is [var provider, var model] ? (provider, model) : null;
+    }
+
     public IReadOnlyList<ModelProfile> AllModels => _models;
 }

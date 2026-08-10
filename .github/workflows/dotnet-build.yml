@@ -91,9 +91,12 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish CLI artifact
-        run: >
-          dotnet publish src/ai/HELIOS.AIHub.Cli -c Release --no-build
-          -o ./publish/helios-ai
+        run: |
+          dotnet publish src/ai/HELIOS.AIHub.Cli -c Release --no-build -o ./publish/helios-ai
+          # Ship the default config next to the executable so the extracted artifact
+          # runs standalone — config resolution checks the app base directory too.
+          mkdir -p ./publish/helios-ai/config
+          cp config/aihub.json config/aihub.cloud.json config/model-catalog.json ./publish/helios-ai/config/
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4

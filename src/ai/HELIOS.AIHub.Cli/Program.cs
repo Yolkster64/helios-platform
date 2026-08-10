@@ -42,6 +42,7 @@ public static class Program
                 }
                 var provider = options.GetValueOrDefault("provider");
                 var optimize = options.GetValueOrDefault("optimize");
+                string? optimizedModel = null;
                 if (provider is null && optimize is not null)
                 {
                     var forTask = options.GetValueOrDefault("for");
@@ -49,17 +50,19 @@ public static class Program
                     {
                         return Fail("--optimize requires --for <task-type> so the catalog knows what it's optimizing.");
                     }
-                    provider = hub.SelectOptimalProvider(forTask, optimize);
-                    if (provider is null)
+                    if (hub.SelectOptimalProfile(forTask, optimize) is not { } profile)
                     {
                         return Fail($"No catalog entry (config/model-catalog.json) covers task '{forTask}'; " +
                                      "falling back to `route` is your next move.");
                     }
-                    Console.Error.WriteLine($"[optimize={optimize} for={forTask} -> {provider}]");
+                    // Send the request to the model the catalog actually ranked, not the
+                    // provider's configured default.
+                    (provider, optimizedModel) = profile;
+                    Console.Error.WriteLine($"[optimize={optimize} for={forTask} -> {provider}/{optimizedModel}]");
                 }
                 var result = await hub.AskAsync(
                     positionals[0], provider,
-                    options.GetValueOrDefault("model"),
+                    options.GetValueOrDefault("model") ?? optimizedModel,
                     options.GetValueOrDefault("system"));
                 return PrintResult(result);
             }

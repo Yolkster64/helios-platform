@@ -95,8 +95,17 @@ public sealed class AIHubService
     /// <see cref="RouteAsync"/>'s configured chain.
     /// </summary>
     public string? SelectOptimalProvider(string taskType, string preference = "balanced") =>
-        _catalog?.SelectProvider(taskType, preference) is { } provider && _byProvider.ContainsKey(provider)
-            ? provider
+        SelectOptimalProfile(taskType, preference)?.Provider;
+
+    /// <summary>
+    /// Best provider AND the model whose catalog profile won the ranking. Callers should
+    /// pass both to <see cref="AskAsync"/>: the ranking scored a specific provider/model
+    /// pair, and invoking the provider's configured default instead would silently answer
+    /// a different question than the one optimized.
+    /// </summary>
+    public (string Provider, string Model)? SelectOptimalProfile(string taskType, string preference = "balanced") =>
+        _catalog?.SelectProfile(taskType, preference) is { } profile && _byProvider.ContainsKey(profile.Provider)
+            ? profile
             : null;
 
     /// <summary>Ask one provider directly (or the default chain when provider is null).</summary>
@@ -199,6 +208,15 @@ public sealed class AIHubService
             return configuredChain;
         }
         catch (UnauthorizedAccessException)
+        {
+            return configuredChain;
+        }
+        catch (Azure.RequestFailedException)
+        {
+            // Azure Table learning store outage — same rule as filesystem failures.
+            return configuredChain;
+        }
+        catch (Azure.Identity.AuthenticationFailedException)
         {
             return configuredChain;
         }
@@ -496,6 +514,14 @@ public sealed class AIHubService
             // Recording is best-effort; losing a data point must not fail the user's call.
         }
         catch (UnauthorizedAccessException)
+        {
+        }
+        catch (Azure.RequestFailedException)
+        {
+            // An Azure learning-store outage must not turn a successful (paid) provider
+            // call into a routing failure.
+        }
+        catch (Azure.Identity.AuthenticationFailedException)
         {
         }
     }

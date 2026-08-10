@@ -19,7 +19,11 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
     private readonly string? _projectEndpoint;
     private readonly Lazy<PersistentAgentsClient>? _client;
     private readonly SemaphoreSlim _agentGate = new(1, 1);
-    private PersistentAgent? _agent;
+
+    // Keyed by (model, instructions): a persistent agent bakes both in at creation,
+    // so reusing one agent across requests would silently pin every caller to the
+    // first request's model and system prompt.
+    private readonly Dictionary<(string Model, string Instructions), PersistentAgent> _agents = new();
 
     public FoundryAgentProvider(string provider, string displayName, string? defaultModel, string? projectEndpoint)
         : base(provider, displayName, defaultModel)
@@ -96,20 +100,22 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
     private async Task<PersistentAgent> GetOrCreateAgentAsync(
         PersistentAgentsClient client, string model, string? instructions, CancellationToken cancellationToken)
     {
-        if (_agent is not null)
-        {
-            return _agent;
-        }
+        var effectiveInstructions = instructions ?? "You are the HELIOS platform's Azure AI Foundry agent.";
+        var key = (model, effectiveInstructions);
 
         await _agentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _agent ??= await client.Administration.CreateAgentAsync(
-                model: model,
-                name: AgentName,
-                instructions: instructions ?? "You are the HELIOS platform's Azure AI Foundry agent.",
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            return _agent;
+            if (!_agents.TryGetValue(key, out var agent))
+            {
+                agent = await client.Administration.CreateAgentAsync(
+                    model: model,
+                    name: AgentName,
+                    instructions: effectiveInstructions,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                _agents[key] = agent;
+            }
+            return agent;
         }
         finally
         {
