@@ -5,9 +5,8 @@ before pinning.
 
 ## Contents
 
-- [Action versions](#action-versions) · [Actions that don't exist](#actions-that-dont-exist) · [Triggers](#triggers)
-- [permissions](#permissions-and-github_token) · [Azure OIDC](#azure-oidc-login) · [Script injection](#script-injection) · [Matrix and concurrency](#matrix-fail-fast-concurrency)
-- [Graceful skip](#graceful-skip-for-missing-secrets) · [Self-hosted runners](#self-hosted-runners-arc) · [Composite vs reusable](#composite-actions-vs-reusable-workflows) · [Caching](#caching-correctness) · [Debugging](#debugging)
+- [Action versions](#action-versions) · [Actions that don't exist](#actions-that-dont-exist) · [Triggers](#triggers) · [permissions](#permissions-and-github_token) · [Azure OIDC](#azure-oidc-login) · [Script injection](#script-injection)
+- [Matrix and concurrency](#matrix-fail-fast-concurrency) · [Graceful skip](#graceful-skip-for-missing-secrets) · [Self-hosted runners](#self-hosted-runners-arc) · [Composite vs reusable](#composite-actions-vs-reusable-workflows) · [Caching](#caching-correctness) · [Debugging](#debugging)
 
 ## Action versions
 
