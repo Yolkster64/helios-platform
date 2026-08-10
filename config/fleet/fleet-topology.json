@@ -1,0 +1,39 @@
+{
+  "$comment": "Declarative agent-fleet topology for HELIOS. Consumed by fleet tooling (bring-up is roadmap PR5 — see docs/architecture/HERMES_FLEET_AND_XCORE.md). Sizing and naming change here, never in code.",
+  "fleets": [
+    {
+      "name": "hermes",
+      "kind": "hermes-kanban",
+      "description": "Hermes Agent kanban worker lanes (fleet mode): pulls all non-archived tasks and dispatches one worker lane per claimed task.",
+      "repo": "hermes-agent-github",
+      "spawn": {
+        "command": "hermes",
+        "argsTemplate": "-p {assignee} chat -q {prompt}",
+        "envContract": [
+          "HERMES_KANBAN_TASK",
+          "HERMES_KANBAN_DB",
+          "HERMES_KANBAN_RUN_ID",
+          "HERMES_KANBAN_CLAIM_LOCK"
+        ],
+        "termination": ["kanban_complete", "kanban_block"]
+      },
+      "maxConcurrentLanes": 4
+    },
+    {
+      "name": "xcore-9s",
+      "kind": "worker-pool",
+      "description": "Xcore agent worker pool. Nine workers by default; resize via poolSize.",
+      "repo": "xcore-agent",
+      "poolSize": 9,
+      "worker": {
+        "taskTypes": ["code_generation", "test_creation", "documentation_generation"],
+        "dispatchVia": "hermes",
+        "assigneePrefix": "xcore"
+      }
+    }
+  ],
+  "routing": {
+    "$comment": "The AIHub side of fleet dispatch: config/aihub.json routes task type 'agent_fleet_dispatch' to the hermes CLI agent, which feeds these fleets.",
+    "aihubTaskType": "agent_fleet_dispatch"
+  }
+}
