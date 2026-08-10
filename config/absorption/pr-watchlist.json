@@ -1,5 +1,5 @@
 {
-  "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically. epic references the consolidated theme in docs/architecture/ABSORPTION_LEDGER.md (E1..E18), which mirrors the GitHub issues once Issues are enabled on the fork.",
+  "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically. epic references the consolidated theme in docs/architecture/ABSORPTION_LEDGER.md (E1..E40), which mirrors the GitHub issues once Issues are enabled on the fork.",
   "upstream": "M0nado/helios-platform",
   "candidates": [
     {
@@ -307,6 +307,141 @@
       "why": "Audit-first only: PR #4's safety disposition rejected unsigned SYSTEM WinRE tasks; only a governed, signed, consent-gated subset may ever be considered.",
       "absorb": ["threat-model documentation only"],
       "risks": ["safety carve-out: no integration without explicit human review and signing story"]
+    },
+    {
+      "pr": 2,
+      "title": "complete customization & configuration infrastructure",
+      "status": "candidate",
+      "epic": "E19",
+      "why": "The customization/configuration half of the founding USB-installer pair; the profile idea is the durable part.",
+      "absorb": ["customization-profile shape"],
+      "risks": ["WinPE/USB era predates the current tree; expect nothing to apply verbatim"]
+    },
+    {
+      "pr": 105,
+      "title": "Helios Hermes autosetup generator, scripts, manifest, and workflow",
+      "status": "candidate",
+      "epic": "E20",
+      "why": "Autosetup generator with manifest and workflow — ancestor of our fleet topology and bootstrap scripts; diff for missing steps.",
+      "absorb": ["autosetup manifest shape"],
+      "risks": ["superseded by fleet-topology.json v2 and current bootstrap; absorb deltas only"]
+    },
+    {
+      "pr": 70,
+      "title": "merge automation CLI and branch consolidation guide",
+      "status": "candidate",
+      "epic": "E21",
+      "why": "Merge-automation CLI and consolidation guide — the machinery of the consolidation this ledger performs.",
+      "absorb": ["merge CLI shape", "consolidation guide structure"],
+      "risks": ["also listed under E12; absorb one coherent design across both eras"]
+    },
+    {
+      "pr": 72,
+      "title": "deep AI automation orchestrator (inventory + workflow + docs)",
+      "status": "candidate",
+      "epic": "E22",
+      "why": "The fullest deep-automation take; the inventory model and planner profiles are the portable ideas.",
+      "absorb": ["inventory model", "planner profile shape"],
+      "risks": ["assumes the early tree; nothing here may auto-execute"]
+    },
+    {
+      "pr": 74,
+      "title": "Implement local AIHub X-Tier control modules",
+      "status": "candidate",
+      "epic": "E23",
+      "why": "Earliest x-tier appearance — module boundaries as context for E3's contract reconciliation.",
+      "absorb": ["x-tier module boundaries"],
+      "risks": ["likely superseded by E3's canonical environment definitions"]
+    },
+    {
+      "pr": 83,
+      "title": "bump action versions, github-system workflow, consolidation tooling",
+      "status": "candidate",
+      "epic": "E24",
+      "why": "Representative of the workflow-modernization wave; mine the github-system workflow and preflight/cache ideas for gaps.",
+      "absorb": ["github-system workflow ideas"],
+      "risks": ["our workflows are already newer; gaps only"]
+    },
+    {
+      "pr": 76,
+      "title": ".NET inventory and automerge readiness checks; orchestrator unit tests in CI",
+      "status": "candidate",
+      "epic": "E25",
+      "why": "Automerge readiness checks and .NET inventory — readiness criteria to fold into verify-readiness.",
+      "absorb": ["readiness criteria", "inventory fields"],
+      "risks": ["automerge itself stays off the table; checks only, nothing merges automatically"]
+    },
+    {
+      "pr": 86,
+      "title": "build portable core, portable tests, harden script/JSON validation",
+      "status": "candidate",
+      "epic": "E27",
+      "why": "Portable core + tests + hardened script/JSON validation — the ancestor of our Linux-first HELIOS.sln lane.",
+      "absorb": ["portable-lane split", "validation guards"],
+      "risks": ["also listed under E8; our exclusion policy already encodes the lesson"]
+    },
+    {
+      "pr": 88,
+      "title": "helios azure commands, Azure CLI/PowerShell validation, persist HELIOS Azure config",
+      "status": "candidate",
+      "epic": "E29",
+      "why": "The command family plus persisted Azure config — validation checks and config persistence our bootstrap scripts lack.",
+      "absorb": ["persisted-config shape", "CLI/PS validation checks"],
+      "risks": ["overlaps connect-azure bootstrap; port the checks, not a second surface"]
+    },
+    {
+      "pr": 91,
+      "title": "Harden deep automation remote redaction",
+      "status": "candidate",
+      "epic": "E31",
+      "why": "Security-adjacent: the remote-redaction rules are durable regardless of what became of the automation they guarded.",
+      "absorb": ["redaction rules"],
+      "risks": ["host automation is gone; port rules into our logging/telemetry paths"]
+    },
+    {
+      "pr": 96,
+      "title": "AIHub fleet models, service, UI redesign, unit tests",
+      "status": "candidate",
+      "epic": "E33",
+      "why": "The earliest fleet-in-the-hub design; mine the model/service shapes, not the WPF-era UI.",
+      "absorb": ["fleet model/service shapes"],
+      "risks": ["UI is WPF-era; shell direction is WinUI 3 (GUI_THEME_ANALYSIS.md)"]
+    },
+    {
+      "pr": 101,
+      "title": "Centralize HELIOS NuGet versions, shared metadata, version-audit workflow",
+      "status": "candidate",
+      "epic": "E34",
+      "why": "Central package versions + shared metadata + version audit — directly portable as central package management.",
+      "absorb": ["central version file", "version-audit workflow"],
+      "risks": ["must cover HELIOS.sln and the Windows-only src/gui solution consistently"]
+    },
+    {
+      "pr": 111,
+      "title": "Isolate Windows-only code into HELIOS.Platform.Windows (net8.0-windows)",
+      "status": "candidate",
+      "epic": "E35",
+      "why": "The Windows-isolation split is the revival path for the excluded src/core/HELIOS.Platform.",
+      "absorb": ["isolation split shape"],
+      "risks": ["must align with the HELIOS.sln exclusion policy and root-csproj glob guards"]
+    },
+    {
+      "pr": 120,
+      "title": "HELIOS.Analytics.FSharp library, platform contracts, unit tests",
+      "status": "candidate",
+      "epic": "E38",
+      "why": "Earliest F# analytics slot with platform contracts — evaluate against our F# domain (cross-link E13).",
+      "absorb": ["platform contract shapes"],
+      "risks": ["new project must join HELIOS.sln and the root csproj guards"]
+    },
+    {
+      "pr": 128,
+      "title": "automation workflows, capability/config registries, operator tooling",
+      "status": "candidate",
+      "epic": "E39",
+      "why": "Capability/config registries and operator tooling — registry shapes to absorb once across E16 and E39.",
+      "absorb": ["capability/config registry shapes"],
+      "risks": ["very large; also listed under E16 — absorb shapes, never the parallel implementation"]
     }
   ]
 }

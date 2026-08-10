@@ -1,7 +1,8 @@
 # Upstream Absorption Ledger
 
 The consolidated map of upstream `M0nado/helios-platform` PR history (195 PRs, #1–#295)
-distilled into 18 theme epics. Each epic bundles the broad idea behind several upstream
+distilled into 40 theme epics: E1–E18 cover the recent era (#151–#295), E19–E40 the
+early era (#1–#151). Each epic bundles the broad idea behind several upstream
 PRs; the per-PR benchmark status lives in `config/absorption/pr-watchlist.json` and the
 evidence loop is `docs/architecture/ABSORPTION_PIPELINE.md`. Upstream is read-only —
 benchmark provenance, never a write target.
@@ -239,12 +240,300 @@ and integrates no code in this pass.
 - Risks: the carve-out is the point; nothing lands without an explicit signing and
   consent story
 
+## E19 — USB quick-start installer & customization (`enhancement`) — open
+
+The founding PRs: a bootable quick-start USB installer and the customization &
+configuration infrastructure around it — HELIOS's WinPE-era origin as a Windows
+deployment tool, before the AI hub existed. The customization-profile idea is the
+part worth mining; the installer targets a tree that no longer exists.
+
+- PRs: #1 (the quick-start USB installer itself), #2 (customization & configuration
+  infrastructure around it)
+- Extracts: customization-profile shape, quick-start UX outline
+- Risks: WinPE/USB era predates the current tree; expect nothing to apply verbatim
+
+## E20 — Orchestration backbone & Hermes autosetup (`ai-hub`) — open
+
+The first orchestration layer: a HELIOS/HERMES backbone with Azure CLI bootstrap,
+later joined by an autosetup generator producing scripts, a manifest, and a workflow
+— the direct ancestor of today's fleet topology and bootstrap scripts.
+
+- PRs: #61 (orchestration backbone + Azure CLI bootstrap), #105 (Hermes autosetup
+  generator: scripts, manifest, workflow)
+- Extracts: autosetup manifest shape; bootstrap steps our connect scripts lack
+- Risks: superseded by fleet-topology.json v2 and the current bootstrap; deltas only
+
+## E21 — Consolidation automation: manifests, plan-runner, merge CLI (`build-ci`) — open
+
+The early era's branch-consolidation machinery: merge-source manifests, a
+plan-runner, a merge-automation CLI, manifest validation with build/test discovery,
+and the first umbrella consolidation — the same idea E12 revisits in the recent era.
+Absorb one coherent design across both epics.
+
+- PRs: #69 (manifest + plan-runner + docs), #70 (merge-automation CLI + branch
+  consolidation guide), #66 (MERGE_SOURCE_MANIFEST + register inputs), #93 (manifest
+  validation + build/test discovery), #59 (first umbrella: AIHub, C# environment,
+  WinUI3 USB wizard, integration manifests)
+- Extracts: manifest schema, plan-runner sequencing, validation checks — deduped with
+  E12, which lists #69/#70/#66 from the recent-era side
+- Risks: two eras of drafts; pick one shape, credit both
+
+## E22 — Deep-AI automation orchestrator & integration planner (`ai-hub`) — open
+
+A "deep automation" cluster: an automatic AI & Azure integration planner with
+profiles, a deep-AI orchestrator with inventory/workflow/docs, control-plane
+scripts, and submodule consolidation tooling. The planner profiles and inventory
+model are the durable ideas; the orchestrators are era-specific.
+
+- PRs: #71 (integration planner with profiles), #72 (deep-AI orchestrator: inventory
+  + workflow + docs), #73 (deep AI & workflow automation), #77 (automation workflows
+  + control-plane scripts + submodule consolidation tooling), #68 (SRE Agent
+  deployment automation docs and assets)
+- Extracts: planner profile shape, inventory model; submodule tooling defers to E7's
+  governance
+- Risks: orchestrators assume the early tree; nothing here may auto-execute
+
+## E23 — Local AIHub X-Tier control modules (`ai-hub`) — open
+
+Local X-Tier control modules inside the AIHub — the earliest appearance of the
+x-tier concept that E3's canonical environment definitions later formalize. Evaluate
+against the live fleet topology, not as new modules.
+
+- PRs: #74 (local AIHub X-Tier control modules)
+- Extracts: x-tier module boundaries as context for E3's contracts
+- Risks: predates the Hermes/XCore contract era; likely superseded by E3
+
+## E24 — Workflow modernization & action-pin upgrades (`build-ci`) — open
+
+The early era's workflow hygiene: pipeline stabilization and linting, actions
+upgraded to v4, standardized CI/CD, an autonomous preflight workflow with
+cache/monitoring improvements, and removal of deprecated pins.
+
+- PRs: #75 (stabilize pipelines + workflow linting), #82 (actions v4 + platform
+  automation + standardized CI/CD), #83 (action-version bumps + github-system
+  workflow + consolidation tooling), #107 (autonomous preflight workflow +
+  cache/monitoring), #142 (remove deprecated action pins)
+- Extracts: preflight and cache/monitoring patterns our workflows lack
+- Risks: our workflows are already newer; mine for gaps only
+
+## E25 — .NET inventory & automerge readiness (`build-ci`) — open
+
+A .NET inventory plus automerge readiness checks, with orchestrator unit tests wired
+into CI — readiness-as-a-gate ahead of any automatic merge; cousin to E14's
+verify-readiness and E21's merge automation.
+
+- PRs: #76 (.NET inventory + automerge readiness checks + orchestrator unit tests
+  in CI)
+- Extracts: readiness criteria and inventory fields to fold into verify-readiness
+- Risks: automerge stays off the table — checks only; nothing merges automatically
+
+## E26 — Phase-docs consolidation & AI-path hardening (`enhancement`) — open
+
+Four takes on one combined change: consolidate the phase docs, harden the AI Hub's
+HTTP paths, fix IntelligentCache locking, and run an AI-performance-security scan.
+The cache-locking and HTTP-hardening fixes are the valuable part if that code still
+exists anywhere relevant; otherwise only the doc-consolidation pattern survives.
+
+- PRs: #78 #79 #80 #81 (quadruplet: phase-doc consolidation + AI Hub HTTP-path
+  hardening + IntelligentCache locking fix + AI-Performance-Security scan)
+- Extracts: cache-locking and HTTP-hardening fixes if the code survives anywhere
+  relevant; else the doc-consolidation pattern only
+- Risks: four competing drafts — diff before absorbing; the touched code may be gone
+
+## E27 — Portable core CI: Linux lanes & guardrails (`build-ci`) — open
+
+Making the core build and test on Linux: portable-core CI coverage, portable tests,
+hardened script/JSON validation, a portable Ubuntu job with guardrails, and skip
+logic for tests that would rebuild the full core or hit missing ProjectReference
+targets — the direct ancestor of our Linux-first `HELIOS.sln` lane.
+
+- PRs: #85 (fix Linux CI coverage for portable core), #86 (portable core + portable
+  tests + script/JSON validation hardening), #92 (portable Ubuntu CI job +
+  guardrails + validations), #94 (skip Linux tests that would rebuild the full
+  core), #62 (skip tests when ProjectReference targets missing)
+- Extracts: portable-lane split and skip guards (E8 lists #85/#86/#92 too; dedupe)
+- Risks: our HELIOS.sln exclusion policy already encodes the lesson; guard details
+  only
+
+## E28 — ltrain local training entrypoint (`ai-hub`) — open
+
+A local training entrypoint (`ltrain`) — the one early PR reaching toward on-box
+model training. Training runtimes are evaluate-carefully per repo policy: catalog
+the entrypoint as an advisory engine candidate and nothing more.
+
+- PRs: #87 (ltrain local training entrypoint)
+- Extracts: entrypoint UX as an advisory engine-catalog entry only
+- Risks: training runtimes are evaluate-carefully; advisory catalog only, never
+  auto-execute
+
+## E29 — `helios azure` command family & persisted config (`infra`) — open
+
+A `helios azure` command family with Azure CLI/PowerShell validation and persisted
+HELIOS Azure config, plus the surrounding bootstrap-and-runbook cluster — the early
+era's answer to what our connect-azure and cloud-shell bootstrap scripts do today.
+
+- PRs: #88 (helios azure commands + CLI/PS validation + persisted config), #100
+  (cloud auth + dev bootstrap hardening), #102 (branch integration report + Azure
+  CLI bootstrap), #104 (automation bootstrap + Copilot Studio runbook + action
+  template), #106 (branch integration runbook + CLI session bootstrap)
+- Extracts: persisted-config shape, validation checks our bootstrap lacks
+- Risks: #100 also serves E5 and #102/#106 serve E13 — this epic owns the command
+  family; dedupe the rest
+
+## E30 — Early Azure infra & deploy-artifact evolution (`infra`) — open
+
+The first Bicep: an infrastructure/main.bicep with a deploy workflow that builds and
+packages an artifact, then modernized CI with tightened scans, release-branch
+condition fixes, a required Bicep-build CI gate with local helper, and the
+"Enterprise Deployment Manager v5" capstone. Our infra/ stack supersedes most of it;
+mine the deploy-artifact packaging ideas.
+
+- PRs: #90 (first main.bicep + deploy workflow build/package artifact), #98
+  (modernize CI + tighten scans + Azure infra: Bicep + deploy flow), #99 (fix Azure
+  deploy release-branch conditions), #129 (require Bicep build in CI + local helper
+  — ours already does), #150 (HELIOS Enterprise Deployment Manager v5)
+- Extracts: deploy-artifact packaging steps our helios-deploy.yml lacks
+- Risks: our infra/ stack supersedes most of this; packaging ideas only
+
+## E31 — Deep-automation remote redaction hardening (`enhancement`) — open
+
+Hardened redaction of remote data in the deep-automation path. Security-adjacent:
+the redaction rules themselves are the durable artifact, regardless of what became
+of the automation they guarded (E22).
+
+- PRs: #91 (harden deep automation remote redaction)
+- Extracts: the redaction rules — patterns and what counts as sensitive
+- Risks: the host automation is gone; port the rules into our logging/telemetry
+  paths
+
+## E32 — Minimal-platform scorecard & API tests (`build-ci`) — open
+
+A minimal-platform scorecard plus minimal API tests wired into a CI test step —
+lightweight platform-health signals predating the full test lanes; the scorecard
+metrics could feed our status dashboard.
+
+- PRs: #95 (optimize minimal platform scorecard), #113 (minimal API tests + CI test
+  step)
+- Extracts: scorecard metrics, minimal API-test pattern for the helios-ai-api
+  surface
+- Risks: our AIHub tests already cover the API; absorb metrics, not duplicate tests
+
+## E33 — AIHub fleet models, service & UI (`ai-hub`) — open
+
+Fleet models, a fleet service, a UI redesign with unit tests, then wiring that fleet
+into shared AI abstractions — the earliest fleet-in-the-hub design. GUI direction
+now lives in `GUI_THEME_ANALYSIS.md` (WinUI 3); mine the model/service shapes, not
+the UI.
+
+- PRs: #96 (fleet models + service + UI redesign + unit tests), #97 (connect fleet
+  to shared AI abstractions)
+- Extracts: fleet model/service shapes (E15 already cites #96/#97 as fleet-model
+  wiring context); UI defers to GUI_THEME_ANALYSIS.md
+- Risks: the UI is WPF-era; our shell direction is WinUI 3
+
+## E34 — NuGet version centralization & audit (`build-ci`) — open
+
+Centralized HELIOS NuGet versions with shared metadata and a version-audit workflow
+— the governance that would have made the era's dependabot bumps (#58/#60) one-line
+changes, and directly portable as central package management today.
+
+- PRs: #101 (centralize NuGet versions + shared metadata + version-audit workflow;
+  context: the #58/#60 dependabot bumps it would govern)
+- Extracts: central version file, shared-metadata pattern, version-audit workflow
+- Risks: must cover HELIOS.sln and the Windows-only src/gui solution consistently
+
+## E35 — Windows platform isolation (`build-ci`) — open
+
+Splitting Windows-only code out of the portable core: a conventional
+HELIOS.Platform.sln with its own CI target, a HELIOS.Platform.Windows
+(net8.0-windows) project, and separated cross-platform core/CLI builds from the
+Windows WPF shell — directly relevant to reviving our excluded src/core; the
+isolation split is the path to making it compile again.
+
+- PRs: #84 (conventional HELIOS.Platform.sln + CI target), #111 (isolate
+  Windows-only code into HELIOS.Platform.Windows), #132 (separate cross-platform
+  core/CLI builds from the Windows WPF shell)
+- Extracts: the isolation split as the revival plan for src/core/HELIOS.Platform
+- Risks: must align with the HELIOS.sln exclusion policy and root-csproj glob
+  guards, not fight them
+
+## E36 — Repo optimization audit & idempotent dev setup (`enhancement`) — open
+
+A repository optimization audit plus a hardened, check-only dev setup with Azure CLI
+support, and full-stack documentation with non-mutating validators — the
+verify-don't-mutate discipline our bootstrap scripts follow today.
+
+- PRs: #112 (optimization audit + check-only hardened dev setup + Azure CLI
+  support), #114 (full-stack docs + non-mutating validators + idempotent setup —
+  also under E17)
+- Extracts: audit checklist, check-only/idempotent patterns our scripts lack
+- Risks: overlaps E1's verify-only port and E17's #114; absorb the audit, dedupe
+  the rest
+
+## E37 — Multi-language platform scaffolding (`enhancement`) — open
+
+Two takes on scaffolding a multi-language platform — CI, docs, Azure IaC, language
+bindings — including quarantining legacy sources out of the build. Our polyglot
+layout (C#/F#/C++/Python) landed differently; the quarantine pattern is the piece
+to mine.
+
+- PRs: #118 (scaffold: CI + docs + Azure IaC + language bindings), #119 (sibling:
+  CI workflows + infra + docs + scaffolding, quarantine legacy sources)
+- Extracts: the legacy-source quarantine pattern (relevant to the excluded src/core)
+- Risks: greenfield scaffolding our layout already superseded
+
+## E38 — F# analytics library & platform contracts (`ai-hub`) — open
+
+A HELIOS.Analytics.FSharp library with platform contracts and unit tests — the
+earliest F# analytics slot, ancestor to E13's RepositoryAnalytics and E2's scoring
+modules. Evaluate the contracts against our F# domain.
+
+- PRs: #120 (HELIOS.Analytics.FSharp library + platform contracts + unit tests)
+- Extracts: contract shapes for the F# domain (cross-link E13's
+  RepositoryAnalytics)
+- Risks: new projects must join HELIOS.sln and the root csproj glob guards
+
+## E39 — Command-center control plane & capability registries (`ai-hub`) — open
+
+The early era's control-plane push: a command center with CI workflows, Azure
+infra, analytics and reporting; mass-integration orchestration with
+capability/agent registries and operator tooling; a unified pipeline scaffold
+spanning Azure/GitHub/Codex/Hermes/Slack/M365; and a unified communication contract
+— the early-era counterpart of E16. Absorb the registry and report shapes once
+across both.
+
+- PRs: #121 #122 (command-center twins), #127 (mass integration workflow + shell +
+  capability/agent registries + Azure bootstrap), #128 (automation workflows +
+  capability/config registries + operator tooling), #146 (unified pipeline
+  scaffold: Azure + GitHub + Codex + Hermes + Slack + M365), #147 (collaboration
+  control plane), #151 (unify Copilot Codex Azure and HELIOS communication
+  contract)
+- Extracts: capability/agent registry shapes and report formats — once across E16
+  and this epic (E16 lists #121/#122/#127/#128 from its side)
+- Risks: very large PRs; absorb shapes, never the parallel implementation
+
+## E40 — helios.sh developer helper family (`build-ci`) — open
+
+A helios.sh helper family: PR-body generation, pruning (and ignoring) generated
+artifacts, a shared repo-local tool resolver surfaced in build/readiness reports,
+and a verify command with `--include-readiness`. Overlaps E14's ported
+verify-readiness.ps1 — absorb only what that script lacks.
+
+- PRs: #123 (helios.sh PR-body generator), #124 (prune-generated script + ignore
+  generated artifacts), #130 (repo-local tool resolver — candidacy stays tracked
+  under E14; cross-linked here), #131 (`--include-readiness` + helios.sh verify
+  command)
+- Extracts: PR-body generator, prune-generated hygiene, verify behaviors
+  verify-readiness.ps1 lacks
+- Risks: bash-vs-PS7 split — repo convention wraps the C# CLI in PS7; port
+  behaviors, not the shell
+
 ---
 
 ## Coverage
 
-18 epics span **~90 distinct upstream PRs** (the remainder of the 195 are duplicates of
-these themes, dependency bumps, or superseded merge-train snapshots). Tranche 1 (E14,
+40 epics span **~140 distinct upstream PRs** (the remainder of the 195 are dependency
+bumps, duplicates of these themes, or superseded merge-train snapshots). Tranche 1 (E14,
 E15, E17 and the E1 bootstrap port) has **landed at this branch head** — every ported
 file exists in the tree with its benchmark report as evidence, and branch CI validates
 them; a port is only ever marked so under that rule. Every other epic holds `candidate` watchlist entries

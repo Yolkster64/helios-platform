@@ -1,0 +1,14 @@
+{
+  "$comment": "Referenced by the markdownlint steps in ci-validation.yml and quality.yml. This file was missing, which made those steps error out silently under continue-on-error - markdown was never actually linted. Relaxed baseline: structural rules on, style rules that would flag the large legacy corpus off.",
+  "default": true,
+  "MD013": false,
+  "MD024": { "siblings_only": true },
+  "MD025": false,
+  "MD026": false,
+  "MD029": false,
+  "MD033": false,
+  "MD034": false,
+  "MD036": false,
+  "MD040": false,
+  "MD041": false
+}
