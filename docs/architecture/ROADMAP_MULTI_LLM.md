@@ -47,7 +47,9 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 | `deploy.yml` | All-echo fake deployment incl. fake "AI initialized" lines | Replace or delete in PR2 |
 | `ai-code-review.yml` | Regex-only "AI review", canned comment | Replace with real `code_review` routing in PR2 |
 | `microsoft-ecosystem/.github/workflows/azure-deploy.yml` | Nested path (never runs), missing `./infrastructure/main.bicep` | Salvage OIDC/staging patterns, then delete |
-| `build-all-modules.yml`, `phase-build.yml`, `multi-repo-sync.yml`, others | Reference phase/module structures that don't exist | Audit in PR2; delete what cannot go green |
+| `publish-to-packagemanagers.yml` | **Invalid YAML** — embedded PowerShell here-string (`@'`) starts at column 0 (line 62), de-indenting out of the `run: |` block scalar. Workflow cannot parse, so it has never run | Re-indent the here-string body inside the block scalar, or move the script to a `.ps1` file and call it (preferred) — PR2 |
+| `documentation-update.yml` | **Invalid YAML** — block mapping broken at line 33 (same embedded-script class of defect) | Same fix as above — PR2 |
+| `build-all-modules.yml`, `multi-repo-sync.yml`, others | Reference phase/module structures that don't exist | Audit in PR2; delete what cannot go green |
 | `ci-validation.yml` markdownlint step | `.markdownlint.json` missing | Add config or drop step (PR2) |
 | `.gitmodules` | Declares 7 nonexistent `modules/` submodules; `.gitignore` ignores `.gitmodules` | Remove in PR2 |
 | `azure-pipelines.yml` | "Hello world" starter, git-ignored | Delete in PR2 |

@@ -431,7 +431,7 @@ jobs:
           git push origin main --force-with-lease || echo "Push failed, skipping"
 
       - name: Upload wiki artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wiki-html
           path: wiki_html/

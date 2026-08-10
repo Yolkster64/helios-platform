@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload Variant Artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: variant-${{ matrix.variant.name }}-node${{ matrix.node }}-${{ matrix.os }}
           path: |
@@ -170,7 +170,7 @@ jobs:
     if: always()
     steps:
       - name: Download All Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: variants
 
