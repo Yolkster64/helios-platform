@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using HELIOS.AIHub;
 using HELIOS.AIHub.Abstractions;
+using HELIOS.AIHub.Learning;
 
 namespace HELIOS.AIHub.Cli;
 
@@ -29,6 +31,11 @@ public static class Program
     private static async Task<int> RunAsync(string[] args)
     {
         var (command, positionals, options) = Parse(args);
+        if (options.TryGetValue("config", out var explicitConfig)
+            && string.IsNullOrWhiteSpace(explicitConfig))
+        {
+            return Fail("--config requires a path.");
+        }
         var hub = AIHubService.CreateFromConfig(options.GetValueOrDefault("config"));
 
         switch (command)
@@ -154,6 +161,111 @@ public static class Program
                 return 0;
             }
 
+            case "engines":
+            {
+                if (positionals.Count != 0)
+                {
+                    return Fail(
+                        "Usage: helios-ai engines [--cuda[=BOOL]] [--include-candidates[=BOOL]]");
+                }
+                if (FindUnexpectedOption(options, "config", "cuda", "include-candidates") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for engines.");
+                }
+                if (!TryReadFlag(options, "cuda", out var cudaEnabled, out var flagError)
+                    || !TryReadFlag(
+                        options, "include-candidates", out var includeCandidates, out flagError))
+                {
+                    return Fail(flagError!);
+                }
+                var spoke = new PythonInsightsSpoke();
+                var catalog = await spoke.GetEngineCatalogAsync(
+                    cudaEnabled: cudaEnabled,
+                    includeCandidates: includeCandidates);
+                if (catalog is null)
+                {
+                    return Fail(
+                        "Python engine spoke unavailable; install Python 3 and keep src/ai/python "
+                        + "beside the checkout (or set HELIOS_PYTHON_SPOKE). No engine was run.");
+                }
+                Console.WriteLine(catalog.Value.GetRawText());
+                return 0;
+            }
+
+            case "engine-plan":
+            {
+                if (positionals.Count != 0)
+                {
+                    return Fail(
+                        "Usage: helios-ai engine-plan [--security-profile P] [--pressure 0..1] "
+                        + "[--fleet-size N] [--cuda[=BOOL]] [--include-candidates[=BOOL]]");
+                }
+                if (FindUnexpectedOption(
+                        options,
+                        "config", "security-profile", "pressure", "fleet-size", "cuda",
+                        "include-candidates") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for engine-plan.");
+                }
+                foreach (var valuedOption in new[] { "security-profile", "pressure", "fleet-size" })
+                {
+                    if (options.TryGetValue(valuedOption, out var value)
+                        && string.IsNullOrWhiteSpace(value))
+                    {
+                        return Fail($"--{valuedOption} requires a value.");
+                    }
+                }
+                if (!TryReadFlag(options, "cuda", out var cudaEnabled, out var flagError)
+                    || !TryReadFlag(
+                        options, "include-candidates", out var includeCandidates, out flagError))
+                {
+                    return Fail(flagError!);
+                }
+
+                var securityProfile = options.GetValueOrDefault("security-profile") ?? "balanced";
+                if (securityProfile.ToLowerInvariant()
+                    is not ("balanced" or "hardened" or "paranoid" or "performance"))
+                {
+                    return Fail(
+                        "--security-profile must be balanced, hardened, paranoid, or performance.");
+                }
+                if (!double.TryParse(
+                        options.GetValueOrDefault("pressure") ?? "0.5",
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out var pressure)
+                    || !double.IsFinite(pressure)
+                    || pressure is < 0 or > 1)
+                {
+                    return Fail("--pressure must be a number between 0 and 1.");
+                }
+                if (!int.TryParse(
+                        options.GetValueOrDefault("fleet-size") ?? "0",
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var fleetSize)
+                    || fleetSize is < 0 or > 100_000)
+                {
+                    return Fail("--fleet-size must be an integer between 0 and 100000.");
+                }
+
+                var spoke = new PythonInsightsSpoke();
+                var plan = await spoke.RecommendEnginesAsync(
+                    cudaEnabled: cudaEnabled,
+                    securityProfile: securityProfile,
+                    optimizationPressure: pressure,
+                    fleetSize: fleetSize,
+                    includeCandidates: includeCandidates);
+                if (plan is null)
+                {
+                    return Fail(
+                        "Python engine spoke unavailable or rejected the request. "
+                        + "No engine was selected, installed, or run.");
+                }
+                Console.WriteLine(plan.Value.GetRawText());
+                return 0;
+            }
+
             case "help":
             case "--help":
             case "-h":
@@ -200,6 +312,11 @@ public static class Program
               status                                                    Provider readiness (no network calls)
               providers                                                 Status as JSON
               routing                                                   Show the task-routing table
+              engines [--cuda[=BOOL]] [--include-candidates[=BOOL]]      Show implemented capabilities and runtime availability
+              engine-plan [--security-profile P] [--pressure 0..1]
+                          [--fleet-size N] [--cuda[=BOOL]]
+                          [--include-candidates[=BOOL]]
+                                                                        Recommend available implementations; candidates stay advisory
               help                                                      This text
 
             Global options:
@@ -221,9 +338,13 @@ public static class Program
             var arg = args[i];
             if (arg.StartsWith("--", StringComparison.Ordinal))
             {
-                var name = arg[2..];
-                string? value = null;
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                var option = arg[2..];
+                var separator = option.IndexOf('=');
+                var name = separator >= 0 ? option[..separator] : option;
+                string? value = separator >= 0 ? option[(separator + 1)..] : null;
+                if (separator < 0
+                    && i + 1 < args.Length
+                    && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
                 {
                     value = args[++i];
                 }
@@ -240,5 +361,41 @@ public static class Program
         }
 
         return (command, positionals, options);
+    }
+
+    private static string? FindUnexpectedOption(
+        IReadOnlyDictionary<string, string?> options,
+        params string[] allowed)
+    {
+        var allowedSet = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
+        return options.Keys.FirstOrDefault(key => !allowedSet.Contains(key));
+    }
+
+    private static bool TryReadFlag(
+        IReadOnlyDictionary<string, string?> options,
+        string name,
+        out bool value,
+        out string? error)
+    {
+        if (!options.TryGetValue(name, out var raw))
+        {
+            value = false;
+            error = null;
+            return true;
+        }
+        if (raw is null)
+        {
+            value = true;
+            error = null;
+            return true;
+        }
+        if (bool.TryParse(raw, out value))
+        {
+            error = null;
+            return true;
+        }
+
+        error = $"--{name} accepts only true or false when a value is supplied.";
+        return false;
     }
 }

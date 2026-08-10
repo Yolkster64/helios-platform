@@ -23,10 +23,10 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
   configuration where BYO storage is needed.
 - Key-Vault-backed config end-to-end test; managed-identity path in CI.
 - MCP additions: `helios_foundry_agent_create/list` (still non-destructive by default).
-- Wire real per-call `CostUsd` into `RoutingOutcome` (currently a placeholder `0`) from
-  provider usage via `Pricing.fs`; wire `HELIOS.AIHub.Native` cosine similarity into
-  `CompareAsync` for response dedup; enable `learning.enabled` by default once the cost
-  wiring lands and document the `.helios/` gitignore entry.
+- Completed on the active integration branch: real per-call `CostUsd` from provider usage
+  via `Pricing.fs`, native token estimation/cosine response dedup, native MLP routing with
+  managed fallbacks, and the `.helios/` gitignore entry. Enabling learning by default
+  remains a separate operational decision.
 
 ## PR4 — Connectors
 - Slack + SharePoint via the Hermes gateway reuse; Linear via `src/connectors/

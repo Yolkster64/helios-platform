@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/ai/HELIOS.AIHub/HELIOS.AIHub.csproj" />
     <ProjectReference Include="../../src/ai/HELIOS.AIHub.Api/HELIOS.AIHub.Api.csproj" />
+    <ProjectReference Include="../../src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj" />
   </ItemGroup>
 
 </Project>

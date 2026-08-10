@@ -75,3 +75,19 @@ public sealed record InsightsResponse(
     string? Hint,
     JsonElement? Summary,
     JsonElement? Drift);
+
+public sealed record EngineRecommendationRequest(
+    bool CudaEnabled = false,
+    string? SecurityProfile = "balanced",
+    double OptimizationPressure = 0.5,
+    int FleetSize = 0,
+    bool IncludeCandidates = false);
+
+/// <summary>
+/// A local, read-only Python-spoke answer. Candidate engines are architecture proposals,
+/// never an instruction to install or execute arbitrary code.
+/// </summary>
+public sealed record EngineAdvisoryResponse(
+    bool Available,
+    string? Hint,
+    JsonElement? Result);

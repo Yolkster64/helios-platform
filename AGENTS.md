@@ -34,11 +34,15 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 
 ## Multi-LLM hub
 
-- `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `compare` /
-  `status` / `routing`. Providers and the task-routing table live in `config/aihub.json`.
+- `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `tandem` /
+  `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan`.
+  Providers and the task-routing table live in `config/aihub.json`; engine candidates are
+  advisory and never auto-execute.
 - MCP server (src/mcp/HELIOS.Mcp, registered in `.mcp.json`): `helios_ai_ask`,
-  `helios_ai_route`, `helios_ai_compare`, `helios_ai_status`, `helios_providers_list`,
-  `helios_task_routing_get`, `helios_infra_validate`.
+  `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
+  `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
+  `helios_engine_catalog_get`,
+  `helios_engine_mix_recommend`, `helios_infra_validate`.
 - Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
 
 ## Architecture docs

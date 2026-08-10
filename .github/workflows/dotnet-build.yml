@@ -29,6 +29,7 @@ permissions:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  HELIOS_REQUIRE_PYTHON_SPOKE: 1
 
 jobs:
   build-and-test:
@@ -81,6 +82,7 @@ jobs:
         run: |
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- status
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- routing
+          dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- engines
 
       - name: Upload test results
         if: always()
@@ -97,6 +99,43 @@ jobs:
           # runs standalone — config resolution checks the app base directory too.
           mkdir -p ./publish/helios-ai/config
           cp config/aihub.json config/aihub.cloud.json config/model-catalog.json ./publish/helios-ai/config/
+          mkdir -p ./publish/helios-ai/python-spoke
+          cp -R src/ai/python/helios_agents ./publish/helios-ai/python-spoke/
+
+      - name: Smoke-test extracted CLI artifact
+        run: |
+          helios_artifact="$GITHUB_WORKSPACE/publish/helios-ai/helios-ai"
+          helios_smoke_dir="$(mktemp -d)"
+          cd "$helios_smoke_dir"
+          "$helios_artifact" engines > catalog.json
+          "$helios_artifact" engine-plan \
+            --cuda=false --include-candidates=false --pressure 0 --fleet-size 0 > plan.json
+          if "$helios_artifact" engines unexpected >/dev/null 2>&1; then
+            echo "engines accepted an unexpected positional argument" >&2
+            exit 1
+          fi
+          if "$helios_artifact" engine-plan --pressure >/dev/null 2>&1; then
+            echo "engine-plan accepted a missing option value" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+
+          with open("catalog.json", encoding="utf-8") as stream:
+              catalog = json.load(stream)
+          with open("plan.json", encoding="utf-8") as stream:
+              plan = json.load(stream)
+
+          assert catalog["implemented_count"] > 0
+          assert catalog["candidate_count"] == 0
+          native_router = next(
+              engine for engine in catalog["engines"]
+            if engine["name"] == "online-sgd-router")
+          assert native_router["runtime_available"] is True
+          assert plan["inputs"]["cuda_enabled"] is False
+          assert plan["inputs"]["include_candidates"] is False
+          assert plan["candidate_count"] == 0
+          PY
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4

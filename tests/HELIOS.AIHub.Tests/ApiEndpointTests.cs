@@ -15,12 +15,18 @@ namespace HELIOS.AIHub.Tests;
 public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly bool RequirePythonSpoke =
+        Environment.GetEnvironmentVariable("HELIOS_REQUIRE_PYTHON_SPOKE") == "1";
 
     private readonly HttpClient _client;
 
     public ApiEndpointTests(WebApplicationFactory<Program> factory)
     {
         _client = factory.CreateClient();
+        if (Environment.GetEnvironmentVariable("HELIOS_PYTHON_SPOKE_API_KEY") is { Length: > 0 } key)
+        {
+            _client.DefaultRequestHeaders.Add("X-HELIOS-Spoke-Key", key);
+        }
     }
 
     [Fact]
@@ -87,8 +93,70 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
         }
         else
         {
+            Assert.False(RequirePythonSpoke, insights.Hint);
             Assert.False(string.IsNullOrWhiteSpace(insights.Hint));
         }
+    }
+
+    [Fact]
+    public async Task Engines_ReturnImplementedCatalogWithRuntimeAvailability()
+    {
+        var response = await _client.GetAsync("/v1/engines?includeCandidates=false");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var advisory = await response.Content.ReadFromJsonAsync<EngineAdvisoryResponse>(Json);
+        Assert.NotNull(advisory);
+        if (!advisory.Available)
+        {
+            Assert.False(RequirePythonSpoke, advisory.Hint);
+            Assert.False(string.IsNullOrWhiteSpace(advisory.Hint));
+            return;
+        }
+        Assert.NotNull(advisory.Result);
+        Assert.Equal(0, advisory.Result.Value.GetProperty("candidate_count").GetInt32());
+        Assert.True(advisory.Result.Value.GetProperty("implemented_count").GetInt32() > 0);
+        var routingPolicy = Assert.Single(
+            advisory.Result.Value.GetProperty("engines").EnumerateArray(),
+            engine => engine.GetProperty("name").GetString() == "routing-policy");
+        Assert.True(routingPolicy.GetProperty("runtime_available").GetBoolean());
+    }
+
+    [Fact]
+    public async Task EngineRecommendation_RejectsOutOfRangePressure()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/v1/engines/recommend",
+            new EngineRecommendationRequest(OptimizationPressure: 1.1),
+            Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task EngineRecommendation_IsAdvisoryAndSeparatesCandidates()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/v1/engines/recommend",
+            new EngineRecommendationRequest(
+                CudaEnabled: false,
+                SecurityProfile: "hardened",
+                OptimizationPressure: 0.8,
+                FleetSize: 36,
+                IncludeCandidates: true),
+            Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var advisory = await response.Content.ReadFromJsonAsync<EngineAdvisoryResponse>(Json);
+        Assert.NotNull(advisory);
+        if (!advisory.Available)
+        {
+            Assert.False(RequirePythonSpoke, advisory.Hint);
+            Assert.False(string.IsNullOrWhiteSpace(advisory.Hint));
+            return;
+        }
+        Assert.NotNull(advisory.Result);
+        Assert.True(advisory.Result.Value.GetProperty("selected_count").GetInt32() > 0);
+        Assert.True(advisory.Result.Value.GetProperty("candidate_count").GetInt32() > 0);
     }
 
     [Fact]

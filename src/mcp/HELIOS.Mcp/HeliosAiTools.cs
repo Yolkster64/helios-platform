@@ -5,6 +5,7 @@ using HELIOS.AIHub.Configuration;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using HELIOS.AIHub;
+using HELIOS.AIHub.Learning;
 
 namespace HELIOS.Mcp;
 
@@ -93,6 +94,67 @@ public static class HeliosAiTools
         JsonSerializer.Serialize(
             new { defaultChain = hub.RoutingTable.DefaultChain, taskRouting = hub.RoutingTable.TaskRouting },
             JsonOptions);
+
+    [McpServerTool(Name = "helios_engine_catalog_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("Read the HELIOS engine capability catalog. By default it returns only implemented capabilities, with runtime availability reported separately. Set includeCandidates=true to include recovered prototype/concept vocabulary. This tool does not install or run an engine.")]
+    public static async Task<string> GetEngineCatalog(
+        PythonInsightsSpoke spoke,
+        [Description("Whether CUDA-required candidates are eligible for display. Defaults false; this does not probe or enable a GPU.")] bool cudaEnabled = false,
+        [Description("Include explicitly labeled prototype/concept candidates.")] bool includeCandidates = false,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await spoke.GetEngineCatalogAsync(
+            cudaEnabled, includeCandidates, cancellationToken);
+        return result is { } catalog
+            ? catalog.GetRawText()
+            : JsonSerializer.Serialize(new
+            {
+                available = false,
+                hint = "Python spoke unavailable; no engine was installed or run.",
+            }, JsonOptions);
+    }
+
+    [McpServerTool(Name = "helios_engine_mix_recommend", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("Create a local, deterministic engine plan for a security/performance/fleet profile. Runtime-available implementations and non-runnable build candidates are returned separately. The tool never installs, trains, or executes candidates.")]
+    public static async Task<string> RecommendEngineMix(
+        PythonInsightsSpoke spoke,
+        [Description("Whether the target runtime has CUDA available. This is an input, not a hardware probe.")] bool cudaEnabled = false,
+        [Description("balanced | hardened | paranoid | performance")] string? securityProfile = "balanced",
+        [Description("Optimization pressure from 0.0 to 1.0.")] double optimizationPressure = 0.5,
+        [Description("Expected concurrent Hermes/XCore fleet size, 0 to 100000.")] int fleetSize = 0,
+        [Description("Include non-runnable prototype/concept build candidates in a separate list.")] bool includeCandidates = false,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedProfile = (securityProfile ?? "balanced").Trim().ToLowerInvariant();
+        if (normalizedProfile is not ("balanced" or "hardened" or "paranoid" or "performance"))
+        {
+            throw new McpException(
+                "securityProfile must be balanced, hardened, paranoid, or performance.");
+        }
+        if (!double.IsFinite(optimizationPressure) || optimizationPressure is < 0 or > 1)
+        {
+            throw new McpException("optimizationPressure must be between 0 and 1.");
+        }
+        if (fleetSize is < 0 or > 100_000)
+        {
+            throw new McpException("fleetSize must be between 0 and 100000.");
+        }
+
+        var result = await spoke.RecommendEnginesAsync(
+            cudaEnabled,
+            normalizedProfile,
+            optimizationPressure,
+            fleetSize,
+            includeCandidates,
+            cancellationToken);
+        return result is { } recommendation
+            ? recommendation.GetRawText()
+            : JsonSerializer.Serialize(new
+            {
+                available = false,
+                hint = "Python spoke unavailable or rejected the request; no engine was selected or run.",
+            }, JsonOptions);
+    }
 
     [McpServerTool(Name = "helios_infra_validate", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Compile and lint the Azure infra (infra/main.bicep) with the Bicep CLI. Read-only: no deployment, no subscription access.")]

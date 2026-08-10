@@ -89,18 +89,20 @@ from. `RoutingPolicy.explain` is available for surfacing *why* a chain was reord
 F# domain logic is exposed to C# through a thin interop surface
 (`RoutingPolicyInterop`, `PricingInterop`) that takes only primitives and arrays — no
 F#-only types cross the boundary, per the fsharp-functional skill's interop rule. The
-same module's `Pricing` functions (with units of measure — see PR3 for wiring
-`CostUsd` from real provider usage instead of the current placeholder `0`) turn raw token
-counts into dollar estimates without the token/million unit-mixing bug that plagues
-hand-rolled cost math.
+same module's `Pricing` functions turn provider-reported input/output token usage and
+catalog rates into `RoutingOutcome.CostUsd`. Calls with missing usage or an ambiguous
+model/rate remain `0` rather than inventing spend. Units of measure prevent the common
+token-versus-million-token arithmetic bug.
 
-## Native spoke (optional, not yet wired)
+## Native spoke (optional, wired with managed fallback)
 
 `src/ai/HELIOS.AIHub.Native` is a C++ library (CMake, flat C ABI, `LibraryImport`
-P/Invoke) for the numeric hot paths that belong outside managed code: cosine similarity
-across a `compare` fan-out's embeddings, and UTF-8-safe token/prefix estimation. It
-builds independently of the .NET solution and nothing calls into it yet — wiring `compare`
-to use it for response dedup is PR3 scope. See `src/ai/HELIOS.AIHub.Native/README.md`.
+P/Invoke) for numeric hot paths outside managed code. `AIHubService` uses its UTF-8 token
+estimator for bounded context, cosine similarity for deterministic response dedup, and
+MLP for neural routing. The ABI gate is checked before use; missing or stale binaries
+degrade to managed estimation, no dedup, and the F# linear policy respectively. CI builds
+the native library and asserts that it reaches the test output. See
+`src/ai/HELIOS.AIHub.Native/README.md`.
 
 ## Python analysis spoke
 
@@ -113,6 +115,27 @@ package is dependency-free by design (runs on any bare interpreter: Cloud Shell,
 Codespaces, CI); installing the `[ml]` extra swaps the math to numpy and the text
 similarity to scikit-learn TF-IDF cosine. A missing interpreter degrades to null
 insights, never an error — same "unconfigured is a state" rule as providers.
+
+### Recovered engine fabric
+
+The spoke also owns a truthful engine-capability catalog (`helios_agents.engines`). It
+preserves the useful vocabulary recovered from older AIHub/Hermes/XCore prototypes while
+separating it into three maturity states plus an independent runtime snapshot:
+
+- `implemented` — checked-in source and test evidence; this alone does not claim the
+  current process can load it;
+- `prototype` — partial design vocabulary, never selected in a runnable plan;
+- `concept` — preserved expansion idea, never selected in a runnable plan;
+- `runtime_available` — `true`/`false` for implemented entries after the managed/native
+  host snapshot, and `null` for candidates.
+
+`engine_catalog` and `recommend_engines` are deterministic, offline subprocess operations.
+Recommendations return `selected_engines` (implemented and runtime-available only) and
+`candidate_engines` (proposal-only) as different arrays. CUDA is an explicit target
+input, not a guessed machine fact. Candidate parallelization/hybridization vocabulary is
+omitted unless requested and CUDA-ineligible hybrids are filtered. The import audit and
+rejected legacy runtime paths are recorded in
+`RECOVERED_AI_ENGINE_FABRIC.md`.
 
 ## REST orchestration API
 
@@ -128,10 +151,18 @@ one door with shared circuit-breaker and learning state:
 | `/v1/routing` | GET | Default chain + task-routing table |
 | `/v1/learning?taskType=&limit=` | GET | Recent routing outcomes, newest first |
 | `/v1/insights?taskType=&limit=` | GET | Python-spoke analytics (per-provider stats + drift) over recorded outcomes |
+| `/v1/engines?cudaEnabled=&includeCandidates=` | GET | Implemented engine catalog with runtime snapshot plus optional labeled candidates |
+| `/v1/engines/recommend` | POST | Offline plan; available implementations and build candidates remain separate |
 | `/v1/ask` | POST | One provider (or default chain): `{prompt, provider?, model?, system?}` |
 | `/v1/route` | POST | Task-type chain with learned reorder + fallback: `{taskType, prompt, system?}` |
 | `/v1/tandem` | POST | Whole chain concurrently, learned winner reported |
 | `/v1/compare` | POST | Parallel fan-out with duplicate flagging: `{prompt, providers?, system?}` |
+
+Python-spoke calls share a four-process concurrency cap. With no
+`HELIOS_PYTHON_SPOKE_API_KEY`, those endpoints accept loopback callers only. A directly
+remote caller must send the configured key as `X-HELIOS-Spoke-Key`; hosted deployments
+should still use identity-aware, rate-limited ingress instead of treating that narrow key
+as the platform's full authorization layer.
 
 Provider failures are payload (`200` + `success:false` + `error`), not transport errors;
 `4xx` is reserved for malformed requests. Config resolution matches the CLI:
@@ -139,10 +170,11 @@ Provider failures are payload (`200` + `success:false` + `error`), not transport
 
 ## Testing
 
-87 .NET unit tests plus 15 Python tests, no network: fallback switching regression,
+CI runs the complete .NET and Python suites with no live provider calls: fallback switching regression,
 breaker transitions, routing strategy, real-config binding (drift fails CI), CLI process
 fixtures, fake `IChatClient` mapping tests, the local learning store's
 round-trip/filter/limit/torn-line behavior, the F# routing policy and fusion cases
 through their C# interop surface, HTTP-level API tests against the shipped keyless
-config, and the C#→Python subprocess round-trip (guarded on a runnable interpreter). Live-API calls are deliberately untested in CI; `helios-ai status` +
-smoke runs cover wiring.
+config, the C#→Python subprocess round-trip, MCP engine tool discovery/invocation, an
+installed Python package smoke, and a published CLI artifact smoke from outside the
+checkout. Live-provider calls are deliberately untested in CI.

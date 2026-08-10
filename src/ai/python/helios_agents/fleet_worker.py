@@ -33,6 +33,7 @@ named by the contract. Logs go to stderr only; stdout stays silent.
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import os
 import signal
@@ -182,7 +183,9 @@ def _lane_of(task: dict[str, Any]) -> str:
 def _claim_expired(task: dict[str, Any], lease_seconds: float) -> bool:
     claimed_at = str(task.get("claimedAt") or "")
     try:
-        claimed = time.mktime(time.strptime(claimed_at, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+        # claimedAt is UTC (the trailing Z is part of the contract). mktime treats
+        # the tuple as local time and is one hour wrong during DST outside UTC.
+        claimed = calendar.timegm(time.strptime(claimed_at, "%Y-%m-%dT%H:%M:%SZ"))
     except (ValueError, OverflowError):
         return True  # unparseable claim stamp: treat the lease as expired
     return (time.time() - claimed) >= lease_seconds

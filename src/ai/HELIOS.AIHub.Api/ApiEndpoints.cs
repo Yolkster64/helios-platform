@@ -1,3 +1,6 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using HELIOS.AIHub.Learning;
 
 namespace HELIOS.AIHub.Api;
@@ -13,6 +16,17 @@ namespace HELIOS.AIHub.Api;
 /// </summary>
 public static class ApiEndpoints
 {
+    private const string SpokeApiKeyEnvironment = "HELIOS_PYTHON_SPOKE_API_KEY";
+    private const string SpokeApiKeyHeader = "X-HELIOS-Spoke-Key";
+
+    private static readonly HashSet<string> EngineSecurityProfiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "balanced",
+        "hardened",
+        "paranoid",
+        "performance",
+    };
+
     public static IEndpointRouteBuilder MapAIHubApi(this IEndpointRouteBuilder app)
     {
         app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
@@ -74,9 +88,14 @@ public static class ApiEndpoints
         });
 
         app.MapGet("/v1/insights", async (
-            AIHubService hub, PythonInsightsSpoke spoke, string? taskType, int? limit,
+            HttpContext httpContext, AIHubService hub, PythonInsightsSpoke spoke,
+            string? taskType, int? limit,
             CancellationToken ct) =>
         {
+            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
+            {
+                return denied;
+            }
             if (string.IsNullOrWhiteSpace(taskType))
             {
                 return Results.BadRequest(new ApiError("taskType query parameter is required."));
@@ -96,6 +115,72 @@ public static class ApiEndpoints
             }
             var drift = await spoke.DetectDriftAsync(chronological, ct);
             return Results.Ok(new InsightsResponse(taskType, true, null, summary, drift));
+        });
+
+        app.MapGet("/v1/engines", async (
+            HttpContext httpContext,
+            PythonInsightsSpoke spoke,
+            bool? cudaEnabled,
+            bool? includeCandidates,
+            CancellationToken ct) =>
+        {
+            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
+            {
+                return denied;
+            }
+            var catalog = await spoke.GetEngineCatalogAsync(
+                cudaEnabled ?? false, includeCandidates ?? false, ct);
+            return catalog is null
+                ? Results.Ok(new EngineAdvisoryResponse(
+                    false,
+                    "Python spoke unavailable: install Python 3 and keep src/ai/python "
+                    + "beside the HELIOS runtime (or set HELIOS_PYTHON_SPOKE).",
+                    null))
+                : Results.Ok(new EngineAdvisoryResponse(true, null, catalog));
+        });
+
+        app.MapPost("/v1/engines/recommend", async (
+            HttpContext httpContext,
+            EngineRecommendationRequest request,
+            PythonInsightsSpoke spoke,
+            CancellationToken ct) =>
+        {
+            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
+            {
+                return denied;
+            }
+            var profile = request.SecurityProfile?.Trim().ToLowerInvariant() ?? "balanced";
+            if (!EngineSecurityProfiles.Contains(profile))
+            {
+                return Results.BadRequest(new ApiError(
+                    "securityProfile must be balanced, hardened, paranoid, or performance."));
+            }
+            if (!double.IsFinite(request.OptimizationPressure)
+                || request.OptimizationPressure < 0
+                || request.OptimizationPressure > 1)
+            {
+                return Results.BadRequest(new ApiError(
+                    "optimizationPressure must be a finite number between 0 and 1."));
+            }
+            if (request.FleetSize is < 0 or > 100_000)
+            {
+                return Results.BadRequest(new ApiError(
+                    "fleetSize must be between 0 and 100000."));
+            }
+
+            var recommendation = await spoke.RecommendEnginesAsync(
+                request.CudaEnabled,
+                profile,
+                request.OptimizationPressure,
+                request.FleetSize,
+                request.IncludeCandidates,
+                ct);
+            return recommendation is null
+                ? Results.Ok(new EngineAdvisoryResponse(
+                    false,
+                    "Python spoke unavailable or rejected the request; no engine was selected or run.",
+                    null))
+                : Results.Ok(new EngineAdvisoryResponse(true, null, recommendation));
         });
 
         app.MapPost("/v1/ask", async (AskRequest request, AIHubService hub, CancellationToken ct) =>
@@ -143,5 +228,37 @@ public static class ApiEndpoints
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// Python-spawning endpoints are local by default. A directly remote caller must use
+    /// the configured spoke key; hosted deployments should additionally enforce their
+    /// normal identity-aware ingress before traffic reaches Kestrel.
+    /// </summary>
+    private static IResult? AuthorizePythonSpokeRequest(HttpContext context)
+    {
+        var configuredKey = Environment.GetEnvironmentVariable(SpokeApiKeyEnvironment);
+        var remoteAddress = context.Connection.RemoteIpAddress;
+        if (remoteAddress is null || IPAddress.IsLoopback(remoteAddress))
+        {
+            return null;
+        }
+        if (string.IsNullOrEmpty(configuredKey))
+        {
+            return Results.Json(
+                new ApiError(
+                    $"Remote Python-spoke access is disabled. Configure {SpokeApiKeyEnvironment} "
+                    + $"and send {SpokeApiKeyHeader}."),
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var suppliedKey = context.Request.Headers[SpokeApiKeyHeader].ToString();
+        var expectedBytes = Encoding.UTF8.GetBytes(configuredKey);
+        var suppliedBytes = Encoding.UTF8.GetBytes(suppliedKey);
+        return CryptographicOperations.FixedTimeEquals(expectedBytes, suppliedBytes)
+            ? null
+            : Results.Json(
+                new ApiError($"Missing or invalid {SpokeApiKeyHeader}."),
+                statusCode: StatusCodes.Status401Unauthorized);
     }
 }

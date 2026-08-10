@@ -5,11 +5,15 @@ namespace HELIOS.AIHub.Tests;
 
 /// <summary>
 /// The C#→Python subprocess boundary. Round-trip tests are guarded on the spoke being
-/// runnable here (python3 on PATH + src/ai/python found by walk-up), so keyless CI and
-/// Windows dev boxes without Python stay green; the degrade tests always run.
+/// runnable here (python3 on PATH + a discovered spoke). CI sets
+/// HELIOS_REQUIRE_PYTHON_SPOKE=1 so contract regressions fail; local machines without
+/// Python may skip round trips, while the explicit degradation tests always run.
 /// </summary>
 public sealed class PythonInsightsSpokeTests
 {
+    private static readonly bool RequirePythonSpoke =
+        Environment.GetEnvironmentVariable("HELIOS_REQUIRE_PYTHON_SPOKE") == "1";
+
     private static RoutingOutcome Outcome(string provider, bool success, double latencyMs = 100) => new()
     {
         Timestamp = DateTimeOffset.UnixEpoch,
@@ -30,7 +34,8 @@ public sealed class PythonInsightsSpokeTests
         var summary = await spoke.SummarizeAsync(outcomes);
         if (summary is null)
         {
-            return; // no runnable Python spoke in this environment
+            Assert.False(RequirePythonSpoke, "The required Python spoke did not round-trip.");
+            return;
         }
 
         var openai = summary.Value.GetProperty("providers").GetProperty("openai");
@@ -52,12 +57,48 @@ public sealed class PythonInsightsSpokeTests
         }, threshold: 0.5);
         if (result is null)
         {
+            Assert.False(RequirePythonSpoke, "The required Python spoke did not round-trip.");
             return;
         }
 
         var groups = result.Value.GetProperty("groups");
         Assert.Equal(2, groups.GetArrayLength());
         Assert.Equal(2, groups[0].GetArrayLength());
+    }
+
+    [Fact]
+    public async Task EngineRecommendation_SeparatesAvailableImplementationsAndCandidates()
+    {
+        var spoke = new PythonInsightsSpoke();
+
+        var result = await spoke.RecommendEnginesAsync(
+            cudaEnabled: false,
+            securityProfile: "hardened",
+            optimizationPressure: 0.8,
+            fleetSize: 36,
+            includeCandidates: true);
+        if (result is null)
+        {
+            Assert.False(RequirePythonSpoke, "The required Python spoke did not round-trip.");
+            return;
+        }
+
+        Assert.True(result.Value.GetProperty("selected_count").GetInt32() > 0);
+        Assert.True(result.Value.GetProperty("candidate_count").GetInt32() > 0);
+        Assert.All(
+            result.Value.GetProperty("selected_engines").EnumerateArray(),
+            engine =>
+            {
+                Assert.Equal("implemented", engine.GetProperty("maturity").GetString());
+                Assert.True(engine.GetProperty("runtime_available").GetBoolean());
+            });
+        Assert.All(
+            result.Value.GetProperty("candidate_engines").EnumerateArray(),
+            engine => Assert.NotEqual("implemented", engine.GetProperty("maturity").GetString()));
+        var routingPolicy = Assert.Single(
+            result.Value.GetProperty("selected_engines").EnumerateArray(),
+            engine => engine.GetProperty("name").GetString() == "routing-policy");
+        Assert.True(routingPolicy.GetProperty("runtime_available").GetBoolean());
     }
 
     [Fact]

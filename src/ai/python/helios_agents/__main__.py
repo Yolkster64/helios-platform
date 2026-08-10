@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 
-from . import analysis, textwork
+from . import analysis, engines, textwork
 
 
 def _outcomes(request: dict) -> list:
@@ -28,11 +28,33 @@ def _texts(request: dict) -> list:
     return texts
 
 
+def _bool(request: dict, key: str, default: bool = False) -> bool:
+    value = request.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"'{key}' must be a JSON boolean")
+    return value
+
+
 _OPS = {
     "provider_summary": lambda r: analysis.provider_summary(_outcomes(r)),
     "detect_drift": lambda r: analysis.detect_drift(_outcomes(r)),
     "keywords": lambda r: textwork.keywords(_texts(r), int(r.get("topN", 10))),
     "group_similar": lambda r: textwork.group_similar(_texts(r), float(r.get("threshold", 0.6))),
+    "engine_catalog": lambda r: engines.build_engine_catalog(
+        cuda_enabled=_bool(r, "cudaEnabled"),
+        include_candidates=_bool(r, "includeCandidates"),
+        managed_available=_bool(r, "managedAvailable"),
+        native_available=_bool(r, "nativeAvailable"),
+    ),
+    "recommend_engines": lambda r: engines.recommend_engine_mix(
+        cuda_enabled=_bool(r, "cudaEnabled"),
+        security_profile=r.get("securityProfile", "balanced"),
+        optimization_pressure=r.get("optimizationPressure", 0.5),
+        fleet_size=r.get("fleetSize", 0),
+        include_candidates=_bool(r, "includeCandidates"),
+        managed_available=_bool(r, "managedAvailable"),
+        native_available=_bool(r, "nativeAvailable"),
+    ),
 }
 
 

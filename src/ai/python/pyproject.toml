@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "helios-agents"
-version = "0.1.0"
-description = "Python analysis spoke for the HELIOS AIHub: routing-outcome analytics and text work behind a subprocess JSON boundary."
+version = "0.2.0"
+description = "Python spoke for HELIOS AIHub analytics, text work, and truthful engine advisories behind a subprocess JSON boundary."
 requires-python = ">=3.10"
 dependencies = []
 

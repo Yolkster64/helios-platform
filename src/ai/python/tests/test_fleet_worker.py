@@ -2,7 +2,10 @@
 
 import json
 import os
+import subprocess
+import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -201,3 +204,22 @@ def test_fresh_claim_is_not_stolen(tmp_path):
     ])
     config = _config(tmp_path, db, lanes=["build"], claim_lease_seconds=60.0)
     assert fleet_worker.claim_next_task(config) is None
+
+
+def test_claim_lease_uses_utc_during_daylight_saving_time():
+    if not hasattr(time, "tzset"):
+        return  # Windows has no process-local TZ switch; calendar.timegm is still portable.
+
+    env = os.environ.copy()
+    env["TZ"] = "America/Chicago"
+    script = """
+import calendar
+from helios_agents import fleet_worker
+
+claimed_at = "2026-08-10T12:00:00Z"
+now = calendar.timegm(__import__("time").strptime(
+    "2026-08-10T12:01:00Z", "%Y-%m-%dT%H:%M:%SZ"))
+fleet_worker.time.time = lambda: now
+assert not fleet_worker._claim_expired({"claimedAt": claimed_at}, 300.0)
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, env=env, timeout=30)

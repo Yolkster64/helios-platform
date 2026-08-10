@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using HELIOS.AIHub.Native;
 
 namespace HELIOS.AIHub.Learning;
 
@@ -13,6 +14,7 @@ namespace HELIOS.AIHub.Learning;
 public sealed class PythonInsightsSpoke
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+    private static readonly SemaphoreSlim ProcessSlots = new(initialCount: 4, maxCount: 4);
 
     private readonly string? _spokeDirectory;
     private readonly string _interpreter;
@@ -27,11 +29,17 @@ public sealed class PythonInsightsSpoke
 
     public bool IsAvailable => _spokeDirectory is not null;
 
-    /// <summary>Finds src/ai/python walking up from the app base (then current) directory.</summary>
+    /// <summary>Finds a packaged spoke or src/ai/python from the app/current directory.</summary>
     public static string? FindSpokeDirectory()
     {
         foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
+            var packaged = Path.Combine(start, "python-spoke");
+            if (File.Exists(Path.Combine(packaged, "helios_agents", "__main__.py")))
+            {
+                return packaged;
+            }
+
             var dir = new DirectoryInfo(start);
             while (dir is not null)
             {
@@ -61,6 +69,47 @@ public sealed class PythonInsightsSpoke
         IReadOnlyList<string> texts, double threshold = 0.6, CancellationToken cancellationToken = default) =>
         InvokeAsync(new { op = "group_similar", texts, threshold }, cancellationToken);
 
+    /// <summary>
+    /// Engine capabilities backed by checked-in implementation evidence, with managed
+    /// and native runtime availability probed independently. Set
+    /// <paramref name="includeCandidates"/> to preserve recovered prototype vocabulary.
+    /// </summary>
+    public Task<JsonElement?> GetEngineCatalogAsync(
+        bool cudaEnabled = false,
+        bool includeCandidates = false,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(new
+        {
+            op = "engine_catalog",
+            cudaEnabled,
+            includeCandidates,
+            managedAvailable = true,
+            nativeAvailable = NativeGate.Available,
+        }, cancellationToken);
+
+    /// <summary>
+    /// Selects runtime-available implemented capabilities for the requested profile and,
+    /// when asked, returns non-runnable build candidates in a separate collection.
+    /// </summary>
+    public Task<JsonElement?> RecommendEnginesAsync(
+        bool cudaEnabled,
+        string securityProfile,
+        double optimizationPressure,
+        int fleetSize,
+        bool includeCandidates = false,
+        CancellationToken cancellationToken = default) =>
+        InvokeAsync(new
+        {
+            op = "recommend_engines",
+            cudaEnabled,
+            securityProfile,
+            optimizationPressure,
+            fleetSize,
+            includeCandidates,
+            managedAvailable = true,
+            nativeAvailable = NativeGate.Available,
+        }, cancellationToken);
+
     private async Task<JsonElement?> InvokeAsync(object request, CancellationToken cancellationToken)
     {
         if (_spokeDirectory is null)
@@ -80,20 +129,28 @@ public sealed class PythonInsightsSpoke
         startInfo.ArgumentList.Add("-m");
         startInfo.ArgumentList.Add("helios_agents");
 
-        using var process = new Process { StartInfo = startInfo };
-        try
-        {
-            process.Start();
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return null; // no interpreter on PATH — the spoke is simply not installed here
-        }
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
+        using var process = new Process { StartInfo = startInfo };
+        var slotAcquired = false;
+        var processStarted = false;
         try
         {
+            await ProcessSlots.WaitAsync(timeout.Token).ConfigureAwait(false);
+            slotAcquired = true;
+            try
+            {
+                processStarted = process.Start();
+                if (!processStarted)
+                {
+                    return null;
+                }
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                return null; // no interpreter on PATH — the spoke is simply not installed here
+            }
+
             await JsonSerializer.SerializeAsync(
                 process.StandardInput.BaseStream, request, cancellationToken: timeout.Token)
                 .ConfigureAwait(false);
@@ -123,15 +180,38 @@ public sealed class PythonInsightsSpoke
         }
         finally
         {
-            if (!process.HasExited)
+            var processExited = !processStarted;
+            if (processStarted && !process.HasExited)
             {
                 try
                 {
                     process.Kill(entireProcessTree: true);
+                    using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await process.WaitForExitAsync(cleanupTimeout.Token).ConfigureAwait(false);
+                    processExited = true;
                 }
-                catch (InvalidOperationException)
+                catch (Exception ex) when (ex is InvalidOperationException
+                    or System.ComponentModel.Win32Exception
+                    or OperationCanceledException)
                 {
+                    // Preserve the concurrency bound if the OS cannot confirm exit: the
+                    // slot stays consumed instead of admitting a fifth live child.
+                    try
+                    {
+                        processExited = process.HasExited;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
                 }
+            }
+            else if (processStarted)
+            {
+                processExited = true;
+            }
+            if (slotAcquired && processExited)
+            {
+                ProcessSlots.Release();
             }
         }
     }

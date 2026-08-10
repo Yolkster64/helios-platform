@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using HELIOS.AIHub;
+using HELIOS.AIHub.Learning;
 
 namespace HELIOS.Mcp;
 
@@ -23,6 +24,7 @@ public static class Program
         builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
         builder.Services.AddSingleton(_ => AIHubService.CreateFromConfig());
+        builder.Services.AddSingleton<PythonInsightsSpoke>();
         builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()

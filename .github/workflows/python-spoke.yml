@@ -37,7 +37,16 @@ jobs:
           python -m pip install pytest
           if [ "${{ matrix.extras }}" = "ml" ]; then
             python -m pip install '.[ml]'
+          else
+            python -m pip install .
           fi
 
       - name: Run tests
         run: python -m pytest tests -q
+
+      - name: Smoke-test installed package outside source tree
+        run: |
+          helios_smoke_dir="$(mktemp -d)"
+          cd "$helios_smoke_dir"
+          printf '%s' '{"op":"engine_catalog"}' | python -m helios_agents > response.json
+          python -c 'import json; result=json.load(open("response.json", encoding="utf-8")); assert result["ok"] and result["result"]["implemented_count"] > 0'
