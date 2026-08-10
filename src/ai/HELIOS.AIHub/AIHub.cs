@@ -48,7 +48,16 @@ public sealed class AIHubService
     /// then the AIHUB_CONFIG environment variable (how .helios/azure.env selects the
     /// cloud-only profile), then config/aihub.json walking up from the current directory.</summary>
     public static AIHubService CreateFromConfig(string? configPath = null)
-        => new(AIHubOptions.Load(ResolveConfigPath(configPath)));
+    {
+        var resolved = ResolveConfigPath(configPath);
+        // The catalog belongs to whichever config was selected: a --config/AIHUB_CONFIG
+        // profile outside the repo must not silently pick up an unrelated tree's
+        // model-catalog.json via the default directory walk. Missing-beside-config
+        // falls back to the walk inside the constructor.
+        var catalogPath = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(resolved))!, "model-catalog.json");
+        return new(AIHubOptions.Load(resolved), catalog: ModelCatalog.TryLoad(catalogPath));
+    }
 
     /// <summary>Explicit --config beats AIHUB_CONFIG beats walking up the directory tree.</summary>
     public static string ResolveConfigPath(string? configPath = null)
@@ -357,11 +366,52 @@ public sealed class AIHubService
             }
         }
 
-        return utf8.Length / 4;
+        // Managed fallback mirrors the native heuristic: ASCII averages ~3.85
+        // characters per token while a multibyte character is roughly one token.
+        // Plain bytes/4 undercounted CJK ~25% relative to the native path, so the
+        // same prompt could pass or fail context filtering depending on whether
+        // the optional library happened to be present.
+        var ascii = 0;
+        var multibyte = 0;
+        foreach (var b in utf8)
+        {
+            if ((b & 0xC0) == 0x80)
+            {
+                continue; // UTF-8 continuation byte
+            }
+            if (b < 0x80)
+            {
+                ascii++;
+            }
+            else
+            {
+                multibyte++;
+            }
+        }
+
+        var estimate = (ascii / 3.85) + multibyte;
+        return estimate < 1.0 ? 1 : (int)estimate;
     }
 
     /// <summary>Feature-hash vector width for dedup — fixed so every result maps to the same space.</summary>
     private const int DedupVectorDimension = 64;
+
+    /// <summary>Token-set agreement required to CONFIRM a hash-prefiltered duplicate pair.</summary>
+    private const double DedupJaccardVerifyThreshold = 0.5;
+
+    /// <summary>Jaccard similarity over the actual token sets — the collision check
+    /// behind the hashed prefilter.</summary>
+    internal static double TokenJaccard(string a, string b)
+    {
+        var setA = new HashSet<string>(Tokenize(a));
+        var setB = new HashSet<string>(Tokenize(b));
+        if (setA.Count == 0 || setB.Count == 0)
+        {
+            return 0;
+        }
+        var intersection = setA.Count(setB.Contains);
+        return (double)intersection / (setA.Count + setB.Count - intersection);
+    }
 
     /// <summary>Cosine-similarity threshold above which two responses count as duplicates.</summary>
     private const float DedupSimilarityThreshold = 0.90f;
@@ -413,7 +463,13 @@ public sealed class AIHubService
         {
             for (var j = 0; j < i; j++)
             {
-                if (matrix[(i * candidates.Count) + j] >= DedupSimilarityThreshold)
+                // The hashed vector is a 64-bucket prefilter: short unrelated replies
+                // can collide into identical vectors ("no" and "approved" share a
+                // bucket), so a candidate pair must also agree on actual tokens
+                // before it counts as a duplicate.
+                if (matrix[(i * candidates.Count) + j] >= DedupSimilarityThreshold
+                    && TokenJaccard(candidates[i].result.Text!, candidates[j].result.Text!)
+                        >= DedupJaccardVerifyThreshold)
                 {
                     var originalIndex = candidates[i].index;
                     var earlierProvider = candidates[j].result.Provider;

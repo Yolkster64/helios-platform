@@ -87,6 +87,14 @@ public sealed class CircuitBreaker
         lock (_gate)
         {
             _consecutiveFailures = 0;
+            if (_state == CircuitState.Open)
+            {
+                // A success arriving while the circuit is Open belongs to a call
+                // admitted BEFORE it opened; letting it close the circuit would
+                // bypass the cooldown and the half-open probe. Recovery is proven
+                // only by the probe itself.
+                return;
+            }
             _state = CircuitState.Closed;
             _probeInFlight = false;
         }

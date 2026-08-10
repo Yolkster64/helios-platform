@@ -79,9 +79,18 @@ public static class ProviderFactory
             return new ChatClientAgent(name, "GitHub Models", provider.Model, null,
                 "Set GITHUB_MODELS_TOKEN or GITHUB_TOKEN (a GitHub PAT with models:read).");
         }
+        // A malformed baseUrl is "unconfigured", not a construction crash — same
+        // contract as the Azure OpenAI endpoint below.
+        var baseUrl = provider.BaseUrl ?? GitHubModelsEndpoint;
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
+            || (baseUri.Scheme != Uri.UriSchemeHttps && baseUri.Scheme != Uri.UriSchemeHttp))
+        {
+            return new ChatClientAgent(name, "GitHub Models", provider.Model, null,
+                "github-models baseUrl is not an absolute http(s) URL; fix config/aihub.json to enable this provider.");
+        }
         var client = new OpenAIClient(
             new ApiKeyCredential(key),
-            new OpenAIClientOptions { Endpoint = new Uri(provider.BaseUrl ?? GitHubModelsEndpoint) });
+            new OpenAIClientOptions { Endpoint = baseUri });
         return new ChatClientAgent(name, "GitHub Models", provider.Model,
             model => client.GetChatClient(model).AsIChatClient());
     }

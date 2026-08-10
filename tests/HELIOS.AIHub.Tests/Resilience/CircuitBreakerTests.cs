@@ -73,6 +73,26 @@ public class CircuitBreakerTests
     }
 
     [Fact]
+    public void StaleSuccess_WhileOpen_DoesNotBypassCooldown()
+    {
+        var clock = new FakeClock();
+        var breaker = new CircuitBreaker(failureThreshold: 1, openDuration: TimeSpan.FromSeconds(10), clock);
+
+        breaker.RecordFailure();
+        Assert.Equal(CircuitState.Open, breaker.State);
+
+        // A slow call admitted before the circuit opened reports success late:
+        // the circuit must stay open until the cooldown + probe prove recovery.
+        breaker.RecordSuccess();
+        Assert.Equal(CircuitState.Open, breaker.State);
+        Assert.False(breaker.CanExecute());
+
+        clock.Now += TimeSpan.FromSeconds(11);
+        Assert.True(breaker.CanExecute());
+        Assert.Equal(CircuitState.HalfOpen, breaker.State);
+    }
+
+    [Fact]
     public void HalfOpen_ProbeThatNeverRecords_RearmsAfterCooldown()
     {
         var clock = new FakeClock();

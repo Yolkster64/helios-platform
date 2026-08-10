@@ -282,6 +282,28 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public void FlagDuplicates_HashCollisionOnShortReplies_IsNotADuplicate()
+    {
+        if (!NativeLibraryPresent())
+        {
+            return;
+        }
+
+        // "no" and "approved" land in the same 64-bucket hash slot, so their vectors
+        // are identical — the token-level verification must keep them apart.
+        var results = new[]
+        {
+            new ChatResult(true, "no", "a", "m", TimeSpan.Zero),
+            new ChatResult(true, "approved", "b", "m", TimeSpan.Zero),
+        };
+
+        var flagged = AIHubService.FlagDuplicates(results);
+
+        Assert.Null(flagged[0].DuplicateOfProvider);
+        Assert.Null(flagged[1].DuplicateOfProvider);
+    }
+
+    [Fact]
     public void HashedFrequencyVector_IsDeterministic_AndOrderAndCaseInsensitive()
     {
         var a = new float[8];

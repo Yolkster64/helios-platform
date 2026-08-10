@@ -117,7 +117,12 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
         var window = new Queue<RoutingOutcome>(limit);
         var taskTypeToken = JsonSerializer.Serialize(taskType);
         await Task.Yield();
-        foreach (var line in File.ReadLines(_path))
+        // FileShare.ReadWrite: File.ReadLines holds a read-only share for the whole
+        // enumeration, which on Windows blocks a concurrent append — and the appender
+        // swallows IOException as best-effort, silently losing that outcome.
+        using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        while (reader.ReadLine() is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(line) || !line.Contains(taskTypeToken, StringComparison.Ordinal))
