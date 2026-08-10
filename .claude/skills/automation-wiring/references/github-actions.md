@@ -20,14 +20,12 @@ before pinning.
 | `actions/download-artifact` | **v8** (v8.0.1, Mar 2026) | v8 errors on hash mismatch |
 | `Azure/login` | **v3** (v3.0.1, Aug 2026) | v2 still patched (v2.3.1) |
 
-`@v4` for these is a 2024-era pin. It still runs, but ships Node 20 actions and misses the
-fork-checkout hardening added across checkout v4.4/v5.1/v6.1/v7.0.1 in July 2026
-(`allow-unsafe-pr-checkout`).
+`@v4` for these is a 2024-era pin: still runs, but ships Node 20 actions and misses the
+fork-checkout hardening added across checkout v4.4/v5.1/v6.1/v7.0.1 in July 2026.
 
 **The artifact major skew.** Since late 2025 the two artifact actions are not on the same
-number. They pair diagonally: upload v4→download v4, v5→v6, v6→v7, **v7→v8**. Writing
-`upload@v7` + `download@v7` looks symmetrical and is wrong — non-zipped artifacts from
-upload v7 need download v8.
+number — they pair diagonally: upload v4→download v4, v5→v6, v6→v7, **v7→v8**. `upload@v7` +
+`download@v7` looks symmetrical and is wrong; non-zipped artifacts need download v8.
 
 **v3 artifact actions are dead, not deprecated.** `upload-artifact@v3`/`download-artifact@v3`
 were shut off by GitHub on 30 Jan 2025 and hard-fail the step, no warning; same for
@@ -37,28 +35,24 @@ nothing changed".
 ## Actions that don't exist
 
 **`actions/setup-powershell` does not exist.** `pwsh` is preinstalled on all hosted runners
-including `ubuntu-*` — use `shell: pwsh` directly; a setup step fails at action resolution.
-Likewise `actions/setup-azure-cli` (`az` is preinstalled) and `actions/setup-bicep` (ships
-inside the Azure CLI). `actions/setup-terraform` is really `hashicorp/setup-terraform@v3`.
+including `ubuntu-*` — use `shell: pwsh`; a setup step fails at action resolution. Likewise
+`actions/setup-azure-cli` (`az` is preinstalled) and `actions/setup-bicep` (in the Azure
+CLI). `actions/setup-terraform` is really `hashicorp/setup-terraform@v3`.
 
 ## Triggers
 
 ```yaml
 on:
-  push:
-    branches: [main]
-    paths: ['infra/**', '.github/workflows/deploy.yml']   # OR-ed
-  pull_request:
-    types: [opened, synchronize, reopened]     # this IS the default set
+  push: { branches: [main], paths: ['infra/**', '.github/workflows/deploy.yml'] }  # paths OR-ed
+  pull_request: { types: [opened, synchronize, reopened] }    # this IS the default set
   workflow_dispatch:
-    inputs:
+    inputs:                                    # types: string|boolean|choice|environment|number
       environment: { type: choice, options: [dev, prod], required: true }
       destroy:     { type: boolean, default: false }
   workflow_call:                               # makes this a reusable workflow
     inputs:  { environment: { type: string, required: true } }
     secrets: { AZURE_CLIENT_ID: { required: true } }
-  schedule:
-    - cron: '17 3 * * 1'                       # ALWAYS UTC. No DST.
+  schedule: [{ cron: '17 3 * * 1' }]           # ALWAYS UTC. No DST.
 ```
 
 - `paths` filters **do not apply** to `workflow_dispatch` or `schedule`, and `paths` /
@@ -66,8 +60,8 @@ on:
 - A path-filtered workflow that doesn't match produces **silence, not a skip marker** — a
   required status check that never runs blocks the PR forever. Add an always-run shim job.
 - `${{ inputs.destroy }}` preserves the boolean; `${{ github.event.inputs.destroy }}` gives
-  the truthy string `"false"`. Use `inputs`.
-- `schedule` on a fork silently disables after 60 days of repo inactivity.
+  the truthy string `"false"`. Use `inputs`. `schedule` on a fork silently disables after
+  60 days of repo inactivity.
 
 **`pull_request_target`** runs with a read/write token and full secret access, in base-repo
 context, for fork PRs. Checking out the PR head under it runs attacker code with your secrets:
@@ -78,22 +72,20 @@ on: pull_request_target        # NEVER combine with:
     with: { ref: ${{ github.event.pull_request.head.sha }} }   # RCE
 ```
 
-Legitimate uses never check out head code (labeling, commenting). To build fork code use
-`pull_request` (no secrets) plus a separate gated deploy.
+Legitimate uses never check out head code (labeling, commenting). Build fork code under
+`pull_request` (no secrets), with a separate gated deploy.
 
 ## permissions and GITHUB_TOKEN
 
 ```yaml
-permissions: {}          # deny at workflow level
+permissions: {}                                    # deny at workflow level
 jobs:
   deploy:
-    permissions:         # grant narrowly per job
-      contents: read
-      id-token: write    # REQUIRED for OIDC — nothing else grants it
+    permissions: { contents: read, id-token: write }   # id-token: REQUIRED for OIDC
 ```
 
 - Missing `id-token: write` surfaces as `Unable to get ACTION_ID_TOKEN_REQUEST_URL` — that
-  error means this line is absent, not that the federated credential is wrong.
+  error means the line is absent, not that the federated credential is wrong.
 - `GITHUB_TOKEN` **cannot trigger other workflows**; a push made with it won't fire
   `on: push`. Use a GitHub App token for cascades.
 - Fork PRs get a read-only token and no secrets regardless of `permissions`.
@@ -160,8 +152,7 @@ concurrency:
   cancel-in-progress: true
 ```
 
-- `include` entries matching an existing combo add variables; ones that don't **add a new
-  job**. Constant source of surprise.
+- `include` entries matching an existing combo add variables; ones that don't **add a job**.
 - `cancel-in-progress: true` on a deploy can kill a half-applied Terraform run. Use `false`
   (queue) for anything that mutates infrastructure.
 - Pin `runs-on` to a dated image (`ubuntu-24.04`) for infra jobs — `ubuntu-latest` rolls on
@@ -180,9 +171,7 @@ jobs:
     steps:
       - id: p
         env: { CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}' }
-        run: |
-          [ -n "$CLIENT_ID" ] && echo "has-azure=true" >> "$GITHUB_OUTPUT" \
-                              || echo "has-azure=false" >> "$GITHUB_OUTPUT"
+        run: '[ -n "$CLIENT_ID" ] && echo has-azure=true >>"$GITHUB_OUTPUT" || echo has-azure=false >>"$GITHUB_OUTPUT"'
   deploy:
     needs: probe
     if: needs.probe.outputs.has-azure == 'true'
@@ -209,7 +198,7 @@ template:
 ```
 
 - `runs-on: helios-linux` — the scale set name, singular. Scale sets do **not** match
-  `[self-hosted, linux, x64]` label arrays; that is the older `RunnerDeployment` model.
+  `[self-hosted, linux, x64]` arrays; that is the older `RunnerDeployment` model.
 - `minRunners: 0` queues jobs ~20-40s for a cold pod. Use `1` when latency matters.
 - `dind` needs privileged but supports `services:` and container actions. `kubernetes` mode
   requires `kubernetesModeWorkVolumeClaim` (RWO PVC per job) and breaks some actions —
@@ -234,14 +223,13 @@ different runners, environments/approvals, or matrices. Max 4 deep, never from a
 - uses: actions/cache@v6
   with:
     path: ~/.nuget/packages
-    key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+    key:          ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
     restore-keys: ${{ runner.os }}-nuget-
 ```
 
 - `key` is exact; `restore-keys` are ordered prefixes. A `key` hit means **no save** at job
   end; a restore-keys-only hit restores *and* re-saves under the new key — that asymmetry is
-  the whole design. Include `runner.os` (and arch on mixed fleets), or a Linux cache
-  restored on Windows produces baffling errors.
+  the whole design. Include `runner.os` (and arch on mixed fleets).
 - Caches are **immutable**; bump a version prefix to invalidate. A branch reads its own
   cache, its base's, and the default branch's — never a sibling PR's, so warm on `main`.
 - 10 GB/repo, LRU-evicted, 7 days unused. Artifacts default to 90-day retention and bill
@@ -255,8 +243,8 @@ gh run rerun <run-id> --failed --debug
 gh workflow run deploy.yml -f environment=dev
 ```
 
-- Repo/org variables `ACTIONS_STEP_DEBUG=true` and `ACTIONS_RUNNER_DEBUG=true` enable
-  verbose logs (they work as secrets too, if your org blocks variables).
+- Repo/org variables `ACTIONS_STEP_DEBUG=true` / `ACTIONS_RUNNER_DEBUG=true` enable verbose
+  logs (they work as secrets too, if your org blocks variables).
 - When a conditional misbehaves, dump context: `env: {C: '${{ toJSON(github) }}'}` then
   `run: echo "$C"`.
 - Run **`actionlint`** in CI — expression typos, bad `needs` references, and shell issues,

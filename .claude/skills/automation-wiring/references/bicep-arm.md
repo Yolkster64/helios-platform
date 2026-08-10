@@ -1,14 +1,13 @@
 # Bicep / ARM Reference
 
-Bicep CLI **v0.46.1** (Jul 2026) is current. Features below assume ≥ v0.30. Check
+Bicep CLI **v0.46.1** (Jul 2026) is current; features below assume >= v0.30. Check
 `bicep --version` in CI — linter rules and type features are version-gated.
 
 ## Contents
 
-- [Language features](#language-features-that-matter) · [Parameter files](#parameter-files) · [Secrets](#secrets)
-- [RBAC](#rbac-role-assignments) · [Idempotency traps](#idempotency-traps) · [what-if](#what-if)
-- [Scopes](#deployment-scopes) · [AVM](#avm-vs-raw-resources) · [AI Foundry](#azure-ai-foundry)
-- [ARM interop](#arm-json-interop) · [Validation](#validation)
+- [Language features](#language-features-that-matter) · [Parameter files](#parameter-files) · [Secrets](#secrets) · [RBAC](#rbac-role-assignments)
+- [Idempotency traps](#idempotency-traps) · [what-if](#what-if) · [Scopes](#deployment-scopes) · [AVM](#avm-vs-raw-resources)
+- [AI Foundry](#azure-ai-foundry) · [ARM interop](#arm-json-interop) · [Validation](#validation)
 
 ## Language features that matter
 
@@ -18,10 +17,8 @@ targetScope = 'resourceGroup'    // default; also subscription | managementGroup
 @description('Environment short name, used in resource naming.')
 @allowed(['dev', 'test', 'prod'])
 param env string
-
 @minLength(3) @maxLength(24)
 param namePrefix string
-
 @secure()                        // omitted from deployment history
 param adminPassword string
 
@@ -43,31 +40,26 @@ resource kv 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
   scope: resourceGroup(kvResourceGroup)      // cross-RG reference
 }
 
-@batchSize(1)                                // serial; default is parallel
-resource models 'Microsoft.CognitiveServices/accounts/deployments@2025-09-01' = [
-  for d in deployments: { /* ... */ }
-]
-
 module network 'modules/network.bicep' = {
-  name: 'network-${env}'        // DEPLOYMENT name, not resource name; unique per RG per run
+  name: 'network-${env}'   // DEPLOYMENT name, not resource name; unique per RG per run
   params: { location: region }
 }
 ```
 
-- **`@batchSize(1)` is mandatory for CognitiveServices model deployments** — parallel
-  creation on one account returns intermittent `409 Conflict`. Same for SQL firewall rules
-  and some App Service children.
-- `existing` is **not** validated at compile time. A typo'd name compiles and fails at
+- **`@batchSize(1)` above a resource loop serializes it** (default is parallel) and is
+  mandatory for CognitiveServices model deployments — parallel creation on one account
+  returns intermittent `409 Conflict`. Same for SQL firewall rules.
+- `existing` is **not** validated at compile time; a typo'd name compiles and fails at
   deploy with a 404 on the parent operation.
-- Module `name` collides across concurrent deployments into the same RG. Prefix with a
+- Module `name` collides across concurrent deployments into one RG. Prefix with a
   `deploymentSuffix` parameter from the pipeline — never `utcNow()` (see below).
 - `.?` guards `null` only, not array index-out-of-range.
 
 ## Parameter files
 
 `.bicepparam` is type-checked against the template at compile time, so a renamed parameter
-fails the build instead of the deploy. Drifted parameter names are the single most common
-Bicep seam failure — this is the fix.
+fails the build, not the deploy. Drifted parameter names are the most common Bicep seam
+failure; this is the fix.
 
 ```bicep
 // main.dev.bicepparam
@@ -82,35 +74,32 @@ param adminPassword = getSecret('<subId>', '<rg>', '<kvName>', 'admin-password')
 
 ```bash
 az deployment group create -g rg-helios-dev -f main.bicep -p main.dev.bicepparam
-az bicep build-params --file main.dev.bicepparam     # emit legacy JSON if a tool needs it
+az bicep build-params --file main.dev.bicepparam    # emit legacy JSON if a tool needs it
 ```
 
 Legacy JSON parameters are still required where a tool only accepts ARM JSON (some Azure
 DevOps tasks, Terraform's `azurerm_resource_group_template_deployment`) or the file is
-machine-generated. Otherwise use `.bicepparam`.
-
-`getSecret()` is valid only in a `.bicepparam` file or as a module param, only for
-`@secure()` parameters. It resolves at deploy time via the deploying identity, so the value
-never lands in the file or the deployment record.
+machine-generated. `getSecret()` is valid only in a `.bicepparam` or as a module param, and
+only for `@secure()` parameters — it resolves at deploy time via the deploying identity, so
+the value never lands in the file or the deployment record.
 
 ## Secrets
 
 ```bicep
 resource kv 'Microsoft.KeyVault/vaults@2024-11-01' existing = { name: kvName }
-
 module app 'modules/app.bicep' = {
   name: 'app'
   params: { connectionString: kv.getSecret('sql-connection-string') }  // ARM resolves it
 }
 ```
 
-- `@secure()` on every password, key, connection string, token. Non-secure params are stored
-  in plaintext in deployment history, readable by anyone with `deployments/read`.
+- `@secure()` on every password, key, connection string, token. Non-secure params sit in
+  plaintext in deployment history, readable by anyone with `deployments/read`.
 - **Never `output` a secret.** Outputs persist in the deployment record forever and are not
-  redacted even when the source was `@secure()`. Give consumers the Key Vault URI and RBAC.
-- App settings can reference the vault without your template seeing the value:
+  redacted even when the source was `@secure()`. Give consumers the vault URI and RBAC.
+- App settings can reference the vault without the template seeing the value:
   `'@Microsoft.KeyVault(SecretUri=${kv.properties.vaultUri}secrets/api-key/)'`
-- Set `enableRbacAuthorization: true`. Access policies are legacy and do not compose with
+- Set `enableRbacAuthorization: true` — access policies are legacy and do not compose with
   role assignments.
 
 ## RBAC role assignments
@@ -130,54 +119,46 @@ resource ra 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 ```
 
 - The name **must be a GUID, stable across deploys**. `guid(scope, principal, role)` is the
-  canonical seed. `newGuid()` creates a duplicate every run until the 2000-per-scope cap.
+  canonical seed; `newGuid()` creates a duplicate every run until the 2000-per-scope cap.
 - `roleDefinitionId` needs the full ARM ID — a bare GUID fails validation.
 - `principalType: 'ServicePrincipal'` avoids `PrincipalNotFound` when a just-created managed
   identity has not replicated through Entra ID.
-- Creating role assignments needs Owner or User Access Administrator, **not** Contributor.
-  This is the usual cause of "infra deploys fine but RBAC fails".
+- Role assignments need Owner or User Access Administrator, **not** Contributor — the usual
+  cause of "infra deploys fine but RBAC fails".
 
-Built-in GUIDs I'm confident about:
-
-| Role | GUID |
-|---|---|
-| Owner | `8e3af657-a8ff-443c-a75c-2fe8c4bcb635` |
-| Contributor | `b24988ac-6180-42a0-ab88-20f7382dd24c` |
-| Reader | `acdd72a7-3385-48ef-bd42-f606fba81ae7` |
-| Key Vault Secrets User | `4633458b-17de-408a-b874-0445c86b69e6` |
-| Key Vault Secrets Officer | `b86a8fe4-44ce-4948-aee5-eccb2c155cd7` |
-| Storage Blob Data Contributor | `ba92f5b4-2d11-453d-a403-e96b0029c9fe` |
-| Storage Blob Data Reader | `2a2b9908-6ea1-4ae2-8e65-a410df84e7d1` |
-| AcrPull | `7f951dda-4ed3-4680-a7ca-43fe172d538d` |
-
-For anything else, resolve rather than guess — a wrong GUID deploys successfully and grants
-the wrong thing: `az role definition list --name "Cognitive Services OpenAI User" --query "[].name" -o tsv`
+Built-in GUIDs I'm confident about: Owner `8e3af657-a8ff-443c-a75c-2fe8c4bcb635`,
+Contributor `b24988ac-6180-42a0-ab88-20f7382dd24c`, Reader
+`acdd72a7-3385-48ef-bd42-f606fba81ae7`, Key Vault Secrets User
+`4633458b-17de-408a-b874-0445c86b69e6`, Key Vault Secrets Officer
+`b86a8fe4-44ce-4948-aee5-eccb2c155cd7`, Storage Blob Data Contributor
+`ba92f5b4-2d11-453d-a403-e96b0029c9fe`, AcrPull `7f951dda-4ed3-4680-a7ca-43fe172d538d`.
+Resolve anything else rather than guessing — a wrong GUID deploys fine and grants the wrong
+thing: `az role definition list --name "Cognitive Services OpenAI User" --query "[].name" -o tsv`
 
 ## Idempotency traps
 
 ```bicep
 param deployTime string = utcNow()
-name: 'st${deployTime}'                                   // WRONG: new resource every deploy
+name: 'st${deployTime}'                                     // WRONG: new resource every deploy
 name: 'st${namePrefix}${uniqueString(resourceGroup().id)}'  // RIGHT: stable
 ```
 
-- `utcNow()` is only legal as a parameter default (which is why it sneaks into names). It
+- `utcNow()` is only legal as a parameter default, which is why it sneaks into names. It
   changes every run → new resources → orphans and cost. Legitimate use: a `lastDeployed` tag.
-- `uniqueString(resourceGroup().id)` — 13-char deterministic hash, stable for the RG's life.
-  Seed on `subscription().id` for subscription-scope uniqueness. It changes if the RG is
-  deleted and recreated.
-- `newGuid()` has the same problem; use `guid()` with stable seeds.
-- Storage account names are 3-24 chars lowercase alphanumeric — `uniqueString` overflows
-  them fast. Validate length at author time; ARM's error is unhelpful.
+- `uniqueString(resourceGroup().id)` — 13-char deterministic hash, stable for the RG's life
+  (seed on `subscription().id` for subscription-scope uniqueness; it changes if the RG is
+  deleted and recreated). `newGuid()` has `utcNow()`'s problem; use `guid()`.
+- Storage account names are 3-24 lowercase alphanumeric — `uniqueString` overflows them
+  fast. Validate length at author time; ARM's error is unhelpful.
 - Deleting a resource from the template does **not** delete it in Azure under default
-  `Incremental` mode. `Complete` mode does — and will delete anything in the RG not in the
+  `Incremental` mode. `Complete` mode does — and deletes anything in the RG not in the
   template, including another pipeline's resources. Use it only on single-owner RGs.
 
 ## what-if
 
 ```bash
 az deployment group what-if -g rg-helios-dev -f main.bicep -p main.dev.bicepparam
-az deployment group what-if ... --result-format ResourceIdOnly     # terse, for a PR comment
+az deployment group what-if ... --result-format ResourceIdOnly   # terse, for a PR comment
 ```
 
 Change types: `Create` `Delete` `Modify` `Deploy` `NoChange` `Ignore` `NoEffect`.
@@ -187,12 +168,11 @@ Change types: `Create` `Delete` `Modify` `Deploy` `NoChange` `Ignore` `NoEffect`
   change. Learn your stack's usual noise so a real diff stands out.
 - **It is a prediction, not a guarantee.** Nested deployments and some providers
   under-report. `Delete` entries are reliable; absence of a `Delete` is not proof.
-- `NoEffect` usually means you're setting a property on the wrong API version.
+  `NoEffect` usually means you're setting a property on the wrong API version.
 - Run what-if on every PR touching `infra/`, post it as a comment, require a human read
-  before apply. There is no plan file in Bicep — this is the entire safety story.
-
-`az deployment group validate` is weaker (schema + basic policy, no diff) but fast; use it
-as a syntactic gate, not a review artifact.
+  before apply. Bicep has no plan file — this is the entire safety story.
+- `az deployment group validate` is weaker (schema + basic policy, no diff) but fast; use it
+  as a syntactic gate, not a review artifact.
 
 ## Deployment scopes
 
@@ -204,16 +184,14 @@ as a syntactic gate, not a review artifact.
 | `tenant` | `az deployment tenant create -l LOC` | management groups |
 
 Sub/MG/tenant deployments need `-l` even though nothing regional is created — it says where
-deployment *metadata* lives.
+deployment *metadata* lives. `deployment()` returns that metadata: fine for tagging, never
+for building resource names.
 
 ```bicep
 targetScope = 'subscription'
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = { name: 'rg-helios-${env}', location: location }
 module workload 'main-rg.bicep' = { name: 'workload', scope: rg, params: { location: location } }
 ```
-
-`deployment()` returns the current deployment's metadata (`.name`, `.location`) — fine for
-tagging, do not build resource names from it.
 
 ## AVM vs raw resources
 
@@ -224,11 +202,9 @@ module kv 'br/public:avm/res/key-vault/vault:0.13.0' = {   // pin exactly, never
 }
 ```
 
-| | Raw resources | AVM (`br/public:`) |
-|---|---|---|
-| CI determinism | offline after `az bicep install` | pulls from MCR at build |
-| Best practice | you own it | curated: diagnostics, RBAC, private endpoints |
-| Debugging | one file | nested modules, deeper what-if output |
+Raw resources are offline-deterministic after `az bicep install`, one file to debug, and
+yours to maintain. AVM modules pull from MCR at build time and add nested-module depth to
+what-if output, but arrive with curated diagnostics, RBAC, and private-endpoint wiring.
 
 **Raw resources for anything on the critical CI path in a registry-restricted or air-gapped
 environment; AVM when you want maintained wiring and can tolerate a registry dependency.**
@@ -238,7 +214,7 @@ reintroduces exactly the drift AVM prevents.
 ## Azure AI Foundry
 
 Current model: a **single `Microsoft.CognitiveServices/accounts` with
-`allowProjectManagement: true`**, acting as both AI-services provider and management hub,
+`allowProjectManagement: true`** acting as both AI-services provider and management hub,
 with projects as native child resources. Confirmed GA API versions: `2025-06-01`,
 `2025-09-01`, `2025-12-01`, `2026-03-01`, `2026-05-01`.
 
@@ -253,7 +229,6 @@ resource foundry 'Microsoft.CognitiveServices/accounts@2025-09-01' = {
     allowProjectManagement: true        // this is what makes it a Foundry resource
     customSubDomainName: accountName    // REQUIRED for token auth and portal visibility
     disableLocalAuth: true              // force Entra auth, no API keys
-    publicNetworkAccess: 'Enabled'
   }
 }
 
@@ -281,12 +256,11 @@ resource models 'Microsoft.CognitiveServices/accounts/deployments@2025-09-01' = 
 
 - Omitting `customSubDomainName` deploys successfully but breaks Entra-token auth and portal
   discovery, and **cannot be added later without recreating**.
-- Model deployments must be serialized (`@batchSize(1)`).
 - `sku.capacity` is quota. Exceeding regional quota fails with `InsufficientQuota` naming
   the region, not the model.
 - **`Microsoft.MachineLearningServices/workspaces` with `kind: 'Hub'`/`'Project'` is the
-  older hub-based model ("Foundry classic").** Don't use it for new work. Inheriting one is
-  a migration project, not a template edit — resource shapes, connections, and RBAC all
+  older hub-based model ("Foundry classic").** Not for new work. Inheriting one is a
+  migration project, not a template edit — resource shapes, connections, and RBAC all
   differ. I'm not certain of the current retirement date; check the Foundry docs.
 
 ## ARM JSON interop
@@ -294,15 +268,12 @@ resource models 'Microsoft.CognitiveServices/accounts/deployments@2025-09-01' = 
 ```bash
 bicep build main.bicep --outfile main.json    # Bicep -> ARM (also runs the linter)
 bicep decompile main.json                     # ARM -> Bicep (best-effort)
-bicep build-params main.dev.bicepparam        # -> ARM parameters JSON
 ```
 
-`decompile` output is a starting point: `resource0`-style symbolic names, lost intent, and
-occasionally invalid Bicep for nested copy loops. Budget time to rewrite.
-
-Hand-edit ARM only when a marketplace/managed-app artifact demands a specific JSON shape, a
-policy `deployIfNotExists` embeds a template inline, or a tool consumes
-`createUiDefinition.json` alongside it.
+`decompile` output is a starting point: `resource0`-style symbolic names, lost intent,
+occasionally invalid Bicep for nested copy loops. Budget time to rewrite. Hand-edit ARM only
+when a marketplace/managed-app artifact demands a specific JSON shape, a policy
+`deployIfNotExists` embeds a template inline, or a tool consumes `createUiDefinition.json`.
 
 ## Validation
 
@@ -316,18 +287,16 @@ Commit a `bicepconfig.json` and raise defaults to `error` so CI actually fails:
 
 ```json
 { "analyzers": { "core": { "enabled": true, "rules": {
-  "secure-parameter-default":          { "level": "error" },
-  "outputs-should-not-contain-secrets":{ "level": "error" },
-  "no-hardcoded-env-urls":             { "level": "error" },
-  "no-unused-params":                  { "level": "error" },
-  "no-unused-vars":                    { "level": "error" },
-  "use-recent-api-versions":           { "level": "warning" }
+  "secure-parameter-default":           { "level": "error" },
+  "outputs-should-not-contain-secrets": { "level": "error" },
+  "no-hardcoded-env-urls":              { "level": "error" },
+  "no-unused-params":                   { "level": "error" },
+  "use-recent-api-versions":            { "level": "warning" }
 }}}}
 ```
 
-`outputs-should-not-contain-secrets` and `secure-parameter-default` are the two that catch
-real incidents. `use-recent-api-versions` is noisy (it wants versions newer than most stable
-templates use) — keep it at warning.
+The first two catch real incidents. `use-recent-api-versions` is noisy — it wants versions
+newer than most stable templates use — so keep it at warning.
 
 CI order that catches the most for the least time: `bicep build` (offline, seconds) →
 `az deployment validate` (needs auth) → `what-if` (posts the diff) → apply.
