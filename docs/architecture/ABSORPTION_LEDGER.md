@@ -28,7 +28,9 @@ fleet topology, and board-setup scripts (PS7 wrapping the C# CLI, per repo conve
 - PRs: #270 #271 #273 (the entrypoint, three takes), #251 #236 (inventory), #280
   (scaffold), #265 #268 (orchestration stability + persisted board config), #252
   (hardened wrappers, Windows tool discovery), #266 (build-blocker fixes), #213
-  (bootstrap XDG paths + verify-only auth — **tranche-1 candidate; not yet ported in this branch**)
+  (bootstrap verify-only auth — **ported**: `--verify-only`/`-VerifyOnly` on the
+  connect-github/connect-azure/cloud-shell-setup bootstrap scripts; upstream's XDG move
+  was N/A — no hardcoded `~/.local` tool paths exist here)
 - Extracts: one command surface; readiness inventory (dedupe with E14); persisted
   board-config artifact pattern
 - Risks: competing drafts — pick one shape, credit the rest; heavy tree divergence
@@ -174,27 +176,28 @@ next, slotting into our F# domain.
 - Extracts: priority-scoring model, analytics data model
 - Risks: new projects must join `HELIOS.sln` and the root csproj glob guards
 
-## E14 — Build graph & readiness tooling (`build-ci`) — tranche-1 (in flight)
+## E14 — Build graph & readiness tooling (`build-ci`) — tranche-1
 
 Build-graph verify/readiness commands, required/optional tool split, repo-local tool
 resolver, compile checkers, and result reporting — the upstream's dev-loop quality
-tooling. The referenced readiness and compile-checker ports are not considered landed
-until their files exist in this branch and the branch CI validates them.
+tooling.
 
-- PRs: #136 #138 (readiness verify — **benchmarked / port pending**), #137 (python
-  compile checker — **benchmarked / port pending**), #130 (repo-local tool resolver),
-  #139 #133 #131 #135 (build-graph refinements)
+- PRs: #136 #138 (readiness verify — **ported**: `scripts/build/verify-readiness.ps1`,
+  required/optional split, human table + `-Json`), #137 (python compile checker —
+  **ported**: `compileall` gate in `python-spoke.yml` before pytest), #130 (repo-local
+  tool resolver), #139 #133 #131 #135 (build-graph refinements)
 - Extracts: required/optional split, resolver precedence, native-interop smoke
 - Risks: build-graph itself is upstream-specific; port ideas only
 
-## E15 — Model registry & routing validation (`ai-hub`) — tranche-1 (in flight)
+## E15 — Model registry & routing validation (`ai-hub`) — tranche-1
 
 A model registry with schema, deprecated-model replacement, and tightened
-routing/fallback validation. Benchmark evidence exists, but the model-catalog schema,
-CI schema validation, catalog refresh, and routing changes are still integration work
-for this branch rather than completed ports.
+routing/fallback validation.
 
-- PRs: #110 (**benchmarked / port pending**), #97 #96 (fleet-model wiring context)
+- PRs: #110 (**ported**: `config/schemas/model-catalog.schema.json` +
+  `scripts/build/validate-model-catalog.py` wired into `dotnet-build.yml`; catalog
+  refreshed to current families; `bulk_processing` routing lane), #97 #96 (fleet-model
+  wiring context)
 - Extracts: registry schema, current families, routing validation
 - Risks: model IDs move fast; the schema is the durable part
 
@@ -209,16 +212,16 @@ data shapes and report cadence our status-dashboard workflow lacks.
 - Extracts: dashboard data shapes, report cadence
 - Risks: very large PRs; absorb shapes, never the parallel implementation
 
-## E17 — Docs & onboarding (`enhancement`) — tranche-1 (in flight)
+## E17 — Docs & onboarding (`enhancement`) — tranche-1
 
 Canonical setup guide, owner-first checklist, full-stack documentation, and wiki-sync
-refinements — the onboarding layer. The setup/checklist documents are benchmarked
-targets but are not reported as landed until they actually exist in this branch.
+refinements — the onboarding layer.
 
-- PRs: #210 (**benchmarked / port pending**), #65 (**benchmarked / port pending**),
-  #247 (Copilot setup + merge readiness), #114 (full-stack docs + validators), #103
-  (owner-first governance baseline), #117 (wiki sync — compare with our newer Wiki Sync,
-  likely reject)
+- PRs: #210 (**ported**: `docs/PROJECT_SETUP.md` grounded in the current tree), #65
+  (**ported**: `docs/OWNER_START_HERE.md` incl. the enable-Issues step), #247 (Copilot
+  setup + merge readiness), #114 (full-stack docs + validators), #103 (owner-first
+  governance baseline), #117 (wiki sync — compare with our newer Wiki Sync, likely
+  reject)
 - Extracts: guide + checklist structure, any missing wiki-sync behaviors
 - Risks: none beyond staleness; docs ground in the current tree
 
@@ -242,9 +245,9 @@ and integrates no code in this pass.
 
 18 epics span **~90 distinct upstream PRs** (the remainder of the 195 are duplicates of
 these themes, dependency bumps, or superseded merge-train snapshots). Tranche 1 (E14,
-E15, E17 and the E1 bootstrap candidate) is **in flight**: benchmark evidence exists,
-but a port is only marked absorbed/landed after the referenced files are present in the
-current tree and CI validates them. Every other epic holds `candidate` watchlist entries
+E15, E17 and the E1 bootstrap port) has **landed at this branch head** — every ported
+file exists in the tree with its benchmark report as evidence, and branch CI validates
+them; a port is only ever marked so under that rule. Every other epic holds `candidate` watchlist entries
 ready for `scripts/absorption/absorb-pr.ps1`. Fleet-scale benchmarking: seed absorb
 commands onto the `xcore-infra` board via the lock-aware `--enqueue` (see
 ABSORPTION_PIPELINE.md).

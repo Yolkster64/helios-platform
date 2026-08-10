@@ -82,20 +82,30 @@ try {
     if ($mergeClean) {
         $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)/root/.dotnet"
 
+        # The native entrypoint is required, like it is in dotnet-build.yml: a
+        # candidate that deletes or renames it must fail the gate rather than
+        # silently skipping the native paths (whose tests no-op without the .so).
         $nativeBuild = Join-Path $worktree 'scripts/build/build-native.sh'
-        if (Test-Path $nativeBuild) {
-            $steps.Add((Invoke-Step 'native-build' {
-                if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
-                    throw 'bash is required to build the native C++ spoke.'
-                }
-                $out = bash $nativeBuild 2>&1
-                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
-            }))
-        }
+        $steps.Add((Invoke-Step 'native-build' {
+            if (-not (Test-Path -LiteralPath $nativeBuild)) {
+                throw 'Required native build entrypoint scripts/build/build-native.sh is missing from the merged tree.'
+            }
+            if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+                throw 'bash is required to build the native C++ spoke.'
+            }
+            $out = bash $nativeBuild 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+        }))
 
         $steps.Add((Invoke-Step 'dotnet-build' {
             $out = dotnet build (Join-Path $worktree 'HELIOS.sln') -c Release --nologo 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 5 | Out-String) }
+            # Same assert CI makes: the runtime degrades gracefully without the
+            # library, which would let a broken native change score a green gate.
+            $so = Join-Path $worktree 'tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so'
+            if (-not (Test-Path -LiteralPath $so)) {
+                throw 'Native library did not reach test output (libhelios_aihub_native.so missing).'
+            }
         }))
 
         # infra/main.bicep is a required repository entrypoint. A candidate that
@@ -116,6 +126,26 @@ try {
             }
             finally {
                 Remove-Item -LiteralPath $bicepOut -Force -ErrorAction SilentlyContinue
+            }
+        }))
+
+        # infra-validate.yml also compiles the parameter entrypoint; a candidate
+        # that breaks main.bicepparam must not score a green gate.
+        $bicepParamFile = Join-Path $worktree 'infra/main.bicepparam'
+        $steps.Add((Invoke-Step 'bicep-build-params' {
+            if (-not (Test-Path -LiteralPath $bicepParamFile)) {
+                throw 'Required Bicep parameters entrypoint infra/main.bicepparam is missing from the merged tree.'
+            }
+            if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+                throw 'Azure CLI is required to compile infra/main.bicepparam.'
+            }
+            $paramOut = Join-Path $reportDir "pr-$PrNumber-main.params.json"
+            try {
+                $out = az bicep build-params --file $bicepParamFile --outfile $paramOut 2>&1
+                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+            }
+            finally {
+                Remove-Item -LiteralPath $paramOut -Force -ErrorAction SilentlyContinue
             }
         }))
 

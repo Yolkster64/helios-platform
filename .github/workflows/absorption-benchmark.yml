@@ -56,6 +56,11 @@ jobs:
 
       - name: Run absorption benchmark
         shell: pwsh
+        # Same requirement dotnet-build.yml sets: without it the C#->Python
+        # spoke tests return quietly when the spoke cannot round-trip, letting
+        # a candidate that breaks the subprocess contract score a green gate.
+        env:
+          HELIOS_REQUIRE_PYTHON_SPOKE: 1
         run: |
           $skip = [bool]::Parse('${{ inputs.skip_tests }}')
           $params = @{ PrNumber = ${{ inputs.pr_number }} }
