@@ -1,0 +1,26 @@
+name: Infra Validation
+
+on:
+  pull_request:
+    paths: ['infra/**']
+  push:
+    branches: [main]
+    paths: ['infra/**']
+
+permissions:
+  contents: read
+
+jobs:
+  bicep-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # az bicep runs entirely offline — no login or subscription needed,
+      # so this job is deterministic on forks and PRs.
+      - name: Bicep build (compile + lint)
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          az bicep build-params --file infra/main.bicepparam --stdout > /dev/null

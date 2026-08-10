@@ -1,0 +1,71 @@
+name: Helios Platform Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  workflow_dispatch:
+    inputs:
+      what_if:
+        description: Run what-if instead of deploying
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: helios-deploy
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: helios-core-rg
+  AZURE_LOCATION: centralus
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Repos without the OIDC federated credential configured skip gracefully
+      # instead of failing every push to main.
+      - name: Check Azure credentials
+        id: creds
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AZURE_CLIENT_ID secret not set — skipping deployment."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure Login (OIDC)
+        if: steps.creds.outputs.configured == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-if
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
+        run: |
+          az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
+          az deployment group what-if \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam
+
+      - name: Deploy Helios Infra
+        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
+        run: |
+          az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
+          az deployment group create \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam
