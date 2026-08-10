@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 1: Infrastructure Deployment - DETAILED NARRATION
+
+.DESCRIPTION
+This phase creates the foundation Azure resources and Docker infrastructure
+#>
+
 # HELIOS Phase 1: Infrastructure Deployment - DETAILED NARRATION
 # This phase creates the foundation Azure resources and Docker infrastructure
 

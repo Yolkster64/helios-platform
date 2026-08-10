@@ -1,0 +1,99 @@
+name: Docker Validation
+
+# Proves the local-Docker story stays buildable: image build plus runtime smoke
+# (no push or registry login) and compose-file validation. Deterministic without secrets —
+# restore hits nuget.org only (nuget.config's packageSourceMapping reserves the
+# private GitHub source for HELIOS.* package ids, none of which are referenced),
+# and the native-spoke toolchain steps in the Dockerfile are best-effort.
+
+on:
+  pull_request:
+    paths:
+      - 'docker/**'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'src/ai/**'
+      - '.github/workflows/docker-validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'src/ai/**'
+      - '.github/workflows/docker-validate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        run: docker build --file docker/helios-ai-api.Dockerfile --tag helios-ai-api:ci .
+
+      - name: Runtime smoke (authenticated API + Python spoke)
+        run: |
+          helios_container="helios-ai-api-ci-${GITHUB_RUN_ID}"
+          docker run --detach --name "$helios_container" \
+            --publish 127.0.0.1::5170 \
+            --env HELIOS_API_ACCESS_KEY=ci-runtime-only \
+            helios-ai-api:ci
+          trap 'docker rm --force "$helios_container" >/dev/null 2>&1 || true' EXIT
+
+          helios_binding="$(docker port "$helios_container" 5170/tcp)"
+          helios_port="${helios_binding##*:}"
+          for attempt in {1..30}; do
+            if curl --fail --silent "http://127.0.0.1:${helios_port}/healthz" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$helios_container"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          unauthenticated_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "http://127.0.0.1:${helios_port}/v1/status")"
+          test "$unauthenticated_status" = '401'
+          wrong_key_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'X-HELIOS-Api-Key: wrong-key' \
+            "http://127.0.0.1:${helios_port}/v1/status")"
+          test "$wrong_key_status" = '401'
+          malformed_post_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' --data '{' \
+            "http://127.0.0.1:${helios_port}/v1/learning")"
+          test "$malformed_post_status" = '401'
+
+          curl --fail --silent \
+            --header 'X-HELIOS-Api-Key: ci-runtime-only' \
+            "http://127.0.0.1:${helios_port}/v1/engines" > engine.json
+          curl --fail --silent \
+            --header 'X-HELIOS-Api-Key: ci-runtime-only' \
+            "http://127.0.0.1:${helios_port}/v1/insights?taskType=container-smoke" > insights.json
+          python3 - <<'PY'
+          import json
+
+          with open("engine.json", encoding="utf-8") as stream:
+              engine = json.load(stream)
+          with open("insights.json", encoding="utf-8") as stream:
+              insights = json.load(stream)
+
+          assert engine["available"] is True
+          assert engine["result"]["implemented_count"] > 0
+          assert insights["available"] is True
+          PY
+
+      # Interpolates the ${VAR:-} passthroughs (all default empty) and rejects
+      # schema errors; also covers the fleet profile service definition.
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet

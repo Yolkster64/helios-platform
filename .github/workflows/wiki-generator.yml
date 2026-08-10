@@ -1,453 +1,113 @@
-name: Wiki Generator
+name: Wiki Sync
+
+# Mirrors curated docs into the GitHub wiki (Yolkster64/helios-platform.wiki.git)
+# with a flattened naming scheme:
+#   docs/architecture/<NAME>.md -> Architecture-<NAME>.md
+#   docs/mcp/<NAME>.md          -> Mcp-<NAME>.md
+# plus a generated _Sidebar.md. Commit-if-changed, so re-runs are no-ops.
+#
+# This replaces the previous wiki-generator.yml, which fabricated content
+# (invented build variants, a sqlite "wiki db", HTML force-pushed to main) and
+# never touched the actual wiki — see the known-red workflow inventory in
+# docs/architecture/ROADMAP_MULTI_LLM.md.
+#
+# If the wiki git repo does not exist yet (GitHub only creates it when the
+# first wiki page is created in the UI), the job logs a notice with that one
+# manual step and exits green.
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - 'src/**'
       - 'docs/**'
-      - 'README.md'
-      - 'COMPONENT_MATRIX.md'
-      - 'BUILD_VARIANTS.md'
       - '.github/workflows/wiki-generator.yml'
   workflow_dispatch:
-    inputs:
-      include_diagrams:
-        description: 'Include architecture diagrams'
-        required: false
-        default: 'true'
+
+# contents: write is what lets GITHUB_TOKEN push to <repo>.wiki.git — the wiki
+# is part of the repository for permission purposes.
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false # queue rather than cancel: never interrupt a half-pushed wiki update
 
 jobs:
-  generate-wiki:
+  sync-wiki:
+    name: Sync docs/ to GitHub wiki
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pages: write
-    
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install wiki generation tools
+      - name: Clone wiki repo (skip cleanly if it does not exist yet)
+        id: clone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          pip install markdown mkdocs mkdocs-material jinja2 pyyaml
+          set -u
+          if git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" wiki; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Wiki not initialized::${REPO}.wiki.git does not exist yet. One manual step: open https://github.com/${REPO}/wiki and create the first page (any content) — GitHub materializes the wiki git repo at that moment. Then re-run this workflow (Actions -> Wiki Sync -> Run workflow)."
+            echo "Wiki repo missing; nothing to sync. Exiting green."
+          fi
 
-      - name: Initialize wiki database
+      - name: Flatten docs into wiki pages
+        if: steps.clone.outputs.exists == 'true'
         run: |
-          python3 << 'PYTHON_EOF'
-          import sqlite3
-          from datetime import datetime
-          
-          conn = sqlite3.connect('wiki.db')
-          cursor = conn.cursor()
-          
-          # Create tables
-          cursor.execute('''
-            CREATE TABLE IF NOT EXISTS pages (
-              id INTEGER PRIMARY KEY,
-              title TEXT UNIQUE NOT NULL,
-              slug TEXT UNIQUE NOT NULL,
-              content TEXT,
-              created_at TIMESTAMP,
-              updated_at TIMESTAMP,
-              version INTEGER DEFAULT 1
-            )
-          ''')
-          
-          cursor.execute('''
-            CREATE TABLE IF NOT EXISTS components (
-              id INTEGER PRIMARY KEY,
-              name TEXT UNIQUE NOT NULL,
-              description TEXT,
-              version TEXT,
-              dependencies TEXT,
-              documentation_path TEXT
-            )
-          ''')
-          
-          cursor.execute('''
-            CREATE TABLE IF NOT EXISTS build_variants (
-              id INTEGER PRIMARY KEY,
-              name TEXT UNIQUE NOT NULL,
-              description TEXT,
-              components TEXT,
-              use_cases TEXT
-            )
-          ''')
-          
-          cursor.execute('''
-            CREATE TABLE IF NOT EXISTS api_docs (
-              id INTEGER PRIMARY KEY,
-              endpoint TEXT UNIQUE NOT NULL,
-              method TEXT,
-              description TEXT,
-              parameters TEXT,
-              response_schema TEXT,
-              examples TEXT
-            )
-          ''')
-          
-          conn.commit()
-          print("✅ Wiki database initialized")
-          PYTHON_EOF
+          set -euo pipefail
 
-      - name: Parse source files
-        id: parse
+          # Remove previously synced pages first so renames/deletions in docs/
+          # do not leave stale wiki pages. Hand-written pages (Home.md, etc.)
+          # are untouched.
+          rm -f wiki/Architecture-*.md wiki/Mcp-*.md wiki/_Sidebar.md
+
+          for f in docs/architecture/*.md; do
+            [ -e "$f" ] || continue
+            cp "$f" "wiki/Architecture-$(basename "$f")"
+          done
+          for f in docs/mcp/*.md; do
+            [ -e "$f" ] || continue
+            cp "$f" "wiki/Mcp-$(basename "$f")"
+          done
+
+          # _Sidebar.md — wiki links are [[Page-Name]] (file name minus .md).
+          {
+            echo '## HELIOS docs'
+            echo
+            echo '### Architecture'
+            for f in wiki/Architecture-*.md; do
+              [ -e "$f" ] || continue
+              echo "- [[$(basename "$f" .md)]]"
+            done
+            echo
+            echo '### MCP'
+            for f in wiki/Mcp-*.md; do
+              [ -e "$f" ] || continue
+              echo "- [[$(basename "$f" .md)]]"
+            done
+            echo
+            echo '_Auto-synced from `docs/` by wiki-generator.yml — edit the repo, not these wiki pages._'
+          } > wiki/_Sidebar.md
+
+          ls -1 wiki
+
+      - name: Commit and push if changed
+        if: steps.clone.outputs.exists == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          python3 << 'PYTHON_EOF'
-          import os
-          import json
-          import re
-          from pathlib import Path
-          
-          components = {}
-          
-          # Parse component directories
-          for component_dir in Path("src").glob("*/"):
-            if component_dir.is_dir():
-              component_name = component_dir.name
-              
-              # Look for module docstring or README
-              readme = component_dir / "README.md"
-              if readme.exists():
-                with open(readme, 'r') as f:
-                  content = f.read()
-              else:
-                content = f"# {component_name}\n\nNo documentation found."
-              
-              components[component_name] = {
-                'name': component_name,
-                'documentation': content,
-                'files': len(list(component_dir.glob('**/*')))
-              }
-          
-          with open('parsed_components.json', 'w') as f:
-            json.dump(components, f, indent=2)
-          
-          print(f"Parsed {len(components)} components")
-          PYTHON_EOF
-
-      - name: Parse build variants
-        run: |
-          python3 << 'PYTHON_EOF'
-          import json
-          
-          variants = {
-            'minimal': {
-              'description': 'Minimal installation with core functionality',
-              'components': ['platform-core'],
-              'use_cases': ['Embedded systems', 'Resource-constrained environments']
-            },
-            'standard': {
-              'description': 'Standard installation with common features',
-              'components': ['platform-core', 'auth-service', 'api-gateway'],
-              'use_cases': ['General purpose applications', 'Web services']
-            },
-            'enterprise': {
-              'description': 'Enterprise-grade with all features',
-              'components': ['platform-core', 'auth-service', 'api-gateway', 'storage-engine', 'monitoring-agent'],
-              'use_cases': ['Large-scale applications', 'Mission-critical systems']
-            },
-            'devtools': {
-              'description': 'Development tools and utilities',
-              'components': ['platform-core', 'auth-service', 'api-gateway', 'monitoring-agent'],
-              'use_cases': ['Development', 'Testing']
-            },
-            'cloudbuild': {
-              'description': 'Cloud-optimized build',
-              'components': ['platform-core', 'auth-service', 'api-gateway', 'cache-layer'],
-              'use_cases': ['Cloud deployment', 'Containerized environments']
-            },
-            'embedded': {
-              'description': 'Embedded systems build',
-              'components': ['platform-core', 'storage-engine'],
-              'use_cases': ['IoT', 'Embedded systems']
-            },
-            'hybrid': {
-              'description': 'Hybrid cloud and on-premises',
-              'components': ['platform-core', 'auth-service', 'api-gateway', 'cache-layer', 'monitoring-agent'],
-              'use_cases': ['Hybrid deployments', 'Multi-cloud']
-            }
-          }
-          
-          with open('parsed_variants.json', 'w') as f:
-            json.dump(variants, f, indent=2)
-          
-          print(f"Parsed {len(variants)} build variants")
-          PYTHON_EOF
-
-      - name: Generate wiki pages
-        id: wiki
-        run: |
-          python3 << 'PYTHON_EOF'
-          import json
-          import os
-          import sqlite3
-          from datetime import datetime
-          from pathlib import Path
-          
-          conn = sqlite3.connect('wiki.db')
-          cursor = conn.cursor()
-          
-          pages_generated = 0
-          
-          # Generate home page
-          home_content = """# Helios Platform Wiki
-          
-          Welcome to the comprehensive documentation for the Helios Platform.
-          
-          ## Quick Links
-          - [Components](#components)
-          - [Build Variants](#build-variants)
-          - [Installation Guide](#installation)
-          - [API Documentation](#api-docs)
-          - [Contributing](#contributing)
-          
-          ## Overview
-          The Helios Platform is a modular, scalable infrastructure for building robust systems.
-          """
-          
-          cursor.execute('''
-            INSERT OR REPLACE INTO pages (title, slug, content, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-          ''', ('Home', 'home', home_content, datetime.now(), datetime.now()))
-          
-          pages_generated += 1
-          
-          # Generate component pages
-          with open('parsed_components.json', 'r') as f:
-            components = json.load(f)
-          
-          for component_name, component_data in components.items():
-            slug = component_name.lower().replace(' ', '-')
-            cursor.execute('''
-              INSERT OR REPLACE INTO pages (title, slug, content, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?)
-            ''', (
-              component_name,
-              slug,
-              component_data['documentation'],
-              datetime.now(),
-              datetime.now()
-            ))
-            pages_generated += 1
-          
-          # Generate build variant pages
-          with open('parsed_variants.json', 'r') as f:
-            variants = json.load(f)
-          
-          for variant_name, variant_data in variants.items():
-            content = f"""# {variant_name.title()} Variant
-          
-          ## Description
-          {variant_data['description']}
-          
-          ## Components
-          {', '.join(variant_data['components'])}
-          
-          ## Use Cases
-          {', '.join(variant_data['use_cases'])}
-          """
-            
-            slug = f"variant-{variant_name}"
-            cursor.execute('''
-              INSERT OR REPLACE INTO pages (title, slug, content, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?)
-            ''', (
-              f"{variant_name.title()} Variant",
-              slug,
-              content,
-              datetime.now(),
-              datetime.now()
-            ))
-            pages_generated += 1
-          
-          conn.commit()
-          conn.close()
-          
-          print(f"Generated {pages_generated} wiki pages")
-          print(f"pages_generated={pages_generated}")
-          PYTHON_EOF
-
-      - name: Generate HTML wiki
-        run: |
-          python3 << 'PYTHON_EOF'
-          import sqlite3
-          from pathlib import Path
-          import markdown
-          
-          conn = sqlite3.connect('wiki.db')
-          cursor = conn.cursor()
-          
-          wiki_dir = Path('wiki_html')
-          wiki_dir.mkdir(exist_ok=True)
-          
-          # Fetch all pages
-          cursor.execute('SELECT title, slug, content FROM pages ORDER BY title')
-          pages = cursor.fetchall()
-          
-          # Generate index
-          index_content = """<!DOCTYPE html>
-          <html>
-          <head>
-            <title>Helios Platform Wiki</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background: #f6f8fa; }
-              .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-              h1 { border-bottom: 1px solid #e1e4e8; padding-bottom: 10px; }
-              nav { background: #f6f8fa; padding: 15px; border-radius: 6px; margin-bottom: 30px; }
-              nav a { display: inline-block; margin: 5px 10px 5px 0; padding: 8px 12px; background: white; border: 1px solid #d1d5da; border-radius: 3px; text-decoration: none; color: #0366d6; }
-              nav a:hover { background: #0366d6; color: white; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>Helios Platform Documentation</h1>
-              <nav>
-          """
-          
-          for title, slug, _ in pages:
-            index_content += f'        <a href="{slug}.html">{title}</a>\n'
-          
-          index_content += """      </nav>
-          """
-          
-          # Generate individual pages
-          for title, slug, content in pages:
-            html_content = f"""<!DOCTYPE html>
-          <html>
-          <head>
-            <title>{title} - Helios Platform Wiki</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-              body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background: #f6f8fa; }}
-              .container {{ max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-              h1, h2, h3 {{ border-bottom: 1px solid #e1e4e8; padding-bottom: 10px; }}
-              code {{ background: #f6f8fa; padding: 2px 6px; border-radius: 3px; }}
-              pre {{ background: #f6f8fa; padding: 15px; border-radius: 6px; overflow-x: auto; }}
-              a {{ color: #0366d6; text-decoration: none; }}
-              a:hover {{ text-decoration: underline; }}
-              .nav {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #e1e4e8; }}
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              {markdown.markdown(content)}
-              <div class="nav">
-                <a href="index.html">← Back to Index</a>
-              </div>
-            </div>
-          </body>
-          </html>
-          """
-            
-            with open(wiki_dir / f'{slug}.html', 'w') as f:
-              f.write(html_content)
-          
-          # Write index
-          with open(wiki_dir / 'index.html', 'w') as f:
-            f.write(index_content + '\n      </nav>\n    </div>\n  </body>\n</html>')
-          
-          print(f"Generated HTML wiki with {len(pages)} pages")
-          conn.close()
-          PYTHON_EOF
-
-      - name: Create architecture diagrams
-        if: github.event.inputs.include_diagrams != 'false'
-        run: |
-          python3 << 'PYTHON_EOF'
-          import json
-          
-          # Create Mermaid diagrams
-          diagrams = {
-            'architecture': """graph TB
-              Client["Client Application"]
-              Gateway["API Gateway"]
-              Auth["Auth Service"]
-              Core["Platform Core"]
-              Storage["Storage Engine"]
-              Cache["Cache Layer"]
-              Monitor["Monitoring Agent"]
-              
-              Client --> Gateway
-              Gateway --> Auth
-              Gateway --> Core
-              Core --> Storage
-              Core --> Cache
-              Monitor -.-> Core
-              Monitor -.-> Cache
-            """,
-            'deployment': """graph LR
-              Dev["Development"] --> Build["Build Pipeline"]
-              Build --> Test["Test Suite"]
-              Test --> Staging["Staging"]
-              Staging --> Prod["Production"]
-              
-              Monitor["Monitoring"]
-              Metrics["Metrics"]
-              Logs["Logs"]
-              
-              Staging -.-> Monitor
-              Prod -.-> Monitor
-              Monitor --> Metrics
-              Monitor --> Logs
-            """
-          }
-          
-          for name, diagram in diagrams.items():
-            with open(f'diagram_{name}.md', 'w') as f:
-              f.write(f"```mermaid\n{diagram}\n```")
-          
-          print(f"Generated {len(diagrams)} diagrams")
-          PYTHON_EOF
-
-      - name: Commit wiki changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add wiki.db wiki_html/ *.md
-          git commit -m "docs: generate wiki from source code
-          
-          - Scanned all documentation files
-          - Generated wiki pages for components
-          - Generated build variant documentation
-          - Created HTML wiki
-          - Added architecture diagrams
-          
-          Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" || echo "No changes to commit"
-          
-          git push origin main --force-with-lease || echo "Push failed, skipping"
-
-      - name: Upload wiki artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: wiki-html
-          path: wiki_html/
-          retention-days: 90
-
-      - name: Create summary
-        run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          # Wiki Generation Complete
-          
-          - ✅ Database initialized
-          - ✅ Source files parsed
-          - ✅ Pages generated
-          - ✅ HTML wiki created
-          - ✅ Diagrams created
-          - ✅ Changes committed
-          
-          The wiki is now updated and available in the repository.
-          EOF
+          set -euo pipefail
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date — nothing to push."
+          else
+            git commit -m "docs: sync wiki from docs/ at ${COMMIT_SHA}"
+            git push origin HEAD
+          fi

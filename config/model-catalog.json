@@ -1,0 +1,103 @@
+{
+  "$comment": "Static model profiles: published capability/cost/speed characteristics per provider/model, as of Aug 2026. This is the PRIOR the learning loop (config/aihub.json 'learning') refines with observed outcomes — the catalog says what a model SHOULD be good at; recorded outcomes say what it HAS BEEN good at in this codebase. Update prices/context windows when providers change them; this file has no secrets.",
+  "models": [
+    {
+      "provider": "anthropic",
+      "model": "claude-opus-5",
+      "class": "frontier",
+      "contextTokens": 500000,
+      "inputPerMillionUsd": 15.0,
+      "outputPerMillionUsd": 75.0,
+      "relativeSpeed": "slow",
+      "strengths": ["long_context_analysis", "architecture_design", "security_analysis"]
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "class": "balanced",
+      "contextTokens": 500000,
+      "inputPerMillionUsd": 3.0,
+      "outputPerMillionUsd": 15.0,
+      "relativeSpeed": "medium",
+      "strengths": ["code_review", "debugging", "code_analysis"]
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5",
+      "class": "fast",
+      "contextTokens": 200000,
+      "inputPerMillionUsd": 0.8,
+      "outputPerMillionUsd": 4.0,
+      "relativeSpeed": "fast",
+      "strengths": ["inline_completion", "general_query"]
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "class": "frontier",
+      "contextTokens": 300000,
+      "inputPerMillionUsd": 10.0,
+      "outputPerMillionUsd": 30.0,
+      "relativeSpeed": "medium",
+      "strengths": ["architecture_design", "code_generation"]
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "class": "fast",
+      "contextTokens": 128000,
+      "inputPerMillionUsd": 0.15,
+      "outputPerMillionUsd": 0.6,
+      "relativeSpeed": "fast",
+      "strengths": ["general_query", "documentation_generation"]
+    },
+    {
+      "provider": "openai",
+      "model": "codex-1",
+      "class": "specialist",
+      "contextTokens": 200000,
+      "inputPerMillionUsd": 3.0,
+      "outputPerMillionUsd": 12.0,
+      "relativeSpeed": "medium",
+      "strengths": ["code_generation", "code_refactoring", "test_creation"]
+    },
+    {
+      "provider": "azure-openai",
+      "model": "gpt-5-mini",
+      "class": "fast",
+      "contextTokens": 400000,
+      "inputPerMillionUsd": 0.25,
+      "outputPerMillionUsd": 2.0,
+      "relativeSpeed": "fast",
+      "strengths": ["enterprise_data", "general_query"]
+    },
+    {
+      "provider": "github-models",
+      "model": "openai/gpt-4o-mini",
+      "class": "fast",
+      "contextTokens": 128000,
+      "inputPerMillionUsd": 0.0,
+      "outputPerMillionUsd": 0.0,
+      "relativeSpeed": "fast",
+      "strengths": ["inline_completion"],
+      "note": "Free tier rate-limited per GitHub plan; treat as $0 with a request cap, not truly free at scale."
+    },
+    {
+      "provider": "ollama",
+      "model": "llama3.2",
+      "class": "local",
+      "contextTokens": 128000,
+      "inputPerMillionUsd": 0.0,
+      "outputPerMillionUsd": 0.0,
+      "relativeSpeed": "hardware-bound",
+      "strengths": ["offline"]
+    }
+  ],
+  "selectionPolicy": {
+    "$comment": "How helios-ai/MCP pick a model when the caller specifies constraints instead of a provider. See docs/architecture/LLM_STRENGTHS_PLAYBOOK.md 'Cost & latency ladder'.",
+    "costSensitive": "prefer the lowest inputPerMillionUsd+outputPerMillionUsd among models whose strengths include the task type",
+    "latencySensitive": "prefer relativeSpeed fast > medium > slow, breaking ties by cost",
+    "qualitySensitive": "prefer class frontier > balanced > specialist > fast, breaking ties by learned success rate",
+    "default": "use the config/aihub.json routing chain; the catalog only applies when a request sets an explicit cost/latency/quality preference"
+  }
+}

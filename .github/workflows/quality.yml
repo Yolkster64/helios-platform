@@ -12,12 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up PowerShell
-        uses: actions/setup-powershell@v4
-        with:
-          pwsh-version: latest
-      
+
+      # pwsh ships preinstalled on ubuntu-latest; actions/setup-powershell does not exist.
       - name: Install PSScriptAnalyzer
         run: |
           pwsh -Command "Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser"
@@ -39,7 +35,7 @@ jobs:
       
       - name: Upload Analysis
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: powershell-analysis
           path: ps-analysis.txt

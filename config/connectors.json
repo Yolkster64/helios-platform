@@ -1,0 +1,32 @@
+{
+  "$comment": "Connector wiring for Slack and Linear. This file carries env-var NAMES and routing choices only — never tokens or webhook values (repo hard rule). The same names are read by the GitHub Actions notify/sync workflows today and by the HELIOS.Connectors service when it lands (ROADMAP_MULTI_LLM.md PR4), so there is exactly one place that says where notifications go.",
+  "slack": {
+    "enabled": true,
+    "webhookUrlEnv": "SLACK_WEBHOOK_URL",
+    "botTokenEnv": "SLACK_BOT_TOKEN",
+    "channels": {
+      "ci": "#helios-ci",
+      "deploys": "#helios-deploys",
+      "fleet": "#helios-fleet"
+    },
+    "notifyOn": {
+      ".NET Build & Test": "failures-and-recovery",
+      "Infra Validation": "failures-and-recovery",
+      "Helios Platform Deploy": "always",
+      "Python Spoke": "failures-and-recovery"
+    }
+  },
+  "linear": {
+    "enabled": true,
+    "apiKeyEnv": "LINEAR_API_KEY",
+    "teamKey": "HEL",
+    "titlePrefix": "[GH-{number}] ",
+    "syncLabels": ["bug", "enhancement", "infra", "ai-hub"],
+    "githubLabelToLinear": {
+      "bug": "Bug",
+      "enhancement": "Feature",
+      "infra": "Infra",
+      "ai-hub": "AIHub"
+    }
+  }
+}

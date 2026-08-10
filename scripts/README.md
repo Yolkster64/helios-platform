@@ -2,6 +2,10 @@
 
 Complete PowerShell automation framework for setting up, configuring, and optimizing the HELIOS Platform GitHub project board with full ecosystem integration.
 
+> **Starting from scratch?** `scripts/bootstrap/` is the entry point: browser/device-code
+> auth for GitHub + Azure and the full cross-LLM CLI fleet bring-up, identical in Azure
+> Cloud Shell, Codespaces, and local shells. `scripts/build/` builds the C++ spoke.
+
 ## 📋 Overview
 
 This suite provides production-ready scripts for:

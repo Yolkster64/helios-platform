@@ -1,0 +1,61 @@
+{
+  "$comment": "Cloud-only AIHub profile: every provider is a hosted LLM API — no local runtimes (ollama) and no CLI subprocess agents. Select it with AIHUB_CONFIG=config/aihub.cloud.json (or --aihub-config). No secrets live here — only env-var names (Key Vault secret names as fallback). scripts/bootstrap/azure-up.sh provisions the Azure side and prints the env wiring.",
+  "providers": {
+    "azure-openai": {
+      "type": "azure-openai",
+      "model": "gpt-5-mini",
+      "endpointEnv": "AZURE_OPENAI_ENDPOINT",
+      "apiKeyEnv": "AZURE_OPENAI_API_KEY"
+    },
+    "azure-foundry": {
+      "type": "azure-foundry-agent",
+      "model": "gpt-5-mini",
+      "endpointEnv": "AZURE_FOUNDRY_PROJECT_ENDPOINT"
+    },
+    "openai": {
+      "type": "openai",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "apiKeySecretName": "openai-api-key"
+    },
+    "anthropic": {
+      "type": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "apiKeySecretName": "anthropic-api-key"
+    },
+    "github-models": {
+      "type": "github-models",
+      "model": "openai/gpt-4o-mini",
+      "apiKeyEnv": "GITHUB_MODELS_TOKEN",
+      "apiKeySecretName": "github-models-token"
+    }
+  },
+  "routing": {
+    "defaultChain": ["azure-openai", "openai", "anthropic", "github-models"],
+    "taskRouting": {
+      "code_generation": ["azure-openai", "openai", "anthropic"],
+      "code_refactoring": ["anthropic", "openai", "azure-openai"],
+      "test_creation": ["openai", "azure-openai", "anthropic"],
+      "code_review": ["anthropic", "openai"],
+      "long_context_analysis": ["anthropic"],
+      "documentation_generation": ["anthropic", "openai", "github-models"],
+      "code_analysis": ["anthropic", "openai"],
+      "debugging": ["openai", "anthropic", "azure-openai"],
+      "security_analysis": ["anthropic", "openai"],
+      "architecture_design": ["anthropic", "openai"],
+      "enterprise_data": ["azure-foundry", "azure-openai"],
+      "inline_completion": ["github-models", "azure-openai"],
+      "general_query": ["azure-openai", "openai", "github-models"]
+    }
+  },
+  "learning": {
+    "$comment": "On by default in the cloud profile: routed calls hit real paid APIs, so the adaptive reorder earns its keep immediately. Outcomes land in local JSONL (.helios/ is gitignored); switch mode to 'azure'/'hybrid' once AZURE_LEARNING_TABLE_ENDPOINT exists.",
+    "enabled": true,
+    "mode": "local",
+    "localPath": ".helios/learning/outcomes.jsonl",
+    "tableEndpointEnv": "AZURE_LEARNING_TABLE_ENDPOINT",
+    "adaptiveRouting": true,
+    "historyWindow": 200
+  }
+}

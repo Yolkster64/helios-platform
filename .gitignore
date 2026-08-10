@@ -5,6 +5,8 @@ bin/
 obj/
 dist/
 build/
+# scripts/build holds build *scripts*, not build output — keep it tracked despite build/ above.
+!scripts/build/
 out/
 
 ## Environment and Configuration (CRITICAL - Do not commit secrets!)
@@ -101,7 +103,6 @@ tmp/
 *.bak
 
 ## Docker
-.dockerignore
 
 ## Generated files
 .next/
@@ -126,4 +127,6 @@ azure-pipelines.yml
 ## Git
 .git/
 .gitkeep
-.gitmodules
+
+## HELIOS runtime state (learning outcomes, azure-up env wiring) — never committed
+.helios/

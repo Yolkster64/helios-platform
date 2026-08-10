@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WinUI 3 shell (GUI_THEME_ANALYSIS.md, roadmap PR6 scaffold).
+
+    WINDOWS-ONLY: this project is deliberately NOT in HELIOS.sln. The Windows App SDK
+    and the WinUI XAML compiler cannot restore or build on the Linux CI runners that
+    build HELIOS.sln. Build it via src/gui/HELIOS.Shell.sln on Windows — see
+    src/gui/README.md.
+
+    Unpackaged (WindowsPackageType=None) per the winui3-shell skill: xcopy deploy for
+    dev loops. WindowsAppSDKSelfContained is intentionally not set — the app runs
+    framework-dependent against an installed Windows App SDK 1.6 runtime.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>HELIOS.Shell</RootNamespace>
+    <AssemblyName>HELIOS.Shell</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Description>HELIOS WinUI 3 desktop shell — NavigationView host for the AI Hub provider dashboard, bound to the helios-ai-api REST surface.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
+  </ItemGroup>
+
+  <!--
+    No explicit <Page>/<ApplicationDefinition> items: with UseWinUI=true the Windows App
+    SDK targets glob *.xaml automatically (App.xaml as ApplicationDefinition, the rest as
+    Page), matching the VS 2022 WinUI 3 template shape.
+  -->
+
+</Project>

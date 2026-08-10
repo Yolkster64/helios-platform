@@ -5,6 +5,13 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+# The default GITHUB_TOKEN is read-only here; the review-comment job needs
+# write access or its createComment call 403s.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   ai-security-review:
     runs-on: ubuntu-latest
@@ -222,8 +229,12 @@ jobs:
   comment-on-pr:
     runs-on: ubuntu-latest
     name: Add Review Comments
-    if: github.event_name == 'pull_request'
-    
+    # Waits for the gate jobs and reports their REAL results — a static "all
+    # verified" comment posted in parallel with the gates was misleading whenever
+    # a gate later failed.
+    needs: [ai-security-review, code-quality-check, approval-gate]
+    if: ${{ always() && github.event_name == 'pull_request' }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -232,15 +243,20 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const mark = r => r === 'success' ? '✅' : r === 'skipped' ? '⏭️' : '❌';
+            const security = '${{ needs.ai-security-review.result }}';
+            const quality = '${{ needs.code-quality-check.result }}';
+            const gate = '${{ needs.approval-gate.result }}';
+            const allGreen = [security, quality, gate].every(r => r === 'success');
             const comment = `
             ## 🤖 AI Integration Pipeline Results
-            
-            **Pipeline Status**: ✅ Complete
-            
+
+            **Pipeline Status**: ${allGreen ? '✅ Complete' : '⚠️ Attention needed'}
+
             ### Analysis Summary
-            - ✅ Security scan completed
-            - ✅ Code quality verified
-            - ✅ Documentation checked
+            - ${mark(security)} Security scan: ${security}
+            - ${mark(quality)} Code quality: ${quality}
+            - ${mark(gate)} Approval gate: ${gate}
             
             ### Recommendations
             For any AI-generated code detected:

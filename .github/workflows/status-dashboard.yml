@@ -81,7 +81,7 @@ jobs:
           echo "report=$REPORT" >> $GITHUB_OUTPUT
 
       - name: Upload Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: status-report
           path: status-report.json
@@ -195,7 +195,7 @@ jobs:
           MDEOF
 
       - name: Upload Dashboard
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: status-dashboard
           path: status/

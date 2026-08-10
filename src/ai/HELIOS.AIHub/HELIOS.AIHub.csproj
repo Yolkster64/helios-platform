@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>HELIOS.AIHub</RootNamespace>
+    <!-- Required by LibraryImport's source-generated marshalling stubs (SYSLIB1062).
+         Scoped to this project; no hand-written unsafe blocks live here. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Multi-LLM provider hub for the HELIOS platform: OpenAI, Anthropic, Azure OpenAI/Foundry, GitHub Models, Ollama, and CLI agents behind the core IAgent/IRouter seams.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HELIOS.AIHub.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Source-linked core seams: contract types only. The core project does not build
+         today, so AIHub must not take a ProjectReference on it. -->
+    <Compile Include="../../core/HELIOS.Platform/Core/AI/Interfaces/IAgent.cs" Link="CoreSeams/IAgent.cs" />
+    <Compile Include="../../core/HELIOS.Platform/Core/AI/Router/IRouter.cs" Link="CoreSeams/IRouter.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- F# domain spoke: pure cost/routing logic, consumed in-process. -->
+    <ProjectReference Include="../HELIOS.AIHub.Domain/HELIOS.AIHub.Domain.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- C++ spoke binary — present only after scripts/build/build-native.sh (or CI) has run;
+         absent is fine, AIHub degrades to its managed fallbacks. Flows transitively to
+         test/CLI output directories so LibraryImport resolves it at runtime. -->
+    <None Include="../HELIOS.AIHub.Native/build/libhelios_aihub_native.so"
+          Condition="Exists('../HELIOS.AIHub.Native/build/libhelios_aihub_native.so')"
+          Link="libhelios_aihub_native.so"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../HELIOS.AIHub.Native/build/libhelios_aihub_native.dylib"
+          Condition="Exists('../HELIOS.AIHub.Native/build/libhelios_aihub_native.dylib')"
+          Link="libhelios_aihub_native.dylib"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../HELIOS.AIHub.Native/build/Release/helios_aihub_native.dll"
+          Condition="Exists('../HELIOS.AIHub.Native/build/Release/helios_aihub_native.dll')"
+          Link="helios_aihub_native.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
+    <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
+    <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.10.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+    <PackageReference Include="OllamaSharp" Version="5.4.30" />
+    <PackageReference Include="OpenAI" Version="2.12.0" />
+  </ItemGroup>
+
+</Project>

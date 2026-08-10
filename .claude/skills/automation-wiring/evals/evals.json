@@ -1,0 +1,44 @@
+{
+  "skill_name": "automation-wiring",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need a GitHub Actions workflow that deploys our Bicep template in infra/main.bicep to Azure on merge to main, but it has to work even for contributors who don't have Azure secrets set up (the repo is open source and forks shouldn't get red X's). Use OIDC, not a stored credential. Also add a PR check that just validates the Bicep compiles without needing real Azure access.",
+      "expected_output": "Two workflow files (or one with two jobs): a PR-triggered offline bicep-build/lint job requiring no secrets, and a main-branch deploy job using azure/login with OIDC (id-token: write permission) that checks for AZURE_CLIENT_ID and skips cleanly rather than failing when it's absent. Should use current, non-deprecated action versions and avoid interpolating untrusted context into run: steps.",
+      "files": [],
+      "assertions": [
+        "Uses azure/login (OIDC) rather than a stored client secret credential",
+        "Declares permissions: id-token: write (required for OIDC token issuance)",
+        "Deploy step/job guards on Azure credentials being present and skips cleanly rather than failing when absent",
+        "A separate PR-triggered check compiles/validates the Bicep template without requiring Azure login",
+        "No use of a disabled action version (upload/download-artifact@v3) or the nonexistent actions/setup-powershell",
+        "No untrusted GitHub context (e.g. PR title/body) interpolated directly into a run: shell block"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We have a config/services.json file that our app reads at startup to get API keys for three services (stripe, sendgrid, twilio). Right now the keys are just sitting in the JSON file in plaintext and I'm worried someone will commit it with real keys by accident. Fix this properly -- I want the config file to be safe to commit, and I want the app to still be able to find its keys somehow.",
+      "expected_output": "Restructures services.json to hold only the name of the environment variable (or a secret reference) per service, never a literal key value -- e.g. {\"stripe\": {\"apiKeyEnv\": \"STRIPE_API_KEY\"}}. Explains the resolution order (env var, optionally a vault) and that missing keys should surface as a clear 'unconfigured' state rather than crashing. May mention a .env.template and gitignoring the real .env. Does not invent unrelated Azure/Bicep infrastructure the user didn't ask for.",
+      "files": [],
+      "assertions": [
+        "Final config/services.json contains no literal API key values (no sk_live_, SG., AC_ style strings)",
+        "Config instead holds an indirection such as an env var name or secret reference per service",
+        "Explains the runtime resolution mechanism (env var, and what happens when a key is missing)",
+        "Does not silently drop the twilio/sendgrid/stripe key requirement -- all three services still resolvable",
+        "Mentions or implies safe-to-commit status explicitly (this was the user's stated goal)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Can you set up Terraform for a new Azure storage account and also add Bicep for an Azure Key Vault in the same PR? I want everything provisioned together.",
+      "expected_output": "Should flag or handle the Terraform+Bicep-in-one-PR request by applying the one-owner-per-resource rule: either recommend picking a single IaC tool for both resources (with reasoning), or if both are genuinely used elsewhere in the repo, wire them so Terraform consumes the Bicep-created Key Vault via a data source (or vice versa) rather than each tool defining resources the other might also touch. Should not produce Terraform and Bicep that silently define overlapping/conflicting resources without comment.",
+      "files": [],
+      "assertions": [
+        "Explicitly addresses the tension of using two IaC tools together rather than silently producing both with no comment",
+        "Either recommends one tool with reasoning, or wires the two together via a data source / output reference rather than each independently defining potentially-overlapping resources",
+        "Does not define the same resource type+name in both Terraform and Bicep with no cross-reference",
+        "Both a Terraform storage account definition and a Bicep Key Vault definition are present in some form (the user's actual ask is still met)"
+      ]
+    }
+  ]
+}

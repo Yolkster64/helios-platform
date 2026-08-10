@@ -77,6 +77,12 @@
     <Compile Remove="samples/**/*.cs" />
     <Compile Remove="demos/**/*.cs" />
     <Compile Remove="cloud-integration/**/*.cs" />
+    <Compile Remove="src/ai/**/*.cs" />
+    <Compile Remove="src/mcp/**/*.cs" />
+    <!-- src/gui builds only via src/gui/HELIOS.Shell.sln on Windows (WinUI 3); the WPF
+         default globs would otherwise pull its .cs AND .xaml into this project. -->
+    <Compile Remove="src/gui/**/*.cs" />
+    <Page Remove="src/gui/**/*.xaml" />
     <Compile Remove="src/**/Migrations/**/*.cs" />
     <Compile Remove="HELIOS.Platform.Tray/**/*.cs" />
     <Compile Remove="HELIOS.Platform.ShellExtension/**/*.cs" />

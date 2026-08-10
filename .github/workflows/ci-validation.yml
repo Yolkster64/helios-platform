@@ -13,31 +13,55 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-        with:
-          powershell-version: '7.3'
-      
+
+      # pwsh ships preinstalled on ubuntu-latest; actions/setup-powershell does not exist.
+      # Real parser (Parser::ParseFile), gated against a baseline: 54 legacy scripts
+      # carry genuine pre-existing parse errors (.github/ps1-parse-baseline.txt), so a
+      # blanket gate would always be red and a blanket skip (the old continue-on-error,
+      # whose scriptblock::Create check also space-joined files and reported nonsense)
+      # would mask regressions. Errors in any file NOT in the baseline fail the job;
+      # repaired baseline files are reported so their lines get removed.
       - name: Check PowerShell Syntax
+        shell: pwsh
         run: |
+          $baselinePath = '.github/ps1-parse-baseline.txt'
+          $baseline = @{}
+          if (Test-Path $baselinePath) {
+            Get-Content $baselinePath | Where-Object { $_ -and -not $_.StartsWith('#') } |
+              ForEach-Object { $baseline[$_.Trim()] = $true }
+          }
+          $root = (Get-Location).Path
           $failures = 0
+          $stillBroken = 0
+          $repaired = [System.Collections.Generic.List[string]]::new()
           Get-ChildItem -Path '.' -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            $file = $_.FullName
-            Write-Host "Checking: $file"
-            try {
-              $content = Get-Content -Path $file
-              [scriptblock]::Create($content) | Out-Null
-              Write-Host "✅ OK" -ForegroundColor Green
-            } catch {
-              Write-Host "❌ FAILED: $_" -ForegroundColor Red
-              $failures++
+            $rel = $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              if ($baseline.ContainsKey($rel)) {
+                $stillBroken++
+              }
+              else {
+                Write-Host "❌ $($rel): $($errors[0].Message)" -ForegroundColor Red
+                $failures++
+              }
+            }
+            elseif ($baseline.ContainsKey($rel)) {
+              $repaired.Add($rel)
             }
           }
+          if ($repaired.Count -gt 0) {
+            Write-Host "🎉 Repaired since baselining (remove from $baselinePath):"
+            $repaired | ForEach-Object { Write-Host "   $_" }
+          }
+          Write-Host "Baseline: $stillBroken known-broken legacy file(s) tolerated."
           if ($failures -gt 0) {
-            Write-Host "Syntax check failed for $failures files" -ForegroundColor Red
+            Write-Host "Syntax check failed for $failures non-baseline file(s)" -ForegroundColor Red
             exit 1
           }
+          Write-Host "✅ No parse errors outside the legacy baseline"
 
   markdown-check:
     runs-on: ubuntu-latest
@@ -88,10 +112,7 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v2
-      
+
       - name: Run Unit Tests
         run: |
           if (Test-Path -Path "src/tests" -ErrorAction SilentlyContinue) {

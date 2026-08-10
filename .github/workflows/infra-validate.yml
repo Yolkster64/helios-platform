@@ -1,0 +1,99 @@
+name: Infra Validation
+
+on:
+  pull_request:
+    paths: ['infra/**']
+  push:
+    branches: [main]
+    paths: ['infra/**']
+
+permissions:
+  contents: read
+
+jobs:
+  bicep-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # az bicep runs entirely offline — no login or subscription needed,
+      # so this job is deterministic on forks and PRs.
+      - name: Bicep build (compile + lint)
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          az bicep build-params --file infra/main.bicepparam --stdout > /dev/null
+
+  # infra/arm/main.json is a GENERATED mirror of infra/main.bicep (see infra/arm/README.md).
+  # This gate recompiles the Bicep and fails if the committed JSON has drifted. The
+  # comparison is canonical JSON (json.load == json.load), so trailing newlines and
+  # formatting are irrelevant; metadata._generator (Bicep CLI version + templateHash)
+  # is stripped first so a toolchain version bump alone never turns the gate red.
+  arm-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Regenerate ARM template from Bicep
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --outfile /tmp/main.generated.json
+
+      - name: Compare against committed infra/arm/main.json
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          def strip_generator(node):
+              """Recursively drop metadata._generator (root and nested module
+              templates): it carries the Bicep CLI version and templateHash,
+              which change with the toolchain, not the template content."""
+              if isinstance(node, dict):
+                  meta = node.get("metadata")
+                  if isinstance(meta, dict):
+                      meta.pop("_generator", None)
+                      if not meta:
+                          del node["metadata"]
+                  for value in node.values():
+                      strip_generator(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      strip_generator(value)
+
+          with open("/tmp/main.generated.json") as f:
+              generated = json.load(f)
+          with open("infra/arm/main.json") as f:
+              committed = json.load(f)
+          strip_generator(generated)
+          strip_generator(committed)
+
+          if generated != committed:
+              print("::error file=infra/arm/main.json::infra/arm/main.json is stale — it no longer matches what infra/main.bicep compiles to. Regenerate it and commit the result: bicep build infra/main.bicep --outfile infra/arm/main.json")
+              print("FAIL: committed ARM template differs from the current Bicep output.")
+              print("Fix: bicep build infra/main.bicep --outfile infra/arm/main.json  (then commit)")
+              sys.exit(1)
+          print("OK: infra/arm/main.json matches infra/main.bicep (canonical JSON comparison).")
+          EOF
+
+  # Validate-only: fmt/init/validate need no backend, no providers configured with
+  # credentials, and no cloud access — deterministic on forks and PRs, just like the
+  # Bicep job. infra/terraform is an independent mirror of the stack (see infra/README.md).
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        run: terraform -chdir=infra/terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform -chdir=infra/terraform validate

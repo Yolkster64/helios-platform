@@ -1,0 +1,101 @@
+{
+  "$comment": "HELIOS multi-LLM hub configuration. No secrets live here — only the names of environment variables (Key Vault secret names as fallback). Task routing chains are ordered: first entry is primary, the rest are fallbacks.",
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "apiKeySecretName": "openai-api-key"
+    },
+    "anthropic": {
+      "type": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "apiKeySecretName": "anthropic-api-key"
+    },
+    "azure-openai": {
+      "type": "azure-openai",
+      "model": "gpt-5-mini",
+      "endpointEnv": "AZURE_OPENAI_ENDPOINT",
+      "apiKeyEnv": "AZURE_OPENAI_API_KEY"
+    },
+    "github-models": {
+      "type": "github-models",
+      "model": "openai/gpt-4o-mini",
+      "apiKeyEnv": "GITHUB_MODELS_TOKEN",
+      "apiKeySecretName": "github-models-token"
+    },
+    "ollama": {
+      "type": "ollama",
+      "model": "llama3.2",
+      "endpointEnv": "OLLAMA_BASE_URL"
+    },
+    "azure-foundry": {
+      "type": "azure-foundry-agent",
+      "model": "gpt-5-mini",
+      "endpointEnv": "AZURE_FOUNDRY_PROJECT_ENDPOINT"
+    }
+  },
+  "cliAgents": [
+    {
+      "name": "claude-cli",
+      "command": "claude",
+      "argsTemplate": "-p {prompt}",
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "codex",
+      "command": "codex",
+      "argsTemplate": "exec {prompt}",
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "copilot",
+      "command": "copilot",
+      "argsTemplate": "-p {prompt}",
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "gh-models",
+      "command": "gh",
+      "argsTemplate": "models run {model} {prompt}",
+      "model": "openai/gpt-4o-mini",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "hermes",
+      "command": "hermes",
+      "argsTemplate": "chat -q {prompt}",
+      "timeoutSeconds": 600
+    }
+  ],
+  "routing": {
+    "defaultChain": ["azure-openai", "openai", "anthropic", "github-models", "ollama"],
+    "taskRouting": {
+      "code_generation": ["codex", "openai", "azure-openai", "anthropic"],
+      "code_refactoring": ["codex", "anthropic", "openai"],
+      "test_creation": ["codex", "openai", "anthropic"],
+      "code_review": ["anthropic", "claude-cli", "openai"],
+      "long_context_analysis": ["anthropic", "claude-cli"],
+      "documentation_generation": ["anthropic", "openai", "github-models"],
+      "code_analysis": ["anthropic", "openai"],
+      "debugging": ["claude-cli", "codex", "openai"],
+      "security_analysis": ["anthropic", "openai"],
+      "architecture_design": ["anthropic", "openai"],
+      "enterprise_data": ["azure-foundry", "azure-openai"],
+      "inline_completion": ["copilot", "github-models"],
+      "agent_fleet_dispatch": ["hermes"],
+      "offline": ["ollama"],
+      "general_query": ["azure-openai", "openai", "github-models", "ollama"]
+    }
+  },
+  "learning": {
+    "$comment": "Off by default so routing never changes itself silently. mode: local (JSONL under .helios/) | azure (Table Storage) | hybrid (both; local is authoritative, Azure syncs best-effort). Reordering falls back to the configured chain whenever history is thin or unavailable.",
+    "enabled": false,
+    "mode": "local",
+    "localPath": ".helios/learning/outcomes.jsonl",
+    "tableEndpointEnv": "AZURE_LEARNING_TABLE_ENDPOINT",
+    "adaptiveRouting": true,
+    "historyWindow": 200
+  }
+}

@@ -1,0 +1,89 @@
+# Build-context filter for docker/helios-ai-api.Dockerfile (context = repo root).
+# The image needs: src/ (sources only), config/*.json, nuget.config, docker/.
+# Root-level-only patterns (no leading **/) deliberately do not touch nested
+# files — e.g. `*.txt` skips the root build logs but keeps src/**/CMakeLists.txt.
+
+# --- VCS / tooling metadata ---
+.git
+.github
+.claude
+.devcontainer
+.vscode
+.env
+.env.*
+**/local.settings.json
+**/appsettings.development.json
+**/appsettings.production.json
+**/api-keys.env
+**/api-keys.json
+**/secret.txt
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/secrets
+**/.aws
+**/.azure
+**/.kube
+
+# --- Runtime state: mounted as a volume, never baked into the image ---
+.helios
+**/.helios
+
+# --- Build outputs and caches (also keeps host obj/ from clobbering the
+# --- in-container restore, and stale host CMake caches from breaking cmake) ---
+**/bin
+**/obj
+**/TestResults
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+src/ai/python/build
+src/ai/python/dist
+src/ai/python/*.egg-info
+src/ai/HELIOS.AIHub.Native/build
+
+# --- Heavy trees the image never needs ---
+infra
+docs
+tests
+builds
+submodules
+installer
+scripts
+tools
+phases
+components
+dashboards
+demos
+examples
+monitoring
+plugins
+samples
+microsoft-ecosystem
+file-architecture
+cloud-integration
+ai-integration
+HELIOS
+HELIOS-Platform-Portable
+HELIOS.Platform.Installer
+HELIOS.Platform.ShellExtension
+HELIOS.Platform.SystemIntegration
+HELIOS.Platform.Tray
+
+# --- Root-level noise (status docs, build logs, stray sources) ---
+*.md
+*.txt
+*.log
+*.sql
+*.ps1
+*.cs
+*.sln
+*.csproj
+*.code-workspace
+_config.yml
+azure-pipelines.yml
+security.config.template.json
+verify-documentation-testing.sh
+verify-setup.sh
+docker-compose.yml

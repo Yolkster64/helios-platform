@@ -1,0 +1,25 @@
+{
+  "$comment": "Upstream repos watched by .github/workflows/fork-observation.yml (weekly, read-only). The digest is published as a workflow artifact + step summary — CI never pushes. All repos are public, fetched with the workflow GITHUB_TOKEN via plain REST. Design: docs/architecture/FORK_OBSERVATION.md.",
+  "repos": [
+    {
+      "repo": "actions/actions-runner-controller",
+      "because": "Upstream of the HELIOS actions-runner-controller fork (self-hosted runner scale sets — GITHUB_ECOSYSTEM_DESIGN.md); releases drive controller/chart upgrades for the PR5 fleet bring-up.",
+      "signals": ["releases", "commits"]
+    },
+    {
+      "repo": "Azure-Samples/azure-search-openai-demo",
+      "because": "RAG reference implementation tracked for the PR3 Foundry retrieval work (AI Search connection, file search patterns).",
+      "signals": ["releases", "commits"]
+    },
+    {
+      "repo": "microsoft/WindowsAppSDK",
+      "because": "Windows App SDK releases gate the HELIOS.Shell dependency pin (src/gui, WinUI 3 shell) and the PR6 net10 platform upgrade.",
+      "signals": ["releases", "commits"]
+    },
+    {
+      "repo": "modelcontextprotocol/csharp-sdk",
+      "because": "The MCP SDK behind src/mcp/HELIOS.Mcp; protocol changes and breaking SDK releases land here first.",
+      "signals": ["releases", "commits"]
+    }
+  ]
+}

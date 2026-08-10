@@ -1,0 +1,91 @@
+name: Helios Platform Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  workflow_dispatch:
+    inputs:
+      what_if:
+        description: Run what-if instead of deploying
+        type: boolean
+        default: true
+
+# OIDC: id-token lets the runner mint a short-lived token that Entra exchanges against
+# the federated credential created by scripts/bootstrap/azure-oidc-setup.sh — no cloud
+# secret is stored anywhere. Without id-token: write the token is never issued.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: helios-deploy
+  cancel-in-progress: false
+
+env:
+  # Must match the scope the OIDC principal holds Contributor on (see
+  # scripts/bootstrap/azure-oidc-setup.sh and infra/README.md "OIDC identity").
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-helios-ai' }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Repos without the OIDC federated credential configured skip gracefully
+      # instead of failing every push to main. AZURE_CLIENT_ID is an identifier,
+      # not a secret — set it as an Actions variable (azure-oidc-setup.sh prints
+      # the gh one-liners); the legacy secrets location still works as a fallback.
+      - name: Check Azure OIDC configuration
+        id: creds
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AZURE_CLIENT_ID variable not set — skipping deployment. Run scripts/bootstrap/azure-oidc-setup.sh and set the three AZURE_* repo variables it prints."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No creds JSON, no client secret: azure/login exchanges the run's OIDC token
+      # against the federated credential whose subject is
+      # repo:Yolkster64/helios-platform:ref:refs/heads/main — so dispatch this
+      # workflow from main, not from a topic branch.
+      - name: Azure Login (OIDC)
+        if: steps.creds.outputs.configured == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Contributor is scoped to the resource group, so the identity cannot create
+      # the RG itself (and an unconditional `az group create` would also fail on a
+      # location mismatch with the existing RG). Only attempt creation when the RG
+      # is missing — that path works for identities with subscription-wide rights.
+      - name: Ensure resource group
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
+            az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
+          fi
+
+      - name: What-if
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
+        run: |
+          az deployment group what-if \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam
+
+      - name: Deploy Helios Infra
+        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
+        run: |
+          az deployment group create \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam

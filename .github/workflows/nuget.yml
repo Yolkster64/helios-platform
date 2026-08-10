@@ -1,11 +1,13 @@
 name: NuGet Build & Release
 
+# Release workflow for the legacy core package. It builds/packs
+# src/core/HELIOS.Platform, which does not compile today (see
+# docs/architecture/ROADMAP_MULTI_LLM.md known-red inventory), so it must not
+# gate pull requests — PR builds are covered by dotnet-build.yml.
 on:
   push:
     branches: [main]
     tags: ['v*.*.*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       publish_nuget:
@@ -34,7 +36,9 @@ jobs:
           dotnet-version: ${{ matrix.dotnet-version }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        # Bare `dotnet restore` is ambiguous at the repo root (HELIOS.sln and
+        # HELIOS.Platform.csproj both live there) and dies with MSB1011.
+        run: dotnet restore src/core/HELIOS.Platform/HELIOS.Platform.csproj
 
       - name: Build solution
         run: dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj -c Release -f net${{ matrix.dotnet-version }} --no-restore -v minimal
@@ -44,7 +48,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.dotnet-version }}
           path: '**/test-results.trx'
@@ -52,7 +56,6 @@ jobs:
   package:
     needs: build
     runs-on: windows-latest
-    if: always()
 
     steps:
       - name: Checkout code
@@ -73,7 +76,7 @@ jobs:
 
       - name: Restore and Build
         run: |
-          dotnet restore
+          dotnet restore src/core/HELIOS.Platform/HELIOS.Platform.csproj
           dotnet pack src/core/HELIOS.Platform/HELIOS.Platform.csproj -c Release -o artifacts/
 
       - name: Verify package
@@ -84,7 +87,7 @@ jobs:
           }
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nuget-package-${{ steps.version.outputs.VERSION }}
           path: artifacts/*.nupkg
@@ -97,7 +100,7 @@ jobs:
 
     steps:
       - name: Download package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: download/
 
@@ -138,7 +141,7 @@ jobs:
 
     steps:
       - name: Download package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: download/
 

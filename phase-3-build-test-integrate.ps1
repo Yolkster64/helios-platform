@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+HELIOS Phase 3 Build, Test & Integration Master Orchestrator
+
+.DESCRIPTION
+Runs the HELIOS Phase 3 build, test, and integration sequence end to end.
+#>
+
 #================================================================================
 # HELIOS Phase 3 Build, Test & Integration Master Orchestrator
 #================================================================================

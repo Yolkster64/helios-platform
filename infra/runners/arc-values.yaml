@@ -1,0 +1,49 @@
+# Actions Runner Controller — values for the HELIOS self-hosted runner pool.
+#
+# Chart:  oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+# Tested: chart v0.14.2 (keys mirror charts/gha-runner-scale-set/values.yaml at that tag)
+#
+# This file is applied MANUALLY by a cluster operator with helm (see README.md).
+# Nothing in this repo's CI applies it; workflows only consume the pool via
+# `runs-on: helios-runners`.
+
+# Repo-scoped registration: runners appear under
+# https://github.com/Yolkster64/helios-platform → Settings → Actions → Runners.
+# (Use https://github.com/Yolkster64 instead for an org-level pool.)
+githubConfigUrl: https://github.com/Yolkster64/helios-platform
+
+# Pre-created Kubernetes secret ("variation C" in the chart's values.yaml).
+# NEVER put a PAT or GitHub App key in this file — create the secret out of
+# band in the same namespace as this release (command in README.md):
+#   kubectl create secret generic helios-runners-github-secret \
+#     --namespace arc-runners --from-literal=github_token="${GH_RUNNER_PAT}"
+# A GitHub App secret (github_app_id / github_app_installation_id /
+# github_app_private_key) is preferred for shared pools.
+githubConfigSecret: helios-runners-github-secret
+
+# THIS is the `runs-on:` value. Runner scale sets match the single scale-set
+# name only — `runs-on: helios-runners` — NOT the legacy
+# `[self-hosted, linux, x64]` label arrays (that is the old RunnerDeployment
+# model and will never match a scale set).
+runnerScaleSetName: helios-runners
+
+# True scale-to-zero when idle (cold job pickup costs ~20-40 s for a fresh
+# pod); bursts to at most 4 concurrent jobs.
+minRunners: 0
+maxRunners: 4
+
+# containerMode is DELIBERATELY unset — plain runner pods:
+#   - no dind (no privileged containers on the cluster)
+#   - no kubernetes container hooks (which need kubernetesModeWorkVolumeClaim
+#     and break some container actions)
+# HELIOS CI is plain dotnet/python/az-bicep/terraform steps and needs neither
+# `services:` nor container actions. If a job ever needs Docker, switch to
+# `containerMode: { type: dind }` and accept privileged pods.
+
+# Plain runner pod — same shape as the chart's default template.
+template:
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]

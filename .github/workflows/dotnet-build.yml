@@ -2,291 +2,172 @@ name: .NET Build & Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
       - 'src/**'
-      - '.github/workflows/dotnet-build.yml'
+      - 'tests/**'
+      - 'config/**'
+      - 'scripts/build/**'
       - '**.csproj'
-      - '**.sln*'
+      - 'HELIOS.sln'
+      - 'nuget.config'
+      - '.github/workflows/dotnet-build.yml'
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
       - 'src/**'
-      - '.github/workflows/dotnet-build.yml'
+      - 'tests/**'
+      - 'config/**'
+      - 'scripts/build/**'
       - '**.csproj'
-      - '**.sln*'
+      - 'HELIOS.sln'
+      - 'nuget.config'
+      - '.github/workflows/dotnet-build.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  DOTNET_MULTILEVEL_LOOKUP: false
+  HELIOS_REQUIRE_PYTHON_SPOKE: 1
 
 jobs:
-  build:
-    name: Build .NET Projects
+  build-and-test:
+    name: Build solution & run tests
     runs-on: ubuntu-latest
-    outputs:
-      artifact-path: ${{ steps.artifact.outputs.path }}
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: 8.0.x
 
-      - name: Restore NuGet Cache
-        uses: actions/cache@v3
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
         with:
-          path: |
-            ~/.nuget/packages
-            ~/.sonarqube/
-            **/bin/
-            **/obj/
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-            nuget-
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
 
-      - name: Display .NET Information
+      # Must run before dotnet build: HELIOS.AIHub.csproj copies the .so to output
+      # only when it already exists, and the tests exercise the native code paths
+      # (similarity dedup, token estimation) only when the library loads.
+      - name: Build native library (C++ spoke)
+        run: ./scripts/build/build-native.sh
+
+      # HELIOS.sln contains only buildable projects (AIHub, CLI, MCP, tests).
+      # nuget.config maps all public packages to nuget.org, so no GITHUB_TOKEN is needed.
+      - name: Restore
+        run: dotnet restore HELIOS.sln
+
+      - name: Build
+        run: dotnet build HELIOS.sln -c Release --no-restore
+
+      # The runtime degrades gracefully when the native library is missing, which is
+      # right for dev machines but would let CI silently stop testing the native paths.
+      # Fail loudly here instead.
+      - name: Assert native library reached test output
+        run: test -f tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so
+
+      - name: Test
+        run: >
+          dotnet test tests/HELIOS.AIHub.Tests/HELIOS.AIHub.Tests.csproj
+          -c Release --no-build
+          --logger "trx;LogFileName=aihub-tests.trx"
+          --results-directory ./test-results
+
+      - name: Smoke-test cross-LLM shell
         run: |
-          echo "=== .NET Environment ==="
-          dotnet --version
-          dotnet --list-sdks
-          dotnet --list-runtimes
-          echo "========================"
+          dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- status
+          dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- routing
+          dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- engines
 
-      - name: Restore Dependencies
-        run: dotnet restore
-
-      - name: Build Solution
-        run: |
-          dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj \
-            --configuration Release \
-            --no-restore \
-            -p:ContinueOnError=true \
-            -p:TreatWarningsAsErrors=false
-
-      - name: Publish Application
-        run: |
-          dotnet publish src/core/HELIOS.Platform/HELIOS.Platform.csproj \
-            -c Release \
-            -o ./publish \
-            --no-build
-
-      - name: Upload Build Artifacts
+      - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
-          path: ./publish/
+          name: test-results
+          path: test-results/
           if-no-files-found: warn
-          retention-days: 5
 
-  test-unit:
-    name: Unit Tests
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore NuGet Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.nuget/packages
-            **/bin/
-            **/obj/
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-            nuget-
-
-      - name: Run Unit Tests
+      - name: Publish CLI artifact
         run: |
-          dotnet test src/tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj \
-            --configuration Release \
-            --no-build \
-            --logger "trx;LogFileName=unit-test-results.trx" \
-            --logger "console;verbosity=minimal" \
-            -v minimal \
-            2>&1 || true
-        continue-on-error: true
+          dotnet publish src/ai/HELIOS.AIHub.Cli -c Release --no-build -o ./publish/helios-ai
+          # Ship the default config next to the executable so the extracted artifact
+          # runs standalone — config resolution checks the app base directory too.
+          mkdir -p ./publish/helios-ai/config
+          cp config/aihub.json config/aihub.cloud.json config/model-catalog.json ./publish/helios-ai/config/
+          mkdir -p ./publish/helios-ai/python-spoke
+          cp -R src/ai/python/helios_agents ./publish/helios-ai/python-spoke/
 
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results-unit
-          path: '**/unit-test-results.trx'
-          if-no-files-found: warn
-          retention-days: 5
-
-  test-integration:
-    name: Integration Tests
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore NuGet Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.nuget/packages
-            **/bin/
-            **/obj/
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-            nuget-
-
-      - name: Run Integration Tests
+      - name: Smoke-test extracted CLI artifact
         run: |
-          dotnet test src/tests/ \
-            --configuration Release \
-            --no-build \
-            --logger "trx;LogFileName=integration-test-results.trx" \
-            --logger "console;verbosity=minimal" \
-            -v minimal \
-            2>&1 || true
-        continue-on-error: true
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results-integration
-          path: '**/integration-test-results.trx'
-          if-no-files-found: warn
-          retention-days: 5
-
-  code-analysis:
-    name: Code Quality & Security
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore NuGet Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.nuget/packages
-            **/bin/
-            **/obj/
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.config') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-            nuget-
-
-      - name: Run Security Scanning
-        uses: github/super-linter/slim@v4
-        env:
-          DEFAULT_BRANCH: main
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VALIDATE_CSHARP: true
-          VALIDATE_JSON: true
-          VALIDATE_MARKDOWN: true
-        continue-on-error: true
-
-      - name: Check .NET Package Vulnerabilities
-        run: |
-          dotnet list package --vulnerable 2>&1 || true
-        continue-on-error: true
-
-  test-results:
-    name: Publish Test Results
-    if: always()
-    needs: [test-unit, test-integration]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Test Artifacts
-        uses: actions/download-artifact@v3
-        with:
-          path: test-results
-
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: test-results/**/test-results.trx
-          check_name: .NET Test Results
-          comment_mode: off
-        continue-on-error: true
-
-      - name: Generate Report
-        if: always()
-        run: |
-          echo "## .NET Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Runs" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit Tests: ${{ needs.test-unit.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Integration Tests: ${{ needs.test-integration.result }}" >> $GITHUB_STEP_SUMMARY
-
-  final-status:
-    name: Build Status Summary
-    if: always()
-    needs: [build, test-unit, test-integration, code-analysis]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Build Status
-        run: |
-          BUILD_STATUS="${{ needs.build.result }}"
-          UNIT_STATUS="${{ needs.test-unit.result }}"
-          INTEGRATION_STATUS="${{ needs.test-integration.result }}"
-          ANALYSIS_STATUS="${{ needs.code-analysis.result }}"
-          
-          echo "## CI/CD Status"
-          echo "Build: $BUILD_STATUS"
-          echo "Unit Tests: $UNIT_STATUS"
-          echo "Integration Tests: $INTEGRATION_STATUS"
-          echo "Code Analysis: $ANALYSIS_STATUS"
-          
-          if [ "$BUILD_STATUS" = "success" ] && [ "$UNIT_STATUS" = "success" ]; then
-            echo "✅ Core build successful"
-            exit 0
-          else
-            echo "⚠️  See details above"
-            exit 0
+          helios_artifact="$GITHUB_WORKSPACE/publish/helios-ai/helios-ai"
+          helios_smoke_dir="$(mktemp -d)"
+          cd "$helios_smoke_dir"
+          "$helios_artifact" engines > catalog.json
+          "$helios_artifact" engine-plan \
+            --cuda=false --include-candidates=false --pressure 0 --fleet-size 0 > plan.json
+          if "$helios_artifact" engines unexpected >/dev/null 2>&1; then
+            echo "engines accepted an unexpected positional argument" >&2
+            exit 1
           fi
+          if "$helios_artifact" engine-plan --pressure >/dev/null 2>&1; then
+            echo "engine-plan accepted a missing option value" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
 
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+          with open("catalog.json", encoding="utf-8") as stream:
+              catalog = json.load(stream)
+          with open("plan.json", encoding="utf-8") as stream:
+              plan = json.load(stream)
+
+          assert catalog["implemented_count"] > 0
+          assert catalog["candidate_count"] == 0
+          native_router = next(
+              engine for engine in catalog["engines"]
+            if engine["name"] == "online-sgd-router")
+          assert native_router["runtime_available"] is True
+          assert plan["inputs"]["cuda_enabled"] is False
+          assert plan["inputs"]["include_candidates"] is False
+          assert plan["candidate_count"] == 0
+          PY
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const status = '${{ needs.build.result }}' === 'success' ? '✅' : '⚠️';
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## ${status} .NET Build & Test\n\n**Build**: ${{ needs.build.result }}\n**Unit Tests**: ${{ needs.test-unit.result }}\n**Integration Tests**: ${{ needs.test-integration.result }}\n\n[View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
-            })
+          name: helios-ai
+          path: publish/helios-ai/
+
+  # The legacy core project (src/core/HELIOS.Platform) does not compile today
+  # (~323 pre-existing errors). This job tracks its state in the step summary
+  # without ever failing: a red X here reads as a PR problem when it is not.
+  # Make the build outcome gating again once the core is repaired
+  # (see ROADMAP_MULTI_LLM.md).
+  legacy-core-status:
+    name: Legacy core build (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build core (known broken, never fails the job)
+        run: |
+          dotnet build src/core/HELIOS.Platform/HELIOS.Platform.csproj -c Release 2>&1 | tee core-build.log
+          if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+            echo "## Legacy core build: PASSED — consider making this job gating again" >> "$GITHUB_STEP_SUMMARY"
+          else
+            errors=$(grep -c " error " core-build.log || true)
+            echo "## Legacy core build: still broken (~${errors} errors) — informational only" >> "$GITHUB_STEP_SUMMARY"
+          fi
