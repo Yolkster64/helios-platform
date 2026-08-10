@@ -111,9 +111,14 @@ foreach ($manifestPath in $manifestFiles) {
     $totalRunning += $runRunning
     $totalExited += $runExited
     $totalWorkers += $runRunning + $runExited
+    # ConvertFrom-Json turns ISO-8601 strings into [datetime]; normalize back.
+    $startedAt = Get-OptionalProperty $manifest 'startedAt' '?'
+    if ($startedAt -is [datetime]) {
+        $startedAt = $startedAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
     $runs.Add([ordered]@{
             runId      = [string](Get-OptionalProperty $manifest 'runId' '?')
-            startedAt  = [string](Get-OptionalProperty $manifest 'startedAt' '?')
+            startedAt  = [string]$startedAt
             status     = [string](Get-OptionalProperty $manifest 'status' '?')
             workerKind = [string](Get-OptionalProperty $manifest 'workerKind' '?')
             running    = $runRunning

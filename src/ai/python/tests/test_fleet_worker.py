@@ -150,6 +150,16 @@ def test_run_worker_drains_board_then_idle_exits(tmp_path):
     assert persisted["T3"]["status"] == "open"  # other lane never touched
 
 
+def test_torn_board_read_is_an_idle_poll_not_a_crash(tmp_path):
+    db = tmp_path / "board.json"
+    db.write_text('{"board": "xcore-test", "tasks": [', encoding="utf-8")  # torn write
+    config = _config(tmp_path, db)
+    assert fleet_worker.claim_next_task(config) is None
+    assert not (tmp_path / "board.lock").exists()  # lock released on the way out
+    assert fleet_worker.finish_task(
+        config, "T1", fleet_worker.RESOLUTION_COMPLETE, "x") is False
+
+
 def test_run_worker_honors_stop_event(tmp_path):
     db = _board(tmp_path, [
         {"id": "T1", "lane": "code_generation", "status": "open", "prompt": "a"},
