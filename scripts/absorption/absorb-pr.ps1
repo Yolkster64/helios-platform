@@ -7,10 +7,11 @@ score it, and record an advisory learning outcome.
 The absorption pipeline's engine (docs/architecture/ABSORPTION_PIPELINE.md).
 Fetches refs/pull/<N>/head from the upstream repo, trial-merges it onto the
 current branch in a DISPOSABLE git worktree, runs the same gate CI runs
-(solution build, Bicep compile, .NET tests, Python tests), and writes a scored
-report under .helios/absorption/. Nothing ever merges into the real working
-tree: -Apply only keeps the scratch worktree around (merge staged, conflicts
-included) so a human can inspect, cherry-pick, and commit deliberately.
+(native C++ build, solution build, Bicep compile, .NET tests, Python tests),
+and writes a scored report under .helios/absorption/. Nothing ever merges into
+the real working tree: -Apply only keeps the scratch worktree around (merge
+staged, conflicts included) so a human can inspect, cherry-pick, and commit
+deliberately.
 
 If helios-ai-api is reachable (HELIOS_API_URL, default http://localhost:5170),
 the verdict is also recorded as an ADVISORY outcome via POST /v1/learning with
@@ -84,6 +85,20 @@ try {
     if ($mergeClean) {
         # --- the gate (same categories CI runs) -----------------------------
         $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)/root/.dotnet"
+
+        # Build the native spoke from the merged scratch tree, never from the
+        # original checkout. Otherwise native tests can silently miss candidate
+        # changes and produce false-green absorption evidence.
+        $nativeBuild = Join-Path $worktree 'scripts/build/build-native.sh'
+        if (Test-Path $nativeBuild) {
+            $steps.Add((Invoke-Step 'native-build' {
+                if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+                    throw 'bash is required to build the native C++ spoke.'
+                }
+                $out = bash $nativeBuild 2>&1
+                if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+            }))
+        }
 
         $steps.Add((Invoke-Step 'dotnet-build' {
             $out = dotnet build (Join-Path $worktree 'HELIOS.sln') -c Release --nologo 2>&1
