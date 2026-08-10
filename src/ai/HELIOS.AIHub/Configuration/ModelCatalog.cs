@@ -108,11 +108,17 @@ public sealed class ModelCatalog
     /// <summary>
     /// Best provider/model pair for a task — the model belongs to the profile that won
     /// the ranking, so the caller can send the request to the model that was actually
-    /// scored rather than the provider's configured default.
+    /// scored rather than the provider's configured default. When
+    /// <paramref name="allowedProviders"/> is given, only those providers' profiles
+    /// compete — the ranking must not be won by a provider the caller cannot use.
     /// </summary>
-    public (string Provider, string Model)? SelectProfile(string taskType, string preference)
+    public (string Provider, string Model)? SelectProfile(
+        string taskType, string preference, IReadOnlySet<string>? allowedProviders = null)
     {
-        if (_models.Count == 0)
+        var models = allowedProviders is null
+            ? _models
+            : _models.Where(m => allowedProviders.Contains(m.Provider)).ToList();
+        if (models.Count == 0)
         {
             return null;
         }
@@ -120,14 +126,14 @@ public sealed class ModelCatalog
         var result = ModelSelectionInterop.SelectBestProfile(
             taskType,
             preference,
-            _models.Select(m => m.Provider).ToArray(),
-            _models.Select(m => m.Model).ToArray(),
-            _models.Select(m => m.Class).ToArray(),
-            _models.Select(m => m.ContextTokens).ToArray(),
-            _models.Select(m => m.InputPerMillionUsd).ToArray(),
-            _models.Select(m => m.OutputPerMillionUsd).ToArray(),
-            _models.Select(m => m.RelativeSpeed).ToArray(),
-            _models.Select(m => string.Join(',', m.Strengths)).ToArray());
+            models.Select(m => m.Provider).ToArray(),
+            models.Select(m => m.Model).ToArray(),
+            models.Select(m => m.Class).ToArray(),
+            models.Select(m => m.ContextTokens).ToArray(),
+            models.Select(m => m.InputPerMillionUsd).ToArray(),
+            models.Select(m => m.OutputPerMillionUsd).ToArray(),
+            models.Select(m => m.RelativeSpeed).ToArray(),
+            models.Select(m => string.Join(',', m.Strengths)).ToArray());
 
         return result is [var provider, var model] ? (provider, model) : null;
     }

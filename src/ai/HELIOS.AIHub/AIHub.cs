@@ -125,10 +125,18 @@ public sealed class AIHubService
     /// pair, and invoking the provider's configured default instead would silently answer
     /// a different question than the one optimized.
     /// </summary>
-    public (string Provider, string Model)? SelectOptimalProfile(string taskType, string preference = "balanced") =>
-        _catalog?.SelectProfile(taskType, preference) is { } profile && _byProvider.ContainsKey(profile.Provider)
-            ? profile
-            : null;
+    public (string Provider, string Model)? SelectOptimalProfile(string taskType, string preference = "balanced")
+    {
+        // Rank only profiles a request could actually reach: an unregistered or
+        // unconfigured provider winning the ranking would either return null despite
+        // a usable runner-up, or select a provider whose ask is guaranteed to fail.
+        var ready = _byProvider.Values
+            .Where(agent => agent.Readiness == ProviderReadiness.Ready)
+            .Select(agent => agent.Provider)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return ready.Count == 0 ? null : _catalog?.SelectProfile(taskType, preference, ready);
+    }
 
     /// <summary>Ask one provider directly (or the default chain when provider is null).</summary>
     public Task<ChatResult> AskAsync(
@@ -240,6 +248,12 @@ public sealed class AIHubService
         }
         catch (Azure.Identity.AuthenticationFailedException)
         {
+            return configuredChain;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // A store-internal timeout, not the caller cancelling: learning failures
+            // must preserve the configured order, never abort the route.
             return configuredChain;
         }
     }
@@ -588,6 +602,10 @@ public sealed class AIHubService
         }
         catch (Azure.Identity.AuthenticationFailedException)
         {
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Store-internal timeout — recording is best-effort.
         }
     }
 

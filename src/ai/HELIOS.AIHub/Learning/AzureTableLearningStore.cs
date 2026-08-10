@@ -161,13 +161,14 @@ public sealed class HybridLearningStore : ILearningStore
     public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
         string taskType, int limit = 200, CancellationToken cancellationToken = default)
     {
+        // Merge, never prefer: local writes always land first and remote writes are
+        // best-effort, so after an Azure outage the local store holds outcomes the
+        // table never saw — returning a non-empty remote result alone would serve
+        // stale history until some external reconciliation ran.
+        IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
         try
         {
-            var remote = await _remote.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
-            if (remote.Count > 0)
-            {
-                return remote;
-            }
+            remote = await _remote.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
         }
         catch (RequestFailedException)
         {
@@ -176,6 +177,12 @@ public sealed class HybridLearningStore : ILearningStore
         {
         }
 
-        return await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
+        var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
+
+        return remote.Concat(local)
+            .DistinctBy(o => (o.Timestamp, o.Provider, o.Model, o.Success, o.LatencyMs))
+            .OrderByDescending(o => o.Timestamp)
+            .Take(limit)
+            .ToList();
     }
 }

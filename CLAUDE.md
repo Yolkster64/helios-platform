@@ -22,7 +22,11 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 - **Root `HELIOS.Platform.csproj` recursively globs `**/*.cs`.** Any new C# directory
   outside `src/ai`/`src/mcp` must be added to its `<Compile Remove>` list in the same
   commit, or it silently breaks the root WPF project.
-- **New C# goes under `src/`** and must be added to `HELIOS.sln`.
+- **New C# goes under `src/`** and must be added to `HELIOS.sln`. Exception:
+  Windows-only UI projects (`src/gui/`) cannot compile on the Linux CI that builds
+  `HELIOS.sln`, so they live in their own solution (`src/gui/HELIOS.Shell.sln`,
+  built on Windows — see `src/gui/README.md`) and MUST still be covered by the
+  root csproj's glob guards.
 - **No secrets in the repo.** `config/aihub.json` carries env-var names only; keys come
   from the environment or Azure Key Vault (`AZURE_KEY_VAULT_URI`). Bicep takes secrets as
   `@secure()` parameters and never outputs them.
