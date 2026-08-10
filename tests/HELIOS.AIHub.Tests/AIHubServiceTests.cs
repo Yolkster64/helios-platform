@@ -1,5 +1,6 @@
 using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Native;
 using Xunit;
 
 namespace HELIOS.AIHub.Tests;
@@ -227,6 +228,57 @@ public class AIHubServiceTests
 
         Assert.Equal(2, flagged.Count);
         Assert.All(flagged, r => Assert.Null(r.DuplicateOfProvider));
+    }
+
+    /// <summary>
+    /// True when the C++ spoke is loadable (built via scripts/build/build-native.sh and
+    /// copied to output). Native-path tests no-op without it so local keyless/toolless
+    /// runs stay green; CI asserts the library's presence so they always run there.
+    /// </summary>
+    private static bool NativeLibraryPresent()
+    {
+        try
+        {
+            NativeMethods.AbiVersion();
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [Fact]
+    public void NativeLibrary_WhenPresent_ReportsExpectedAbiVersion()
+    {
+        if (!NativeLibraryPresent())
+        {
+            return;
+        }
+
+        Assert.Equal(NativeMethods.ExpectedAbiVersion, NativeMethods.AbiVersion());
+    }
+
+    [Fact]
+    public void FlagDuplicates_WithNativeLibrary_MarksDuplicateOfEarlierProvider()
+    {
+        if (!NativeLibraryPresent())
+        {
+            return;
+        }
+
+        var results = new[]
+        {
+            new ChatResult(true, "The quick brown fox jumps over the lazy dog", "a", "m", TimeSpan.Zero),
+            new ChatResult(true, "Completely unrelated text about ocean tides and weather patterns", "b", "m", TimeSpan.Zero),
+            new ChatResult(true, "the QUICK brown fox jumps over the LAZY dog", "c", "m", TimeSpan.Zero),
+        };
+
+        var flagged = AIHubService.FlagDuplicates(results);
+
+        Assert.Null(flagged[0].DuplicateOfProvider);
+        Assert.Null(flagged[1].DuplicateOfProvider);
+        Assert.Equal("a", flagged[2].DuplicateOfProvider);
     }
 
     [Fact]

@@ -50,6 +50,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'nuget.config') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # Must run before dotnet build: HELIOS.AIHub.csproj copies the .so to output
+      # only when it already exists, and the tests exercise the native code paths
+      # (similarity dedup, token estimation) only when the library loads.
+      - name: Build native library (C++ spoke)
+        run: ./scripts/build/build-native.sh
+
       # HELIOS.sln contains only buildable projects (AIHub, CLI, MCP, tests).
       # nuget.config maps all public packages to nuget.org, so no GITHUB_TOKEN is needed.
       - name: Restore
@@ -57,6 +63,12 @@ jobs:
 
       - name: Build
         run: dotnet build HELIOS.sln -c Release --no-restore
+
+      # The runtime degrades gracefully when the native library is missing, which is
+      # right for dev machines but would let CI silently stop testing the native paths.
+      # Fail loudly here instead.
+      - name: Assert native library reached test output
+        run: test -f tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so
 
       - name: Test
         run: >

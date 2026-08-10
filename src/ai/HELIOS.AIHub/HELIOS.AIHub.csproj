@@ -29,6 +29,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- C++ spoke binary — present only after scripts/build/build-native.sh (or CI) has run;
+         absent is fine, AIHub degrades to its managed fallbacks. Flows transitively to
+         test/CLI output directories so LibraryImport resolves it at runtime. -->
+    <None Include="../HELIOS.AIHub.Native/build/libhelios_aihub_native.so"
+          Condition="Exists('../HELIOS.AIHub.Native/build/libhelios_aihub_native.so')"
+          Link="libhelios_aihub_native.so"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../HELIOS.AIHub.Native/build/libhelios_aihub_native.dylib"
+          Condition="Exists('../HELIOS.AIHub.Native/build/libhelios_aihub_native.dylib')"
+          Link="libhelios_aihub_native.dylib"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../HELIOS.AIHub.Native/build/Release/helios_aihub_native.dll"
+          Condition="Exists('../HELIOS.AIHub.Native/build/Release/helios_aihub_native.dll')"
+          Link="helios_aihub_native.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
     <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
     <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />

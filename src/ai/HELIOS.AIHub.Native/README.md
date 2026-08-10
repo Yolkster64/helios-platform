@@ -8,21 +8,30 @@ and UTF-8-safe token estimation, exposed as a flat C ABI and called from C# via
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-# Sanitizer build for local UB/overflow checking (non-MSVC):
-cmake -S . -B build-san -DCMAKE_BUILD_TYPE=Debug -DHELIOS_SANITIZE=ON
-cmake --build build-san
+scripts/build/build-native.sh              # Release build into ./build
+scripts/build/build-native.sh --sanitize   # ASan/UBSan build into ./build-san
+# Windows: scripts/build/build-native.ps1
 ```
 
-Produces `helios_aihub_native` (`.dll`/`.so`/`.dylib`) — copy or symlink it next to the
-AIHub's output directory so `LibraryImport` resolves it at runtime. This library is
-optional: nothing in HELIOS.AIHub calls into it yet (PR3 wires the `compare` dedup path),
-so its absence does not affect `dotnet build`/`dotnet test`.
+Or directly:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+`HELIOS.AIHub.csproj` picks up the binary from `build/` automatically when it exists and
+copies it to the AIHub, CLI, and test output directories, so `LibraryImport` resolves it
+at runtime — build native first, then `dotnet build`. The library is optional at runtime:
+when it is absent, token estimation falls back to a managed byte-count heuristic and
+`compare` dedup returns results unmarked. CI builds it unconditionally and asserts it
+reached the test output, so the native code paths are always exercised there
+(`.github/workflows/dotnet-build.yml`).
 
 ## ABI contract
 
 - Every function returns a `helios_status`; none throw across the boundary.
 - The caller owns all memory; nothing here allocates or retains a pointer past return.
 - `helios_abi_version()` lets the managed side detect a stale native binary at startup
-  instead of silently misreading its memory layout.
+  instead of silently misreading its memory layout —
+  `NativeMethods.ExpectedAbiVersion` must match, and the test suite checks it.
