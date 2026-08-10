@@ -206,6 +206,98 @@ def test_fresh_claim_is_not_stolen(tmp_path):
     assert fleet_worker.claim_next_task(config) is None
 
 
+def test_enqueue_appends_under_lock(tmp_path):
+    db = _board(tmp_path, [
+        {"id": "T1", "lane": "build", "status": "open", "prompt": "a"},
+    ])
+    config = _config(tmp_path, db)
+    assert fleet_worker.enqueue_task(
+        config, {"id": "T2", "lane": "build", "status": "open", "prompt": "b"}) is True
+    assert [t["id"] for t in _tasks(db)] == ["T1", "T2"]
+    assert not (tmp_path / "board.lock").exists()  # lock released after the append
+
+
+def test_enqueue_missing_board_fails_and_releases_lock(tmp_path):
+    config = _config(tmp_path, tmp_path / "nope.json")
+    assert fleet_worker.enqueue_task(config, {"id": "T1"}) is False
+    assert not (tmp_path / "nope.json").exists()  # never invents a board
+    assert not (tmp_path / "board.lock").exists()
+
+
+def test_enqueue_rejects_non_dict_task(tmp_path):
+    db = _board(tmp_path, [])
+    with pytest.raises(TypeError):
+        fleet_worker.enqueue_task(_config(tmp_path, db), ["not", "a", "task"])  # type: ignore[arg-type]
+
+
+def test_enqueue_times_out_while_lock_is_held(tmp_path):
+    db = _board(tmp_path, [])
+    lock = tmp_path / "board.lock"
+    # A live holder: our own pid is definitely alive, so the lock is not stale.
+    lock.write_text(json.dumps({"pid": os.getpid(), "assignee": "other"}), encoding="utf-8")
+    assert fleet_worker.enqueue_task(_config(tmp_path, db), {"id": "T1"}) is False
+    assert _tasks(db) == []  # board untouched
+
+
+def test_enqueue_waits_for_worker_lock_and_neither_mutation_is_lost(tmp_path):
+    # The stale-snapshot regression: a worker mutates the board while holding
+    # the claim lock; a concurrent external append must serialize behind that
+    # lock so BOTH the worker's claim and the enqueued task survive.
+    db = _board(tmp_path, [
+        {"id": "T1", "lane": "build", "status": "open", "prompt": "a"},
+    ])
+    config = _config(tmp_path, db, lock_timeout_seconds=5.0)
+    assert fleet_worker.acquire_claim_lock(config.lock_path, "worker", 0.05) is True
+
+    result: dict = {}
+    thread = threading.Thread(target=lambda: result.update(
+        ok=fleet_worker.enqueue_task(
+            config, {"id": "T2", "lane": "build", "status": "open", "prompt": "b"})))
+    thread.start()
+    try:
+        # The worker's critical section, performed while the enqueue spins on
+        # the lock: load the board fresh, claim T1, save.
+        board = fleet_worker.load_board(db)
+        board["tasks"][0]["status"] = "claimed"
+        board["tasks"][0]["assignee"] = "worker"
+        fleet_worker.save_board(db, board)
+    finally:
+        fleet_worker.release_claim_lock(config.lock_path)
+    thread.join(timeout=10.0)
+    assert not thread.is_alive() and result["ok"] is True
+
+    persisted = {t["id"]: t for t in _tasks(db)}
+    assert persisted["T1"]["status"] == "claimed"  # worker mutation preserved
+    assert persisted["T2"]["status"] == "open"     # enqueued task preserved
+    assert not (tmp_path / "board.lock").exists()
+
+
+def test_parse_args_enqueue():
+    assert fleet_worker._parse_args([]).enqueue == ""
+    args = fleet_worker._parse_args(["--enqueue", '{"id": "T9"}'])
+    assert args.enqueue == '{"id": "T9"}'
+
+
+def test_main_enqueue_appends_and_exits_zero(tmp_path, monkeypatch):
+    db = _board(tmp_path, [])
+    monkeypatch.setenv(fleet_worker.ENV_DB, str(db))
+    monkeypatch.setenv(fleet_worker.ENV_CLAIM_LOCK, str(tmp_path / "board.lock"))
+    rc = fleet_worker.main(["--enqueue", json.dumps(
+        {"id": "T-9", "lane": "build", "status": "open", "prompt": "x"})])
+    assert rc == 0
+    (task,) = _tasks(db)
+    assert task["id"] == "T-9"
+
+
+@pytest.mark.parametrize("bad", ["not json", "[1, 2]", '"a string"'])
+def test_main_enqueue_rejects_bad_payloads(tmp_path, monkeypatch, bad):
+    db = _board(tmp_path, [])
+    monkeypatch.setenv(fleet_worker.ENV_DB, str(db))
+    monkeypatch.setenv(fleet_worker.ENV_CLAIM_LOCK, str(tmp_path / "board.lock"))
+    assert fleet_worker.main(["--enqueue", bad]) == 2
+    assert _tasks(db) == []  # nothing appended
+
+
 def test_claim_lease_uses_utc_during_daylight_saving_time():
     if not hasattr(time, "tzset"):
         return  # Windows has no process-local TZ switch; calendar.timegm is still portable.

@@ -15,6 +15,11 @@
     Per run it creates .helios/fleet/<runId>/ (gitignored) holding one JSON
     kanban board per pool (boards/<board>.json), worker logs (logs/), and the
     manifest.json that scripts/fleet/fleet-status.ps1 and stop-fleet.ps1 read.
+    The manifest is persisted incrementally (status 'starting' before any
+    spawn, rewritten after each successful spawn, 'running' at the end): if a
+    later spawn fails, the already-started workers are best-effort TERMed and
+    the manifest is left as status 'failed', so stop-fleet.ps1 -RunId <id> can
+    always finish the cleanup - no worker is orphaned without a manifest.
 
 .PARAMETER Fleet
     Pool name (xcore-9-code) or its board name (xcore-code) to start;
@@ -68,6 +73,60 @@ function ConvertTo-ShellWord {
     # Single-quote a word for POSIX sh.
     param([string]$Value)
     return "'" + ($Value -replace "'", "'\''") + "'"
+}
+
+function Stop-FleetWorker {
+    # stop-fleet.ps1's identity-verified kill - keep in sync. Used here for
+    # best-effort cleanup when a later spawn fails mid-launch. A pid alone can
+    # be reused by an unrelated process, so the recorded start time must match
+    # (2s tolerance for clock rounding) before killing; if either side is
+    # unreadable, skip rather than kill a stranger.
+    param([int]$WorkerPid, [string]$ExpectedStartTime)
+    $proc = Get-Process -Id $WorkerPid -ErrorAction SilentlyContinue
+    if (-not $proc) { return 'already-exited' }
+
+    if ($ExpectedStartTime) {
+        $actualStart = $null
+        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+        $expected = [datetime]::Parse($ExpectedStartTime, $null,
+            [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
+    }
+
+    if (-not $IsWindows) {
+        & kill -TERM $WorkerPid 2> $null
+        for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 100
+            if (-not (Get-Process -Id $WorkerPid -ErrorAction SilentlyContinue)) { return 'stopped' }
+        }
+    }
+    Stop-Process -Id $WorkerPid -Force -ErrorAction SilentlyContinue
+    return 'killed'
+}
+
+function Write-FleetManifest {
+    # Persist the run manifest. Called incrementally - once with status
+    # 'starting' as soon as the run directory exists, again after EVERY
+    # successful spawn, then flipped to 'running' at the end (or left as
+    # 'failed' after a spawn error) - so stop-fleet.ps1 always has the pids of
+    # workers already started, even when a later spawn dies mid-launch. Reads
+    # the run context ($runId, $startedAt, $repoRoot, $topologyPath,
+    # $workerKind, $workspaceMode, $manifestPools, $manifestPath) from the
+    # script scope. Worker startTime values are round-trip 'o' strings, which
+    # stop-fleet.ps1 parses with DateTimeStyles::RoundtripKind.
+    param([string]$Status)
+    [ordered]@{
+        runId         = $runId
+        startedAt     = $startedAt
+        repoRoot      = $repoRoot
+        topology      = $topologyPath
+        workerKind    = $workerKind
+        workspaceMode = [bool]$workspaceMode
+        status        = $Status
+        stoppedAt     = $null
+        pools         = $manifestPools
+    } | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
 }
 
 if ($PoolSize -lt 0 -or $PoolSize -gt 64) {
@@ -189,7 +248,16 @@ foreach ($sub in @('boards', 'locks', 'logs')) {
     New-Item -ItemType Directory -Path (Join-Path $runDir $sub) -Force | Out-Null
 }
 
+# The manifest exists from the first moment a worker can: written as
+# 'starting' before any spawn, rewritten after each successful spawn, flipped
+# to 'running' at the end. A mid-launch failure TERMs the already-started pids
+# and leaves it as 'failed', so no worker is ever orphaned without a manifest
+# for stop-fleet.ps1 to find.
+$manifestPath = Join-Path $runDir 'manifest.json'
+$startedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $manifestPools = [System.Collections.Generic.List[object]]::new()
+Write-FleetManifest -Status 'starting'
+
 $tempKnobs = @()
 if ($workerKind -eq 'stub') {
     # Give interactive bring-up time to seed the boards: poll every 2s, idle-exit
@@ -214,7 +282,18 @@ try {
             } | ConvertTo-Json -Depth 4 | Set-Content -Path $entry.Db -Encoding utf8
         }
 
+        # Pool entry goes into the manifest up front (empty worker list); the
+        # $workers list is shared, so each manifest rewrite below picks up
+        # every worker spawned so far.
         $workers = [System.Collections.Generic.List[object]]::new()
+        $manifestPools.Add([ordered]@{
+                pool      = $entry.Pool
+                board     = $entry.Board
+                lanes     = $entry.Lanes
+                db        = $entry.Db
+                claimLock = $entry.Lock
+                workers   = $workers
+            })
         for ($slot = 1; $slot -le $entry.Workers; $slot++) {
             $assignee = "$($entry.Prefix)-$slot"
 
@@ -287,18 +366,29 @@ try {
                     command   = "$workerExe $($workerArgs -join ' ')"
                     log       = $errLog
                 })
+            # Persist after every spawn: if the NEXT spawn throws, this worker
+            # is already on disk for cleanup.
+            Write-FleetManifest -Status 'starting'
             Write-Host "  started $assignee (pid $($proc.Id))"
         }
-
-        $manifestPools.Add([ordered]@{
-                pool      = $entry.Pool
-                board     = $entry.Board
-                lanes     = $entry.Lanes
-                db        = $entry.Db
-                claimLock = $entry.Lock
-                workers   = $workers
-            })
     }
+}
+catch {
+    # A failed spawn must not orphan the workers that did start: best-effort
+    # TERM them (identity-verified, like stop-fleet.ps1) and leave the
+    # manifest as 'failed' so `stop-fleet.ps1 -RunId <id>` can finish any
+    # cleanup this pass could not.
+    Write-Warning "Fleet launch failed: $_"
+    foreach ($manifestPool in $manifestPools) {
+        foreach ($worker in @($manifestPool.workers)) {
+            $outcome = Stop-FleetWorker -WorkerPid ([int]$worker.pid) `
+                -ExpectedStartTime ([string]$worker.startTime)
+            Write-Host "  cleanup $($worker.assignee) (pid $($worker.pid)): $outcome"
+        }
+    }
+    Write-FleetManifest -Status 'failed'
+    Write-Host "Manifest left as status=failed: $manifestPath"
+    throw
 }
 finally {
     foreach ($name in @($envContract) + @('HERMES_KANBAN_ASSIGNEE') + $tempKnobs) {
@@ -307,24 +397,15 @@ finally {
 }
 
 # ---- manifest --------------------------------------------------------------
-$manifestPath = Join-Path $runDir 'manifest.json'
-[ordered]@{
-    runId         = $runId
-    startedAt     = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-    repoRoot      = $repoRoot
-    topology      = $topologyPath
-    workerKind    = $workerKind
-    workspaceMode = [bool]$workspaceMode
-    status        = 'running'
-    stoppedAt     = $null
-    pools         = $manifestPools
-} | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
+Write-FleetManifest -Status 'running'
 
 $totalWorkers = ($plan | Measure-Object -Property Workers -Sum).Sum
 Write-Host ''
 Write-Host "Started $totalWorkers worker(s) across $($plan.Count) pool(s). Manifest: $manifestPath"
-Write-Host "Feed the boards by appending tasks to .helios/fleet/$runId/boards/<board>.json, e.g.:"
-Write-Host '  { "id": "T-1", "lane": "code_generation", "status": "open", "prompt": "..." }'
+Write-Host 'Feed the boards with the lock-aware enqueue (hand-editing a live board can drop tasks;'
+Write-Host "run from src/ai/python with HERMES_KANBAN_DB/_CLAIM_LOCK from the manifest's db/claimLock):"
+Write-Host ('  python3 -m helios_agents.fleet_worker --enqueue ' +
+    '''{ "id": "T-1", "lane": "code_generation", "status": "open", "prompt": "..." }''')
 Write-Host "Status: pwsh scripts/fleet/fleet-status.ps1 -RunId $runId"
 Write-Host "Stop:   pwsh scripts/fleet/stop-fleet.ps1 -RunId $runId"
 exit 0

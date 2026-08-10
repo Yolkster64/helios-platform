@@ -26,6 +26,17 @@ consecutive polls.
 
 Run: ``python3 -m helios_agents.fleet_worker`` from ``src/ai/python``.
 
+Feeding a live board: hand-editing the board JSON while workers are running is
+unsafe — workers load and save the board under the claim lock, which external
+editors do not take, so a hand-appended task can be silently dropped by a
+concurrent worker save. Use the lock-aware enqueue instead (same env
+contract; exits without polling)::
+
+    python3 -m helios_agents.fleet_worker --enqueue \
+        '{"id": "T-1", "lane": "code_generation", "status": "open", "prompt": "..."}'
+
+Seeding a board by hand before its workers start is still fine.
+
 Hub-and-spoke rule: no network, no providers, no state beyond the board file
 named by the contract. Logs go to stderr only; stdout stays silent.
 """
@@ -287,6 +298,37 @@ def finish_task(config: WorkerConfig, task_id: str, resolution: str, payload: st
         release_claim_lock(config.lock_path)
 
 
+def enqueue_task(config: WorkerConfig, task: dict[str, Any]) -> bool:
+    """Append ``task`` to the board under the claim lock.
+
+    The lock-aware alternative to hand-editing a live board: workers mutate
+    the board while holding the claim lock, so an external append that does
+    not take the lock can be silently lost to a concurrent worker save. This
+    takes the lock, re-loads the board, appends, and saves atomically.
+    Returns False when the lock could not be taken before timeout or the
+    board is missing/unreadable.
+    """
+    if not isinstance(task, dict):
+        raise TypeError(f"task must be a JSON object (dict), got {type(task).__name__}")
+    if not acquire_claim_lock(
+        config.lock_path, config.assignee, config.lock_timeout_seconds, config.lock_stale_seconds
+    ):
+        _log(f"{config.assignee}: enqueue failed - claim lock busy")
+        return False
+    try:
+        try:
+            board = load_board(config.db_path)
+        except (ValueError, OSError) as exc:
+            _log(f"{config.assignee}: enqueue failed - board read failed ({exc})")
+            return False
+        tasks: list[Any] = board["tasks"]
+        tasks.append(task)
+        save_board(config.db_path, board)
+        return True
+    finally:
+        release_claim_lock(config.lock_path)
+
+
 def run_worker(config: WorkerConfig, stop: threading.Event | None = None) -> int:
     """Poll-claim-resolve loop; exits 0 on stop signal or sustained idleness."""
     stop = stop if stop is not None else threading.Event()
@@ -352,6 +394,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=os.environ.get(ENV_LOG_FILE, ""),
         help="append stderr logging to this file so the worker keeps a log "
              "sink after its launcher exits (env HERMES_KANBAN_LOG_FILE)")
+    parser.add_argument(
+        "--enqueue", metavar="TASK_JSON", default="",
+        help="append one task (a JSON object) to the board under the claim "
+             "lock, then exit without polling - the safe alternative to "
+             "hand-editing a board its workers are running against")
     return parser.parse_args(argv)
 
 
@@ -378,6 +425,24 @@ def main(argv: list[str] | None = None) -> int:
         poll_seconds=max(0.01, float(args.poll_seconds)),
         max_idle_polls=int(args.max_idle_polls),
     )
+    config.lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.enqueue:
+        try:
+            task: Any = json.loads(str(args.enqueue))
+        except ValueError as exc:
+            _log(f"--enqueue is not valid JSON: {exc}")
+            return 2
+        if not isinstance(task, dict):
+            _log("--enqueue expects a single JSON object, e.g. "
+                 '\'{"id": "T-1", "lane": "code_generation", "status": "open", '
+                 '"prompt": "..."}\'')
+            return 2
+        if not enqueue_task(config, task):
+            return 1
+        _log(f"{config.assignee}: enqueued task "
+             f"{str(task.get('id') or '') or '<no id>'} onto {config.db_path}")
+        return 0
 
     stop = threading.Event()
 
@@ -391,7 +456,6 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, OSError):  # pragma: no cover - non-main thread / platform
             pass
 
-    config.lock_path.parent.mkdir(parents=True, exist_ok=True)
     _log(f"{config.assignee}: polling {config.db_path} "
          f"(lanes: {', '.join(sorted(config.lanes)) if config.lanes else 'any'}; "
          f"run {config.run_id})")

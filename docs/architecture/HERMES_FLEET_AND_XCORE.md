@@ -87,16 +87,23 @@ recorded start time, never a stranger's reused pid). A queue that is merely shri
 never triggers scale-down: excess lanes keep draining it.
 
 **Cloud burst (hybrid pools).** When demand still exceeds `maxLocalLanes`, the excess
-(capped at `maxBurstLanes`) is offered to an Azure VMSS. With the `az` CLI on PATH and
-`HELIOS_FLEET_VMSS_NAME` + `HELIOS_FLEET_VMSS_RG` set (naming the scale set the
-`infra/` parameters provision), the pass runs `az vmss scale --new-capacity <n>`;
-otherwise it prints a `burst wanted: N lane(s) (VMSS not configured)` notice and moves
-on — unconfigured burst is advisory, never an error. The reconciler only requests
+lanes (per pool capped at `maxBurstLanes`, and the sum capped at the participating
+pools' combined `maxBurstLanes`) are aggregated across pools and offered to one Azure
+VMSS. Lanes are not instances: each instance runs
+`HELIOS_FLEET_VMSS_WORKERS_PER_INSTANCE` worker lanes (default 2, matching infra's
+`fleetWorkersPerInstance`), and `az vmss scale` sets an absolute capacity, so a pass
+makes at most one call. With the `az` CLI on PATH and `HELIOS_FLEET_VMSS_NAME` +
+`HELIOS_FLEET_VMSS_RG` set (naming the scale set the `infra/` parameters provision),
+that call is `az vmss scale --new-capacity ceil(totalBurstLanes / workersPerInstance)`;
+otherwise the pass prints a `burst wanted: N lane(s) (VMSS not configured)` notice and
+moves on — unconfigured burst is advisory, never an error. The reconciler only requests
 capacity; VMSS scale-in is left to the scale set's own policy.
 
-Every scaling action appends one advisory line to `.helios/fleet/scale-log.jsonl`
-(`{at, pool, from, to, reason, burst}`) so the learning/insights side can correlate
-scaling decisions with task outcomes later.
+Every scaling action appends one advisory line to `.helios/fleet/scale-log.jsonl` so
+the learning/insights side can correlate scaling decisions with task outcomes later:
+local scales as `{at, pool, from, to, reason, burst: 0}`, an actual burst call as one
+aggregate `{at, pool: "vmss-burst", pools, burst, instances, workersPerInstance,
+reason}` entry listing the contributing pools.
 
 Keeping a floor of warm local lanes matters more than it looks: the first lane on a cold
 burst runner pays image pull plus toolchain setup, so a small always-on floor is what
@@ -184,13 +191,20 @@ and exit 0 on SIGTERM or after `HERMES_KANBAN_MAX_IDLE_POLLS` empty polls
 (start-fleet defaults the stub to 2s polls, ~2 minutes idle). The stub does no
 model work — it exists to exercise the fleet wiring end to end.
 
-Feed a board by appending to its `tasks` array (the stub tolerates torn reads
-while you edit):
+Feed a live board through the lock-aware enqueue — workers mutate the board
+under the claim lock, which a hand editor does not take, so hand-appending to
+a board whose workers are running can be silently lost to a concurrent worker
+save. From `src/ai/python`, with `HERMES_KANBAN_DB` / `HERMES_KANBAN_CLAIM_LOCK`
+set to the run's board and lock (the manifest's `db` / `claimLock`):
 
-```json
-{ "id": "T-1", "lane": "code_generation", "status": "open",
-  "prompt": "add retry to the router" }
+```bash
+python3 -m helios_agents.fleet_worker --enqueue \
+  '{ "id": "T-1", "lane": "code_generation", "status": "open",
+     "prompt": "add retry to the router" }'
 ```
+
+Seeding a board by hand *before* its workers start is still fine (and the stub
+tolerates torn reads, so a hand edit shows up as an idle poll, never a crash).
 
 A task whose `lane` is not in the pool's task types is never claimed; one with
 `"block": true` (or no prompt) exercises the `kanban_block` path.

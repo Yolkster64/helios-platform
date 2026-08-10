@@ -31,16 +31,25 @@
     stopped with stop-fleet.ps1's identity-verified kill (pid + recorded
     process start time - never a stranger's reused pid).
 
-    Cloud burst: when a hybrid pool's demand still exceeds maxLocalLanes, the
-    excess (capped at maxBurstLanes) is offered to an Azure VMSS. If the az
-    CLI is on PATH and HELIOS_FLEET_VMSS_NAME + HELIOS_FLEET_VMSS_RG are set,
-    the pass runs `az vmss scale --new-capacity <n>`; otherwise it prints a
-    "burst wanted: N lane(s) (VMSS not configured)" notice and moves on -
-    unconfigured burst is never an error.
+    Cloud burst: when hybrid pools' demand still exceeds their maxLocalLanes,
+    the excess lanes (per pool capped at maxBurstLanes, and the sum capped at
+    the participating pools' combined maxBurstLanes) are AGGREGATED across
+    pools and offered to one Azure VMSS. Lanes are not instances: each
+    instance runs HELIOS_FLEET_VMSS_WORKERS_PER_INSTANCE worker lanes
+    (default 2, matching infra/main.bicep's fleetWorkersPerInstance), and
+    `az vmss scale` sets an ABSOLUTE capacity, so per-pool calls would
+    overwrite each other. If the az CLI is on PATH and
+    HELIOS_FLEET_VMSS_NAME + HELIOS_FLEET_VMSS_RG are set, the pass makes at
+    most ONE call per pass:
+    `az vmss scale --new-capacity ceil(totalBurstLanes / workersPerInstance)`;
+    otherwise it prints a "burst wanted: N lane(s) (VMSS not configured)"
+    notice and moves on - unconfigured burst is never an error.
 
-    Every scaling ACTION (a local scale and/or an actual az call) appends one
-    advisory JSON line to .helios/fleet/scale-log.jsonl
-    ({at, pool, from, to, reason, burst}) for the learning/insights side.
+    Every scaling ACTION appends one advisory JSON line to
+    .helios/fleet/scale-log.jsonl for the learning/insights side: local
+    scales as {at, pool, from, to, reason, burst: 0}; an actual az call as
+    one aggregate entry {at, pool: 'vmss-burst', pools, burst, instances,
+    workersPerInstance, reason} listing the contributing pools.
 
 .PARAMETER RepoRoot
     Root holding config/fleet/fleet-topology.json and .helios/fleet/.
@@ -177,8 +186,13 @@ function Get-QueueDepth {
 }
 
 function Get-PoolWorkerState {
-    # Live workers for a manifest pool (pid probe, like fleet-status.ps1) and
-    # the highest assignee slot number, so new workers continue the numbering.
+    # Live workers for a manifest pool and the highest assignee slot number,
+    # so new workers continue the numbering. Identity-verified, not a bare pid
+    # probe: a pid can be reused by an unrelated process after a worker exits,
+    # and counting a stranger as a live lane inflates $current and suppresses
+    # needed scale-ups. Same start-time check as Stop-FleetWorker (2s
+    # tolerance); an unreadable start time means it is not a process we
+    # spawned, so it does not count.
     param($ManifestPool)
     $running = [System.Collections.Generic.List[object]]::new()
     $maxSlot = 0
@@ -189,9 +203,17 @@ function Get-PoolWorkerState {
             if ($slot -gt $maxSlot) { $maxSlot = $slot }
         }
         $workerPid = [int](Get-OptionalProperty $worker 'pid' 0)
-        if ($workerPid -gt 0 -and $null -ne (Get-Process -Id $workerPid -ErrorAction SilentlyContinue)) {
-            $running.Add($worker)
+        if ($workerPid -le 0) { continue }
+        $proc = Get-Process -Id $workerPid -ErrorAction SilentlyContinue
+        if ($null -eq $proc) { continue }
+        $expected = ConvertTo-UtcDateTime (Get-OptionalProperty $worker 'startTime')
+        if ($null -ne $expected) {
+            $actualStart = $null
+            try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+            if ($null -eq $actualStart -or
+                [math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { continue }
         }
+        $running.Add($worker)
     }
     return [pscustomobject]@{ Running = $running; MaxSlot = $maxSlot }
 }
@@ -449,6 +471,7 @@ function Invoke-ReconcilePass {
                 Action       = $action
                 Delta        = $delta
                 Burst        = $burst
+                MaxBurst     = $maxBurst
                 IdleSeconds  = $idleSeconds
                 IdleWindow   = $idleWindow
                 LastNonEmpty = $lastNonEmpty
@@ -487,6 +510,80 @@ function Invoke-ReconcilePass {
     $burstConfigured = ($null -ne $azCli) -and
         (-not [string]::IsNullOrEmpty($vmssName)) -and (-not [string]::IsNullOrEmpty($vmssRg))
 
+    # ---- cloud burst: ONE aggregate VMSS call per pass ---------------------
+    # Lanes are not instances (one instance runs workersPerInstance lanes) and
+    # `az vmss scale` sets an ABSOLUTE capacity, so per-pool calls would both
+    # overwrite each other and overprovision. Sum the burst LANE demand across
+    # pools (each row's Burst is already capped at that pool's maxBurstLanes;
+    # cap the sum at the participating pools' combined maxBurstLanes), then
+    # convert lanes -> instances with ceil.
+    $scaleLogPath = Join-Path $fleetDir 'scale-log.jsonl'
+    $burstRows = @($rows | Where-Object { $_.Burst -gt 0 })
+    $burstPoolNames = @($burstRows | ForEach-Object { $_.Pool })
+    $totalBurstLanes = 0
+    $burstLaneCap = 0
+    foreach ($burstRow in $burstRows) {
+        $totalBurstLanes += [int]$burstRow.Burst
+        $burstLaneCap += [math]::Max(0, [int]$burstRow.MaxBurst)
+    }
+    if ($totalBurstLanes -gt $burstLaneCap) { $totalBurstLanes = $burstLaneCap }
+
+    $workersPerInstance = 2   # default matches infra/main.bicep fleetWorkersPerInstance
+    $rawWorkersPerInstance = [string]$env:HELIOS_FLEET_VMSS_WORKERS_PER_INSTANCE
+    if (-not [string]::IsNullOrWhiteSpace($rawWorkersPerInstance)) {
+        $parsedWorkersPerInstance = 0
+        if ([int]::TryParse($rawWorkersPerInstance, [ref]$parsedWorkersPerInstance) -and
+            $parsedWorkersPerInstance -ge 1) {
+            $workersPerInstance = $parsedWorkersPerInstance
+        }
+        else {
+            Write-Warning ("Ignoring HELIOS_FLEET_VMSS_WORKERS_PER_INSTANCE='$rawWorkersPerInstance' " +
+                '(not a positive integer); using the default of 2 workers per instance.')
+        }
+    }
+
+    if ($totalBurstLanes -gt 0) {
+        $burstInstances = [int][math]::Ceiling($totalBurstLanes / [double]$workersPerInstance)
+        $burstPoolsText = $burstPoolNames -join ', '
+        if (-not $burstConfigured) {
+            Write-Host (('  burst wanted: {0} lane(s) across {1} (VMSS not configured - set ' +
+                    'HELIOS_FLEET_VMSS_NAME and HELIOS_FLEET_VMSS_RG, with the az CLI on PATH)') -f
+                    $totalBurstLanes, $burstPoolsText)
+        }
+        elseif ($DryRunMode) {
+            Write-Host (('  burst: would run az vmss scale --name {0} --resource-group {1} ' +
+                    '--new-capacity {2} ({3} lane(s) at {4}/instance; pools: {5})') -f
+                    $vmssName, $vmssRg, $burstInstances, $totalBurstLanes, $workersPerInstance,
+                    $burstPoolsText)
+        }
+        else {
+            Write-Host (('  burst: az vmss scale --name {0} --resource-group {1} ' +
+                    '--new-capacity {2} ({3} lane(s) at {4}/instance; pools: {5})') -f
+                    $vmssName, $vmssRg, $burstInstances, $totalBurstLanes, $workersPerInstance,
+                    $burstPoolsText)
+            & $azCli.Source vmss scale --name $vmssName --resource-group $vmssRg `
+                --new-capacity $burstInstances --output none | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "az vmss scale failed (exit $LASTEXITCODE)."
+                $failures++
+            }
+            else {
+                # One advisory line for the aggregate call, listing the pools
+                # whose lane demand it carries.
+                $logEntry = [ordered]@{
+                    at                 = $nowUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                    pool               = 'vmss-burst'
+                    pools              = $burstPoolNames
+                    burst              = $totalBurstLanes
+                    instances          = $burstInstances
+                    workersPerInstance = $workersPerInstance
+                    reason             = "burst: $totalBurstLanes lane(s) exceed local capacity across $burstPoolsText"
+                }
+                ($logEntry | ConvertTo-Json -Compress) | Add-Content -Path $scaleLogPath -Encoding utf8
+            }
+        }
+    }
+
     # ---- resolve the spawn command once, only if a scale-up will happen ----
     $hermesCli = $null
     $python = $null
@@ -513,34 +610,9 @@ function Invoke-ReconcilePass {
         }
     }
 
-    # ---- act ---------------------------------------------------------------
-    $scaleLogPath = Join-Path $fleetDir 'scale-log.jsonl'
+    # ---- act (local lanes; the aggregate burst already ran above) ----------
     $manifestDirty = $false
     foreach ($row in $rows) {
-        # Cloud burst is independent of local scaling.
-        $burstRequested = 0
-        if ($row.Burst -gt 0) {
-            if (-not $burstConfigured) {
-                Write-Host (('  burst wanted: {0} lane(s) for {1} (VMSS not configured - set ' +
-                        'HELIOS_FLEET_VMSS_NAME and HELIOS_FLEET_VMSS_RG, with the az CLI on PATH)') -f
-                        $row.Burst, $row.Pool)
-            }
-            elseif ($DryRunMode) {
-                Write-Host ("  burst: would run az vmss scale --name {0} --resource-group {1} --new-capacity {2} ({3})" -f
-                    $vmssName, $vmssRg, $row.Burst, $row.Pool)
-            }
-            else {
-                Write-Host ("  burst: az vmss scale --name {0} --resource-group {1} --new-capacity {2} ({3})" -f
-                    $vmssName, $vmssRg, $row.Burst, $row.Pool)
-                & $azCli.Source vmss scale --name $vmssName --resource-group $vmssRg `
-                    --new-capacity $row.Burst --output none | Out-Null
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Warning "az vmss scale failed for pool $($row.Pool) (exit $LASTEXITCODE)."
-                    $failures++
-                }
-                else { $burstRequested = $row.Burst }
-            }
-        }
         if ($DryRunMode) { continue }
 
         $from = $row.Current
@@ -602,16 +674,16 @@ function Invoke-ReconcilePass {
             $to = $from - $stoppedCount
         }
 
-        # One advisory line per scaling ACTION for the learning/insights side.
-        if ($to -ne $from -or $burstRequested -gt 0) {
-            if (-not $reason) { $reason = "burst: demand exceeds maxLocalLanes" }
+        # One advisory line per local scaling ACTION for the learning/insights
+        # side (burst is logged once, aggregated, above - never per pool).
+        if ($to -ne $from) {
             $logEntry = [ordered]@{
                 at     = $nowUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 pool   = $row.Pool
                 from   = $from
                 to     = $to
                 reason = $reason
-                burst  = $burstRequested
+                burst  = 0
             }
             ($logEntry | ConvertTo-Json -Compress) | Add-Content -Path $scaleLogPath -Encoding utf8
         }
