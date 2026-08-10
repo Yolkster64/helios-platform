@@ -37,11 +37,28 @@ public static class Program
             {
                 if (positionals.Count == 0)
                 {
-                    return Fail("Usage: helios-ai ask \"<prompt>\" [--provider P] [--model M] [--system S]");
+                    return Fail("Usage: helios-ai ask \"<prompt>\" [--provider P] [--model M] [--system S] " +
+                                "[--optimize cost|latency|quality|balanced --for <task-type>]");
+                }
+                var provider = options.GetValueOrDefault("provider");
+                var optimize = options.GetValueOrDefault("optimize");
+                if (provider is null && optimize is not null)
+                {
+                    var forTask = options.GetValueOrDefault("for");
+                    if (forTask is null)
+                    {
+                        return Fail("--optimize requires --for <task-type> so the catalog knows what it's optimizing.");
+                    }
+                    provider = hub.SelectOptimalProvider(forTask, optimize);
+                    if (provider is null)
+                    {
+                        return Fail($"No catalog entry (config/model-catalog.json) covers task '{forTask}'; " +
+                                     "falling back to `route` is your next move.");
+                    }
+                    Console.Error.WriteLine($"[optimize={optimize} for={forTask} -> {provider}]");
                 }
                 var result = await hub.AskAsync(
-                    positionals[0],
-                    options.GetValueOrDefault("provider"),
+                    positionals[0], provider,
                     options.GetValueOrDefault("model"),
                     options.GetValueOrDefault("system"));
                 return PrintResult(result);

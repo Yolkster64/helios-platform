@@ -45,6 +45,24 @@ Tool CLIs round out the shell: `az` (Azure control plane), `gh` (GitHub control 
 every agent's toolbox; install profiles live in GITHUB_ECOSYSTEM_DESIGN.md (winget DSC
 "cross-LLM shell workload").
 
+## Optimizing across every model automatically
+
+`config/model-catalog.json` is the published-characteristics counterpart to the learned
+history in `config/aihub.json`'s `routing`/`learning` blocks: per model, its class
+(frontier/balanced/specialist/fast/local), context window, per-million-token cost, and
+relative speed. `helios-ai ask "<prompt>" --optimize cost|latency|quality|balanced --for
+<task-type>` (and the MCP tool `helios_optimal_provider_get`) picks the single best-fit
+provider for a stated preference — instead of the fixed chain, when you know what you're
+optimizing for right now. `cost` picks cheapest-first among models whose strengths cover
+the task; `latency` picks fastest-first; `quality` picks frontier-class first; `balanced`
+splits the difference across all three so no one axis dominates.
+
+This composes with the learning loop rather than replacing it: the catalog picks a
+*candidate* from published specs, `helios-ai route` (or `helios_ai_route`) still applies
+the F# `RoutingPolicy` reordering from *observed* outcomes in this codebase before
+falling back to the static chain. Use `--optimize` for "what's objectively cheapest for
+this kind of task", and `route` for "what has actually worked here."
+
 ## Cost & latency ladder
 
 Cheapest/fastest first, for when the task tolerates it: Copilot inline → small models via

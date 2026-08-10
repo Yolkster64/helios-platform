@@ -64,6 +64,14 @@ public static class HeliosAiTools
         JsonSerializer.Serialize(
             hub.GetStatus().Select(p => new { p.Name, p.Kind, p.Model }), JsonOptions);
 
+    [McpServerTool(Name = "helios_optimal_provider_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("Best provider for a task type under a cost/latency/quality/balanced preference, from the static model catalog (config/model-catalog.json) — not the learned routing chain. Returns null when the catalog has no entry for the task type; fall back to helios_ai_route.")]
+    public static string? SelectOptimalProvider(
+        AIHubService hub,
+        [Description("Task type key, e.g. code_generation, code_review, architecture_design.")] string taskType,
+        [Description("cost | latency | quality | balanced (default).")] string preference = "balanced") =>
+        hub.SelectOptimalProvider(taskType, preference);
+
     [McpServerTool(Name = "helios_task_routing_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("The task-type → provider-chain routing table (LLM strengths playbook as machine-readable config).")]
     public static string GetTaskRouting(AIHubService hub) =>
