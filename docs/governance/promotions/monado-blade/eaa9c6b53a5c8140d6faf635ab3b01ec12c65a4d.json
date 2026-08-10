@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "sourceRepository": "Yolkster64/monado-blade",
+  "sourcePullRequest": 5,
+  "validatedHeadSha": "bc5783038f540c0b810b9fcd6850987056c0ac9a",
+  "sourceMergeSha": "eaa9c6b53a5c8140d6faf635ab3b01ec12c65a4d",
+  "sourceArchiveSha256": "575e0760852f6bf690a297611c1ccef502100e1390cd4b18d53787ef65a5cffe",
+  "archiveSizeBytes": 42487,
+  "validatedFileCount": 37,
+  "workflowRunId": 29302081883,
+  "validationStatus": "success",
+  "azureDeploymentAuthorized": false,
+  "promotionStage": "legacy-control-center-review",
+  "promotionPolicy": "reviewed-pr-only",
+  "migration": {
+    "sourceControlRepository": "M0nado/Helios-Control-Center",
+    "sourceControlPullRequest": 2,
+    "sourceControlCommit": "51e114712a1a7d712e8c6839eb52b00bcafbc539",
+    "destinationRepository": "Yolkster64/helios-platform",
+    "importedOn": "2026-08-10",
+    "status": "provenance-only"
+  }
+}
