@@ -1,19 +1,89 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+name: helios-control-plane-$(Date:yyyyMMdd)$(Rev:.r)
 
 trigger:
-- main
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - .github/workflows/promote-integration.yml
+      - azure-pipelines.yml
+      - config/openai-integration.example.json
+      - docs/architecture/ENTERPRISE_PROMOTION_TOPOLOGY.md
+      - docs/governance/promotions/**
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - .github/workflows/promote-integration.yml
+      - azure-pipelines.yml
+      - config/openai-integration.example.json
+      - docs/architecture/ENTERPRISE_PROMOTION_TOPOLOGY.md
+      - docs/governance/promotions/**
 
 pool:
   vmImage: ubuntu-latest
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+  - checkout: self
+    clean: true
+    fetchDepth: 2
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.11'
+    displayName: Use Python 3.11
+
+  - script: |
+      set -euo pipefail
+      python - <<'PY'
+      import json
+      from pathlib import Path
+
+      files = []
+      config = Path("config/openai-integration.example.json")
+      if config.exists():
+          files.append(config)
+      files.extend(Path("docs/governance/promotions").rglob("*.json"))
+      for path in files:
+          json.loads(path.read_text(encoding="utf-8"))
+          print(f"validated {path}")
+      if not files:
+          print("no migrated JSON contracts are present yet")
+      PY
+    displayName: Validate migrated JSON contracts
+
+  - script: |
+      set -euo pipefail
+      python - <<'PY'
+      import json
+      from pathlib import Path
+
+      config_path = Path("config/openai-integration.example.json")
+      if config_path.exists():
+          config = json.loads(config_path.read_text())
+          auth = config["authentication"]
+          assert auth["storeSecretsInRepository"] is False
+          assert auth["apiKeyEnvironmentVariable"] == "OPENAI_API_KEY"
+
+      for path in Path("docs/governance/promotions").rglob("*.json"):
+          record = json.loads(path.read_text())
+          assert len(record["sourceMergeSha"]) == 40
+          assert len(record["sourceArchiveSha256"]) == 64
+          assert record["azureDeploymentAuthorized"] is False
+
+      workflow_path = Path(".github/workflows/promote-integration.yml")
+      if workflow_path.exists():
+          workflow = workflow_path.read_text()
+          assert "source_sha:" in workflow
+          assert "^[0-9a-fA-F]{40}$" in workflow
+          assert "id-token: write" not in workflow
+      PY
+    displayName: Enforce promotion safety invariants
+
+  - script: git diff --check HEAD^ HEAD
+    displayName: Check whitespace
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'Manual'))
