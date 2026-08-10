@@ -1,0 +1,108 @@
+name: Linear Sync
+
+# Mirrors labeled GitHub issues into Linear so the Linear board and the GitHub
+# Project dashboard rank the same work. One-directional by design (GitHub is
+# the source of truth for engineering issues here); Linear-side edits are not
+# synced back. Without the LINEAR_API_KEY secret every run skips green.
+#
+# Team key, label routing, and the title prefix live in config/connectors.json;
+# the secret is set once: gh secret set LINEAR_API_KEY --body "<personal api key>"
+
+on:
+  issues:
+    types: [opened, labeled, closed, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: Sync issue to Linear
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (connectors config only)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: config
+
+      - name: Sync
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_STATE: ${{ github.event.issue.state }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          EVENT_ACTION: ${{ github.event.action }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "LINEAR_API_KEY is not configured — skipping (see config/connectors.json)."
+            exit 0
+          fi
+
+          team_key=$(jq -r '.linear.teamKey' config/connectors.json)
+          prefix=$(jq -r '.linear.titlePrefix' config/connectors.json |
+            sed "s/{number}/$ISSUE_NUMBER/")
+
+          # Only issues carrying at least one sync label cross over — the board
+          # should rank curated work, not every drive-by issue.
+          sync_labels=$(jq -r '.linear.syncLabels | join("\n")' config/connectors.json)
+          matched=false
+          IFS=',' read -ra labels <<< "$ISSUE_LABELS"
+          for l in "${labels[@]}"; do
+            if grep -qxF "$l" <<< "$sync_labels"; then matched=true; break; fi
+          done
+          if [ "$matched" != "true" ]; then
+            echo "No sync label on #$ISSUE_NUMBER (have: '$ISSUE_LABELS') — skipping."
+            exit 0
+          fi
+
+          gql() { # query [variables-json]
+            curl -fsS https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" \
+              -H 'Content-Type: application/json' \
+              --data "$(jq -n --arg q "$1" --argjson v "${2:-{}}" '{query:$q, variables:$v}')"
+          }
+
+          team_id=$(gql 'query($key:String!){ teams(filter:{key:{eq:$key}}){ nodes { id } } }' \
+            "$(jq -n --arg key "$team_key" '{key:$key}')" | jq -r '.data.teams.nodes[0].id // empty')
+          if [ -z "$team_id" ]; then
+            echo "::warning::Linear team with key '$team_key' not found — check config/connectors.json."
+            exit 0
+          fi
+
+          existing_id=$(gql 'query($t:String!){ issues(filter:{title:{startsWith:$t}}, first:1){ nodes { id url } } }' \
+            "$(jq -n --arg t "$prefix" '{t:$t}')" | jq -r '.data.issues.nodes[0].id // empty')
+
+          case "$EVENT_ACTION" in
+            opened|labeled)
+              if [ -n "$existing_id" ]; then
+                echo "Linear issue already exists for #$ISSUE_NUMBER."
+                exit 0
+              fi
+              created=$(gql 'mutation($input:IssueCreateInput!){ issueCreate(input:$input){ issue { identifier url } } }' \
+                "$(jq -n --arg teamId "$team_id" --arg title "${prefix}${ISSUE_TITLE}" \
+                    --arg desc "Mirrored from ${ISSUE_URL} (labels: ${ISSUE_LABELS})." \
+                    '{input:{teamId:$teamId, title:$title, description:$desc}}')")
+              url=$(jq -r '.data.issueCreate.issue.url // empty' <<< "$created")
+              ident=$(jq -r '.data.issueCreate.issue.identifier // empty' <<< "$created")
+              if [ -n "$url" ]; then
+                gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
+                  --body "Tracked in Linear as [$ident]($url)."
+                echo "Created $ident."
+              fi
+              ;;
+            closed|reopened)
+              if [ -z "$existing_id" ]; then
+                echo "No Linear counterpart for #$ISSUE_NUMBER — nothing to update."
+                exit 0
+              fi
+              gql 'mutation($id:String!, $body:String!){ commentCreate(input:{issueId:$id, body:$body}){ success } }' \
+                "$(jq -n --arg id "$existing_id" --arg body "GitHub issue was ${EVENT_ACTION}: ${ISSUE_URL}" \
+                    '{id:$id, body:$body}')" > /dev/null
+              echo "Noted '${EVENT_ACTION}' on the Linear issue."
+              ;;
+          esac

@@ -82,10 +82,30 @@ OpenAI Codex CLI, Ollama; a Windows Terminal fragment adds a "HELIOS AI" profile
 
 ## Connector strategy (Slack, Linear, SharePoint)
 
-Deferred to PR4, deliberately: hermes-agent-github already ships a Slack gateway,
-MS Graph client (SharePoint/Teams), and 15 other platform adapters. HELIOS will reuse
-that gateway as the connector edge (fleet dispatch already routes through Hermes) rather
-than hand-writing C# connectors first. Linear has no Hermes adapter — PR4 adds it as a
-`src/connectors/HELIOS.Connectors` project using `@linear/sdk`-equivalent GraphQL calls,
-or as a Hermes gateway plugin, whichever lands cleaner after a spike. Credentials for
-every connector flow through the same Key Vault pattern as model keys.
+The connector *service* stays deferred to PR4, deliberately: hermes-agent-github already
+ships a Slack gateway, MS Graph client (SharePoint/Teams), and 15 other platform
+adapters. HELIOS will reuse that gateway as the connector edge (fleet dispatch already
+routes through Hermes) rather than hand-writing C# connectors first. Linear has no
+Hermes adapter — PR4 adds it as a `src/connectors/HELIOS.Connectors` project using
+`@linear/sdk`-equivalent GraphQL calls, or as a Hermes gateway plugin, whichever lands
+cleaner after a spike. Credentials for every connector flow through the same Key Vault
+pattern as model keys.
+
+### Implemented wiring (this PR)
+
+The Actions-level wiring is live now, driven by one declarative file —
+`config/connectors.json` (env-var names and routing only, never values):
+
+- **`notify-slack.yml`** listens via `workflow_run` to `.NET Build & Test`,
+  `Infra Validation`, `Python Spoke`, and `Helios Platform Deploy`, and posts
+  outcomes to Slack. Per-workflow policy comes from `slack.notifyOn`
+  (`always` vs `failures-and-recovery`); pipelines stay notification-agnostic.
+- **`linear-sync.yml`** mirrors GitHub issues carrying a `linear.syncLabels`
+  label into the configured Linear team (`[GH-<n>]`-prefixed, link-back comment
+  on the GitHub issue; close/reopen is noted on the Linear side). One-directional:
+  GitHub remains the source of truth.
+- **Graceful-skip contract**: with `SLACK_WEBHOOK_URL` / `LINEAR_API_KEY` unset,
+  both workflows exit green with a clear notice — they can never be the red check.
+  Enable with `gh secret set SLACK_WEBHOOK_URL` and `gh secret set LINEAR_API_KEY`.
+- PR4's HELIOS.Connectors consumes the same `config/connectors.json`, so enabling
+  the service later changes no routing decisions, only who executes them.

@@ -1,0 +1,68 @@
+name: Slack Notifications
+
+# Posts CI/deploy outcomes to Slack. Deliberately a separate workflow_run
+# listener rather than steps inside each pipeline: the pipelines stay
+# notification-agnostic, and adding a channel later means editing exactly one
+# file. Without the SLACK_WEBHOOK_URL secret every run skips green — the
+# workflow must never be the red check.
+#
+# Routing and notify policy live in config/connectors.json; the secret is set
+# once: gh secret set SLACK_WEBHOOK_URL --body "<incoming-webhook url>"
+
+on:
+  workflow_run:
+    workflows:
+      - ".NET Build & Test"
+      - "Infra Validation"
+      - "Python Spoke"
+      - "Helios Platform Deploy"
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Post outcome to Slack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (connectors config only)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: config
+
+      - name: Post to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+          WF_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not configured — skipping (see config/connectors.json)."
+            exit 0
+          fi
+
+          policy=$(jq -r --arg wf "$WF_NAME" '.slack.notifyOn[$wf] // "failures-and-recovery"' config/connectors.json)
+          if [ "$policy" != "always" ] && [ "$WF_CONCLUSION" = "success" ]; then
+            # failures-and-recovery: skip routine successes. (Recovery detection needs
+            # run history the webhook payload doesn't carry; successes stay quiet, which
+            # is the lower-noise default. Flip a workflow to "always" in
+            # config/connectors.json to hear every outcome.)
+            echo "Policy '$policy' and conclusion 'success' — staying quiet."
+            exit 0
+          fi
+
+          case "$WF_CONCLUSION" in
+            success) icon=":white_check_mark:";;
+            failure) icon=":x:";;
+            cancelled) icon=":no_entry_sign:";;
+            *) icon=":grey_question:";;
+          esac
+
+          jq -n \
+            --arg text "$icon *$WF_NAME* concluded *$WF_CONCLUSION* on \`$WF_BRANCH\` (${WF_SHA:0:7}) — <$WF_URL|run>" \
+            '{text: $text}' |
+            curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
