@@ -58,7 +58,7 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 | `build-all-modules.yml`, `multi-repo-sync.yml`, others | Reference phase/module structures that don't exist | Audit in PR2; delete what cannot go green |
 | `ci-validation.yml` markdownlint step | `.markdownlint.json` missing | Add config or drop step (PR2) |
 | 54 legacy `.ps1` files | Genuine parse errors (broken `foreach`, unterminated here-strings, invalid class code) — masked for years because the old syntax checks used the shallow tokenizer or never gated | Baselined in `.github/ps1-parse-baseline.txt`; the ci-validation gate fails any NON-baseline parse error and reports repaired files. Repair scripts area-by-area in PR2+, deleting baseline lines as they fix |
-| `.gitmodules` | Declares 7 nonexistent `modules/` submodules; `.gitignore` ignores `.gitmodules` | Remove in PR2 |
+| `.gitmodules` | ~~Declared 7 nonexistent `modules/` submodules (zero gitlinks — pure manifest debris); `.gitignore` also ignored `.gitmodules` and `.dockerignore`~~ | **Retired in PR1**: manifest deleted, ignore-rule traps removed. Real submodule governance (upstream PR #215's fail-closed pinned-approval gate) is an absorption-pipeline candidate |
 | `azure-pipelines.yml` | "Hello world" starter, git-ignored | Delete in PR2 |
 
 Rule: nothing new may depend on a known-red item, and each PR that touches an area
