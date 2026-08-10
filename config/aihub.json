@@ -3,13 +3,13 @@
   "providers": {
     "openai": {
       "type": "openai",
-      "model": "gpt-4o-mini",
+      "model": "gpt-5-mini",
       "apiKeyEnv": "OPENAI_API_KEY",
       "apiKeySecretName": "openai-api-key"
     },
     "anthropic": {
       "type": "anthropic",
-      "model": "claude-sonnet-4-5",
+      "model": "claude-sonnet-5",
       "apiKeyEnv": "ANTHROPIC_API_KEY",
       "apiKeySecretName": "anthropic-api-key"
     },
@@ -21,7 +21,7 @@
     },
     "github-models": {
       "type": "github-models",
-      "model": "openai/gpt-4o-mini",
+      "model": "openai/gpt-5-mini",
       "apiKeyEnv": "GITHUB_MODELS_TOKEN",
       "apiKeySecretName": "github-models-token"
     },
@@ -59,7 +59,7 @@
       "name": "gh-models",
       "command": "gh",
       "argsTemplate": "models run {model} {prompt}",
-      "model": "openai/gpt-4o-mini",
+      "model": "openai/gpt-5-mini",
       "timeoutSeconds": 300
     },
     {
@@ -86,6 +86,7 @@
       "inline_completion": ["copilot", "github-models"],
       "agent_fleet_dispatch": ["hermes"],
       "offline": ["ollama"],
+      "bulk_processing": ["github-models", "azure-openai", "ollama"],
       "general_query": ["azure-openai", "openai", "github-models", "ollama"]
     }
   },
