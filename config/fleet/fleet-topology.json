@@ -1,39 +1,114 @@
 {
-  "$comment": "Declarative agent-fleet topology for HELIOS. Consumed by fleet tooling (bring-up is roadmap PR5 — see docs/architecture/HERMES_FLEET_AND_XCORE.md). Sizing and naming change here, never in code.",
-  "fleets": [
+  "$comment": "Declarative agent-fleet topology for HELIOS. Four specialized Xcore-9 pools, each with its own Hermes fleet, tool grants, and autoscaling policy. Sizing, specialization, and naming change here — never in code. Bring-up runbook: docs/architecture/HERMES_FLEET_AND_XCORE.md.",
+  "version": 2,
+  "defaults": {
+    "poolSize": 9,
+    "spawn": {
+      "command": "hermes",
+      "argsTemplate": "-p {assignee} chat -q {prompt}",
+      "envContract": [
+        "HERMES_KANBAN_TASK",
+        "HERMES_KANBAN_DB",
+        "HERMES_KANBAN_RUN_ID",
+        "HERMES_KANBAN_CLAIM_LOCK"
+      ],
+      "termination": ["kanban_complete", "kanban_block"]
+    },
+    "autoscaling": {
+      "mode": "hybrid",
+      "minLocalLanes": 1,
+      "maxLocalLanes": 4,
+      "burstTarget": "arc",
+      "maxBurstLanes": 5,
+      "scaleUpQueueDepth": 3,
+      "scaleDownIdleSeconds": 300,
+      "$comment": "hybrid = keep minLocalLanes warm on the local host, burst the remainder onto ARC runner scale sets when the board queue exceeds scaleUpQueueDepth. mode may also be 'local' (never burst) or 'cloud' (never run locally)."
+    }
+  },
+  "pools": [
     {
-      "name": "hermes",
-      "kind": "hermes-kanban",
-      "description": "Hermes Agent kanban worker lanes (fleet mode): pulls all non-archived tasks and dispatches one worker lane per claimed task.",
-      "repo": "hermes-agent-github",
-      "spawn": {
-        "command": "hermes",
-        "argsTemplate": "-p {assignee} chat -q {prompt}",
-        "envContract": [
-          "HERMES_KANBAN_TASK",
-          "HERMES_KANBAN_DB",
-          "HERMES_KANBAN_RUN_ID",
-          "HERMES_KANBAN_CLAIM_LOCK"
-        ],
-        "termination": ["kanban_complete", "kanban_block"]
+      "name": "xcore-9-code",
+      "specialization": "Feature implementation: code generation, refactoring, and test authoring across the C# orchestrator and its spokes.",
+      "assigneePrefix": "xcode",
+      "poolSize": 9,
+      "hermesFleet": {
+        "board": "xcore-code",
+        "maxConcurrentLanes": 6
       },
-      "maxConcurrentLanes": 4
+      "taskTypes": ["code_generation", "code_refactoring", "test_creation"],
+      "providerChain": ["codex", "openai", "azure-openai", "anthropic"],
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "skills": ["csharp-orchestrator", "fsharp-functional", "python-agents", "api-creator"],
+      "autoscaling": { "mode": "hybrid", "minLocalLanes": 2, "maxLocalLanes": 4, "maxBurstLanes": 5 }
     },
     {
-      "name": "xcore-9s",
-      "kind": "worker-pool",
-      "description": "Xcore agent worker pool. Nine workers by default; resize via poolSize.",
-      "repo": "xcore-agent",
+      "name": "xcore-9-infra",
+      "specialization": "Automation wiring: Bicep/ARM, Terraform, GitHub Actions, JSON/YAML config, and the contracts between them.",
+      "assigneePrefix": "xinfra",
       "poolSize": 9,
-      "worker": {
-        "taskTypes": ["code_generation", "test_creation", "documentation_generation"],
-        "dispatchVia": "hermes",
-        "assigneePrefix": "xcore"
+      "hermesFleet": {
+        "board": "xcore-infra",
+        "maxConcurrentLanes": 4
+      },
+      "taskTypes": ["infrastructure", "pipeline_authoring", "config_authoring"],
+      "providerChain": ["anthropic", "openai", "azure-openai"],
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "skills": ["automation-wiring", "iac-azure", "pipelines-config", "powershell-automation"],
+      "agents": ["workflow-author", "bicep-arm-author", "terraform-author", "config-schema-author", "keyvault-secrets-agent", "identity-access-agent"],
+      "autoscaling": { "mode": "hybrid", "minLocalLanes": 1, "maxLocalLanes": 3, "maxBurstLanes": 6 }
+    },
+    {
+      "name": "xcore-9-review",
+      "specialization": "Adversarial review: code review, security analysis, and long-context audits. Never authors features — it judges them.",
+      "assigneePrefix": "xreview",
+      "poolSize": 9,
+      "hermesFleet": {
+        "board": "xcore-review",
+        "maxConcurrentLanes": 9
+      },
+      "taskTypes": ["code_review", "security_analysis", "long_context_analysis", "code_analysis"],
+      "providerChain": ["anthropic", "claude-cli", "openai"],
+      "tools": ["Read", "Grep", "Glob", "Bash"],
+      "skills": ["csharp-orchestrator", "automation-wiring"],
+      "agents": ["cpp-perf-reviewer", "winui3-reviewer"],
+      "autoscaling": {
+        "mode": "hybrid",
+        "minLocalLanes": 1,
+        "maxLocalLanes": 4,
+        "maxBurstLanes": 8,
+        "$comment": "Review fans out widest: independent reviewers on one artifact is the point, so lanes scale with findings rather than with tasks."
+      }
+    },
+    {
+      "name": "xcore-9-native",
+      "specialization": "Native and GPU work: C++ performance, memory/CPU/GPU optimization, kernel-adjacent tooling, rendering, and the WinUI 3 shell.",
+      "assigneePrefix": "xnative",
+      "poolSize": 9,
+      "hermesFleet": {
+        "board": "xcore-native",
+        "maxConcurrentLanes": 3
+      },
+      "taskTypes": ["native_optimization", "rendering", "gui_authoring"],
+      "providerChain": ["anthropic", "openai", "codex"],
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "skills": ["cpp-performance", "winui3-shell", "csharp-orchestrator"],
+      "agents": ["cpp-perf-reviewer", "winui3-reviewer"],
+      "autoscaling": {
+        "mode": "local",
+        "minLocalLanes": 1,
+        "maxLocalLanes": 3,
+        "$comment": "Local-only: native builds need the Windows SDK, MSVC toolchain, and a GPU that generic burst runners do not have. Give this pool a dedicated ARC scale set with those labels before switching to hybrid."
       }
     }
   ],
-  "routing": {
-    "$comment": "The AIHub side of fleet dispatch: config/aihub.json routes task type 'agent_fleet_dispatch' to the hermes CLI agent, which feeds these fleets.",
+  "coordination": {
+    "$comment": "Pools are peers and never call each other directly — the same hub-and-spoke rule the languages follow. Cross-pool work moves as a task handed to another pool's board, so every handoff is recorded.",
+    "handoffs": [
+      { "from": "xcore-9-code", "to": "xcore-9-review", "when": "implementation complete" },
+      { "from": "xcore-9-infra", "to": "xcore-9-review", "when": "pipeline or template authored" },
+      { "from": "xcore-9-native", "to": "xcore-9-review", "when": "native change touches the interop boundary" },
+      { "from": "xcore-9-review", "to": "xcore-9-code", "when": "findings require a fix" }
+    ],
     "aihubTaskType": "agent_fleet_dispatch"
   }
 }
