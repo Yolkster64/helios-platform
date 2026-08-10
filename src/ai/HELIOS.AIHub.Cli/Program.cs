@@ -266,6 +266,19 @@ public static class Program
                 return 0;
             }
 
+            case "absorb-status":
+            {
+                if (positionals.Count != 0)
+                {
+                    return Fail("Usage: helios-ai absorb-status");
+                }
+                if (FindUnexpectedOption(options, "config") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for absorb-status.");
+                }
+                return AbsorptionStatus.Execute(null, Console.Out, Console.Error);
+            }
+
             case "help":
             case "--help":
             case "-h":
@@ -317,6 +330,7 @@ public static class Program
                           [--fleet-size N] [--cuda[=BOOL]]
                           [--include-candidates[=BOOL]]
                                                                         Recommend available implementations; candidates stay advisory
+              absorb-status                                             Upstream PR watchlist + benchmark reports as JSON (read-only)
               help                                                      This text
 
             Global options:
