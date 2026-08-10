@@ -40,6 +40,19 @@ public static class HeliosAiTools
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
+    [McpServerTool(Name = "helios_ai_tandem", Idempotent = false, OpenWorld = true)]
+    [Description("Runs a task type's whole provider chain concurrently instead of sequential fallback -- e.g. ChatGPT (API) and Codex (CLI) racing on the same code_generation prompt -- and reports which the learned policy currently favors among the successes. Every result feeds the learning store when enabled, so tandem runs improve future single-shot routing.")]
+    public static async Task<string> Tandem(
+        AIHubService hub,
+        [Description("Task type key, e.g. code_generation, code_review.")] string taskType,
+        [Description("The prompt to send to every provider in the chain.")] string prompt,
+        [Description("Optional system prompt.")] string? system = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await hub.TandemAsync(taskType, prompt, system, cancellationToken);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
     [McpServerTool(Name = "helios_ai_compare", Idempotent = false, OpenWorld = true)]
     [Description("Fan the same prompt out to several providers in parallel and return every reply — useful for consensus checks and model comparison. Defaults to all ready providers.")]
     public static async Task<string> Compare(

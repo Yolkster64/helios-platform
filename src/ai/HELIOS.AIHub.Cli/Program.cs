@@ -75,6 +75,31 @@ public static class Program
                 return PrintResult(result);
             }
 
+            case "tandem":
+            {
+                if (positionals.Count < 2)
+                {
+                    return Fail("Usage: helios-ai tandem <task-type> \"<prompt>\" [--system S]\n" +
+                                "Runs the task type's whole provider chain concurrently (e.g. ChatGPT + Codex " +
+                                "for code_generation) instead of sequential fallback, and reports which the " +
+                                "learned policy currently favors.");
+                }
+                var tandem = await hub.TandemAsync(positionals[0], positionals[1], options.GetValueOrDefault("system"));
+                foreach (var result in tandem.Results)
+                {
+                    var marker = ReferenceEquals(result, tandem.Winner) ? "★" : " ";
+                    Console.WriteLine($"{marker} ────── {result.Provider} ({result.Model}) " +
+                                      $"{(result.Success ? $"{result.Latency.TotalSeconds:F1}s" : "FAILED")} ──────");
+                    Console.WriteLine(result.Success ? result.Text : $"  {result.Error}");
+                    Console.WriteLine();
+                }
+                if (tandem.Winner is not null)
+                {
+                    Console.Error.WriteLine($"[tandem winner: {tandem.Winner.Provider} — learned-policy favorite among successes]");
+                }
+                return tandem.Results.Any(r => r.Success) ? 0 : 1;
+            }
+
             case "compare":
             {
                 if (positionals.Count == 0)
@@ -167,6 +192,7 @@ public static class Program
             Commands:
               ask "<prompt>" [--provider P] [--model M] [--system S]   Ask one provider (default: routed chain)
               route <task-type> "<prompt>" [--system S]                Route by task type with fallback
+              tandem <task-type> "<prompt>" [--system S]               Run the whole chain concurrently (e.g. ChatGPT+Codex), report the learned winner
               compare "<prompt>" [--providers a,b,c]                   Fan out to several providers in parallel
               status                                                    Provider readiness (no network calls)
               providers                                                 Status as JSON

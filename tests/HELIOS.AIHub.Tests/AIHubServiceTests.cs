@@ -84,6 +84,40 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task TandemAsync_RunsWholeChainConcurrently_AndReportsWinner()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var options = EchoOnlyOptions();
+        // Give both a real chance to succeed so tandem has more than one result to pick from.
+        options.Routing.TaskRouting["echo_task"] = new List<string> { "echo-agent", "ghost-agent" };
+        var hub = new AIHubService(options);
+
+        var tandem = await hub.TandemAsync("echo_task", "ping");
+
+        Assert.Equal(2, tandem.Results.Count);
+        Assert.NotNull(tandem.Winner);
+        Assert.Equal("echo-agent", tandem.Winner!.Provider);
+        Assert.True(tandem.Winner.Success);
+    }
+
+    [Fact]
+    public async Task TandemAsync_EmptyChain_ReturnsNoResultsAndNoWinner()
+    {
+        var options = EchoOnlyOptions();
+        options.Routing.DefaultChain = new List<string>(); // no fallback either
+        var hub = new AIHubService(options);
+
+        var tandem = await hub.TandemAsync("no_such_task", "ping");
+
+        Assert.Empty(tandem.Results);
+        Assert.Null(tandem.Winner);
+    }
+
+    [Fact]
     public void GetStatus_ReportsReadinessAndHints()
     {
         var hub = new AIHubService(EchoOnlyOptions());

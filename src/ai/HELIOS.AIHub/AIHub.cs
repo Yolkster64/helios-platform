@@ -241,6 +241,45 @@ public sealed class AIHubService
         return await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Runs a task-type's whole chain concurrently rather than as sequential fallback —
+    /// "tandem" mode. The motivating case is code_generation: ChatGPT (API) and Codex
+    /// (CLI) genuinely differ in latency and failure modes, so running both at once and
+    /// keeping whichever finishes correctly beats waiting out a slow one before trying
+    /// the next. Every result is recorded to the learning store (when enabled), so tandem
+    /// runs feed the same evidence RouteAsync draws on — usage across the tandem set
+    /// compounds into better single-shot routing over time.
+    /// </summary>
+    public async Task<TandemResult> TandemAsync(
+        string taskType, string prompt, string? system = null, CancellationToken cancellationToken = default)
+    {
+        var chain = _strategy.GetChain(taskType).Where(name => _byProvider.ContainsKey(name)).ToList();
+        if (chain.Count == 0)
+        {
+            return new TandemResult(taskType, Array.Empty<ChatResult>(), null);
+        }
+
+        var request = new ChatRequest(prompt, System: system, TaskType: taskType);
+        var tasks = chain.Select(async name =>
+        {
+            var result = await _byProvider[name].ChatAsync(request, cancellationToken).ConfigureAwait(false);
+            await RecordOutcomeAsync(taskType, result, cancellationToken).ConfigureAwait(false);
+            return result;
+        });
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        // Prefer the reordered (learned) chain's first successful result; when nothing
+        // succeeded there is no winner to report, only the failures to inspect.
+        var learnedOrder = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
+        var byProviderResult = results.ToDictionary(r => r.Provider, StringComparer.OrdinalIgnoreCase);
+        var winner = learnedOrder
+            .Select(name => byProviderResult.GetValueOrDefault(name))
+            .FirstOrDefault(r => r?.Success == true);
+
+        return new TandemResult(taskType, results, winner);
+    }
+
     /// <summary>Configuration/readiness of every registered provider (no network calls).</summary>
     public IReadOnlyList<ProviderStatusInfo> GetStatus() =>
         _byProvider.Values
@@ -260,6 +299,9 @@ public sealed class AIHubService
                     readiness == ProviderReadiness.Degraded ? "circuit open after repeated failures" : detail);
             })
             .ToList();
+
+    /// <summary>Every provider's tandem result plus which one the learned policy currently favors.</summary>
+    public sealed record TandemResult(string TaskType, IReadOnlyList<ChatResult> Results, ChatResult? Winner);
 
     public interface IRoutingTableView
     {
