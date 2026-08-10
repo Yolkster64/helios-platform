@@ -49,5 +49,5 @@ the read-only `xcore-review` board.
 - **Upstream is read-only.** We fetch PR heads; we never push to the upstream.
 - **API access is explicit.** Direct loopback API calls need no key. Docker bridge or
   remote calls send `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; the absorption script
-  reads that environment variable (and knows the loopback-only compose development key).
+  reads that environment variable and never guesses a credential.
   Remote API URLs must use HTTPS, and advisory POSTs never follow redirects with the key.

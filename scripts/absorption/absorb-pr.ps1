@@ -146,11 +146,6 @@ try {
     if (-not $apiUri.IsLoopback -and $apiUri.Scheme -ne 'https') {
         throw "Remote HELIOS_API_URL values must use HTTPS."
     }
-    if ([string]::IsNullOrWhiteSpace($ApiKey) -and $apiUri.IsLoopback) {
-        # docker-compose's loopback-only development default. Remote endpoints
-        # never receive a guessed credential.
-        $ApiKey = 'local-compose-only'
-    }
     $headers = @{}
     if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
         $headers['X-HELIOS-Api-Key'] = $ApiKey
