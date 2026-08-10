@@ -1,0 +1,120 @@
+name: Validate HELIOS integration candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: GitHub repository in owner/name form
+        required: true
+        default: Yolkster64/monado-blade
+      source_sha:
+        description: Immutable 40-character candidate commit SHA
+        required: true
+      target_tier:
+        description: Review destination
+        required: true
+        type: choice
+        options:
+          - user-control-plane
+          - preview
+          - enterprise-mirror
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-candidate-${{ inputs.target_tier }}
+  cancel-in-progress: false
+
+jobs:
+  validate-candidate:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      TARGET_TIER: ${{ inputs.target_tier }}
+    steps:
+      - name: Validate dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+
+      - name: Checkout control plane
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout immutable candidate
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Verify candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git -C candidate rev-parse HEAD)"
+          requested_sha="$(printf '%s' "$SOURCE_SHA" | tr '[:upper:]' '[:lower:]')"
+          test "$actual_sha" = "$requested_sha"
+          printf '%s\n' "$actual_sha" > candidate-sha.txt
+
+      - name: Validate candidate JSON
+        shell: python {0}
+        run: |
+          import json
+          from pathlib import Path
+
+          for path in Path("candidate").rglob("*.json"):
+              if ".git" not in path.parts:
+                  json.loads(path.read_text(encoding="utf-8"))
+
+      - name: Build provenance receipt
+        shell: python {0}
+        env:
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          receipt = {
+              "schemaVersion": "1.0",
+              "sourceRepository": os.environ["SOURCE_REPOSITORY"],
+              "sourceCommitSha": os.environ["SOURCE_SHA"].lower(),
+              "targetTier": os.environ["TARGET_TIER"],
+              "workflowRunUrl": os.environ["GITHUB_RUN_URL"],
+              "validationStatus": "success",
+              "azureDeploymentAuthorized": False,
+              "promotionPolicy": "reviewed-pr-only",
+          }
+          Path("promotion-evidence.json").write_text(
+              json.dumps(receipt, indent=2) + "\n", encoding="utf-8"
+          )
+
+      - name: Upload immutable validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-candidate-${{ inputs.target_tier }}-${{ inputs.source_sha }}
+          path: |
+            candidate-sha.txt
+            promotion-evidence.json
+            candidate/**/integration-pack-status.json
+            candidate/**/deployment-evidence/**
+          if-no-files-found: warn
+          retention-days: 30
+
+  review-gate:
+    needs: validate-candidate
+    runs-on: ubuntu-latest
+    environment: helios-${{ inputs.target_tier }}
+    steps:
+      - name: Record review boundary
+        run: |
+          echo "Candidate validation completed." >> "$GITHUB_STEP_SUMMARY"
+          echo "No Azure deployment permission is present in this workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "Promotion continues through a target-repository pull request." >> "$GITHUB_STEP_SUMMARY"
