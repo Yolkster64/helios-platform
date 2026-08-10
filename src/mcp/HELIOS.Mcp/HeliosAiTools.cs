@@ -107,19 +107,53 @@ public static class HeliosAiTools
             throw new McpException($"'{bicepFile}' does not exist.");
         }
 
-        var startInfo = new ProcessStartInfo
+        // Standalone `bicep` first; fall back to `az bicep` — the repo explicitly
+        // supports either frontend and only one may be installed.
+        Process? process = null;
+        foreach (var (fileName, leadingArgs) in new[]
         {
-            FileName = "bicep",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add("build");
-        startInfo.ArgumentList.Add(bicepFile);
-        startInfo.ArgumentList.Add("--stdout");
+            ("bicep", Array.Empty<string>()),
+            ("az", new[] { "bicep" }),
+        })
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            foreach (var arg in leadingArgs)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+            startInfo.ArgumentList.Add("build");
+            if (fileName == "az")
+            {
+                startInfo.ArgumentList.Add("--file");
+            }
+            startInfo.ArgumentList.Add(bicepFile);
+            startInfo.ArgumentList.Add("--stdout");
 
-        using var process = Process.Start(startInfo)
-            ?? throw new McpException("Failed to start the Bicep CLI — is 'bicep' (or 'az bicep') installed?");
+            try
+            {
+                process = Process.Start(startInfo);
+                if (process is not null)
+                {
+                    break;
+                }
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // This frontend isn't installed — try the next one.
+            }
+        }
+
+        if (process is null)
+        {
+            throw new McpException("Neither 'bicep' nor 'az' is on PATH — install the Bicep CLI or Azure CLI.");
+        }
+        using var _proc = process;
         _ = await process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);

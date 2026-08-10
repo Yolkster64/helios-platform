@@ -20,7 +20,11 @@ services:
     image: helios-ai-api:local
     restart: unless-stopped
     ports:
-      - "5170:5170"
+      # Loopback-only by default: the container holds paid-provider credentials
+      # and the API has no authentication middleware, so publishing on all host
+      # interfaces would let any network peer spend your quotas. Override the
+      # bind address deliberately if LAN exposure is really wanted.
+      - "127.0.0.1:5170:5170"
     environment:
       # Baked into the image too; repeated here so it is visible and overridable.
       AIHUB_CONFIG: /app/config/aihub.json

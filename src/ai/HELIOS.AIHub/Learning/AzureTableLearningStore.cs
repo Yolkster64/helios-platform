@@ -68,6 +68,7 @@ public sealed class AzureTableLearningStore : ILearningStore
             ["CostUsd"] = outcome.CostUsd,
             ["Quality"] = outcome.Quality,
             ["Pool"] = outcome.Pool,
+            ["Source"] = outcome.Source,
             ["OccurredAt"] = outcome.Timestamp,
         };
 
@@ -103,6 +104,10 @@ public sealed class AzureTableLearningStore : ILearningStore
                 CostUsd = entity.GetDouble("CostUsd") ?? 0,
                 Quality = entity.GetDouble("Quality"),
                 Pool = entity.GetString("Pool"),
+                // Provenance must round-trip: an advisory record that comes back with
+                // Source == null would be indistinguishable from a live provider
+                // outcome and leak into adaptive routing.
+                Source = entity.GetString("Source"),
             });
             if (results.Count >= limit)
             {
@@ -180,7 +185,7 @@ public sealed class HybridLearningStore : ILearningStore
         var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
 
         return remote.Concat(local)
-            .DistinctBy(o => (o.Timestamp, o.Provider, o.Model, o.Success, o.LatencyMs))
+            .DistinctBy(o => (o.Timestamp, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source))
             .OrderByDescending(o => o.Timestamp)
             .Take(limit)
             .ToList();

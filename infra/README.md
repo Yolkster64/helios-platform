@@ -96,6 +96,14 @@ cloud-init), and run `fleetWorkersPerInstance` stub fleet workers
 (`python3 -m helios_agents.fleet_worker`) with `HELIOS_FLEET_POOL` set (default
 `cloud-burst`), so outcome analytics attribute cloud lanes to their pool.
 
+> **Known limitation — board transport.** Cloud instances currently seed an EMPTY
+> per-instance board: the host run's boards live on the host filesystem
+> (`.helios/fleet/<runId>/boards/`), and no shared mount or sync exists yet, so
+> burst lanes prove the runtime path but do not drain the host queue. Shared board
+> storage (Azure Files mount or a queue-backed board) is the follow-up that makes
+> burst capacity productive; until it lands, treat `scale-fleet.ps1`'s VMSS hook
+> as capacity pre-provisioning.
+
 **OFF by default — the live `rg-helios-ai` stack redeploys unchanged.** The module is
 doubly gated: `deployFleetVmss` (default `false`) **and** a non-empty
 `vmssAdminPublicKey`. Auth is SSH-key-only (password auth disabled); a public key is

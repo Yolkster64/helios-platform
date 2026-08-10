@@ -211,8 +211,11 @@ public sealed class AIHubService
 
         try
         {
+            // Clamp: a zero/negative configured window would reach the store as an
+            // invalid capacity and fail routing over a config typo.
+            var window = Math.Max(1, _options.Learning.HistoryWindow);
             var history = await _learning
-                .GetRecentAsync(taskType, _options.Learning.HistoryWindow, cancellationToken)
+                .GetRecentAsync(taskType, window, cancellationToken)
                 .ConfigureAwait(false);
             // Advisory records (Source != null: absorption benchmarks, fork digests)
             // inform insights only — routing must learn exclusively from the hub's own
