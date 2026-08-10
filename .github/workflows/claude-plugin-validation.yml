@@ -1,0 +1,53 @@
+name: Claude Code Plugin Validation
+
+on:
+  pull_request:
+    paths:
+      - '.claude-plugin/**'
+      - '.claude/settings.json'
+      - 'plugins/helios-operator/**'
+      - 'src/mcp/HELIOS.Mcp/**'
+      - 'tests/HELIOS.AIHub.Tests/OperatorContextToolsTests.cs'
+      - '.github/workflows/claude-plugin-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.claude-plugin/**'
+      - '.claude/settings.json'
+      - 'plugins/helios-operator/**'
+      - 'src/mcp/HELIOS.Mcp/**'
+      - 'tests/HELIOS.AIHub.Tests/OperatorContextToolsTests.cs'
+      - '.github/workflows/claude-plugin-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate plugin and marketplace
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Claude Code plugin
+        run: >-
+          npm --cache "${RUNNER_TEMP}/npm-cache" exec --yes
+          --package @anthropic-ai/claude-code@2.1.226 --
+          claude plugin validate ./plugins/helios-operator --strict
+
+      - name: Validate Claude Code marketplace
+        run: >-
+          npm --cache "${RUNNER_TEMP}/npm-cache" exec --yes
+          --package @anthropic-ai/claude-code@2.1.226 --
+          claude plugin validate . --strict
+
+      - name: Validate HELIOS plugin contracts
+        run: python3 plugins/helios-operator/tests/validate_contract.py

@@ -19,4 +19,8 @@
     <PackageReference Include="ModelContextProtocol" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="HELIOS.AIHub.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,17 @@
+{
+  "name": "helios-platform",
+  "description": "Claude Code extensions for operating the HELIOS multi-LLM and Azure engineering fabric.",
+  "owner": {
+    "name": "HELIOS Development Team",
+    "url": "https://github.com/Yolkster64"
+  },
+  "plugins": [
+    {
+      "name": "helios-operator",
+      "source": "./plugins/helios-operator",
+      "description": "Connects Claude Code to the HELIOS MCP fabric, durable operator context, deterministic next steps, and specialist operating agent.",
+      "category": "development",
+      "tags": ["azure", "claude-code", "mcp", "multi-llm"]
+    }
+  ]
+}

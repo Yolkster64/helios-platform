@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "operator": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${CLAUDE_PROJECT_DIR}/src/mcp/HELIOS.Mcp",
+        "-c",
+        "Release"
+      ],
+      "env": {
+        "HELIOS_REPO_ROOT": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  }
+}
