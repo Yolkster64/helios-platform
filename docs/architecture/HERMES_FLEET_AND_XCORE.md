@@ -59,6 +59,45 @@ Each pool declares `minLocalLanes` kept warm, `maxLocalLanes` on the local host,
 `scaleUpQueueDepth` (default 3) and scale down after `scaleDownIdleSeconds` (default 300)
 idle. `mode` is `hybrid`, `local`, or `cloud`.
 
+`scripts/fleet/scale-fleet.ps1` is the reconciler that enforces this policy on a live
+run. Each invocation is exactly one reconciliation pass, so it drops straight into cron
+or any external loop; `-Watch` adds an internal loop instead:
+
+```powershell
+pwsh scripts/fleet/scale-fleet.ps1 -DryRun            # decision table only, touches nothing
+pwsh scripts/fleet/scale-fleet.ps1                    # one pass - cron/loop friendly
+pwsh scripts/fleet/scale-fleet.ps1 -Watch             # every 60s until Ctrl+C (-IntervalSeconds to change)
+```
+
+A pass reads the latest running run's manifest and boards (the same
+`.helios/fleet/<runId>/` contract fleet-status/stop-fleet use) and computes, for every
+pool with an autoscaling block (the pool's block merged over `defaults.autoscaling`):
+
+    queueDepth   = open tasks in the pool's lanes
+                   + claimed tasks whose 300s claim lease expired (crashed lanes)
+    desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+
+Scale-up spawns extra workers through start-fleet's spawn contract (same env vars, same
+launch mechanics) and records them in the run manifest, so fleet-status and stop-fleet
+treat them like any other worker. Scale-down happens only after the pool's queue has
+been empty for `scaleDownIdleSeconds` — idle time is tracked as `lastNonEmptyAt` per
+pool in `.helios/fleet/scale-state.json` (run-scoped; dry runs never write it) — and
+stops the newest excess workers with stop-fleet's identity-verified kill (pid plus
+recorded start time, never a stranger's reused pid). A queue that is merely shrinking
+never triggers scale-down: excess lanes keep draining it.
+
+**Cloud burst (hybrid pools).** When demand still exceeds `maxLocalLanes`, the excess
+(capped at `maxBurstLanes`) is offered to an Azure VMSS. With the `az` CLI on PATH and
+`HELIOS_FLEET_VMSS_NAME` + `HELIOS_FLEET_VMSS_RG` set (naming the scale set the
+`infra/` parameters provision), the pass runs `az vmss scale --new-capacity <n>`;
+otherwise it prints a `burst wanted: N lane(s) (VMSS not configured)` notice and moves
+on — unconfigured burst is advisory, never an error. The reconciler only requests
+capacity; VMSS scale-in is left to the scale set's own policy.
+
+Every scaling action appends one advisory line to `.helios/fleet/scale-log.jsonl`
+(`{at, pool, from, to, reason, burst}`) so the learning/insights side can correlate
+scaling decisions with task outcomes later.
+
 Keeping a floor of warm local lanes matters more than it looks: the first lane on a cold
 burst runner pays image pull plus toolchain setup, so a small always-on floor is what
 makes short tasks feel instant while long queues still get cloud width.
@@ -119,6 +158,7 @@ pwsh scripts/fleet/start-fleet.ps1                            # start every pool
 pwsh scripts/fleet/start-fleet.ps1 -Fleet xcore-9-code -PoolSize 3
 pwsh scripts/fleet/fleet-status.ps1                           # per-pool running/exited + board tallies
 pwsh scripts/fleet/fleet-status.ps1 -Json                     # machine-readable report
+pwsh scripts/fleet/scale-fleet.ps1 -Watch                     # autoscaling reconciler (see Autoscaling section)
 pwsh scripts/fleet/stop-fleet.ps1                             # SIGTERM the most recent running run
 pwsh scripts/fleet/stop-fleet.ps1 -RunId <id>                 # stop a specific run (-All for every run)
 ```
