@@ -108,12 +108,19 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
             return Array.Empty<RoutingOutcome>();
         }
 
-        var results = new List<RoutingOutcome>();
-        // Read forward and keep a tail window: outcome files stay small enough that this
-        // is cheaper than reverse-seeking, and it tolerates partial final lines.
-        foreach (var line in await File.ReadAllLinesAsync(_path, cancellationToken).ConfigureAwait(false))
+        // Stream forward keeping a bounded tail window: the log is append-only and
+        // grows with every routed attempt, so materializing and deserializing the whole
+        // file would make routing latency grow with total history. The substring
+        // pre-filter skips deserializing other tasks' lines entirely (the JSON string
+        // form of the task type, quotes included, can only appear in matching records
+        // or — rarely — inside another string field, which the exact check below drops).
+        var window = new Queue<RoutingOutcome>(limit);
+        var taskTypeToken = JsonSerializer.Serialize(taskType);
+        await Task.Yield();
+        foreach (var line in File.ReadLines(_path))
         {
-            if (string.IsNullOrWhiteSpace(line))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(line) || !line.Contains(taskTypeToken, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -128,12 +135,17 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
             }
             if (outcome is not null && outcome.TaskType == taskType)
             {
-                results.Add(outcome);
+                if (window.Count == limit)
+                {
+                    window.Dequeue();
+                }
+                window.Enqueue(outcome);
             }
         }
 
-        results.Reverse();
-        return results.Count > limit ? results.GetRange(0, limit) : results;
+        var results = window.ToList();
+        results.Reverse(); // chronological tail → newest first
+        return results;
     }
 
     public void Dispose() => _writeGate.Dispose();

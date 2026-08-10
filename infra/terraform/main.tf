@@ -57,9 +57,18 @@ locals {
   )
 
   # Bicep: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', <id>)
-  role_definition_prefix         = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions"
-  azure_ai_user_role_id          = "53ca6127-db72-4b80-b1b0-d745d6d5456d" # Azure AI User
-  key_vault_secrets_user_role_id = "4633458b-17de-408a-b874-0445c86b69e6" # Key Vault Secrets User
+  role_definition_prefix            = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions"
+  azure_ai_user_role_id             = "53ca6127-db72-4b80-b1b0-d745d6d5456d" # Azure AI User
+  key_vault_secrets_user_role_id    = "4633458b-17de-408a-b874-0445c86b69e6" # Key Vault Secrets User
+  key_vault_secrets_officer_role_id = "b86a8fe4-44ce-4948-aee5-eccb2c155cd7" # Key Vault Secrets Officer
+
+  # Emptiness checks on the sensitive secret variables, unwrapped with
+  # nonsensitive(): a count may not be derived from a sensitive value, and
+  # whether a secret was supplied at all is not itself secret.
+  anthropic_key_supplied = nonsensitive(var.anthropic_api_key != null && var.anthropic_api_key != "")
+  openai_key_supplied    = nonsensitive(var.openai_api_key != null && var.openai_api_key != "")
+  github_token_supplied  = nonsensitive(var.github_models_token != null && var.github_models_token != "")
+  any_secret_supplied    = local.anthropic_key_supplied || local.openai_key_supplied || local.github_token_supplied
 }
 
 # ---------------------------------------------------------------------------
@@ -166,27 +175,33 @@ resource "azurerm_key_vault" "main" {
 # Secrets are only created when a non-empty value is supplied; nothing is ever output.
 
 resource "azurerm_key_vault_secret" "anthropic_api_key" {
-  count = var.anthropic_api_key == null || var.anthropic_api_key == "" ? 0 : 1
+  count = local.anthropic_key_supplied ? 1 : 0
 
   name         = "anthropic-api-key"
   value        = var.anthropic_api_key
   key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.key_vault_secrets_officer_deployer]
 }
 
 resource "azurerm_key_vault_secret" "openai_api_key" {
-  count = var.openai_api_key == null || var.openai_api_key == "" ? 0 : 1
+  count = local.openai_key_supplied ? 1 : 0
 
   name         = "openai-api-key"
   value        = var.openai_api_key
   key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.key_vault_secrets_officer_deployer]
 }
 
 resource "azurerm_key_vault_secret" "github_models_token" {
-  count = var.github_models_token == null || var.github_models_token == "" ? 0 : 1
+  count = local.github_token_supplied ? 1 : 0
 
   name         = "github-models-token"
   value        = var.github_models_token
   key_vault_id = azurerm_key_vault.main.id
+
+  depends_on = [azurerm_role_assignment.key_vault_secrets_officer_deployer]
 }
 
 # ---------------------------------------------------------------------------
@@ -213,4 +228,18 @@ resource "azurerm_role_assignment" "key_vault_secrets_user" {
   role_definition_id = "${local.role_definition_prefix}/${local.key_vault_secrets_user_role_id}"
   principal_id       = var.principal_id
   principal_type     = "User"
+}
+
+# Key Vault Secrets Officer for the principal RUNNING terraform, only when any
+# secret is being written: azurerm_key_vault_secret uses the data plane, and on
+# an RBAC-mode vault Secrets User is read-only — without this grant the
+# documented first apply 403s at the secret step. nonsensitive() unwraps only
+# the emptiness check, never a value; Terraform rejects a count derived from a
+# sensitive value otherwise.
+resource "azurerm_role_assignment" "key_vault_secrets_officer_deployer" {
+  count = local.any_secret_supplied ? 1 : 0
+
+  scope              = azurerm_key_vault.main.id
+  role_definition_id = "${local.role_definition_prefix}/${local.key_vault_secrets_officer_role_id}"
+  principal_id       = data.azurerm_client_config.current.object_id
 }

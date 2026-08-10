@@ -44,7 +44,8 @@ internal sealed class NeuralRoutingLearner
     public string[]? Reorder(
         string taskType, IReadOnlyList<string> configuredChain, IReadOnlyList<RoutingOutcome> history)
     {
-        if (_nativeUnavailable || history.Count < MinTrainingSamples || configuredChain.Count < 2)
+        if (_nativeUnavailable || !NativeGate.Available
+            || history.Count < MinTrainingSamples || configuredChain.Count < 2)
         {
             return null;
         }

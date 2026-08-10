@@ -334,18 +334,12 @@ public sealed class AIHubService
         }
 
         var utf8 = Encoding.UTF8.GetBytes(text);
-        try
+        if (NativeGate.Available)
         {
             if (NativeMethods.EstimateTokens(utf8, (nuint)utf8.Length, out var tokens) == 0)
             {
                 return tokens;
             }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
         }
 
         return utf8.Length / 4;
@@ -371,7 +365,7 @@ public sealed class AIHubService
             .Where(x => x.result.Success && !string.IsNullOrWhiteSpace(x.result.Text))
             .ToList();
 
-        if (candidates.Count < 2)
+        if (candidates.Count < 2 || !NativeGate.Available)
         {
             return results;
         }
@@ -504,7 +498,7 @@ public sealed class AIHubService
                     Model = result.Model,
                     Success = result.Success,
                     LatencyMs = result.Latency.TotalMilliseconds,
-                    CostUsd = 0, // Populated by the caller that knows the rate; see Pricing.fs.
+                    CostUsd = EstimateCostUsd(result),
                     Pool = Environment.GetEnvironmentVariable("HELIOS_FLEET_POOL"),
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -524,6 +518,35 @@ public sealed class AIHubService
         catch (Azure.Identity.AuthenticationFailedException)
         {
         }
+    }
+
+    /// <summary>
+    /// Actual cost of a provider call from catalog rates and reported token usage, so the
+    /// learning loop's cost weight and /v1/insights reflect real spend instead of a
+    /// constant zero. Zero when usage or a confident rate match is unavailable —
+    /// a wrong price is worse than an unknown one.
+    /// </summary>
+    private double EstimateCostUsd(ChatResult result)
+    {
+        if (_catalog is null || result.InputTokens is not { } input || result.OutputTokens is not { } output)
+        {
+            return 0;
+        }
+
+        var providerModels = _catalog.AllModels
+            .Where(m => string.Equals(m.Provider, result.Provider, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Exact model match first; then prefix (providers append version suffixes like
+        // gpt-5-mini-2025-08-07); a lone catalog entry for the provider is unambiguous.
+        var profile = providerModels.FirstOrDefault(m => string.Equals(m.Model, result.Model, StringComparison.OrdinalIgnoreCase))
+            ?? providerModels.FirstOrDefault(m => result.Model.StartsWith(m.Model, StringComparison.OrdinalIgnoreCase))
+            ?? (providerModels.Count == 1 ? providerModels[0] : null);
+
+        return profile is null
+            ? 0
+            : PricingInterop.EstimateCostUsd(
+                profile.InputPerMillionUsd, profile.OutputPerMillionUsd, input, output);
     }
 
     /// <summary>Fan the same prompt out to several providers in parallel.</summary>

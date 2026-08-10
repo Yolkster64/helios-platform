@@ -38,7 +38,7 @@ public sealed class CliProcessAgent : ProviderAgentBase
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (var arg in BuildArguments(request.Prompt, model))
+        foreach (var arg in BuildArguments(request.Prompt, model, request.System))
         {
             startInfo.ArgumentList.Add(arg);
         }
@@ -91,13 +91,23 @@ public sealed class CliProcessAgent : ProviderAgentBase
         return new ChatResult(true, stdout.Trim(), Provider, model, stopwatch.Elapsed);
     }
 
-    private IEnumerable<string> BuildArguments(string prompt, string model)
+    private IEnumerable<string> BuildArguments(string prompt, string model, string? system)
     {
+        // Templates with a {system} slot get the instructions as their own argument;
+        // without a slot the instructions are folded into the prompt — every API-backed
+        // provider honors System, so silently dropping it here would make the same
+        // request mean different things depending on which provider the chain picked.
+        var hasSystemSlot = _options.ArgsTemplate.Contains("{system}", StringComparison.Ordinal);
+        var effectivePrompt = !hasSystemSlot && !string.IsNullOrWhiteSpace(system)
+            ? $"{system}\n\n{prompt}"
+            : prompt;
+
         foreach (var token in _options.ArgsTemplate.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             yield return token
-                .Replace("{prompt}", prompt, StringComparison.Ordinal)
-                .Replace("{model}", model, StringComparison.Ordinal);
+                .Replace("{prompt}", effectivePrompt, StringComparison.Ordinal)
+                .Replace("{model}", model, StringComparison.Ordinal)
+                .Replace("{system}", system ?? string.Empty, StringComparison.Ordinal);
         }
     }
 

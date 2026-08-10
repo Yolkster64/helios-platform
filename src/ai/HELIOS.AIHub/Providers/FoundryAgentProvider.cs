@@ -22,8 +22,12 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
 
     // Keyed by (model, instructions): a persistent agent bakes both in at creation,
     // so reusing one agent across requests would silently pin every caller to the
-    // first request's model and system prompt.
+    // first request's model and system prompt. Bounded: dynamic per-request system
+    // prompts would otherwise grow this cache (and the service-side agent list)
+    // without limit — the oldest agent is evicted and best-effort deleted remotely.
+    private const int MaxCachedAgents = 8;
     private readonly Dictionary<(string Model, string Instructions), PersistentAgent> _agents = new();
+    private readonly Queue<(string Model, string Instructions)> _agentOrder = new();
 
     public FoundryAgentProvider(string provider, string displayName, string? defaultModel, string? projectEndpoint)
         : base(provider, displayName, defaultModel)
@@ -114,6 +118,26 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
                     instructions: effectiveInstructions,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                 _agents[key] = agent;
+                _agentOrder.Enqueue(key);
+
+                while (_agents.Count > MaxCachedAgents)
+                {
+                    var oldest = _agentOrder.Dequeue();
+                    if (_agents.Remove(oldest, out var evicted))
+                    {
+                        try
+                        {
+                            await client.Administration
+                                .DeleteAgentAsync(evicted.Id, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Azure.RequestFailedException)
+                        {
+                            // Best-effort: an orphaned service-side agent is preferable to
+                            // failing the caller's request over cleanup.
+                        }
+                    }
+                }
             }
             return agent;
         }

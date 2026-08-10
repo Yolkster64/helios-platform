@@ -97,9 +97,18 @@ public abstract class ProviderAgentBase : IChatProviderAgent
             RecordExecution(result.Success, stopwatch.Elapsed);
             return result;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // SDK/HTTP-internal timeout: the caller did NOT cancel, so this is a provider
+            // failure the fallback chain must absorb — rethrowing would abort the whole
+            // chain on the first slow provider.
+            RecordExecution(success: false, stopwatch.Elapsed);
+            return new ChatResult(false, null, Provider, model, stopwatch.Elapsed,
+                Error: $"Provider timed out: {ex.Message}");
         }
         catch (Exception ex)
         {

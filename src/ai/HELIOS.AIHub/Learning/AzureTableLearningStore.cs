@@ -81,8 +81,12 @@ public sealed class AzureTableLearningStore : ILearningStore
 
         var partition = Sanitize(taskType);
         var results = new List<RoutingOutcome>(limit);
+        // Also filter the stored TaskType: Sanitize can map distinct task types (e.g.
+        // "customer/a" and "customer?a") onto one partition, and cross-task history
+        // would train one task's routing on another task's outcomes.
+        var escapedTaskType = taskType.Replace("'", "''");
         var query = _table.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{partition}'",
+            filter: $"PartitionKey eq '{partition}' and TaskType eq '{escapedTaskType}'",
             maxPerPage: Math.Min(limit, 1000),
             cancellationToken: cancellationToken);
 
