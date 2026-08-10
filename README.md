@@ -322,6 +322,72 @@ We welcome contributions! Please:
 - **Email:** support@helios-platform.dev
 - **Documentation:** [helios-platform.dev](https://helios-platform.dev)
 
+## Local Docker
+
+Run the AI hub REST API (`helios-ai-api`) in a container. Everything lives in
+`docker/helios-ai-api.Dockerfile`, the root `docker-compose.yml`, and the root
+`.dockerignore`; CI keeps them buildable via `.github/workflows/docker-validate.yml`.
+
+### Build and run
+
+```bash
+# Build from the repo root (the Dockerfile needs src/, config/, nuget.config)
+docker build -f docker/helios-ai-api.Dockerfile -t helios-ai-api .
+
+# Or via compose (recommended)
+docker compose up -d helios-ai-api
+curl http://localhost:5170/healthz
+```
+
+The container listens on `5170` (the same port `dotnet run` uses locally) and
+starts as a non-root user. The image bundles `python3` plus the
+`src/ai/python` spoke (`HELIOS_PYTHON_SPOKE=/opt/helios/python`), so
+`/v1/insights` works out of the box; a slimmed image without them would still
+run, with insights degrading to `null`.
+
+### Configuration and state
+
+- **Config**: `config/*.json` is baked into the image at `/app/config` and
+  selected with `AIHUB_CONFIG=/app/config/aihub.json` (`model-catalog.json` is
+  resolved as its sibling). No secrets are in the image — `aihub.json` carries
+  env-var *names* only.
+- **Learning state**: the hub writes `.helios/learning/outcomes.jsonl` relative
+  to `/app`. Compose mounts the named volume `helios-learning` at
+  `/app/.helios`, so routing-outcome history survives rebuilds. Inspect or
+  reset it with `docker volume inspect|rm helios-platform_helios-learning`.
+- **Credentials**: compose passes through
+  `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
+  `AZURE_FOUNDRY_PROJECT_ENDPOINT`, `AZURE_KEY_VAULT_URI`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_MODELS_TOKEN`, and
+  `OLLAMA_BASE_URL` from your shell (or an untracked `.env` file) as
+  `${VAR:-}` — export what you use; unset providers just report not-ready.
+
+### Azure auth inside the container
+
+Keyless `DefaultAzureCredential` flows that work on your desktop (an `az login`
+session) do not exist inside a fresh container. Either:
+
+- use **key/token env vars** (`AZURE_OPENAI_API_KEY`, `GITHUB_MODELS_TOKEN`, …)
+  or `AZURE_KEY_VAULT_URI` with a credential the container can actually use, or
+- mount your **az token cache** into the container user's home
+  (`-v ~/.azure:/home/app/.azure`) — note the image ships no `az` CLI, so only
+  credential types that read the shared token cache benefit; key-based env vars
+  are the reliable local path. In real Azure hosting, prefer managed identity.
+
+### Fleet stub (optional, `fleet` profile)
+
+A dependency-free kanban worker from the python spoke, polling a JSON board —
+for local fleet-contract experiments only (no network, no model calls):
+
+```bash
+mkdir -p .helios/fleet                 # pre-create so the bind mount isn't root-owned
+export FLEET_UID=$(id -u) FLEET_GID=$(id -g)
+docker compose --profile fleet up fleet-stub
+```
+
+The board lives at `.helios/fleet/board.json` on the host (override the dir
+with `FLEET_BOARD_DIR`, lanes with `FLEET_LANES`).
+
 ## 📄 License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.

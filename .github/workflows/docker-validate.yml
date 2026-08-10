@@ -1,0 +1,46 @@
+name: Docker Validation
+
+# Proves the local-Docker story stays buildable: image build only (no push, no
+# registry login) plus compose-file validation. Deterministic without secrets —
+# restore hits nuget.org only (nuget.config's packageSourceMapping reserves the
+# private GitHub source for HELIOS.* package ids, none of which are referenced),
+# and the native-spoke toolchain steps in the Dockerfile are best-effort.
+
+on:
+  pull_request:
+    paths:
+      - 'docker/**'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'src/ai/**'
+      - '.github/workflows/docker-validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'src/ai/**'
+      - '.github/workflows/docker-validate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        run: docker build --file docker/helios-ai-api.Dockerfile --tag helios-ai-api:ci .
+
+      # Interpolates the ${VAR:-} passthroughs (all default empty) and rejects
+      # schema errors; also covers the fleet profile service definition.
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet

@@ -1,0 +1,72 @@
+# Local Docker for the HELIOS AI hub (see "Local Docker" in README.md).
+#
+#   docker compose up -d helios-ai-api
+#   curl http://localhost:5170/healthz
+#
+# Provider credentials pass through from the host environment (or an untracked
+# .env file next to this compose file) via ${VAR:-} — values are never written
+# here, and every default is empty so `docker compose config -q` stays green
+# on a machine with nothing exported. Unset providers simply report not-ready.
+#
+# The fleet stub is opt-in:
+#   mkdir -p .helios/fleet          # pre-create so the bind mount isn't root-owned
+#   docker compose --profile fleet up fleet-stub
+
+services:
+  helios-ai-api:
+    build:
+      context: .
+      dockerfile: docker/helios-ai-api.Dockerfile
+    image: helios-ai-api:local
+    restart: unless-stopped
+    ports:
+      - "5170:5170"
+    environment:
+      # Baked into the image too; repeated here so it is visible and overridable.
+      AIHUB_CONFIG: /app/config/aihub.json
+      # Endpoints / keys referenced by name in config/aihub.json.
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_FOUNDRY_PROJECT_ENDPOINT: ${AZURE_FOUNDRY_PROJECT_ENDPOINT:-}
+      AZURE_KEY_VAULT_URI: ${AZURE_KEY_VAULT_URI:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GITHUB_MODELS_TOKEN: ${GITHUB_MODELS_TOKEN:-}
+      # Ollama on the host: export OLLAMA_BASE_URL=http://host.docker.internal:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+    volumes:
+      # learning.localPath is .helios/learning/outcomes.jsonl relative to /app —
+      # the named volume keeps routing-outcome history across container rebuilds.
+      - helios-learning:/app/.helios
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5170/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Optional: the dependency-free kanban worker stub from the python spoke,
+  # polling a JSON board for local fleet experiments (no network, no providers).
+  fleet-stub:
+    profiles: ["fleet"]
+    build:
+      context: .
+      dockerfile: docker/helios-ai-api.Dockerfile
+    image: helios-ai-api:local
+    restart: unless-stopped
+    entrypoint: ["python3", "-m", "helios_agents.fleet_worker"]
+    working_dir: /opt/helios/python
+    # Match the host owner of the board dir so claims/locks stay writable on
+    # both sides (same idea as the Hermes compose UID/GID remap).
+    user: "${FLEET_UID:-1000}:${FLEET_GID:-1000}"
+    environment:
+      HERMES_KANBAN_DB: /fleet/board.json
+      HERMES_KANBAN_TASK: ${FLEET_LANES:-}          # empty = claim any lane
+      HERMES_KANBAN_RUN_ID: ${FLEET_RUN_ID:-compose-local}
+      HERMES_KANBAN_ASSIGNEE: fleet-stub-1
+      HERMES_KANBAN_MAX_IDLE_POLLS: "0"             # long-running service: poll forever
+    volumes:
+      - ${FLEET_BOARD_DIR:-./.helios/fleet}:/fleet
+
+volumes:
+  helios-learning:
