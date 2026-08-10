@@ -179,3 +179,25 @@ def test_run_worker_honors_stop_event(tmp_path):
 ])
 def test_parse_lanes(spec, expected):
     assert fleet_worker.parse_lanes(spec) == expected
+
+
+def test_stale_claim_is_reclaimed_as_a_lease(tmp_path):
+    # A worker that crashed after claiming must not strand the task: an expired
+    # claim lease is claimable again by a replacement worker.
+    db = _board(tmp_path, [
+        {"id": "T-1", "lane": "build", "status": "claimed",
+         "assignee": "xdead-1", "claimedAt": "2020-01-01T00:00:00Z"},
+    ])
+    config = _config(tmp_path, db, lanes=["build"], claim_lease_seconds=60.0)
+    task = fleet_worker.claim_next_task(config)
+    assert task is not None and task["id"] == "T-1"
+    assert task["assignee"] == "xtest-1"
+
+
+def test_fresh_claim_is_not_stolen(tmp_path):
+    db = _board(tmp_path, [
+        {"id": "T-1", "lane": "build", "status": "claimed",
+         "assignee": "xother-1", "claimedAt": fleet_worker._utc_now()},
+    ])
+    config = _config(tmp_path, db, lanes=["build"], claim_lease_seconds=60.0)
+    assert fleet_worker.claim_next_task(config) is None

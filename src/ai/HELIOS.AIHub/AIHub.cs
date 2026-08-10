@@ -74,18 +74,31 @@ public sealed class AIHubService
         }
 
         var endpoint = Environment.GetEnvironmentVariable(options.TableEndpointEnv);
-        var local = new LocalJsonlLearningStore(options.LocalPath);
 
-        return options.Mode.ToLowerInvariant() switch
+        try
         {
-            "azure" when !string.IsNullOrWhiteSpace(endpoint) =>
-                new AzureTableLearningStore(new Uri(endpoint)),
-            "hybrid" when !string.IsNullOrWhiteSpace(endpoint) =>
-                new HybridLearningStore(local, new AzureTableLearningStore(new Uri(endpoint))),
-            // Azure requested but unconfigured degrades to local rather than failing —
-            // the same "unconfigured is a state" rule the providers follow.
-            _ => local,
-        };
+            // Construct the local backend only for modes that use it: azure-only mode
+            // must not touch the filesystem (a read-only container would fail hub
+            // construction over a store it never reads).
+            return options.Mode.ToLowerInvariant() switch
+            {
+                "azure" when !string.IsNullOrWhiteSpace(endpoint) =>
+                    new AzureTableLearningStore(new Uri(endpoint)),
+                "hybrid" when !string.IsNullOrWhiteSpace(endpoint) =>
+                    new HybridLearningStore(
+                        new LocalJsonlLearningStore(options.LocalPath),
+                        new AzureTableLearningStore(new Uri(endpoint))),
+                // Azure requested but unconfigured degrades to local rather than failing —
+                // the same "unconfigured is a state" rule the providers follow.
+                _ => new LocalJsonlLearningStore(options.LocalPath),
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or UriFormatException)
+        {
+            // Learning is advisory: a read-only working directory or malformed endpoint
+            // must never stop the hub from starting.
+            return new NullLearningStore();
+        }
     }
 
     /// <summary>
@@ -140,7 +153,7 @@ public sealed class AIHubService
                     : $"No registered providers for task type '{taskType}' (chain empty). Check config/aihub.json.");
         }
 
-        chain = FilterChainByContext(chain, prompt);
+        chain = FilterChainByContext(chain, prompt, system);
         chain = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
 
         var request = new ChatRequest(prompt, System: system, TaskType: taskType);
@@ -233,14 +246,16 @@ public sealed class AIHubService
     /// routing — providers with no known window are always treated as fitting, and if every
     /// window resolves too small ContextBudget.filterFits hands back the original chain.
     /// </summary>
-    private List<string> FilterChainByContext(List<string> chain, string prompt)
+    private List<string> FilterChainByContext(List<string> chain, string prompt, string? system = null)
     {
         if (_catalog is null || chain.Count == 0)
         {
             return chain;
         }
 
-        var promptTokens = EstimateTokenCount(prompt);
+        // System instructions ride in the same context window as the prompt; sizing
+        // only the prompt can keep a model that the full payload overflows.
+        var promptTokens = EstimateTokenCount(system is null ? prompt : $"{system}\n{prompt}");
         if (promptTokens <= 0)
         {
             return chain;
@@ -586,7 +601,7 @@ public sealed class AIHubService
             return new TandemResult(taskType, Array.Empty<ChatResult>(), null);
         }
 
-        chain = FilterChainByContext(chain, prompt);
+        chain = FilterChainByContext(chain, prompt, system);
 
         var request = new ChatRequest(prompt, System: system, TaskType: taskType);
         var tasks = chain.Select(async name =>

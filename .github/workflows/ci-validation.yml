@@ -15,9 +15,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # pwsh ships preinstalled on ubuntu-latest; actions/setup-powershell does not exist.
+      # This gate is real: every .ps1 in the repo parses today, so a failure here is a
+      # genuine regression, not legacy noise.
       - name: Check PowerShell Syntax
         shell: pwsh
-        continue-on-error: true
         run: |
           $failures = 0
           Get-ChildItem -Path '.' -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue | ForEach-Object {

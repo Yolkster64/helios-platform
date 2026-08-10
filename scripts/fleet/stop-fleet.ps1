@@ -42,9 +42,24 @@ function Get-OptionalProperty {
 }
 
 function Stop-FleetWorker {
-    param([int]$WorkerPid)
+    param([int]$WorkerPid, [string]$ExpectedStartTime)
     $proc = Get-Process -Id $WorkerPid -ErrorAction SilentlyContinue
     if (-not $proc) { return 'already-exited' }
+
+    # Identity check before killing: after a worker exits naturally its pid can be
+    # reused by an unrelated process. The manifest records the worker's start time;
+    # a mismatch (beyond 2s tolerance for clock rounding) means this is not our
+    # process, so leave it alone. If either side is unreadable, be conservative
+    # and skip rather than kill a stranger.
+    if ($ExpectedStartTime) {
+        $actualStart = $null
+        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+        $expected = [datetime]::Parse($ExpectedStartTime, $null,
+            [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
+    }
+
     if (-not $IsWindows) {
         & kill -TERM $WorkerPid 2> $null
         for ($i = 0; $i -lt 20; $i++) {
@@ -87,13 +102,14 @@ foreach ($manifestPath in $manifestFiles) {
     $manifest = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json
     $manifestRunId = [string](Get-OptionalProperty $manifest 'runId' '?')
     Write-Host "Stopping run $manifestRunId ..."
-    $counts = @{ 'stopped' = 0; 'killed' = 0; 'already-exited' = 0 }
+    $counts = @{ 'stopped' = 0; 'killed' = 0; 'already-exited' = 0; 'pid-reused' = 0; 'pid-unverifiable' = 0 }
     foreach ($pool in @(Get-OptionalProperty $manifest 'pools' @())) {
         foreach ($worker in @(Get-OptionalProperty $pool 'workers' @())) {
             $workerPid = [int](Get-OptionalProperty $worker 'pid' 0)
             $assignee = [string](Get-OptionalProperty $worker 'assignee' '?')
+            $startTime = [string](Get-OptionalProperty $worker 'startTime' '')
             if ($workerPid -le 0) { continue }
-            $outcome = Stop-FleetWorker -WorkerPid $workerPid
+            $outcome = Stop-FleetWorker -WorkerPid $workerPid -ExpectedStartTime $startTime
             $counts[$outcome]++
             Write-Host "  $assignee (pid $workerPid): $outcome"
         }
@@ -103,7 +119,8 @@ foreach ($manifestPath in $manifestFiles) {
     if ($null -ne $manifest.PSObject.Properties['stoppedAt']) { $manifest.stoppedAt = $stoppedAt }
     else { $manifest | Add-Member -NotePropertyName 'stoppedAt' -NotePropertyValue $stoppedAt }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
-    Write-Host ("  run {0}: {1} stopped, {2} killed, {3} already exited" -f
-        $manifestRunId, $counts['stopped'], $counts['killed'], $counts['already-exited'])
+    Write-Host ("  run {0}: {1} stopped, {2} killed, {3} already exited, {4} pid reused/unverifiable (left alone)" -f
+        $manifestRunId, $counts['stopped'], $counts['killed'], $counts['already-exited'],
+        ($counts['pid-reused'] + $counts['pid-unverifiable']))
 }
 exit 0

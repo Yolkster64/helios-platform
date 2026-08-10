@@ -276,11 +276,16 @@ try {
                     -ArgumentList @('-c', ('"' + ($shCmd -replace '"', '\"') + '"')) `
                     -WorkingDirectory $workDir -PassThru
             }
+            # Process start time is the identity check stop-fleet uses before killing:
+            # a pid alone can be reused by an unrelated process after a worker exits.
+            $procStart = $null
+            try { $procStart = $proc.StartTime.ToUniversalTime().ToString('o') } catch { }
             $workers.Add([ordered]@{
-                    assignee = $assignee
-                    pid      = $proc.Id
-                    command  = "$workerExe $($workerArgs -join ' ')"
-                    log      = $errLog
+                    assignee  = $assignee
+                    pid       = $proc.Id
+                    startTime = $procStart
+                    command   = "$workerExe $($workerArgs -join ' ')"
+                    log       = $errLog
                 })
             Write-Host "  started $assignee (pid $($proc.Id))"
         }

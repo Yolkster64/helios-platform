@@ -29,7 +29,14 @@ main() {
     echo "GitHub: already authenticated as $(gh api user --jq .login 2>/dev/null || echo '?')."
   else
     echo "GitHub: starting browser/device-code login (a one-time code will be shown)..."
-    gh auth login --hostname github.com --git-protocol https --web
+    # models:read is required for the github-models provider this token feeds;
+    # without it the provider looks configured but every call 403s.
+    gh auth login --hostname github.com --git-protocol https --web --scopes "models:read"
+  fi
+
+  if ! gh auth status --hostname github.com 2>&1 | grep -q "models:read"; then
+    echo "GitHub: note — the current token lacks the models:read scope; the github-models"
+    echo "        provider will fail. Fix with: gh auth refresh --hostname github.com --scopes models:read"
   fi
 
   # Export only when sourced — an exported var in a subshell would vanish anyway.

@@ -98,8 +98,14 @@ bootstrap (`scripts/bootstrap/azure-oidc-setup.sh`, PowerShell twin
   | Subject | Used by |
   |---|---|
   | `repo:Yolkster64/helios-platform:ref:refs/heads/main` | `helios-deploy.yml` on push to `main` and `workflow_dispatch` runs *from* `main` (a dispatch from another branch presents that branch's ref and fails login) |
-  | `repo:Yolkster64/helios-platform:pull_request` | any future PR-triggered job that needs Azure (infra PR validation deliberately stays offline) |
   | `repo:Yolkster64/helios-platform:environment:production` | pre-provisioned for adding `environment: production` (an approval gate) to the deploy job — a job that declares an environment presents this subject *instead of* the branch one |
+
+  There is deliberately **no `pull_request` subject**: this principal holds deploy
+  rights, and a PR can modify workflow code — trusting the generic PR subject would
+  hand any PR with `id-token: write` a path to those rights. Infra PR validation
+  stays offline (`infra-validate.yml`); if PR jobs ever genuinely need Azure, create
+  a separate identity with read-only scope for them. Re-running the setup script
+  removes the credential if an earlier revision created it.
 
 - **`Contributor` scoped to `rg-helios-ai` only** — enough to run
   `az deployment group create` for this template; deliberately not subscription-wide,

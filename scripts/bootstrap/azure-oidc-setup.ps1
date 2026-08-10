@@ -124,10 +124,20 @@ function Add-FederatedCredential {
 
 Add-FederatedCredential -Name 'github-main' -Subject "repo:${Repo}:ref:refs/heads/main" `
     -Description 'helios-deploy.yml on push/dispatch from main'
-Add-FederatedCredential -Name 'github-pull-request' -Subject "repo:${Repo}:pull_request" `
-    -Description 'PR-triggered jobs that need Azure (infra PR validation stays offline)'
 Add-FederatedCredential -Name "github-env-$EnvironmentName" -Subject "repo:${Repo}:environment:$EnvironmentName" `
     -Description "jobs declaring environment: $EnvironmentName"
+
+# Deliberately NO repo:...:pull_request credential: this principal holds deploy
+# rights, and a PR workflow is modifiable by the PR itself. PR validation stays
+# offline; a separate read-only identity is the path if PRs ever need Azure.
+# Remove the credential from earlier revisions of this script, if present.
+& az ad app federated-credential show --id $appId `
+    --federated-credential-id 'github-pull-request' --output none 2>$null
+if ($LASTEXITCODE -eq 0) {
+    Invoke-Az @('ad', 'app', 'federated-credential', 'delete', '--id', $appId,
+        '--federated-credential-id', 'github-pull-request', '--output', 'none') | Out-Null
+    Write-Host "Removed the over-privileged 'github-pull-request' federated credential."
+}
 
 # --- Role assignments (idempotent, retried) ---------------------------------------
 function Set-RoleGrant {

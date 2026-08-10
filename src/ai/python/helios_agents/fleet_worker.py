@@ -69,6 +69,11 @@ class WorkerConfig:
     max_idle_polls: int = 30
     lock_timeout_seconds: float = 5.0
     lock_stale_seconds: float = 30.0
+    # A claim is a lease, not ownership forever: a worker that crashes between
+    # claiming and finishing must not strand the task in "claimed" (the fleet
+    # contract's recovery guarantee). After this many seconds a claimed task
+    # becomes claimable again.
+    claim_lease_seconds: float = 300.0
 
 
 def _log(message: str) -> None:
@@ -174,8 +179,22 @@ def _lane_of(task: dict[str, Any]) -> str:
     return str(task.get("lane") or task.get("taskType") or "")
 
 
-def _claimable(task: dict[str, Any], lanes: frozenset[str] | None) -> bool:
-    if str(task.get("status", "open")) != "open":
+def _claim_expired(task: dict[str, Any], lease_seconds: float) -> bool:
+    claimed_at = str(task.get("claimedAt") or "")
+    try:
+        claimed = time.mktime(time.strptime(claimed_at, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+    except (ValueError, OverflowError):
+        return True  # unparseable claim stamp: treat the lease as expired
+    return (time.time() - claimed) >= lease_seconds
+
+
+def _claimable(task: dict[str, Any], lanes: frozenset[str] | None, lease_seconds: float) -> bool:
+    status = str(task.get("status", "open"))
+    if status == "claimed":
+        # Stale lease from a crashed worker — reclaimable.
+        if not _claim_expired(task, lease_seconds):
+            return False
+    elif status != "open":
         return False
     return lanes is None or _lane_of(task) in lanes
 
@@ -199,7 +218,7 @@ def claim_next_task(config: WorkerConfig) -> dict[str, Any] | None:
             return None
         tasks: list[Any] = board["tasks"]
         for task in tasks:
-            if isinstance(task, dict) and _claimable(task, config.lanes):
+            if isinstance(task, dict) and _claimable(task, config.lanes, config.claim_lease_seconds):
                 task["status"] = "claimed"
                 task["assignee"] = config.assignee
                 task["runId"] = config.run_id

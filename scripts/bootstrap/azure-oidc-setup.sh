@@ -111,10 +111,23 @@ ensure_fic() { # name subject description
 
 ensure_fic "github-main" "repo:${repo}:ref:refs/heads/main" \
   "helios-deploy.yml on push/dispatch from main"
-ensure_fic "github-pull-request" "repo:${repo}:pull_request" \
-  "PR-triggered jobs that need Azure (infra PR validation stays offline)"
 ensure_fic "github-env-${environment}" "repo:${repo}:environment:${environment}" \
   "jobs declaring environment: ${environment}"
+
+# Deliberately NO repo:...:pull_request credential: this principal holds deploy
+# rights (Contributor + Secrets Officer), and a PR workflow can be modified by
+# the PR itself — trusting the generic pull_request subject would let any PR
+# with id-token:write exchange its token for those rights. PR validation stays
+# offline (infra-validate.yml); if PRs ever need Azure, create a SEPARATE
+# read-only identity for them.
+
+# Clean up the credential from earlier revisions of this script, if present.
+if az ad app federated-credential show --id "$app_id" \
+     --federated-credential-id "github-pull-request" --output none 2>/dev/null; then
+  az ad app federated-credential delete --id "$app_id" \
+    --federated-credential-id "github-pull-request" --output none
+  echo "Removed the over-privileged 'github-pull-request' federated credential."
+fi
 
 # --- Role assignments (idempotent, retried) ---------------------------------------
 ensure_role() { # role scope

@@ -95,12 +95,21 @@ public static class ProviderFactory
                 "Set AZURE_OPENAI_ENDPOINT (infra output 'openAiEndpoint').");
         }
 
+        // A malformed endpoint value is "unconfigured", not a construction crash — one
+        // bad environment variable must not take down status and every other provider.
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var endpointUri)
+            || (endpointUri.Scheme != Uri.UriSchemeHttps && endpointUri.Scheme != Uri.UriSchemeHttp))
+        {
+            return new ChatClientAgent(name, "Azure OpenAI", provider.Model, null,
+                "AZURE_OPENAI_ENDPOINT is not an absolute http(s) URL; fix it to enable this provider.");
+        }
+
         // Key when present; otherwise Entra ID via DefaultAzureCredential (CLI login,
         // managed identity, workload identity — matches AzureConfiguration semantics).
         var key = secrets.Resolve(provider.ApiKeyEnv ?? "AZURE_OPENAI_API_KEY", provider.ApiKeySecretName);
         var client = key is null
-            ? new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
-            : new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(key));
+            ? new AzureOpenAIClient(endpointUri, new DefaultAzureCredential())
+            : new AzureOpenAIClient(endpointUri, new ApiKeyCredential(key));
         return new ChatClientAgent(name, "Azure OpenAI / Foundry Models", provider.Model,
             deployment => client.GetChatClient(deployment).AsIChatClient());
     }
