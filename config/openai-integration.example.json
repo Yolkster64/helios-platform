@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "OpenAI",
+  "enabled": false,
+  "authentication": {
+    "mode": "environment-or-key-vault",
+    "apiKeyEnvironmentVariable": "OPENAI_API_KEY",
+    "keyVaultUriEnvironmentVariable": "AZURE_KEY_VAULT_URI",
+    "keyVaultSecretName": "openai-api-key",
+    "storeSecretsInRepository": false
+  },
+  "runtime": {
+    "baseUrlEnvironmentVariable": "OPENAI_BASE_URL",
+    "projectEnvironmentVariable": "OPENAI_PROJECT_ID",
+    "organizationEnvironmentVariable": "OPENAI_ORG_ID"
+  },
+  "governance": {
+    "promptLogging": "sanitized-only",
+    "toolWrites": "approval-gated",
+    "productionModelChanges": "pull-request-required"
+  },
+  "provenance": {
+    "sourceRepository": "M0nado/Helios-Control-Center",
+    "sourceCommit": "376ded55933cd2da8c754141d228032dfa8fd4f0",
+    "migrationMode": "secretless-template"
+  }
+}
