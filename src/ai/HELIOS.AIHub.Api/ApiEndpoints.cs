@@ -1,3 +1,5 @@
+using HELIOS.AIHub.Learning;
+
 namespace HELIOS.AIHub.Api;
 
 /// <summary>
@@ -32,6 +34,31 @@ public static class ApiEndpoints
             var outcomes = await hub.Learning.GetRecentAsync(
                 taskType, Math.Clamp(limit ?? 50, 1, 500), ct);
             return Results.Ok(outcomes);
+        });
+
+        app.MapGet("/v1/insights", async (
+            AIHubService hub, PythonInsightsSpoke spoke, string? taskType, int? limit,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(taskType))
+            {
+                return Results.BadRequest(new ApiError("taskType query parameter is required."));
+            }
+            var recent = await hub.Learning.GetRecentAsync(
+                taskType, Math.Clamp(limit ?? 200, 1, 500), ct);
+            // The store hands back newest first; the spoke's window math wants oldest first.
+            var chronological = recent.Reverse().ToList();
+            var summary = await spoke.SummarizeAsync(chronological, ct);
+            if (summary is null)
+            {
+                return Results.Ok(new InsightsResponse(
+                    taskType, false,
+                    "Python spoke unavailable: needs python3 on PATH and src/ai/python "
+                    + "(or HELIOS_PYTHON_SPOKE pointing at it).",
+                    null, null));
+            }
+            var drift = await spoke.DetectDriftAsync(chronological, ct);
+            return Results.Ok(new InsightsResponse(taskType, true, null, summary, drift));
         });
 
         app.MapPost("/v1/ask", async (AskRequest request, AIHubService hub, CancellationToken ct) =>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HELIOS.AIHub.Abstractions;
 
 namespace HELIOS.AIHub.Api;
@@ -46,3 +47,15 @@ public sealed record ProviderStatusResponse(
 public sealed record RoutingTableResponse(
     IReadOnlyList<string> DefaultChain,
     IReadOnlyDictionary<string, IReadOnlyList<string>> TaskRouting);
+
+/// <summary>
+/// Python-spoke analytics over recorded routing outcomes. <c>Available=false</c> with a
+/// hint (rather than an error status) when the spoke isn't runnable here — insights are
+/// advisory and their absence is a state, not a failure.
+/// </summary>
+public sealed record InsightsResponse(
+    string TaskType,
+    bool Available,
+    string? Hint,
+    JsonElement? Summary,
+    JsonElement? Drift);

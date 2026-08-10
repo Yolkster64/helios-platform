@@ -62,6 +62,36 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task Insights_RequiresTaskType()
+    {
+        var response = await _client.GetAsync("/v1/insights");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Insights_ReportsSummaryOrStatesUnavailability()
+    {
+        var response = await _client.GetAsync("/v1/insights?taskType=code_generation");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var insights = await response.Content.ReadFromJsonAsync<InsightsResponse>(Json);
+        Assert.NotNull(insights);
+        Assert.Equal("code_generation", insights.TaskType);
+        if (insights.Available)
+        {
+            Assert.NotNull(insights.Summary);
+            Assert.Equal(0, insights.Summary.Value.GetProperty("totalOutcomes").GetInt32());
+            Assert.NotNull(insights.Drift);
+            Assert.Equal(0, insights.Drift.Value.GetProperty("checked").GetInt32());
+        }
+        else
+        {
+            Assert.False(string.IsNullOrWhiteSpace(insights.Hint));
+        }
+    }
+
+    [Fact]
     public async Task Learning_ReturnsRecentOutcomes()
     {
         var response = await _client.GetAsync("/v1/learning?taskType=code_generation&limit=10");

@@ -102,6 +102,18 @@ across a `compare` fan-out's embeddings, and UTF-8-safe token/prefix estimation.
 builds independently of the .NET solution and nothing calls into it yet — wiring `compare`
 to use it for response dedup is PR3 scope. See `src/ai/HELIOS.AIHub.Native/README.md`.
 
+## Python analysis spoke
+
+`src/ai/python` (`helios-agents`) is the Python side of the hub-and-spoke: routing-outcome
+analytics (`provider_summary`, `detect_drift`) and text work (`keywords`, `group_similar`)
+as pure functions. It never calls providers, other spokes, or the network — the C#
+orchestrator's `PythonInsightsSpoke` is its only caller, invoking `python3 -m
+helios_agents` with one JSON request on stdin and one JSON response on stdout. The
+package is dependency-free by design (runs on any bare interpreter: Cloud Shell,
+Codespaces, CI); installing the `[ml]` extra swaps the math to numpy and the text
+similarity to scikit-learn TF-IDF cosine. A missing interpreter degrades to null
+insights, never an error — same "unconfigured is a state" rule as providers.
+
 ## REST orchestration API
 
 `src/ai/HELIOS.AIHub.Api` (`helios-ai-api`) exposes the same `AIHubService` singleton the
@@ -115,6 +127,7 @@ one door with shared circuit-breaker and learning state:
 | `/v1/status` | GET | Provider readiness, no network calls |
 | `/v1/routing` | GET | Default chain + task-routing table |
 | `/v1/learning?taskType=&limit=` | GET | Recent routing outcomes, newest first |
+| `/v1/insights?taskType=&limit=` | GET | Python-spoke analytics (per-provider stats + drift) over recorded outcomes |
 | `/v1/ask` | POST | One provider (or default chain): `{prompt, provider?, model?, system?}` |
 | `/v1/route` | POST | Task-type chain with learned reorder + fallback: `{taskType, prompt, system?}` |
 | `/v1/tandem` | POST | Whole chain concurrently, learned winner reported |
@@ -126,9 +139,10 @@ Provider failures are payload (`200` + `success:false` + `error`), not transport
 
 ## Testing
 
-41 unit tests, no network: fallback switching regression, breaker transitions, routing
-strategy, real-config binding (drift fails CI), CLI process fixtures, fake `IChatClient`
-mapping tests, the local learning store's round-trip/filter/limit/torn-line behavior, and
-the F# routing policy's promotion/thin-evidence/empty-history cases through its C#
-interop surface. Live-API calls are deliberately untested in CI; `helios-ai status` +
+87 .NET unit tests plus 15 Python tests, no network: fallback switching regression,
+breaker transitions, routing strategy, real-config binding (drift fails CI), CLI process
+fixtures, fake `IChatClient` mapping tests, the local learning store's
+round-trip/filter/limit/torn-line behavior, the F# routing policy and fusion cases
+through their C# interop surface, HTTP-level API tests against the shipped keyless
+config, and the C#→Python subprocess round-trip (guarded on a runnable interpreter). Live-API calls are deliberately untested in CI; `helios-ai status` +
 smoke runs cover wiring.

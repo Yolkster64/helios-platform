@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Config resolution matches the CLI: --aihub-config, then AIHUB_CONFIG, then walk up.
 builder.Services.AddSingleton(_ => AIHubService.CreateFromConfig(
     builder.Configuration["aihub-config"] ?? Environment.GetEnvironmentVariable("AIHUB_CONFIG")));
+builder.Services.AddSingleton<HELIOS.AIHub.Learning.PythonInsightsSpoke>();
 
 var app = builder.Build();
 
