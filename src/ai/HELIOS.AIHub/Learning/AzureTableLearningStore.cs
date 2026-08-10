@@ -85,9 +85,12 @@ public sealed class AzureTableLearningStore : ILearningStore
         // Also filter the stored TaskType: Sanitize can map distinct task types (e.g.
         // "customer/a" and "customer?a") onto one partition, and cross-task history
         // would train one task's routing on another task's outcomes.
+        // Sanitize passes apostrophes through, so the partition key needs OData
+        // escaping too or a task type like "customer's-review" breaks the filter.
+        var escapedPartition = partition.Replace("'", "''");
         var escapedTaskType = taskType.Replace("'", "''");
         var query = _table.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{partition}' and TaskType eq '{escapedTaskType}'",
+            filter: $"PartitionKey eq '{escapedPartition}' and TaskType eq '{escapedTaskType}'",
             maxPerPage: Math.Min(limit, 1000),
             cancellationToken: cancellationToken);
 

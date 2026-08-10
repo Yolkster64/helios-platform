@@ -22,6 +22,13 @@ internal static class NativeGate
         {
             return false;
         }
+        catch (BadImageFormatException)
+        {
+            // Wrong-architecture or corrupt binary. Lazy<bool> caches a thrown
+            // exception forever, so letting this escape would poison every later
+            // Available check instead of degrading to the managed fallbacks.
+            return false;
+        }
     });
 
     internal static bool Available => _available.Value;

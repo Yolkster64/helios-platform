@@ -120,9 +120,12 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
                 {
                     await client.Threads.DeleteThreadAsync(thread.Id, CancellationToken.None).ConfigureAwait(false);
                 }
-                catch (Azure.RequestFailedException)
+                catch (Exception)
                 {
-                    // Best-effort: an orphaned thread is preferable to masking the result.
+                    // Best-effort: an orphaned thread is preferable to masking the
+                    // result. Not just RequestFailedException — a credential refresh
+                    // failure or SDK-internal timeout here would otherwise convert an
+                    // already-completed paid run into a provider failure.
                 }
             }
         }
@@ -172,10 +175,12 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
                                     .DeleteAgentAsync(evicted.Id, cancellationToken)
                                     .ConfigureAwait(false);
                             }
-                            catch (Azure.RequestFailedException)
+                            catch (Exception e) when (e is not OperationCanceledException)
                             {
                                 // Best-effort: an orphaned service-side agent is preferable
-                                // to failing the caller's request over cleanup.
+                                // to failing the caller's request over cleanup — whatever
+                                // the failure (auth refresh, timeout, service error). Only
+                                // the caller's own cancellation still propagates.
                             }
                         }
                     }
@@ -226,8 +231,10 @@ public sealed class FoundryAgentProvider : ProviderAgentBase
                     .DeleteAgentAsync(deleteNow.Id, CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch (Azure.RequestFailedException)
+            catch (Exception)
             {
+                // Runs inside the request's finally: any escape here would mask
+                // the completed result, so the deferred delete is best-effort.
             }
         }
     }
