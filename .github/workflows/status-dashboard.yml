@@ -11,7 +11,7 @@ on:
       - '.github/workflows/status-dashboard.yml'
 
 permissions:
-  contents: write
+  contents: read
   checks: read
   pull-requests: read
 
@@ -77,8 +77,11 @@ jobs:
       - name: Generate Status Report
         id: report
         run: |
-          REPORT=$(cat status-report.json)
-          echo "report=$REPORT" >> $GITHUB_OUTPUT
+          {
+            echo 'report<<HELIOS_STATUS_REPORT'
+            cat status-report.json
+            echo 'HELIOS_STATUS_REPORT'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload Report
         uses: actions/upload-artifact@v4
