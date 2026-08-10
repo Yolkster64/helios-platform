@@ -1,11 +1,12 @@
 {
-  "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically.",
+  "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically. epic references the consolidated theme in docs/architecture/ABSORPTION_LEDGER.md (E1..E18), which mirrors the GitHub issues once Issues are enabled on the fork.",
   "upstream": "M0nado/helios-platform",
   "candidates": [
     {
       "pr": 222,
       "title": "Add bounded XCore-9 evaluation service with F# analytics and stable contracts",
       "status": "candidate",
+      "epic": "E2",
       "why": "F# analytics service aligns with HELIOS.AIHub.Domain; evaluator contracts could back the fleet review pool.",
       "absorb": ["service contracts", "F# scoring modules"],
       "risks": ["may target the pre-consolidation layout; expect path conflicts with src/ai"]
@@ -14,6 +15,7 @@
       "pr": 294,
       "title": "Add governed XCore9 runtime matrix with CI and smoke evidence",
       "status": "candidate",
+      "epic": "E2",
       "why": "Runtime matrix (local/Windows/Docker) with smoke evidence maps directly onto our fleet runtime + new Docker packaging.",
       "absorb": ["runtime matrix definition", "smoke-evidence pattern"],
       "risks": ["governance file layout differs from ours"]
@@ -22,6 +24,7 @@
       "pr": 253,
       "title": "XCore9 KNAA evaluator scoring telemetry and policy gates",
       "status": "candidate",
+      "epic": "E2",
       "why": "Scoring telemetry feeds the learning loop's Quality field; policy gates pair with the review pool.",
       "absorb": ["scoring rubric", "telemetry shape"],
       "risks": ["policy-gate wiring assumes upstream CI"]
@@ -30,6 +33,7 @@
       "pr": 250,
       "title": "Define Hermes/XCore v1 contracts and migrate canonical x-tier environments",
       "status": "candidate",
+      "epic": "E3",
       "why": "Federation contracts versus our config/fleet/fleet-topology.json v2 — reconcile or absorb the deltas.",
       "absorb": ["contract fields we lack"],
       "risks": ["contract divergence: ours is v2 and live"]
@@ -38,6 +42,7 @@
       "pr": 215,
       "title": "Add fail-closed pinned submodule approval gate",
       "status": "candidate",
+      "epic": "E7",
       "why": "We deleted the inert .gitmodules; if real submodules ever return, this gate is the governance to bring with them.",
       "absorb": ["approval-gate workflow"],
       "risks": ["irrelevant until a real submodule exists"]
@@ -46,6 +51,7 @@
       "pr": 218,
       "title": "Require reviewed Container Apps subnet for production deployments",
       "status": "candidate",
+      "epic": "E6",
       "why": "Subnet review discipline informs the fleet VMSS/hybrid networking story.",
       "absorb": ["subnet review workflow pattern"],
       "risks": ["targets Container Apps, we deploy Foundry + VMSS"]
@@ -54,6 +60,7 @@
       "pr": 292,
       "title": "Add operator JSON Schema validation and policy-enforcement for plans",
       "status": "candidate",
+      "epic": "E4",
       "why": "JSON Schema validation for operator plans could harden config/fleet and config/absorption files.",
       "absorb": ["schema validation harness"],
       "risks": ["plan format is upstream-specific"]
@@ -62,9 +69,244 @@
       "pr": 295,
       "title": "feat(security): add fail-closed governed capability profiles and validator",
       "status": "candidate",
+      "epic": "E4",
       "why": "Capability profiles map to the fleet pools' tool allowlists (review pool is read-only by design).",
       "absorb": ["profile validator"],
       "risks": ["security model differs; needs careful review"]
+    },
+    {
+      "pr": 273,
+      "title": "Add unified Helios control-plane setup entrypoint",
+      "status": "candidate",
+      "epic": "E1",
+      "why": "Representative of ten PRs converging on one setup-all command; ours would wrap the existing auth/fleet/board scripts.",
+      "absorb": ["command surface shape", "readiness sequencing"],
+      "risks": ["ten competing drafts upstream; pick one shape and credit the rest"]
+    },
+    {
+      "pr": 251,
+      "title": "Add setup inventory command to HELIOS control-fabric CLI",
+      "status": "candidate",
+      "epic": "E1",
+      "why": "Inventory (what is configured vs missing) complements our verify-readiness split of required/optional tools.",
+      "absorb": ["inventory report fields"],
+      "risks": ["overlaps E14 readiness tooling; dedupe there"]
+    },
+    {
+      "pr": 213,
+      "title": "bootstrap-local-tools: use XDG path, add auth verification and modes, and add tests",
+      "status": "benchmarked",
+      "epic": "E1",
+      "why": "XDG-correct tool paths and a verify-only auth mode harden our bootstrap scripts.",
+      "absorb": ["XDG path handling", "verify-only mode"],
+      "risks": ["upstream script layout differs; port ideas only"]
+    },
+    {
+      "pr": 267,
+      "title": "Add Hermes/XCore9 specialization contracts and policy enforcement",
+      "status": "candidate",
+      "epic": "E3",
+      "why": "Per-pool specialization contracts refine our four-pool topology's lane discipline.",
+      "absorb": ["specialization contract fields"],
+      "risks": ["policy enforcement assumes upstream runtime"]
+    },
+    {
+      "pr": 285,
+      "title": "Add governed knowledge discovery, 50-capability backlog, validators, tests, and CI workflow",
+      "status": "candidate",
+      "epic": "E4",
+      "why": "The 50-capability backlog is a ready-made roadmap seed; validators harden governance files.",
+      "absorb": ["capability backlog taxonomy"],
+      "risks": ["large PR; extract the taxonomy, not the runtime"]
+    },
+    {
+      "pr": 224,
+      "title": "Govern Azure activation path: MI to Key Vault secret binding, v2 audience hardening, and immutable plan/deploy custody",
+      "status": "candidate",
+      "epic": "E5",
+      "why": "MI-to-Key-Vault binding and custody discipline extend our OIDC + Key Vault stack.",
+      "absorb": ["custody/audit pattern", "audience hardening checks"],
+      "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"]
+    },
+    {
+      "pr": 260,
+      "title": "Complete governed Azure activation hardening",
+      "status": "candidate",
+      "epic": "E5",
+      "why": "Follow-up hardening on the same activation path; read together with #224.",
+      "absorb": ["hardening checklist"],
+      "risks": ["same as #224"]
+    },
+    {
+      "pr": 211,
+      "title": "Add governed private Azure edge and segmented network",
+      "status": "candidate",
+      "epic": "E6",
+      "why": "Segmented-network patterns inform the VMSS/hybrid networking story beyond our zero-inbound NSG.",
+      "absorb": ["network segmentation shape"],
+      "risks": ["large infra surface; Bicep dialect differs"]
+    },
+    {
+      "pr": 214,
+      "title": "Add repository integrity validator and replace automated submodule sync with declaration audit",
+      "status": "candidate",
+      "epic": "E7",
+      "why": "Declaration-audit replaces sync — matches our removal of multi-repo sync; the validator is the piece we lack.",
+      "absorb": ["integrity validator"],
+      "risks": ["overlaps #215 gate; absorb one coherent design"]
+    },
+    {
+      "pr": 219,
+      "title": "Unify test ownership, centralize test tool versions, and add stable CI test lanes",
+      "status": "candidate",
+      "epic": "E8",
+      "why": "Test-ownership map and centralized tool versions would tame our two-era workflow zoo.",
+      "absorb": ["ownership map", "version centralization"],
+      "risks": ["upstream lane names differ from our workflows"]
+    },
+    {
+      "pr": 290,
+      "title": "Add self-contained one-button launcher, packaging scripts, and tests",
+      "status": "candidate",
+      "epic": "E9",
+      "why": "One-button local bring-up (build + api + fleet) packaged self-contained; the tested variant of three sibling PRs.",
+      "absorb": ["launcher UX", "packaging checks"],
+      "risks": ["packaging targets upstream layout"]
+    },
+    {
+      "pr": 221,
+      "title": "Add Helios.Connect zero-mutation read-only CLI and core library",
+      "status": "candidate",
+      "epic": "E10",
+      "why": "A guaranteed-read-only connect CLI complements our loopback-guarded API for safe hosted inspection.",
+      "absorb": ["read-only enforcement pattern"],
+      "risks": ["overlaps helios-ai status/routing surfaces; absorb the guarantees, not a second CLI"]
+    },
+    {
+      "pr": 220,
+      "title": "Add reliability evidence harness and development-only controlled failure injector",
+      "status": "candidate",
+      "epic": "E11",
+      "why": "Evidence harness pairs with our absorption reports; failure injector would exercise fallback chains deliberately.",
+      "absorb": ["evidence report shape", "dev-only injector gating"],
+      "risks": ["injector must stay dev-only; fail-closed gating required"]
+    },
+    {
+      "pr": 287,
+      "title": "Export branch-intelligence reports for origin/main and add umbrella integration trains",
+      "status": "candidate",
+      "epic": "E12",
+      "why": "Umbrella-train reports are the upstream's own consolidation evidence — useful map for this very epic.",
+      "absorb": ["report format"],
+      "risks": ["train branches reference upstream-only refs"]
+    },
+    {
+      "pr": 141,
+      "title": "Add remote-priority command and remote-filtering for branch intelligence",
+      "status": "candidate",
+      "epic": "E13",
+      "why": "Branch-intelligence scoring could drive which upstream work we absorb next.",
+      "absorb": ["priority scoring idea"],
+      "risks": ["depends on upstream analytics project layout"]
+    },
+    {
+      "pr": 140,
+      "title": "Add HELIOS.RepositoryAnalytics project and Hermes empty/default handling",
+      "status": "candidate",
+      "epic": "E13",
+      "why": "A repository-analytics library slot exists in our F# domain; evaluate the data model.",
+      "absorb": ["analytics data model"],
+      "risks": ["new project must join HELIOS.sln and the root csproj guards"]
+    },
+    {
+      "pr": 136,
+      "title": "Add verify command and readiness option to build graph",
+      "status": "benchmarked",
+      "epic": "E14",
+      "why": "Readiness verify with required/optional split — ported as scripts/build/verify-readiness.ps1.",
+      "absorb": ["required/optional tool split"],
+      "risks": ["build-graph itself is upstream-specific; port the verify idea only"]
+    },
+    {
+      "pr": 138,
+      "title": "Add full stack readiness check with required/optional tool split",
+      "status": "benchmarked",
+      "epic": "E14",
+      "why": "Same readiness idea as #136 from the other direction; merged into one ported script.",
+      "absorb": ["tool list"],
+      "risks": ["duplicate of #136; absorb once"]
+    },
+    {
+      "pr": 137,
+      "title": "Add automatic Python compile checker",
+      "status": "benchmarked",
+      "epic": "E14",
+      "why": "Fast dependency-free compileall gate ahead of pytest — ported into python-spoke.yml.",
+      "absorb": ["compileall CI step"],
+      "risks": ["none; trivially portable"]
+    },
+    {
+      "pr": 130,
+      "title": "Add shared repo-local tool resolver and surface resolved tools in build/readiness reports",
+      "status": "candidate",
+      "epic": "E14",
+      "why": "Repo-local tool resolution complements verify-readiness for hermetic dev setups.",
+      "absorb": ["resolver precedence rules"],
+      "risks": ["overlaps bootstrap scripts; keep one resolution story"]
+    },
+    {
+      "pr": 110,
+      "title": "Add model registry + schema, replace deprecated models with gpt-5.x, and tighten routing/fallback validation",
+      "status": "benchmarked",
+      "epic": "E15",
+      "why": "Model registry with schema validation — ported as model-catalog schema + CI validation + catalog refresh.",
+      "absorb": ["registry schema", "current model families", "routing validation"],
+      "risks": ["model IDs move fast; keep the schema, refresh values periodically"]
+    },
+    {
+      "pr": 145,
+      "title": "Add AIHub unified control plane: workflows, reports, agents, analysis, contracts, dashboard, and tests",
+      "status": "candidate",
+      "epic": "E16",
+      "why": "The most complete of five control-plane PRs; mine for dashboard/report shapes our status-dashboard workflow lacks.",
+      "absorb": ["dashboard data shapes", "report cadence"],
+      "risks": ["very large; absorb shapes, never the parallel implementation"]
+    },
+    {
+      "pr": 210,
+      "title": "Add canonical PROJECT_SETUP guide and refresh README",
+      "status": "benchmarked",
+      "epic": "E17",
+      "why": "Canonical setup guide — ported as docs/PROJECT_SETUP.md grounded in today's tree.",
+      "absorb": ["guide structure"],
+      "risks": ["none; docs only"]
+    },
+    {
+      "pr": 65,
+      "title": "docs: add OWNER_START_HERE owner checklist and link across docs",
+      "status": "benchmarked",
+      "epic": "E17",
+      "why": "Owner-first checklist — ported as docs/OWNER_START_HERE.md including the enable-Issues step this epic needs.",
+      "absorb": ["checklist structure"],
+      "risks": ["none; docs only"]
+    },
+    {
+      "pr": 117,
+      "title": "Update wiki sync workflow",
+      "status": "candidate",
+      "epic": "E17",
+      "why": "Compare against our wiki-generator.yml for sync ideas we lack (ours already flattens docs/architecture + docs/mcp).",
+      "absorb": ["any missing sync behaviors"],
+      "risks": ["ours is newer; likely reject after review"]
+    },
+    {
+      "pr": 166,
+      "title": "feat: add guarded Windows boot security and rootkit recovery",
+      "status": "candidate",
+      "epic": "E18",
+      "why": "Audit-first only: PR #4's safety disposition rejected unsigned SYSTEM WinRE tasks; only a governed, signed, consent-gated subset may ever be considered.",
+      "absorb": ["threat-model documentation only"],
+      "risks": ["safety carve-out: no integration without explicit human review and signing story"]
     }
   ]
 }
