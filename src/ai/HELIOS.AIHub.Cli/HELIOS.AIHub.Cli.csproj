@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>HELIOS.AIHub.Cli</RootNamespace>
+    <AssemblyName>helios-ai</AssemblyName>
+    <Description>Cross-LLM shell for the HELIOS platform: ask, route, compare, and inspect every configured provider from one command.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../HELIOS.AIHub/HELIOS.AIHub.csproj" />
+  </ItemGroup>
+
+</Project>
