@@ -9,6 +9,7 @@ body:
         Thanks for reporting an issue! Please provide as much detail as possible.
 
   - type: textarea
+    id: description
     attributes:
       label: "Description"
       description: "What happened?"
@@ -17,6 +18,7 @@ body:
       required: true
 
   - type: textarea
+    id: steps-to-reproduce
     attributes:
       label: "Steps to Reproduce"
       description: "How do you reproduce the bug?"
@@ -28,6 +30,7 @@ body:
       required: true
 
   - type: textarea
+    id: expected-behavior
     attributes:
       label: "Expected Behavior"
       description: "What should happen?"
@@ -36,6 +39,7 @@ body:
       required: true
 
   - type: textarea
+    id: actual-behavior
     attributes:
       label: "Actual Behavior"
       description: "What actually happened?"
@@ -44,12 +48,14 @@ body:
       required: true
 
   - type: textarea
+    id: error-logs
     attributes:
       label: "Error Message/Logs"
       description: "Any error messages or relevant logs?"
       render: shell
 
   - type: textarea
+    id: environment
     attributes:
       label: "Environment"
       description: "System information"
@@ -62,6 +68,7 @@ body:
       required: true
 
   - type: textarea
+    id: additional-context
     attributes:
       label: "Additional Context"
       description: "Any other information that might help?"
