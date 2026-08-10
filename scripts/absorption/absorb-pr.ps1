@@ -54,7 +54,6 @@ $worktree = Join-Path $reportDir "wt-pr-$PrNumber"
 
 Write-Host "== Absorption benchmark: $Upstream#$PrNumber =="
 
-# --- fetch the PR head -------------------------------------------------------
 git -C $RepoRoot fetch $upstreamUrl "refs/pull/$PrNumber/head" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Could not fetch refs/pull/$PrNumber/head from $upstreamUrl."
@@ -63,7 +62,6 @@ if ($LASTEXITCODE -ne 0) {
 $prSha = (git -C $RepoRoot rev-parse FETCH_HEAD).Trim()
 Write-Host "PR head: $prSha"
 
-# --- disposable worktree at our HEAD ----------------------------------------
 if (Test-Path $worktree) {
     git -C $RepoRoot worktree remove --force $worktree 2>$null
     Remove-Item -Recurse -Force $worktree -ErrorAction SilentlyContinue
@@ -73,7 +71,6 @@ git -C $RepoRoot worktree add --detach $worktree HEAD | Out-Null
 $steps = [System.Collections.Generic.List[object]]::new()
 $conflicts = @()
 try {
-    # --- trial merge ---------------------------------------------------------
     git -C $worktree merge --no-commit --no-ff $prSha 2>&1 | Out-Null
     $mergeClean = ($LASTEXITCODE -eq 0)
     if (-not $mergeClean) {
@@ -83,12 +80,8 @@ try {
     $steps.Add([ordered]@{ step = 'trial-merge'; ok = $mergeClean; conflicts = $conflicts; diffstat = "$stat".Trim() })
 
     if ($mergeClean) {
-        # --- the gate (same categories CI runs) -----------------------------
         $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)/root/.dotnet"
 
-        # Build the native spoke from the merged scratch tree, never from the
-        # original checkout. Otherwise native tests can silently miss candidate
-        # changes and produce false-green absorption evidence.
         $nativeBuild = Join-Path $worktree 'scripts/build/build-native.sh'
         if (Test-Path $nativeBuild) {
             $steps.Add((Invoke-Step 'native-build' {
@@ -105,21 +98,26 @@ try {
             if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 5 | Out-String) }
         }))
 
-        # Infrastructure candidates must never receive a full-green absorption
-        # verdict unless the merged Bicep compiles too. Build into the scratch
-        # report directory so this validation does not alter the candidate tree.
+        # infra/main.bicep is a required repository entrypoint. A candidate that
+        # deletes or renames it must fail the absorption gate rather than silently
+        # skipping infrastructure validation.
         $bicepFile = Join-Path $worktree 'infra/main.bicep'
-        if (Test-Path $bicepFile) {
-            $steps.Add((Invoke-Step 'bicep-build' {
-                if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-                    throw 'Azure CLI is required to compile infra/main.bicep.'
-                }
-                $bicepOut = Join-Path $reportDir "pr-$PrNumber-main.arm.json"
+        $steps.Add((Invoke-Step 'bicep-build' {
+            if (-not (Test-Path -LiteralPath $bicepFile)) {
+                throw 'Required Bicep entrypoint infra/main.bicep is missing from the merged tree.'
+            }
+            if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+                throw 'Azure CLI is required to compile infra/main.bicep.'
+            }
+            $bicepOut = Join-Path $reportDir "pr-$PrNumber-main.arm.json"
+            try {
                 $out = az bicep build --file $bicepFile --outfile $bicepOut 2>&1
                 if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 10 | Out-String) }
+            }
+            finally {
                 Remove-Item -LiteralPath $bicepOut -Force -ErrorAction SilentlyContinue
-            }))
-        }
+            }
+        }))
 
         if (-not $SkipTests) {
             $steps.Add((Invoke-Step 'dotnet-test' {
@@ -144,9 +142,6 @@ finally {
     }
 }
 
-# --- verdict + report --------------------------------------------------------
-# A skipped test run can never claim the full gate: -SkipTests yields at most a
-# partial verdict, and the advisory outcome reports success only for the FULL gate.
 $allStepsOk = ($steps | Where-Object { -not $_.ok } | Measure-Object).Count -eq 0
 $gatePassed = $allStepsOk -and -not $SkipTests
 $elapsed = [math]::Round(((Get-Date) - $started).TotalMilliseconds)
@@ -172,7 +167,6 @@ if ($Apply -and (Test-Path $worktree)) {
     Write-Host "Worktree kept for review: $worktree (merge staged; commit deliberately or 'git worktree remove --force' it)"
 }
 
-# --- advisory learning record (best effort) ----------------------------------
 $apiBase = if ($env:HELIOS_API_URL) { $env:HELIOS_API_URL.TrimEnd('/') } else { 'http://localhost:5170' }
 try {
     [Uri]$apiUri = $null
