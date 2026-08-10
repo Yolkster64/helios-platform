@@ -107,6 +107,63 @@ a fix.
 5. Dashboards: Hermes kanban dashboard plugin per board; HELIOS-side visibility arrives
    with the WinUI 3 AIHub page (GUI_THEME_ANALYSIS.md).
 
+## Local & workspace bring-up
+
+The topology is runnable today, before PR5: `scripts/fleet/` reads
+`config/fleet/fleet-topology.json` and brings pools up on any box with
+PowerShell 7 — with the real Hermes CLI when it is on PATH, else a local stub.
+
+```powershell
+pwsh scripts/fleet/start-fleet.ps1 -DryRun                    # show the launch plan, touch nothing
+pwsh scripts/fleet/start-fleet.ps1                            # start every pool
+pwsh scripts/fleet/start-fleet.ps1 -Fleet xcore-9-code -PoolSize 3
+pwsh scripts/fleet/fleet-status.ps1                           # per-pool running/exited + board tallies
+pwsh scripts/fleet/fleet-status.ps1 -Json                     # machine-readable report
+pwsh scripts/fleet/stop-fleet.ps1                             # SIGTERM the most recent running run
+pwsh scripts/fleet/stop-fleet.ps1 -RunId <id>                 # stop a specific run (-All for every run)
+```
+
+`-Fleet` takes a pool name (`xcore-9-code`) or its board (`xcore-code`);
+default `all`. Per run, start-fleet creates `.helios/fleet/<runId>/` (gitignored)
+holding one JSON kanban board per pool (`boards/<board>.json`), worker logs
+(`logs/`), and the `manifest.json` (pids, boards, locks) that fleet-status and
+stop-fleet read. Every worker is launched with the four contract vars exported:
+`HERMES_KANBAN_TASK` (the pool's task types, comma-separated — its lanes),
+`_DB` (the board file), `_RUN_ID`, and `_CLAIM_LOCK` (the lockfile guarding
+board mutations).
+
+**Stub vs real Hermes.** When `hermes` is on PATH, lanes spawn through the
+topology's spawn template (`hermes -p <assignee> chat -q <prompt>`). When it is
+not, start-fleet prints a notice and falls back — never a crash — to the
+dependency-free stub `python3 -m helios_agents.fleet_worker`
+(src/ai/python), which honors the same worker-lane contract: poll the board,
+claim open tasks in its lanes under the claim lock, resolve each as
+`kanban_complete` (status `done`, result recorded) or `kanban_block` (status
+`blocked`, reason recorded), release the lock on crash (stale-lock breaking),
+and exit 0 on SIGTERM or after `HERMES_KANBAN_MAX_IDLE_POLLS` empty polls
+(start-fleet defaults the stub to 2s polls, ~2 minutes idle). The stub does no
+model work — it exists to exercise the fleet wiring end to end.
+
+Feed a board by appending to its `tasks` array (the stub tolerates torn reads
+while you edit):
+
+```json
+{ "id": "T-1", "lane": "code_generation", "status": "open",
+  "prompt": "add retry to the router" }
+```
+
+A task whose `lane` is not in the pool's task types is never claimed; one with
+`"block": true` (or no prompt) exercises the `kanban_block` path.
+
+**Codespaces / Cloud Shell.** Workspace mode engages automatically when
+`CODESPACES` or `CLOUD_SHELL` is set (or force it with `-Workspace`): pool
+sizes are capped to the topology's `workspaceProfile.poolSize` (per-pool or
+defaults) when one is declared, else to half the declared size rounded up —
+four pools of nine is more processes than a two-core workspace should carry.
+An explicit `-PoolSize` is still subject to the cap. The stub is the normal
+path there (no Hermes CLI in the image); idle workers exit on their own, so
+seed boards promptly or raise `HERMES_KANBAN_MAX_IDLE_POLLS`.
+
 ## Parallelism model
 
 Three independent throttles, tuned separately:

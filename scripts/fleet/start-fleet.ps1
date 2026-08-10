@@ -235,54 +235,51 @@ try {
             }
             Set-Item -Path 'Env:HERMES_KANBAN_ASSIGNEE' -Value $assignee
 
-            # NOTE: never use Start-Process -RedirectStandardOutput/-RedirectStandardError
-            # here - pwsh pumps those through pipes owned by THIS process, so the
-            # workers' log sink (and the workers themselves, via BrokenPipe on write)
-            # would die the moment this script exits.
             $outLog = Join-Path $runDir 'logs' "$assignee.out.log"
             $errLog = Join-Path $runDir 'logs' "$assignee.err.log"
             if ($workerKind -eq 'hermes') {
                 $prompt = "Work board '$($entry.Board)' (run $runId): claim tasks in lanes [$($entry.Lanes)]; " +
                     'terminate each via kanban_complete or kanban_block.'
-                $hermesArgs = @(@($argsTemplate -split '\s+') | ForEach-Object {
+                $workerExe = $hermesCli.Source
+                $workerArgs = @(@($argsTemplate -split '\s+') | ForEach-Object {
                         $_ -replace '\{assignee\}', $assignee -replace '\{prompt\}', $prompt
                     })
-                if ($IsWindows) {
-                    # No detached-log story on Windows; rely on Hermes' own logging.
-                    $proc = Start-Process -FilePath $hermesCli.Source `
-                        -ArgumentList @($hermesArgs | ForEach-Object { ConvertTo-ProcessArgument $_ }) `
-                        -WorkingDirectory $repoRoot -PassThru -WindowStyle Hidden
-                }
-                else {
-                    # sh -c 'exec ...' keeps the worker's pid and hands it its own log
-                    # file descriptors, so it outlives this script.
-                    $shCmd = 'exec ' +
-                        ((@($hermesCli.Source) + $hermesArgs | ForEach-Object { ConvertTo-ShellWord $_ }) -join ' ') +
-                        ' >' + (ConvertTo-ShellWord $outLog) + ' 2>' + (ConvertTo-ShellWord $errLog)
-                    $proc = Start-Process -FilePath 'sh' `
-                        -ArgumentList @('-c', ('"' + ($shCmd -replace '"', '\"') + '"')) `
-                        -WorkingDirectory $repoRoot -PassThru
-                }
-                $commandShown = "$($hermesCli.Source) $($hermesArgs -join ' ')"
+                $workDir = $repoRoot
             }
             else {
-                # The stub opens --log-file itself (no inherited pipes), so it too
-                # outlives this script; its stdout is silent by contract.
-                $stubArgs = @('-m', 'helios_agents.fleet_worker', '--log-file', $errLog)
-                $startArgs = @{
-                    FilePath         = $python.Source
-                    ArgumentList     = @($stubArgs | ForEach-Object { ConvertTo-ProcessArgument $_ })
-                    WorkingDirectory = $stubWorkDir
-                    PassThru         = $true
-                }
-                if ($IsWindows) { $startArgs['WindowStyle'] = 'Hidden' }
-                $proc = Start-Process @startArgs
-                $commandShown = "$($python.Source) $($stubArgs -join ' ')"
+                $workerExe = $python.Source
+                $workerArgs = @('-m', 'helios_agents.fleet_worker')
+                # On Windows the worker keeps a log sink by opening the file itself.
+                if ($IsWindows) { $workerArgs += @('--log-file', $errLog) }
+                $workDir = $stubWorkDir
+            }
+
+            # NOTE: launch mechanics matter here.
+            # - Never use Start-Process -RedirectStandardOutput/-RedirectStandardError:
+            #   pwsh pumps those through pipes owned by THIS process, so worker logs
+            #   (and the workers themselves, via BrokenPipe on write) die when this
+            #   script exits.
+            # - On Unix, wrap in sh -c 'exec ... </dev/null >out 2>err': exec keeps the
+            #   worker's pid, and the worker owns its log fds and holds no inherited
+            #   stdio, so it outlives this script and never blocks a pipeline reading
+            #   this script's output.
+            if ($IsWindows) {
+                $proc = Start-Process -FilePath $workerExe `
+                    -ArgumentList @($workerArgs | ForEach-Object { ConvertTo-ProcessArgument $_ }) `
+                    -WorkingDirectory $workDir -PassThru -WindowStyle Hidden
+            }
+            else {
+                $shCmd = 'exec ' +
+                    ((@($workerExe) + $workerArgs | ForEach-Object { ConvertTo-ShellWord $_ }) -join ' ') +
+                    ' </dev/null >' + (ConvertTo-ShellWord $outLog) + ' 2>' + (ConvertTo-ShellWord $errLog)
+                $proc = Start-Process -FilePath 'sh' `
+                    -ArgumentList @('-c', ('"' + ($shCmd -replace '"', '\"') + '"')) `
+                    -WorkingDirectory $workDir -PassThru
             }
             $workers.Add([ordered]@{
                     assignee = $assignee
                     pid      = $proc.Id
-                    command  = $commandShown
+                    command  = "$workerExe $($workerArgs -join ' ')"
                     log      = $errLog
                 })
             Write-Host "  started $assignee (pid $($proc.Id))"
