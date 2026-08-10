@@ -61,10 +61,10 @@ Candidates are never imported, installed, trained, or executed by the catalog, R
 CLI, or MCP tools. Turning one into an implemented capability requires a normal code
 change and tests that prove its boundary.
 
-The Python subprocess boundary admits at most four concurrent processes. Its REST
-endpoints are loopback-only unless `HELIOS_PYTHON_SPOKE_API_KEY` is configured and sent as
-`X-HELIOS-Spoke-Key`. Hosted deployments must still put `/v1/*` behind identity-aware
-ingress and request limits.
+The Python subprocess boundary admits at most four concurrent processes. All REST
+`/v1/*` operations are loopback-only unless a remote/Docker-bridge caller sends
+`HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`. Hosted deployments must still put the API
+behind identity-aware ingress and request limits.
 
 ## Rejected execution hazards
 

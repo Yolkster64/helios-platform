@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -72,6 +73,18 @@ public partial class AIHubPageViewModel : ObservableObject
         {
             // User-initiated cancellation: just stop spinning, keep whatever is shown.
             _dispatcherQueue.TryEnqueue(() => IsLoading = false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                IsApiUnavailable = true;
+                StatusMessage =
+                    $"helios-ai-api rejected access at {ApiBaseUrl}. Set " +
+                    $"{AIHubApiClient.AccessKeyEnvVar} to the server's access key for " +
+                    "Docker or remote URLs.";
+                IsLoading = false;
+            });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {

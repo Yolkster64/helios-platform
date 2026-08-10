@@ -23,9 +23,9 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     public ApiEndpointTests(WebApplicationFactory<Program> factory)
     {
         _client = factory.CreateClient();
-        if (Environment.GetEnvironmentVariable("HELIOS_PYTHON_SPOKE_API_KEY") is { Length: > 0 } key)
+        if (Environment.GetEnvironmentVariable("HELIOS_API_ACCESS_KEY") is { Length: > 0 } key)
         {
-            _client.DefaultRequestHeaders.Add("X-HELIOS-Spoke-Key", key);
+            _client.DefaultRequestHeaders.Add("X-HELIOS-Api-Key", key);
         }
     }
 

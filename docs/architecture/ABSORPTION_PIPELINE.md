@@ -1,7 +1,8 @@
 # Absorption pipeline — benchmarking the original repo's best PRs
 
-The fork's upstream (`M0nado/helios-platform`) carries ~30 open PRs of prior
-work — XCore9 evaluators, Hermes federation contracts, governance gates. Some of
+`Yolkster64/helios-platform` is authoritative. Its read-only upstream reference
+(`M0nado/helios-platform`) carries prior PR work — XCore9 evaluators, Hermes federation
+contracts, governance gates. Some of
 it is worth having; none of it is worth merging blind. This pipeline turns
 "absorb the best of upstream" into an evidence-driven loop that also feeds the
 AIHub learning store.
@@ -46,3 +47,7 @@ the read-only `xcore-review` board.
 - **Advisory ≠ training data for routing.** The routing chains learn only from
   the hub's own provider outcomes; absorption/fork signals inform insights.
 - **Upstream is read-only.** We fetch PR heads; we never push to the upstream.
+- **API access is explicit.** Direct loopback API calls need no key. Docker bridge or
+  remote calls send `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; the absorption script
+  reads that environment variable (and knows the loopback-only compose development key).
+  Remote API URLs must use HTTPS, and advisory POSTs never follow redirects with the key.

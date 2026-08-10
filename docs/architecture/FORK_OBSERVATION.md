@@ -44,20 +44,20 @@ the artifact, then:
    Windows App SDK servicing release for `src/gui`, MCP SDK breaking change, a retrieval
    pattern worth porting from the RAG demo).
 
-## Feeding the AIHub learning loop (roadmap)
+## Feeding the AIHub learning loop
 
 Today the hub's learning store records `RoutingOutcome`s from real provider calls, read
 back via `GET /v1/learning` and analyzed by the Python spoke via `/v1/insights`. The
-fork digests are the same shape of signal — dated observations that should bias future
-decisions — so the roadmap step (after PR3's cost wiring enables `learning.enabled` by
-default) is:
+fork digests are the same shape of signal — dated observations that inform future
+decisions. The API contract now exists:
 
-- Add a **POST** ingestion surface to `/v1/learning` accepting *advisory* outcomes with
-  a provenance field (`source: fork-observation`), so digest summaries sit alongside
+- **POST** `/v1/learning` accepts *advisory* outcomes with a required provenance field
+  (`source: fork-observation`), so digest summaries sit alongside
   provider outcomes without polluting routing statistics — advisory records inform
   `/v1/insights` narratives, never the routing chains directly.
-- Post each reviewed digest's per-repo summary lines through that endpoint (a follow-up
-  step in the workflow, gated on the API being reachable — still no git writes).
+- A reviewer may post a kept digest's per-repo summary lines through that endpoint. Local
+  calls need no key; Docker bridge/remote calls send `HELIOS_API_ACCESS_KEY` as
+  `X-HELIOS-Api-Key`.
 - Keep the manual review in the loop: only human-committed digests get posted, so the
   learning store never ingests unreviewed upstream text.
 

@@ -22,6 +22,12 @@ public sealed class AIHubApiClient : IDisposable
     /// <summary>Environment variable that overrides the API base URL.</summary>
     public const string BaseUrlEnvVar = "HELIOS_API_URL";
 
+    /// <summary>Environment variable containing the API key for Docker/remote URLs.</summary>
+    public const string AccessKeyEnvVar = "HELIOS_API_ACCESS_KEY";
+
+    /// <summary>Header accepted by helios-ai-api for non-loopback requests.</summary>
+    public const string AccessKeyHeader = "X-HELIOS-Api-Key";
+
     /// <summary>Default helios-ai-api base URL for a local dev loop.</summary>
     public const string DefaultBaseUrl = "http://localhost:5170";
 
@@ -37,13 +43,19 @@ public sealed class AIHubApiClient : IDisposable
     public AIHubApiClient(Uri baseAddress)
     {
         BaseAddress = baseAddress;
-        _http = new HttpClient
+        // Do not forward the custom access-key header across redirects.
+        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
         {
             BaseAddress = baseAddress,
             // Snappy offline detection: the dashboard's "API not running" state should
             // appear in seconds, not after HttpClient's 100 s default.
             Timeout = TimeSpan.FromSeconds(5),
         };
+        var accessKey = Environment.GetEnvironmentVariable(AccessKeyEnvVar);
+        if (!string.IsNullOrWhiteSpace(accessKey))
+        {
+            _http.DefaultRequestHeaders.Add(AccessKeyHeader, accessKey);
+        }
     }
 
     /// <summary>Resolved API base address (env var or default) — surfaced in the UI.</summary>

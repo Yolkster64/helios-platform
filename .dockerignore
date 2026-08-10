@@ -9,6 +9,22 @@
 .claude
 .devcontainer
 .vscode
+.env
+.env.*
+**/local.settings.json
+**/appsettings.development.json
+**/appsettings.production.json
+**/api-keys.env
+**/api-keys.json
+**/secret.txt
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/secrets
+**/.aws
+**/.azure
+**/.kube
 
 # --- Runtime state: mounted as a volume, never baked into the image ---
 .helios
@@ -22,6 +38,9 @@
 **/node_modules
 **/__pycache__
 **/.pytest_cache
+src/ai/python/build
+src/ai/python/dist
+src/ai/python/*.egg-info
 src/ai/HELIOS.AIHub.Native/build
 
 # --- Heavy trees the image never needs ---

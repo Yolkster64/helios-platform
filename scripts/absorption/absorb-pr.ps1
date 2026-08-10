@@ -26,6 +26,7 @@ param(
     [string]$Upstream = 'M0nado/helios-platform',
     [switch]$Apply,
     [switch]$SkipTests,
+    [string]$ApiKey = $env:HELIOS_API_ACCESS_KEY,
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 )
 
@@ -137,6 +138,23 @@ if ($Apply -and (Test-Path $worktree)) {
 # --- advisory learning record (best effort) ----------------------------------
 $apiBase = if ($env:HELIOS_API_URL) { $env:HELIOS_API_URL.TrimEnd('/') } else { 'http://localhost:5170' }
 try {
+    [Uri]$apiUri = $null
+    if (-not [Uri]::TryCreate($apiBase, [UriKind]::Absolute, [ref]$apiUri) -or
+        $apiUri.Scheme -notin @('http', 'https')) {
+        throw "HELIOS_API_URL must be an absolute HTTP(S) URL."
+    }
+    if (-not $apiUri.IsLoopback -and $apiUri.Scheme -ne 'https') {
+        throw "Remote HELIOS_API_URL values must use HTTPS."
+    }
+    if ([string]::IsNullOrWhiteSpace($ApiKey) -and $apiUri.IsLoopback) {
+        # docker-compose's loopback-only development default. Remote endpoints
+        # never receive a guessed credential.
+        $ApiKey = 'local-compose-only'
+    }
+    $headers = @{}
+    if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
+        $headers['X-HELIOS-Api-Key'] = $ApiKey
+    }
     $body = @{
         taskType = 'absorption'
         source = 'absorption-benchmark'
@@ -146,11 +164,11 @@ try {
         latencyMs = $elapsed
     } | ConvertTo-Json
     Invoke-RestMethod -Method Post -Uri "$apiBase/v1/learning" -ContentType 'application/json' `
-        -Body $body -TimeoutSec 5 | Out-Null
+        -Headers $headers -Body $body -TimeoutSec 5 -MaximumRedirection 0 | Out-Null
     Write-Host "Advisory outcome recorded at $apiBase/v1/learning."
 }
 catch {
-    Write-Host "helios-ai-api not reachable at $apiBase — advisory outcome not recorded (report file is authoritative)."
+    Write-Host "helios-ai-api unavailable or access denied at $apiBase — advisory outcome not recorded (report file is authoritative)."
 }
 
 exit $(if ($gatePassed) { 0 } else { 2 })

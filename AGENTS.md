@@ -8,6 +8,7 @@ Enterprise Windows management platform. C#/.NET 8 + PowerShell 7, with a multi-L
 ```bash
 dotnet build HELIOS.sln -c Release          # AIHub + CLI + MCP + tests ONLY
 dotnet test tests/HELIOS.AIHub.Tests -c Release
+cd src/ai/python && python3 -m pytest tests # dependency-free spoke; [ml] optional
 bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
 ```
 
@@ -38,6 +39,14 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan`.
   Providers and the task-routing table live in `config/aihub.json`; engine candidates are
   advisory and never auto-execute.
+- `helios-ai-api` (src/ai/HELIOS.AIHub.Api): `GET /healthz`; `/v1/status`,
+  `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/engines`; `POST /v1/learning`,
+  `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`, `/v1/compare`.
+  `/v1/*` is loopback-only unless a caller sends `HELIOS_API_ACCESS_KEY` as
+  `X-HELIOS-Api-Key`; hosted use still needs identity-aware ingress.
+- Python spoke (src/ai/python, `helios-agents`): outcome analytics, text grouping, and
+  truthful engine catalog/recommendation operations behind `PythonInsightsSpoke`'s
+  four-process cap. Prototype/concept candidates never auto-execute.
 - MCP server (src/mcp/HELIOS.Mcp, registered in `.mcp.json`): `helios_ai_ask`,
   `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
   `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,

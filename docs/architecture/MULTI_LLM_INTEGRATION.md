@@ -150,6 +150,7 @@ one door with shared circuit-breaker and learning state:
 | `/v1/status` | GET | Provider readiness, no network calls |
 | `/v1/routing` | GET | Default chain + task-routing table |
 | `/v1/learning?taskType=&limit=` | GET | Recent routing outcomes, newest first |
+| `/v1/learning` | POST | Provenance-required advisory outcome ingestion; never provider-routing training data |
 | `/v1/insights?taskType=&limit=` | GET | Python-spoke analytics (per-provider stats + drift) over recorded outcomes |
 | `/v1/engines?cudaEnabled=&includeCandidates=` | GET | Implemented engine catalog with runtime snapshot plus optional labeled candidates |
 | `/v1/engines/recommend` | POST | Offline plan; available implementations and build candidates remain separate |
@@ -158,14 +159,14 @@ one door with shared circuit-breaker and learning state:
 | `/v1/tandem` | POST | Whole chain concurrently, learned winner reported |
 | `/v1/compare` | POST | Parallel fan-out with duplicate flagging: `{prompt, providers?, system?}` |
 
-Python-spoke calls share a four-process concurrency cap. With no
-`HELIOS_PYTHON_SPOKE_API_KEY`, those endpoints accept loopback callers only. A directly
-remote caller must send the configured key as `X-HELIOS-Spoke-Key`; hosted deployments
-should still use identity-aware, rate-limited ingress instead of treating that narrow key
-as the platform's full authorization layer.
+Python-spoke calls share a four-process concurrency cap. All `/v1/*` operations are
+loopback-only unless a remote/Docker-bridge caller sends `HELIOS_API_ACCESS_KEY` as
+`X-HELIOS-Api-Key`. Hosted deployments should still use identity-aware, rate-limited
+ingress instead of treating that local access key as the platform's full authorization
+layer.
 
 Provider failures are payload (`200` + `success:false` + `error`), not transport errors;
-`4xx` is reserved for malformed requests. Config resolution matches the CLI:
+`4xx` is reserved for malformed or unauthorized requests. Config resolution matches the CLI:
 `--aihub-config`, then `AIHUB_CONFIG`, then walking up to `config/aihub.json`.
 
 ## Testing

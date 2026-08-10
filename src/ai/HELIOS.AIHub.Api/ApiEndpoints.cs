@@ -16,8 +16,8 @@ namespace HELIOS.AIHub.Api;
 /// </summary>
 public static class ApiEndpoints
 {
-    private const string SpokeApiKeyEnvironment = "HELIOS_PYTHON_SPOKE_API_KEY";
-    private const string SpokeApiKeyHeader = "X-HELIOS-Spoke-Key";
+    private const string ApiKeyEnvironment = "HELIOS_API_ACCESS_KEY";
+    private const string ApiKeyHeader = "X-HELIOS-Api-Key";
 
     private static readonly HashSet<string> EngineSecurityProfiles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,18 +27,35 @@ public static class ApiEndpoints
         "performance",
     };
 
-    public static IEndpointRouteBuilder MapAIHubApi(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapAIHubApi(this WebApplication app)
     {
+        // Authorization must run before endpoint selection/binding. Endpoint filters in
+        // .NET 8 run after handler arguments are bound, so a malformed remote POST could
+        // otherwise receive a binding response without ever reaching the access check.
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/v1")
+                && AuthorizeApiRequest(
+                    context, app.Configuration[ApiKeyEnvironment]) is { } denied)
+            {
+                await denied.ExecuteAsync(context);
+                return;
+            }
+            await next(context);
+        });
+
         app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
-        app.MapGet("/v1/status", (AIHubService hub) =>
+        var api = app.MapGroup("/v1");
+
+        api.MapGet("/status", (AIHubService hub) =>
             Results.Ok(hub.GetStatus().Select(ProviderStatusResponse.From).ToList()));
 
-        app.MapGet("/v1/routing", (AIHubService hub) =>
+        api.MapGet("/routing", (AIHubService hub) =>
             Results.Ok(new RoutingTableResponse(
                 hub.RoutingTable.DefaultChain, hub.RoutingTable.TaskRouting)));
 
-        app.MapGet("/v1/learning", async (
+        api.MapGet("/learning", async (
             AIHubService hub, string? taskType, int? limit, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(taskType))
@@ -50,7 +67,7 @@ public static class ApiEndpoints
             return Results.Ok(outcomes);
         });
 
-        app.MapPost("/v1/learning", async (
+        api.MapPost("/learning", async (
             AIHubService hub, AdvisoryOutcomeRequest request, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.TaskType))
@@ -87,15 +104,10 @@ public static class ApiEndpoints
             return Results.Ok(new { recorded = enabled, learningEnabled = enabled });
         });
 
-        app.MapGet("/v1/insights", async (
-            HttpContext httpContext, AIHubService hub, PythonInsightsSpoke spoke,
-            string? taskType, int? limit,
+        api.MapGet("/insights", async (
+            AIHubService hub, PythonInsightsSpoke spoke, string? taskType, int? limit,
             CancellationToken ct) =>
         {
-            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
-            {
-                return denied;
-            }
             if (string.IsNullOrWhiteSpace(taskType))
             {
                 return Results.BadRequest(new ApiError("taskType query parameter is required."));
@@ -117,17 +129,12 @@ public static class ApiEndpoints
             return Results.Ok(new InsightsResponse(taskType, true, null, summary, drift));
         });
 
-        app.MapGet("/v1/engines", async (
-            HttpContext httpContext,
+        api.MapGet("/engines", async (
             PythonInsightsSpoke spoke,
             bool? cudaEnabled,
             bool? includeCandidates,
             CancellationToken ct) =>
         {
-            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
-            {
-                return denied;
-            }
             var catalog = await spoke.GetEngineCatalogAsync(
                 cudaEnabled ?? false, includeCandidates ?? false, ct);
             return catalog is null
@@ -139,16 +146,11 @@ public static class ApiEndpoints
                 : Results.Ok(new EngineAdvisoryResponse(true, null, catalog));
         });
 
-        app.MapPost("/v1/engines/recommend", async (
-            HttpContext httpContext,
+        api.MapPost("/engines/recommend", async (
             EngineRecommendationRequest request,
             PythonInsightsSpoke spoke,
             CancellationToken ct) =>
         {
-            if (AuthorizePythonSpokeRequest(httpContext) is { } denied)
-            {
-                return denied;
-            }
             var profile = request.SecurityProfile?.Trim().ToLowerInvariant() ?? "balanced";
             if (!EngineSecurityProfiles.Contains(profile))
             {
@@ -183,7 +185,7 @@ public static class ApiEndpoints
                 : Results.Ok(new EngineAdvisoryResponse(true, null, recommendation));
         });
 
-        app.MapPost("/v1/ask", async (AskRequest request, AIHubService hub, CancellationToken ct) =>
+        api.MapPost("/ask", async (AskRequest request, AIHubService hub, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
             {
@@ -194,7 +196,7 @@ public static class ApiEndpoints
             return Results.Ok(ChatResponse.From(result));
         });
 
-        app.MapPost("/v1/route", async (RouteRequest request, AIHubService hub, CancellationToken ct) =>
+        api.MapPost("/route", async (RouteRequest request, AIHubService hub, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.TaskType) || string.IsNullOrWhiteSpace(request.Prompt))
             {
@@ -204,7 +206,7 @@ public static class ApiEndpoints
             return Results.Ok(ChatResponse.From(result));
         });
 
-        app.MapPost("/v1/tandem", async (RouteRequest request, AIHubService hub, CancellationToken ct) =>
+        api.MapPost("/tandem", async (RouteRequest request, AIHubService hub, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.TaskType) || string.IsNullOrWhiteSpace(request.Prompt))
             {
@@ -217,7 +219,7 @@ public static class ApiEndpoints
                 tandem.Winner?.Provider));
         });
 
-        app.MapPost("/v1/compare", async (CompareRequest request, AIHubService hub, CancellationToken ct) =>
+        api.MapPost("/compare", async (CompareRequest request, AIHubService hub, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
             {
@@ -231,34 +233,33 @@ public static class ApiEndpoints
     }
 
     /// <summary>
-    /// Python-spawning endpoints are local by default. A directly remote caller must use
-    /// the configured spoke key; hosted deployments should additionally enforce their
-    /// normal identity-aware ingress before traffic reaches Kestrel.
+    /// All API operations are local by default. A directly remote caller must use the
+    /// configured access key; hosted deployments should additionally enforce their normal
+    /// identity-aware ingress before traffic reaches Kestrel.
     /// </summary>
-    private static IResult? AuthorizePythonSpokeRequest(HttpContext context)
+    private static IResult? AuthorizeApiRequest(HttpContext context, string? configuredKey)
     {
-        var configuredKey = Environment.GetEnvironmentVariable(SpokeApiKeyEnvironment);
         var remoteAddress = context.Connection.RemoteIpAddress;
         if (remoteAddress is null || IPAddress.IsLoopback(remoteAddress))
         {
             return null;
         }
-        if (string.IsNullOrEmpty(configuredKey))
+        if (string.IsNullOrWhiteSpace(configuredKey))
         {
             return Results.Json(
                 new ApiError(
-                    $"Remote Python-spoke access is disabled. Configure {SpokeApiKeyEnvironment} "
-                    + $"and send {SpokeApiKeyHeader}."),
+                    $"Remote API access is disabled. Configure {ApiKeyEnvironment} "
+                    + $"and send {ApiKeyHeader}."),
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var suppliedKey = context.Request.Headers[SpokeApiKeyHeader].ToString();
+        var suppliedKey = context.Request.Headers[ApiKeyHeader].ToString();
         var expectedBytes = Encoding.UTF8.GetBytes(configuredKey);
         var suppliedBytes = Encoding.UTF8.GetBytes(suppliedKey);
         return CryptographicOperations.FixedTimeEquals(expectedBytes, suppliedBytes)
             ? null
             : Results.Json(
-                new ApiError($"Missing or invalid {SpokeApiKeyHeader}."),
+                new ApiError($"Missing or invalid {ApiKeyHeader}."),
                 statusCode: StatusCodes.Status401Unauthorized);
     }
 }

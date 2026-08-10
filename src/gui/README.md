@@ -32,6 +32,14 @@ dotnet run --project src/ai/HELIOS.AIHub.Api   # serves /v1/status
 $env:HELIOS_API_URL = "http://localhost:5170"  # optional; this is the default
 ```
 
+Direct loopback requests need no key. When `HELIOS_API_URL` points through Docker's
+bridge or at a remote API, set the same access key used by the server; the client sends it
+as `X-HELIOS-Api-Key`:
+
+```powershell
+$env:HELIOS_API_ACCESS_KEY = "replace-with-the-server-key"
+```
+
 If the API is not running, the dashboard shows a graceful "API not running" warning with
 the resolved URL and the command to start it — that state is expected, not a bug.
 
