@@ -1,6 +1,10 @@
-# syntax=docker/dockerfile:1
-#
 # helios-ai-api — the HELIOS multi-LLM hub as REST (src/ai/HELIOS.AIHub.Api).
+#
+# Deliberately no `# syntax=docker/dockerfile:1` directive: it makes BuildKit
+# fetch its frontend image from docker.io before anything else, which is this
+# build's only Docker Hub dependency (both FROM images are MCR) and has caused
+# transient registry timeouts in CI. The builtin frontend covers every feature
+# used here.
 #
 # Build from the REPO ROOT (the build needs src/ai, the src/core seam files,
 # config/*.json, and nuget.config from the context):
