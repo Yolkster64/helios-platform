@@ -159,6 +159,25 @@ if ($toolchain) {
             $detail += '; no .NET SDK >= 8 (HELIOS.sln targets net8.0; dotnet --list-sdks lists none)'
         }
     }
+    # Same shape for Python: presence is not compatibility. The spoke declares
+    # requires-python >= 3.10 (src/ai/python/pyproject.toml) and uses
+    # 3.10-only syntax, so a 3.9-or-older interpreter fails the advertised
+    # test lane and fleet stub despite readiness saying Found.
+    if ($toolchainReady) {
+        $pythonOk = $false
+        foreach ($candidate in @('python3', 'python')) {
+            $py = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($py) {
+                & $py.Source -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>$null
+                if ($LASTEXITCODE -eq 0) { $pythonOk = $true; break }
+            }
+        }
+        if (-not $pythonOk) {
+            $toolchainReady = $false
+            $detail += '; no Python >= 3.10 (src/ai/python requires-python >= 3.10)'
+        }
+    }
     $components += New-Component -Name 'toolchain' -Ready $toolchainReady -Detail $detail `
         -FixCommand 'pwsh scripts/build/verify-readiness.ps1   # lists each missing tool and why it is needed'
 }

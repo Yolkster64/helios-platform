@@ -446,12 +446,18 @@ function Invoke-ReconcilePass {
             # Parentheses around the concatenation matter: -f binds tighter
             # than +, so without them the placeholders would print literally.
             Write-Warning (("pool {0}: {1} worker(s) with unverifiable identity (missing/unreadable " +
-                'start time) are excluded from lane counts and cannot be scaled down - check the ' +
-                'manifest pids by hand and rerun stop-fleet.ps1 -RunId once resolved.') -f
+                'start time) are excluded from lane counts and cannot be scaled down - their lane ' +
+                'capacity is reserved (no scale-up into it); check the manifest pids by hand and ' +
+                'rerun stop-fleet.ps1 -RunId once resolved.') -f
                 $poolName, $workerState.Unverifiable)
         }
         $demand = [int][math]::Ceiling($queueDepth / [double]$scaleUpDepth)
-        $desired = [math]::Min($maxLanes, [math]::Max($minLanes, $demand))
+        # An unverifiable worker may still be ALIVE and occupying a lane, so
+        # its capacity is reserved: scaling up into it could exceed the pool's
+        # maxLocalLanes ceiling (e.g. 3 verified + 1 live unverifiable in a
+        # cap-4 pool must not spawn a fifth process).
+        $effectiveMax = [math]::Max(0, $maxLanes - $workerState.Unverifiable)
+        $desired = [math]::Min($effectiveMax, [math]::Max($minLanes, $demand))
 
         # Idle clock: a non-empty queue (or a pool never seen before) resets it.
         $lastNonEmpty = ConvertTo-UtcDateTime (Get-OptionalProperty `

@@ -58,9 +58,15 @@ Batch runs go through the fleet, not a foreach loop:
 `pwsh scripts/fleet/seed-absorption-tasks.ps1 -Epic E14 -Max 5` turns watchlist
 candidates into `xcore-infra` board tasks (lane `infrastructure`, deterministic ids
 `absorb-pr-<N>`, idempotent re-seeding) via the lock-aware enqueue against a running
-fleet. Fleet workers execute the benchmarks **locally on the fleet host**, so batching
-inherits the untrusted-code boundary above: seed only on a credential-free host, or
-dispatch the hosted workflow once per PR instead. Cap with `-Max` — each benchmark is
+fleet. **Seed only when the run's manifest says `workerKind: hermes`.** The stub
+fleet (the normal Cloud Shell/Codespaces path when Hermes is absent) marks every
+prompted task `done` as `stub-completed` *without executing anything* — each seeded
+benchmark would be consumed with no gate run and no report, and its deterministic id
+blocks re-seeding into that run. On a stub fleet, dispatch the hosted `Absorption
+Benchmark` workflow once per PR instead. Real-Hermes fleet workers execute the
+benchmarks **locally on the fleet host**, so batching also inherits the
+untrusted-code boundary above: seed only on a credential-free host, or use the
+hosted workflow. Cap with `-Max` — each benchmark is
 a full build+test gate, and uncapped seeding starves the infra pool's other lanes. Fleet lifecycle itself (start/scale/stop) belongs
 to the `fleet-operator` agent; review of the reports belongs on the read-only
 `xcore-review` board.

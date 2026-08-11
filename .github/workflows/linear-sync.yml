@@ -119,7 +119,10 @@ jobs:
             (.linear.githubLabelToLinear // {}) as $m
             | ($labels | split(",")) | map($m[.] // empty) | unique | .[]' config/connectors.json)
           label_ids='[]'
-          for name in $mapped_names; do
+          # Newline-safe iteration: an unquoted $mapped_names expansion would
+          # word-split a configured name like "High Priority" into two labels.
+          while IFS= read -r name; do
+            [ -z "$name" ] && continue
             lid=$(gql 'query($t:ID!,$n:String!){ issueLabels(filter:{team:{id:{eq:$t}}, name:{eq:$n}}, first:1){ nodes { id } } }' \
               "$(jq -n --arg t "$team_id" --arg n "$name" '{t:$t,n:$n}')" | jq -r '.data.issueLabels.nodes[0].id // empty')
             if [ -z "$lid" ]; then
@@ -127,7 +130,7 @@ jobs:
                 "$(jq -n --arg t "$team_id" --arg n "$name" '{t:$t,n:$n}')" | jq -r '.data.issueLabelCreate.issueLabel.id // empty')
             fi
             [ -n "$lid" ] && label_ids=$(jq -c --arg id "$lid" '. + [$id]' <<< "$label_ids")
-          done
+          done <<< "$mapped_names"
 
           case "$EVENT_ACTION" in
             opened|labeled|unlabeled)
