@@ -136,9 +136,11 @@ foreach ($manifestPath in $manifestFiles) {
         $manifestRunId, $counts['stopped'], $counts['killed'], $counts['already-exited'],
         ($counts['pid-reused'] + $counts['pid-unverifiable']))
     if ($counts['pid-unverifiable'] -gt 0) {
-        Write-Warning ("run {0}: {1} worker(s) could not be identity-verified and were left " +
+        # Parentheses around the concatenation matter: -f binds tighter than
+        # +, so without them the placeholders would print literally.
+        Write-Warning (("run {0}: {1} worker(s) could not be identity-verified and were left " +
             "alone - they may still be running. Manifest kept as 'stopped-partial'; check the " +
-            'pids above manually and rerun stop-fleet.ps1 -RunId {0} once resolved.' -f
+            'pids above manually and rerun stop-fleet.ps1 -RunId {0} once resolved.') -f
             $manifestRunId, $counts['pid-unverifiable'])
     }
 }

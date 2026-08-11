@@ -195,6 +195,7 @@ function Get-PoolWorkerState {
     # spawned, so it does not count.
     param($ManifestPool)
     $running = [System.Collections.Generic.List[object]]::new()
+    $unverifiable = 0
     $maxSlot = 0
     foreach ($worker in @(Get-OptionalProperty $ManifestPool 'workers' @())) {
         $assignee = [string](Get-OptionalProperty $worker 'assignee' '')
@@ -206,16 +207,25 @@ function Get-PoolWorkerState {
         if ($workerPid -le 0) { continue }
         $proc = Get-Process -Id $workerPid -ErrorAction SilentlyContinue
         if ($null -eq $proc) { continue }
+        # Identity contract (keep in sync with stop-fleet.ps1 and the MCP
+        # workersLive counter): a worker counts as Running only when the
+        # recorded start time AND the process start time are both readable
+        # and match. Unverifiable identities are excluded — counting them
+        # would hand scale-down stop targets Stop-FleetWorker must refuse,
+        # burning the whole Delta on unstoppable entries — but they are
+        # tallied so the reconciler can warn that a possibly-live worker
+        # sits outside its control.
         $expected = ConvertTo-UtcDateTime (Get-OptionalProperty $worker 'startTime')
-        if ($null -ne $expected) {
-            $actualStart = $null
-            try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
-            if ($null -eq $actualStart -or
-                [math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { continue }
+        $actualStart = $null
+        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+        if ($null -eq $expected -or $null -eq $actualStart) {
+            $unverifiable++
+            continue
         }
+        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { continue }
         $running.Add($worker)
     }
-    return [pscustomobject]@{ Running = $running; MaxSlot = $maxSlot }
+    return [pscustomobject]@{ Running = $running; MaxSlot = $maxSlot; Unverifiable = $unverifiable }
 }
 
 function Stop-FleetWorker {
@@ -432,6 +442,14 @@ function Invoke-ReconcilePass {
             -NowUtc $nowUtc
         $workerState = Get-PoolWorkerState -ManifestPool $manifestPool
         $current = $workerState.Running.Count
+        if ($workerState.Unverifiable -gt 0) {
+            # Parentheses around the concatenation matter: -f binds tighter
+            # than +, so without them the placeholders would print literally.
+            Write-Warning (("pool {0}: {1} worker(s) with unverifiable identity (missing/unreadable " +
+                'start time) are excluded from lane counts and cannot be scaled down - check the ' +
+                'manifest pids by hand and rerun stop-fleet.ps1 -RunId once resolved.') -f
+                $poolName, $workerState.Unverifiable)
+        }
         $demand = [int][math]::Ceiling($queueDepth / [double]$scaleUpDepth)
         $desired = [math]::Min($maxLanes, [math]::Max($minLanes, $demand))
 

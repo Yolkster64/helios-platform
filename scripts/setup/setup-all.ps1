@@ -141,6 +141,24 @@ if ($toolchain) {
         $toolchainReady = $false
         $detail += '; no Bicep compiler (need bicep or az for infra/main.bicep validation)'
     }
+    # verify-readiness only proves `dotnet` EXISTS; every AIHub/MCP project
+    # targets net8.0, so a host carrying only a pre-8 SDK would be declared
+    # ready while the advertised `dotnet build HELIOS.sln` cannot run.
+    # Require at least one SDK with major version >= 8.
+    if ($toolchainReady) {
+        $dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        $sdkOk = $false
+        if ($dotnetCommand) {
+            foreach ($line in @(& $dotnetCommand.Source --list-sdks 2>$null)) {
+                if ("$line" -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) { $sdkOk = $true; break }
+            }
+        }
+        if (-not $sdkOk) {
+            $toolchainReady = $false
+            $detail += '; no .NET SDK >= 8 (HELIOS.sln targets net8.0; dotnet --list-sdks lists none)'
+        }
+    }
     $components += New-Component -Name 'toolchain' -Ready $toolchainReady -Detail $detail `
         -FixCommand 'pwsh scripts/build/verify-readiness.ps1   # lists each missing tool and why it is needed'
 }
