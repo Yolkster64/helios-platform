@@ -53,7 +53,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 
 # Child scripts run in their own process so their `exit`, StrictMode, and preference
 # settings stay isolated, and their exit codes come back clean.
-$pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
+$pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
 if (-not $pwshExe) {
     # Fail fast: every child step runs through $pwshExe, and a null here would
@@ -65,7 +65,7 @@ if (-not $pwshExe) {
 # On Windows, a bash.exe on PATH is usually WSL's: it cannot resolve the Windows
 # repo paths handed to the .sh probes, and that failure mode would mask the
 # native gh/az fallbacks below. Windows always takes the native probe path.
-$bashCommand = if ($IsWindows) { $null } else { Get-Command bash -CommandType Application -ErrorAction SilentlyContinue }
+$bashCommand = if ($IsWindows) { $null } else { Get-Command bash -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 }
 
 function Invoke-Step {
     param(
@@ -155,8 +155,8 @@ Write-Section ''
 Write-Section '-- b. Auth state (verify-only; nothing is mutated) --'
 # Application only: the probes below launch $command.Source as an external
 # executable, which a profile alias or function shadowing gh/az can never back.
-$ghCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
-$azCommand = Get-Command az -CommandType Application -ErrorAction SilentlyContinue
+$ghCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+$azCommand = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 
 function Invoke-GhAuthStatus {
     # --active restricts the check to the account later gh commands actually
