@@ -38,7 +38,7 @@ public static class HeliosStatusTools
     public static string GetAbsorbStatus() => BuildAbsorbStatusJson(startDirectory: null);
 
     [McpServerTool(Name = "helios_fleet_status_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Fleet run state from .helios/fleet/<runId>/manifest.json: per run { runId, status, pools: [{ pool, board, workers, openTasks, claimedTasks, doneTasks }] }, counts read from each pool's board db. Latest run by default; allRuns=true for every recorded run. Read-only and lock-free — never blocks workers. A missing fleet directory returns an empty result with a message, not an error.")]
+    [Description("Fleet run state from .helios/fleet/<runId>/manifest.json: per run { runId, status, pools: [{ pool, board, workers, workersLive, openTasks, claimedTasks, doneTasks, blockedTasks }] }. workers = manifest-recorded count; workersLive = pid+startTime-verified processes still running (0 with recorded workers means a dead fleet). Task counts read from each pool's board db. Latest run by default; allRuns=true for every recorded run. Read-only and lock-free — never blocks workers. A missing fleet directory returns an empty result with a message, not an error.")]
     public static string GetFleetStatus(
         [Description("Include every recorded run instead of only the latest one.")] bool allRuns = false) =>
         BuildFleetStatusJson(allRuns, startDirectory: null);
@@ -227,16 +227,63 @@ public static class HeliosStatusTools
 
     private static FleetPoolRow BuildPoolRow(FleetManifestPool pool, string runDir, List<string> warnings)
     {
-        var (open, claimed, done) = TallyBoard(pool.Db, runDir, warnings);
+        var (open, claimed, done, blocked) = TallyBoard(pool.Db, runDir, warnings);
         return new FleetPoolRow
         {
             Pool = pool.Pool,
             Board = pool.Board,
             Workers = pool.Workers.Count,
+            WorkersLive = CountLiveWorkers(pool.Workers),
             OpenTasks = open,
             ClaimedTasks = claimed,
             DoneTasks = done,
+            BlockedTasks = blocked,
         };
+    }
+
+    /// <summary>
+    /// Counts manifest workers whose recorded pid is still a live process — the same
+    /// pid + startTime identity check the fleet scripts use before killing (2s clock
+    /// tolerance). A stub that idle-exited or a crashed agent leaves the manifest
+    /// entry behind, so the recorded count alone cannot detect a dead fleet. A pid
+    /// whose start time is unreadable or mismatched counts as NOT live: it is either
+    /// gone or an unrelated process that reused the pid.
+    /// </summary>
+    private static int CountLiveWorkers(IReadOnlyList<JsonElement> workers)
+    {
+        var live = 0;
+        foreach (var worker in workers)
+        {
+            if (worker.ValueKind != JsonValueKind.Object ||
+                !worker.TryGetProperty("pid", out var pidElement) ||
+                !pidElement.TryGetInt32(out var pid) || pid <= 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                if (worker.TryGetProperty("startTime", out var startElement) &&
+                    startElement.ValueKind == JsonValueKind.String &&
+                    DateTimeOffset.TryParse(startElement.GetString(), out var recorded))
+                {
+                    var actual = new DateTimeOffset(process.StartTime.ToUniversalTime());
+                    if (Math.Abs((actual - recorded.ToUniversalTime()).TotalSeconds) > 2)
+                    {
+                        continue; // pid reused by an unrelated process
+                    }
+                }
+                live++;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+                or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                // No such process, it exited mid-probe, or its start time is not
+                // readable from this principal — all mean "not verifiably ours".
+            }
+        }
+        return live;
     }
 
     /// <summary>
@@ -245,19 +292,19 @@ public static class HeliosStatusTools
     /// status counts are advisory and must never block or delay workers claiming
     /// tasks. Worst case a concurrent write skews a count until the next call.
     /// </summary>
-    private static (int Open, int Claimed, int Done) TallyBoard(
+    private static (int Open, int Claimed, int Done, int Blocked) TallyBoard(
         string? dbPath, string runDir, List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(dbPath))
         {
-            return (0, 0, 0);
+            return (0, 0, 0, 0);
         }
         // Manifests written by start-fleet.ps1 carry absolute db paths; tolerate
         // relative ones by resolving against the run directory.
         var resolved = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(runDir, dbPath);
         if (!File.Exists(resolved))
         {
-            return (0, 0, 0);
+            return (0, 0, 0, 0);
         }
 
         BoardFile? board;
@@ -270,14 +317,14 @@ public static class HeliosStatusTools
             ex is IOException or UnauthorizedAccessException or JsonException)
         {
             warnings.Add($"Skipping unreadable board '{resolved}': {ex.Message}");
-            return (0, 0, 0);
+            return (0, 0, 0, 0);
         }
         if (board is null)
         {
-            return (0, 0, 0);
+            return (0, 0, 0, 0);
         }
 
-        int open = 0, claimed = 0, done = 0;
+        int open = 0, claimed = 0, done = 0, blocked = 0;
         foreach (var task in board.Tasks)
         {
             // Same default as fleet-status.ps1: a task without a status is open.
@@ -294,8 +341,14 @@ public static class HeliosStatusTools
             {
                 done++;
             }
+            else if (string.Equals(status, "blocked", StringComparison.OrdinalIgnoreCase))
+            {
+                // A fully blocked backlog is exactly the state an operator must see;
+                // dropping these made such a pool look empty (fleet-status.ps1 parity).
+                blocked++;
+            }
         }
-        return (open, claimed, done);
+        return (open, claimed, done, blocked);
     }
 
     // ---- absorption shapes (mirrors HELIOS.AIHub.Cli.AbsorptionStatus) -------------
@@ -466,5 +519,11 @@ public static class HeliosStatusTools
 
         [JsonPropertyName("doneTasks")]
         public int DoneTasks { get; init; }
+
+        [JsonPropertyName("blockedTasks")]
+        public int BlockedTasks { get; init; }
+
+        [JsonPropertyName("workersLive")]
+        public int WorkersLive { get; init; }
     }
 }

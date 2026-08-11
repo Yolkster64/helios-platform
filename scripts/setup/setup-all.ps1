@@ -62,7 +62,10 @@ if (-not $pwshExe) {
         'host process path is unknown). Install PowerShell 7 or invoke this script via pwsh.')
     exit 2
 }
-$bashCommand = Get-Command bash -ErrorAction SilentlyContinue
+# On Windows, a bash.exe on PATH is usually WSL's: it cannot resolve the Windows
+# repo paths handed to the .sh probes, and that failure mode would mask the
+# native gh/az fallbacks below. Windows always takes the native probe path.
+$bashCommand = if ($IsWindows) { $null } else { Get-Command bash -ErrorAction SilentlyContinue }
 
 function Invoke-Step {
     param(

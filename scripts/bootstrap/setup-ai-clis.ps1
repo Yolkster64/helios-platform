@@ -50,7 +50,7 @@ pwsh scripts/bootstrap/setup-ai-clis.ps1 -Skip codex,copilot
 param(
     [switch]$VerifyOnly,
 
-    [ValidateSet('claude', 'codex', 'copilot', 'gh')]
+    [ValidateSet('claude', 'codex', 'copilot', 'gh', 'hermes')]
     [string[]]$Skip = @()
 )
 
@@ -74,6 +74,7 @@ $cliSpecs = @(
         Name        = 'claude'
         Command     = 'claude'
         NpmPackage  = '@anthropic-ai/claude-code'
+        Optional    = $false
         AgentShape  = 'claude -p {prompt}'
         InstallHint = 'npm install -g @anthropic-ai/claude-code (or rerun without -VerifyOnly)'
         Auth        = 'set ANTHROPIC_API_KEY (Key Vault: anthropic-api-key), or mint a long-lived token once with: claude setup-token'
@@ -82,6 +83,7 @@ $cliSpecs = @(
         Name        = 'codex'
         Command     = 'codex'
         NpmPackage  = '@openai/codex'
+        Optional    = $false
         AgentShape  = 'codex exec {prompt}'
         InstallHint = 'npm install -g @openai/codex (or rerun without -VerifyOnly)'
         Auth        = 'headless: set OPENAI_API_KEY (Key Vault: openai-api-key); `codex login` works where a browser exists'
@@ -90,6 +92,7 @@ $cliSpecs = @(
         Name        = 'copilot'
         Command     = 'copilot'
         NpmPackage  = '@github/copilot'
+        Optional    = $false
         AgentShape  = 'copilot -p {prompt}'
         InstallHint = 'npm install -g @github/copilot (or rerun without -VerifyOnly)'
         Auth        = 'reuses GitHub login: gh auth login --web device-code flow (scripts/bootstrap/connect-github.sh); GH_TOKEN is honored headlessly'
@@ -98,9 +101,23 @@ $cliSpecs = @(
         Name        = 'gh'
         Command     = 'gh'
         NpmPackage  = $null
+        Optional    = $false
         AgentShape  = 'gh models run {model} {prompt}'
         InstallHint = 'https://cli.github.com (pre-installed in Cloud Shell; base tools are not installed here)'
         Auth        = 'gh auth login --web device-code flow; gh-models needs the models:read scope — connect-github.sh sets both'
+    }
+    # The fifth cliAgent in config/aihub.json. Optional: there is no public
+    # installer, and start-fleet.ps1 deliberately falls back to the non-model
+    # local stub without it — but a "complete" inventory must still SAY so
+    # rather than report 4/4 and let setup-all claim full readiness.
+    [pscustomobject]@{
+        Name        = 'hermes'
+        Command     = 'hermes'
+        NpmPackage  = $null
+        Optional    = $true
+        AgentShape  = 'hermes -p {assignee} chat -q {prompt}'
+        InstallHint = 'no public installer — see docs/architecture/HERMES_FLEET_AND_XCORE.md; without it the fleet runs the local stub (no model work)'
+        Auth        = 'authenticates via its own login/config; the fleet env contract (HERMES_KANBAN_*) needs no key'
     }
 )
 
@@ -135,7 +152,7 @@ Write-Host '-- CLI fleet --'
 $results = @(foreach ($spec in $cliSpecs) {
     if ($Skip -contains $spec.Name) {
         Write-Host "  $($spec.Name): skipped (-Skip)"
-        [pscustomobject]@{ Cli = $spec.Name; Status = 'skipped'; Version = ''; Path = ''; AgentShape = $spec.AgentShape }
+        [pscustomobject]@{ Cli = $spec.Name; Status = 'skipped'; Version = ''; Path = ''; AgentShape = $spec.AgentShape; Optional = $spec.Optional }
         continue
     }
 
@@ -158,11 +175,12 @@ $results = @(foreach ($spec in $cliSpecs) {
     if ($command) {
         $version = Get-CliVersion -Command $command
         Write-Host "  $($spec.Name): $status ($version)"
-        [pscustomobject]@{ Cli = $spec.Name; Status = $status; Version = $version; Path = $command.Source; AgentShape = $spec.AgentShape }
+        [pscustomobject]@{ Cli = $spec.Name; Status = $status; Version = $version; Path = $command.Source; AgentShape = $spec.AgentShape; Optional = $spec.Optional }
     }
     else {
-        Write-Host "  $($spec.Name): MISSING — $($spec.InstallHint)"
-        [pscustomobject]@{ Cli = $spec.Name; Status = 'missing'; Version = ''; Path = ''; AgentShape = $spec.AgentShape }
+        $optionalTag = if ($spec.Optional) { 'missing (optional)' } else { 'MISSING' }
+        Write-Host "  $($spec.Name): $optionalTag — $($spec.InstallHint)"
+        [pscustomobject]@{ Cli = $spec.Name; Status = 'missing'; Version = ''; Path = ''; AgentShape = $spec.AgentShape; Optional = $spec.Optional }
     }
 })
 
@@ -197,12 +215,23 @@ else {
 }
 
 Write-Host ''
+# Only required CLIs gate the exit code; optional ones (hermes) are reported
+# honestly but never fail the run — the fleet's stub fallback is by design.
 $checked = @($results | Where-Object { $_.Status -ne 'skipped' })
-$presentCount = @($checked | Where-Object { $_.Status -ne 'missing' }).Count
-$summary = "AI CLIs: $presentCount/$($checked.Count) present"
-if ($missing.Count -gt 0) { $summary += ' — missing: ' + ($missingCliNames -join ', ') }
+$requiredChecked = @($checked | Where-Object { -not $_.Optional })
+$requiredPresent = @($requiredChecked | Where-Object { $_.Status -ne 'missing' }).Count
+$requiredMissing = @($requiredChecked | Where-Object { $_.Status -eq 'missing' })
+$optionalMissing = @($checked | Where-Object { $_.Optional -and $_.Status -eq 'missing' })
+$summary = "AI CLIs: $requiredPresent/$($requiredChecked.Count) required present"
+if ($requiredMissing.Count -gt 0) {
+    $summary += ' — missing: ' + (@($requiredMissing | ForEach-Object Cli) -join ', ')
+}
+if ($optionalMissing.Count -gt 0) {
+    $summary += '; optional missing: ' + (@($optionalMissing | ForEach-Object Cli) -join ', ') +
+        ' (fleet falls back to the local stub)'
+}
 if ($Skip.Count -gt 0) { $summary += " (skipped: $($Skip -join ', '))" }
 Write-Host $summary
 
-if ($missing.Count -gt 0) { exit 2 }
+if ($requiredMissing.Count -gt 0) { exit 2 }
 exit 0

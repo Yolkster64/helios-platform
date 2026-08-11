@@ -193,11 +193,14 @@ public sealed class McpStatusToolsTests : IDisposable
         Assert.Equal("xcore-9-code", codePool.GetProperty("pool").GetString());
         Assert.Equal("xcore-code", codePool.GetProperty("board").GetString());
         Assert.Equal(2, codePool.GetProperty("workers").GetInt32());
-        // T-6 has no status and defaults to open; blocked T-5 is in none of the
-        // three reported buckets.
+        // The fixture's pids (40001+) are synthetic and their recorded start time
+        // matches no real process, so none verify as live.
+        Assert.Equal(0, codePool.GetProperty("workersLive").GetInt32());
+        // T-6 has no status and defaults to open; blocked T-5 gets its own bucket.
         Assert.Equal(3, codePool.GetProperty("openTasks").GetInt32());
         Assert.Equal(1, codePool.GetProperty("claimedTasks").GetInt32());
         Assert.Equal(1, codePool.GetProperty("doneTasks").GetInt32());
+        Assert.Equal(1, codePool.GetProperty("blockedTasks").GetInt32());
 
         var docsPool = pools[1];
         Assert.Equal(1, docsPool.GetProperty("workers").GetInt32());
@@ -225,6 +228,52 @@ public sealed class McpStatusToolsTests : IDisposable
         Assert.Equal("20260810-090000-aaaaaa", runs[0].GetProperty("runId").GetString());
         Assert.Equal("20260811-120000-bb12cd", runs[1].GetProperty("runId").GetString());
         Assert.Equal("stopped", runs[0].GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public void FleetStatus_WorkersLive_CountsPidAndStartTimeVerifiedProcesses()
+    {
+        var root = CreateRepoRoot();
+        // One genuinely live worker (this very test process, with its real start
+        // time) and one dead entry (synthetic pid): live must count exactly 1.
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        var runDir = Path.Combine(root, ".helios", "fleet", "20260811-130000-cc34ef");
+        Directory.CreateDirectory(Path.Combine(runDir, "boards"));
+        var dbPath = Path.Combine(runDir, "boards", "xcore-code.json");
+        File.WriteAllText(dbPath, """{ "tasks": [] }""");
+        File.WriteAllText(Path.Combine(runDir, "manifest.json"), JsonSerializer.Serialize(new
+        {
+            runId = "20260811-130000-cc34ef",
+            status = "running",
+            pools = new[]
+            {
+                new
+                {
+                    pool = "xcore-9-code",
+                    board = "xcore-code",
+                    db = dbPath,
+                    workers = new object[]
+                    {
+                        new
+                        {
+                            assignee = "xcode-1",
+                            pid = self.Id,
+                            startTime = self.StartTime.ToUniversalTime().ToString("o"),
+                        },
+                        new { assignee = "xcode-2", pid = 40999, startTime = "2026-08-11T12:00:00.0000000Z" },
+                    },
+                },
+            },
+        }));
+
+        var json = HeliosStatusTools.BuildFleetStatusJson(allRuns: false, startDirectory: root);
+
+        using var doc = JsonDocument.Parse(json);
+        var pool = Assert.Single(
+            Assert.Single(doc.RootElement.GetProperty("runs").EnumerateArray())
+                .GetProperty("pools").EnumerateArray());
+        Assert.Equal(2, pool.GetProperty("workers").GetInt32());
+        Assert.Equal(1, pool.GetProperty("workersLive").GetInt32());
     }
 
     [Fact]
