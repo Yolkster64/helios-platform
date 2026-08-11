@@ -16,6 +16,8 @@ on:
       - "Infra Validation"
       - "Python Spoke"
       - "Helios Platform Deploy"
+      - "Absorption Benchmark"
+      - "Docker Validation"
     types: [completed]
 
 permissions:

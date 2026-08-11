@@ -7,26 +7,31 @@
     "channels": {
       "ci": "#helios-ci",
       "deploys": "#helios-deploys",
-      "fleet": "#helios-fleet"
+      "fleet": "#helios-fleet",
+      "controlPlane": "#helios-control-plane"
     },
     "notifyOn": {
       ".NET Build & Test": "failures-and-recovery",
       "Infra Validation": "failures-and-recovery",
       "Helios Platform Deploy": "always",
-      "Python Spoke": "failures-and-recovery"
+      "Python Spoke": "failures-and-recovery",
+      "Absorption Benchmark": "always",
+      "Docker Validation": "failures-and-recovery"
     }
   },
   "linear": {
     "enabled": true,
     "apiKeyEnv": "LINEAR_API_KEY",
-    "teamKey": "HEL",
+    "teamKey": "JOH",
     "titlePrefix": "[GH-{number}] ",
-    "syncLabels": ["bug", "enhancement", "infra", "ai-hub"],
+    "syncLabels": ["bug", "enhancement", "infra", "ai-hub", "absorption", "build-ci"],
     "githubLabelToLinear": {
       "bug": "Bug",
       "enhancement": "Feature",
       "infra": "Infra",
-      "ai-hub": "AIHub"
+      "ai-hub": "AIHub",
+      "absorption": "Absorption",
+      "build-ci": "BuildCI"
     }
   }
 }
