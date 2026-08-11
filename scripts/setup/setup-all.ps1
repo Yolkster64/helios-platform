@@ -53,7 +53,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 
 # Child scripts run in their own process so their `exit`, StrictMode, and preference
 # settings stay isolated, and their exit codes come back clean.
-$pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+$pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
 $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
 if (-not $pwshExe) {
     # Fail fast: every child step runs through $pwshExe, and a null here would
@@ -241,6 +241,11 @@ if (-not $Fix) { $aiCliArgs += '-VerifyOnly' }
 $step = Invoke-Step -Executable $pwshExe -Arguments $aiCliArgs
 $aiSummary = @($step.Output | Where-Object { $_ -like 'AI CLIs:*' }) | Select-Object -Last 1
 $aiDetail = if ($aiSummary) { $aiSummary.Trim() } else { Get-FirstLine $step.Output }
+# Installation-only verdict, and the detail says so: setup-ai-clis checks
+# executables, not credentials. Claude/Codex auth rides on env keys or cached
+# CLI logins this orchestrator cannot probe without side effects; GitHub/Azure
+# auth have their own components above.
+$aiDetail = "installed (auth not verified here - env keys or cached CLI logins; see the headless-auth guidance): $aiDetail"
 $components += New-Component -Name 'ai-clis' -Ready ($step.ExitCode -eq 0) -Detail $aiDetail `
     -FixCommand 'pwsh scripts/bootstrap/setup-ai-clis.ps1   # installs missing CLIs via npm (or setup-all.ps1 -Fix)'
 Write-ChildOutput $step.Output

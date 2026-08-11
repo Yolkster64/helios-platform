@@ -141,14 +141,15 @@ fi
 # --- 5. Unified readiness inventory (absorption epic E1) --------------------------
 # setup-all.ps1 is the one-command E1 surface: toolchain readiness, GitHub/Azure auth
 # state, the AI CLI fleet (setup-ai-clis.ps1), fleet topology, and MCP registration,
-# rendered as a single inventory table with a fix command per gap. It is verify-only
-# from here (installs already ran above; auth is never mutated by setup-all), and its
-# exit 2 just means "attention needed" — the table says what and how, so it must not
+# rendered as a single inventory table with a fix command per gap. -Fix lets it
+# complete tool installs this script's npm step cannot (the github/gh-models
+# extension in particular); auth is still never mutated by setup-all. Its exit 2
+# just means "attention needed" — the table says what and how, so it must not
 # abort this script under `set -e`.
 if command -v pwsh >/dev/null 2>&1; then
   echo
-  echo "-- Unified readiness inventory (scripts/setup/setup-all.ps1) --"
-  pwsh "$repo_root/scripts/setup/setup-all.ps1" || true
+  echo "-- Unified readiness inventory (scripts/setup/setup-all.ps1 -Fix) --"
+  pwsh "$repo_root/scripts/setup/setup-all.ps1" -Fix || true
 else
   echo "  pwsh: not installed — skipped scripts/setup/setup-all.ps1 (Cloud Shell ships pwsh)" >&2
 fi

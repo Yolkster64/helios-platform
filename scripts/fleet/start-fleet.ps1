@@ -166,11 +166,16 @@ if ($Fleet -ne 'all') {
 }
 
 # ---- workspace mode --------------------------------------------------------
+# Same Cloud Shell markers setup-ai-clis.ps1 recognizes: real Azure Cloud Shell
+# sets AZUREPS_HOST_ENVIRONMENT/ACC_CLOUD, not the custom CLOUD_SHELL variable —
+# detecting only the latter would launch the full-size fleet in a capped host.
 $workspaceMode = $Workspace.IsPresent -or
     (-not [string]::IsNullOrEmpty($env:CODESPACES)) -or
-    (-not [string]::IsNullOrEmpty($env:CLOUD_SHELL))
+    (-not [string]::IsNullOrEmpty($env:CLOUD_SHELL)) -or
+    (-not [string]::IsNullOrEmpty($env:AZUREPS_HOST_ENVIRONMENT)) -or
+    (-not [string]::IsNullOrEmpty($env:ACC_CLOUD))
 if ($workspaceMode -and -not $Workspace.IsPresent) {
-    Write-Host 'Workspace detected (CODESPACES/CLOUD_SHELL set) - pool sizes will be capped.'
+    Write-Host 'Workspace detected (Codespaces/Cloud Shell markers set) - pool sizes will be capped.'
 }
 
 function Get-EffectivePoolSize {
