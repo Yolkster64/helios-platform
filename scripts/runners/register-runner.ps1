@@ -61,6 +61,13 @@ Comma-separated labels appended to the base helios,xcore set
 Configure with --ephemeral: the runner takes exactly one job, then deregisters —
 the right mode for throwaway VMs; persistent boxes (the Xcore pools) omit it.
 
+.PARAMETER RunAsService
+Windows only: configure with --runasservice so config.cmd installs the runner
+as a Windows service during INITIAL registration. This cannot be added later —
+config.cmd refuses to reconfigure an already-configured runner (GitHub's
+documented path is remove + reconfigure). On Linux/macOS use the printed
+svc.sh sequence instead (valid after configuration).
+
 .PARAMETER DryRun
 Print the full plan and exit; no network calls, no gh calls, nothing executed.
 
@@ -77,6 +84,7 @@ param(
     [string]$RunnerName = "$([Environment]::MachineName.ToLowerInvariant())-helios",
     [string]$ExtraLabels = '',
     [switch]$Ephemeral,
+    [switch]$RunAsService,
     [switch]$DryRun
 )
 
@@ -100,12 +108,26 @@ $arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitect
 
 $configFlags = @('--unattended')
 if ($Ephemeral) { $configFlags += '--ephemeral' }
+# Windows service mode must be chosen AT configuration time: config.cmd
+# refuses to reconfigure an already-configured runner, so it cannot be
+# bolted on afterwards (GitHub's docs say remove + reconfigure).
+if ($RunAsService) {
+    if ($IsWindows) { $configFlags += '--runasservice' }
+    else { Write-Warning '-RunAsService is Windows-only (config.cmd); on Linux/macOS use svc.sh after registration - ignored.' }
+}
 
 # The hint is printed after Pop-Location, so it must carry the runner
 # directory itself — a bare .\config.cmd would resolve against the caller's
 # original working directory and fail.
 $serviceHint = if ($IsWindows) {
-    "cd $TargetDir; re-run .\config.cmd with --runasservice (or run .\run.cmd interactively)"
+    if ($RunAsService) {
+        'already installed as a Windows service by --runasservice (config.cmd sets it up to start automatically)'
+    }
+    else {
+        # config.cmd cannot add service mode to an existing registration —
+        # the only path is remove + re-register with -RunAsService.
+        "config.cmd refuses reconfiguration - to convert: `$t = gh api -X POST repos/$Repo/actions/runners/remove-token --jq .token; cd $TargetDir; .\config.cmd remove --token `$t; then re-run register-runner.ps1 -RunAsService"
+    }
 }
 else {
     "cd $TargetDir && sudo ./svc.sh install && sudo ./svc.sh start"
@@ -195,9 +217,15 @@ finally {
 }
 
 Write-Host ''
-Write-Host 'Registered. This script never auto-starts the runner — pick one:'
-Write-Host "  run in the foreground:      cd $TargetDir; $runCmd"
-Write-Host "  run as a service:           $serviceHint"
+if ($IsWindows -and $RunAsService) {
+    Write-Host 'Registered. --runasservice installed the Windows service during configuration; it starts with Windows.'
+    Write-Host "  service status:             Get-Service 'actions.runner.*'"
+}
+else {
+    Write-Host 'Registered. This script never auto-starts the runner — pick one:'
+    Write-Host "  run in the foreground:      cd $TargetDir; $runCmd"
+    Write-Host "  run as a service:           $serviceHint"
+}
 Write-Host ''
 Write-Host 'Proof of life (dispatch-only smoke workflow):'
 Write-Host "  gh workflow run runner-smoke.yml --repo $Repo"

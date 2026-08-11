@@ -174,7 +174,15 @@ jobs:
               # State names are per-team, so resolve by TYPE: closed maps to the
               # team's first "completed" state (position order — canonically Done),
               # reopened to its first "unstarted" state (canonically Todo).
-              state_type=$([ "$EVENT_ACTION" = "closed" ] && echo completed || echo unstarted)
+              #
+              # Map from the issue's LIVE state, not this run's historical
+              # EVENT_ACTION: the concurrency group serializes runs but does
+              # not order them, so a delayed 'closed' run could re-complete an
+              # issue that was already reopened. Payload fallback only if the
+              # live read fails.
+              live_state=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq .state 2>/dev/null) ||
+                live_state=$([ "$EVENT_ACTION" = "closed" ] && echo closed || echo open)
+              state_type=$([ "$live_state" = "closed" ] && echo completed || echo unstarted)
               state_id=$(gql 'query($id:String!){ team(id:$id){ states { nodes { id type position } } } }' \
                 "$(jq -n --arg id "$team_id" '{id:$id}')" |
                 jq -r --arg t "$state_type" \
