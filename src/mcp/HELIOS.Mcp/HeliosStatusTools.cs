@@ -258,6 +258,20 @@ public static class HeliosStatusTools
                 var report = JsonSerializer.Deserialize<BenchmarkReport>(stream, ReadOptions);
                 if (report is { Pr: > 0 })
                 {
+                    // Reports are keyed by their embedded pr number, so a copied
+                    // or renamed artifact (pr-222.json containing "pr": 294)
+                    // would silently attribute benchmark evidence to the wrong
+                    // upstream change. The filename is the on-disk contract —
+                    // when it parses as pr-<N>, N must agree with the payload.
+                    var stem = Path.GetFileNameWithoutExtension(file);
+                    if (stem.StartsWith("pr-", StringComparison.Ordinal) &&
+                        int.TryParse(stem["pr-".Length..], out var filePr) &&
+                        filePr != report.Pr)
+                    {
+                        warnings.Add(
+                            $"Skipping report '{file}': filename pr {filePr} disagrees with embedded pr {report.Pr}.");
+                        continue;
+                    }
                     reports[report.Pr] = report;
                 }
             }
@@ -356,6 +370,9 @@ public static class HeliosStatusTools
         var resolved = Path.IsPathRooted(dbPath) ? dbPath : Path.Combine(runDir, dbPath);
         if (!File.Exists(resolved))
         {
+            // Zeros without a warning would make a deleted/moved/never-created
+            // board indistinguishable from a genuinely drained queue.
+            warnings.Add($"Board '{resolved}' does not exist — task counts for this pool are unknown, not zero.");
             return (0, 0, 0, 0);
         }
 

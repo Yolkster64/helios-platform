@@ -154,16 +154,22 @@ if ($DryRun) {
 }
 
 # --- Preflight: gh present and authenticated --------------------------------------
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+# Application only: a profile alias or function named gh would satisfy an
+# unrestricted lookup here, then every later bare invocation would hit that
+# shell command instead of the GitHub CLI. Resolve the real executable once
+# and invoke its path throughout.
+$ghCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $ghCommand) {
     throw 'gh CLI not found — install it and run gh auth login.'
 }
+$gh = $ghCommand.Source
 # gh auth status tests EVERY stored account and exits 1 when any is stale;
 # --active scopes the check to the account the gh api calls below will use.
 # Fall back to the unscoped form only on a gh too old to know the flag.
-$authOut = & gh auth status --hostname github.com --active 2>&1
+$authOut = & $gh auth status --hostname github.com --active 2>&1
 if ($LASTEXITCODE -ne 0) {
     if ("$authOut" -match 'unknown flag') {
-        & gh auth status --hostname github.com *> $null
+        & $gh auth status --hostname github.com *> $null
     }
     if ($LASTEXITCODE -ne 0) {
         throw "gh is not authenticated. Run gh auth login as a user with ADMIN on $Repo (the registration-token endpoint requires repo admin)."
@@ -176,7 +182,7 @@ if (Test-Path $configPath) {
     Write-Host "Runner package already present in $TargetDir — skipping download."
 }
 else {
-    $tag = & gh api repos/actions/runner/releases/latest --jq .tag_name
+    $tag = & $gh api repos/actions/runner/releases/latest --jq .tag_name
     if ($LASTEXITCODE -ne 0 -or -not $tag) { throw 'could not resolve the latest actions/runner release via gh api.' }
     $version = $tag.TrimStart('v')
     $asset = "actions-runner-$os-$arch-$version.$ext"
@@ -197,7 +203,7 @@ else {
 
 # --- Mint the registration token (single-use, ~1h; memory only) -------------------
 Write-Host "Minting a short-lived registration token for $Repo..."
-$token = & gh api -X POST "repos/$Repo/actions/runners/registration-token" --jq .token
+$token = & $gh api -X POST "repos/$Repo/actions/runners/registration-token" --jq .token
 if ($LASTEXITCODE -ne 0 -or -not $token) {
     throw "could not mint a registration token — do you have admin on $Repo?"
 }

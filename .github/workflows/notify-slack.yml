@@ -64,14 +64,20 @@ jobs:
             *) icon=":grey_question:";;
           esac
 
-          text="$icon *$WF_NAME* concluded *$WF_CONCLUSION* on \`$WF_BRANCH\` (${WF_SHA:0:7}) — <$WF_URL|run>"
+          # Slack mrkdwn-escape the branch name: it is the one
+          # attacker-influenced field here (an external PR's branch can embed
+          # tokens like <!channel>, which Slack would expand into a
+          # channel-wide mention). & < > are the mrkdwn control characters.
+          branch_esc=$(printf '%s' "$WF_BRANCH" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+          text="$icon *$WF_NAME* concluded *$WF_CONCLUSION* on \`$branch_esc\` (${WF_SHA:0:7}) — <$WF_URL|run>"
           if [ "$WF_NAME" = "Absorption Benchmark" ] && [ "$WF_CONCLUSION" = "success" ]; then
             # That workflow deliberately reports success for every COMPLETED
             # benchmark, including rejected candidates (exit 2 becomes success
             # so the report still publishes). A bare white check would misread
             # as "candidate passed" — say what success actually means and
             # point at the verdict.
-            text=":clipboard: *$WF_NAME* completed on \`$WF_BRANCH\` (${WF_SHA:0:7}) — workflow success means the benchmark RAN, not that the candidate passed; verdict is in the <$WF_URL|run summary and report artifact>"
+            text=":clipboard: *$WF_NAME* completed on \`$branch_esc\` (${WF_SHA:0:7}) — workflow success means the benchmark RAN, not that the candidate passed; verdict is in the <$WF_URL|run summary and report artifact>"
           fi
           jq -n --arg text "$text" '{text: $text}' |
             curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
