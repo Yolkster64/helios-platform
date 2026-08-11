@@ -34,6 +34,11 @@ pwsh scripts/build/verify-readiness.ps1          # human table
 pwsh scripts/build/verify-readiness.ps1 -Json    # machine-readable
 ```
 
+For the *whole* readiness picture in one command — toolchain plus auth state, AI CLIs,
+fleet topology, and MCP registration — use the unified entrypoint instead:
+`pwsh scripts/setup/setup-all.ps1` (`-Fix` installs missing AI CLIs; auth is never
+mutated). See `scripts/bootstrap/README.md` and the README quickstart.
+
 ## Clone, build, test
 
 These are exactly the commands CI runs (see `CLAUDE.md`, which is authoritative):
@@ -48,6 +53,10 @@ cd src/ai/python && python3 -m pytest tests # Python spoke (dependency-free; [ml
 cd ../../..
 bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
 ```
+
+Expected outcomes for these commands — and smoke runs for every other surface (CLI, API,
+MCP, Docker, fleet, absorption, infra) — are in
+[`TEST_RUN_PLAYBOOK.md`](TEST_RUN_PLAYBOOK.md).
 
 Two things to know before you touch the solution:
 
@@ -149,6 +158,8 @@ burst capacity (VMSS)".
 ## Where to go next
 
 - `CLAUDE.md` — build commands and the repo's hard rules (read first).
+- [`TEST_RUN_PLAYBOOK.md`](TEST_RUN_PLAYBOOK.md) — test-run every surface with expected
+  outcomes.
 - `docs/CONSOLIDATION_BLUEPRINT.md` and `docs/architecture/` — the trustworthy
   architecture docs (root-level `*_COMPLETE/*_REPORT/*_SUMMARY.md` files are
   historical and unreliable).

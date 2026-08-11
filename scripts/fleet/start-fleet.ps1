@@ -85,14 +85,20 @@ function Stop-FleetWorker {
     $proc = Get-Process -Id $WorkerPid -ErrorAction SilentlyContinue
     if (-not $proc) { return 'already-exited' }
 
-    if ($ExpectedStartTime) {
-        $actualStart = $null
-        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
-        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    # Both halves of the identity are required — a null recorded start time
+    # means unverifiable, never kill-on-pid-alone (keep in sync with
+    # stop-fleet.ps1 and scale-fleet.ps1).
+    if (-not $ExpectedStartTime) { return 'pid-unverifiable' }
+    $actualStart = $null
+    try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+    if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    $expected = $null
+    try {
         $expected = [datetime]::Parse($ExpectedStartTime, $null,
             [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
     }
+    catch { return 'pid-unverifiable' }
+    if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
 
     if (-not $IsWindows) {
         & kill -TERM $WorkerPid 2> $null
@@ -160,11 +166,16 @@ if ($Fleet -ne 'all') {
 }
 
 # ---- workspace mode --------------------------------------------------------
+# Same Cloud Shell markers setup-ai-clis.ps1 recognizes: real Azure Cloud Shell
+# sets AZUREPS_HOST_ENVIRONMENT/ACC_CLOUD, not the custom CLOUD_SHELL variable —
+# detecting only the latter would launch the full-size fleet in a capped host.
 $workspaceMode = $Workspace.IsPresent -or
     (-not [string]::IsNullOrEmpty($env:CODESPACES)) -or
-    (-not [string]::IsNullOrEmpty($env:CLOUD_SHELL))
+    (-not [string]::IsNullOrEmpty($env:CLOUD_SHELL)) -or
+    (-not [string]::IsNullOrEmpty($env:AZUREPS_HOST_ENVIRONMENT)) -or
+    (-not [string]::IsNullOrEmpty($env:ACC_CLOUD))
 if ($workspaceMode -and -not $Workspace.IsPresent) {
-    Write-Host 'Workspace detected (CODESPACES/CLOUD_SHELL set) - pool sizes will be capped.'
+    Write-Host 'Workspace detected (Codespaces/Cloud Shell markers set) - pool sizes will be capped.'
 }
 
 function Get-EffectivePoolSize {
@@ -254,7 +265,11 @@ foreach ($sub in @('boards', 'locks', 'logs')) {
 # and leaves it as 'failed', so no worker is ever orphaned without a manifest
 # for stop-fleet.ps1 to find.
 $manifestPath = Join-Path $runDir 'manifest.json'
-$startedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+# Round-trip ('o') precision, not whole seconds: two launches in the same
+# second produce runIds that differ only by random GUID suffix, and the MCP
+# latest-run selection tie-breaks on this value — fractional ticks make that
+# tie-break real instead of falling through to suffix order.
+$startedAt = (Get-Date).ToUniversalTime().ToString('o')
 $manifestPools = [System.Collections.Generic.List[object]]::new()
 Write-FleetManifest -Status 'starting'
 

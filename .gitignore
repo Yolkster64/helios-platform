@@ -130,3 +130,8 @@ azure-pipelines.yml
 
 ## HELIOS runtime state (learning outcomes, azure-up env wiring) — never committed
 .helios/
+
+## Self-hosted runner runtime (scripts/runners/register-runner.*): config.sh
+## writes LIVE credentials (.credentials, RSA params) into the target dir, and
+## the default target sits inside the checkout — never committed
+actions-runner/

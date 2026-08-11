@@ -49,16 +49,20 @@ function Stop-FleetWorker {
     # Identity check before killing: after a worker exits naturally its pid can be
     # reused by an unrelated process. The manifest records the worker's start time;
     # a mismatch (beyond 2s tolerance for clock rounding) means this is not our
-    # process, so leave it alone. If either side is unreadable, be conservative
-    # and skip rather than kill a stranger.
-    if ($ExpectedStartTime) {
-        $actualStart = $null
-        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
-        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    # process, so leave it alone. BOTH halves are required: start-fleet can record
+    # a null start time when the read failed, and killing on pid alone would hit
+    # whatever process reused it — unverifiable means untouchable.
+    if (-not $ExpectedStartTime) { return 'pid-unverifiable' }
+    $actualStart = $null
+    try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+    if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    $expected = $null
+    try {
         $expected = [datetime]::Parse($ExpectedStartTime, $null,
             [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
     }
+    catch { return 'pid-unverifiable' }
+    if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
 
     if (-not $IsWindows) {
         & kill -TERM $WorkerPid 2> $null
@@ -89,13 +93,30 @@ if ($RunId) {
     }
 }
 else {
-    $running = @($manifestFiles | Where-Object {
-            (Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running') -eq 'running' })
-    if ($running.Count -eq 0) {
-        Write-Host 'No running fleet runs found. Nothing to stop.'
+    # 'stopped-partial' is selectable on purpose: such a run may still have a
+    # live-but-unverifiable worker, and excluding it would mean the orphan is
+    # only ever retried when an operator hand-supplies -RunId.
+    $stoppable = @($manifestFiles | ForEach-Object {
+            [pscustomobject]@{
+                Path   = $_
+                Status = [string](Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running')
+            }
+        } | Where-Object { $_.Status -in @('running', 'stopped-partial') })
+    if ($stoppable.Count -eq 0) {
+        Write-Host 'No running (or partially stopped) fleet runs found. Nothing to stop.'
         exit 0
     }
-    $manifestFiles = if ($All) { $running } else { @($running | Select-Object -Last 1) }
+    $manifestFiles = if ($All) { @($stoppable | ForEach-Object Path) }
+    else {
+        # The default stays "stop the most recent RUNNING run"; a
+        # stopped-partial run is retried only when no running run exists.
+        # Otherwise a newest run stuck partial on a permanently unverifiable
+        # worker would be re-selected forever while older running runs'
+        # workers were stranded.
+        $runningOnly = @($stoppable | Where-Object { $_.Status -eq 'running' })
+        $pick = if ($runningOnly.Count -gt 0) { $runningOnly[-1] } else { $stoppable[-1] }
+        @($pick.Path)
+    }
 }
 
 foreach ($manifestPath in $manifestFiles) {
@@ -114,7 +135,13 @@ foreach ($manifestPath in $manifestFiles) {
             Write-Host "  $assignee (pid $workerPid): $outcome"
         }
     }
-    $manifest.status = 'stopped'
+    # A pid-unverifiable worker may STILL BE ALIVE (identity could not be
+    # confirmed either way, so it was deliberately not killed). 'stopped-partial'
+    # keeps the run visible AND selectable — default and -All stop passes
+    # re-include it (see the discovery filter above) so the orphan is retried
+    # automatically; pid-reused is different — that process is definitively
+    # not ours.
+    $manifest.status = if ($counts['pid-unverifiable'] -gt 0) { 'stopped-partial' } else { 'stopped' }
     $stoppedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     if ($null -ne $manifest.PSObject.Properties['stoppedAt']) { $manifest.stoppedAt = $stoppedAt }
     else { $manifest | Add-Member -NotePropertyName 'stoppedAt' -NotePropertyValue $stoppedAt }
@@ -122,5 +149,13 @@ foreach ($manifestPath in $manifestFiles) {
     Write-Host ("  run {0}: {1} stopped, {2} killed, {3} already exited, {4} pid reused/unverifiable (left alone)" -f
         $manifestRunId, $counts['stopped'], $counts['killed'], $counts['already-exited'],
         ($counts['pid-reused'] + $counts['pid-unverifiable']))
+    if ($counts['pid-unverifiable'] -gt 0) {
+        # Parentheses around the concatenation matter: -f binds tighter than
+        # +, so without them the placeholders would print literally.
+        Write-Warning (("run {0}: {1} worker(s) could not be identity-verified and were left " +
+            "alone - they may still be running. Manifest kept as 'stopped-partial'; check the " +
+            'pids above manually and rerun stop-fleet.ps1 -RunId {0} once resolved.') -f
+            $manifestRunId, $counts['pid-unverifiable'])
+    }
 }
 exit 0
