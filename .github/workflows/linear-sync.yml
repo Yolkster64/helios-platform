@@ -12,6 +12,15 @@ on:
   issues:
     types: [opened, labeled, unlabeled, closed, reopened]
 
+# One run at a time per issue: two label events racing on a not-yet-mirrored
+# issue would both miss the existing_id lookup and each create a Linear issue.
+# Queued rather than cancelled so a running mutation always finishes; the
+# label mutation re-reads live labels, so whichever run executes last still
+# converges on GitHub's current truth.
+concurrency:
+  group: linear-sync-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write
@@ -48,17 +57,23 @@ jobs:
             sed "s/{number}/$ISSUE_NUMBER/")
 
           # Only issues carrying at least one sync label cross over — the board
-          # should rank curated work, not every drive-by issue. Exception:
-          # `unlabeled` proceeds even when the LAST sync label was just removed,
-          # so the existing Linear mirror's labels get emptied rather than
-          # frozen at their final pre-removal state.
+          # should rank curated work, not every drive-by issue. Exceptions that
+          # proceed regardless of current labels: `unlabeled` (so removing the
+          # LAST sync label empties the mirror's labels instead of freezing
+          # them) and `closed`/`reopened` (so an existing mirror keeps
+          # following GitHub's state after its sync labels are gone — their
+          # branch already no-ops when no mirror exists).
           sync_labels=$(jq -r '.linear.syncLabels | join("\n")' config/connectors.json)
           matched=false
           IFS=',' read -ra labels <<< "$ISSUE_LABELS"
           for l in "${labels[@]}"; do
             if grep -qxF "$l" <<< "$sync_labels"; then matched=true; break; fi
           done
-          if [ "$matched" != "true" ] && [ "$EVENT_ACTION" != "unlabeled" ]; then
+          case "$EVENT_ACTION" in
+            unlabeled|closed|reopened) gate_exempt=true ;;
+            *) gate_exempt=false ;;
+          esac
+          if [ "$matched" != "true" ] && [ "$gate_exempt" != "true" ]; then
             echo "No sync label on #$ISSUE_NUMBER (have: '$ISSUE_LABELS') — skipping."
             exit 0
           fi
