@@ -10,7 +10,7 @@ name: Linear Sync
 
 on:
   issues:
-    types: [opened, labeled, closed, reopened]
+    types: [opened, labeled, unlabeled, closed, reopened]
 
 permissions:
   contents: read
@@ -48,14 +48,17 @@ jobs:
             sed "s/{number}/$ISSUE_NUMBER/")
 
           # Only issues carrying at least one sync label cross over — the board
-          # should rank curated work, not every drive-by issue.
+          # should rank curated work, not every drive-by issue. Exception:
+          # `unlabeled` proceeds even when the LAST sync label was just removed,
+          # so the existing Linear mirror's labels get emptied rather than
+          # frozen at their final pre-removal state.
           sync_labels=$(jq -r '.linear.syncLabels | join("\n")' config/connectors.json)
           matched=false
           IFS=',' read -ra labels <<< "$ISSUE_LABELS"
           for l in "${labels[@]}"; do
             if grep -qxF "$l" <<< "$sync_labels"; then matched=true; break; fi
           done
-          if [ "$matched" != "true" ]; then
+          if [ "$matched" != "true" ] && [ "$EVENT_ACTION" != "unlabeled" ]; then
             echo "No sync label on #$ISSUE_NUMBER (have: '$ISSUE_LABELS') — skipping."
             exit 0
           fi
@@ -96,15 +99,22 @@ jobs:
           done
 
           case "$EVENT_ACTION" in
-            opened|labeled)
+            opened|labeled|unlabeled)
               if [ -n "$existing_id" ]; then
-                if [ "$EVENT_ACTION" = "labeled" ] && [ "$label_ids" != "[]" ]; then
+                if [ "$EVENT_ACTION" = "labeled" ] || [ "$EVENT_ACTION" = "unlabeled" ]; then
+                  # Replacement semantics, empty set included: GitHub is the
+                  # source of truth, so removing the last mapped label must
+                  # clear the mirror's labels too.
                   gql 'mutation($id:String!, $labelIds:[String!]!){ issueUpdate(id:$id, input:{labelIds:$labelIds}){ success } }' \
                     "$(jq -n --arg id "$existing_id" --argjson labelIds "$label_ids" '{id:$id, labelIds:$labelIds}')" > /dev/null
                   echo "Refreshed mapped labels on the existing Linear issue."
                 else
                   echo "Linear issue already exists for #$ISSUE_NUMBER."
                 fi
+                exit 0
+              fi
+              if [ "$EVENT_ACTION" = "unlabeled" ]; then
+                echo "No Linear counterpart for #$ISSUE_NUMBER — nothing to unlabel."
                 exit 0
               fi
               created=$(gql 'mutation($input:IssueCreateInput!){ issueCreate(input:$input){ issue { identifier url } } }' \
