@@ -29,16 +29,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Report runner identity
-        # shell: bash pins one syntax on every OS (a Windows runner would
-        # otherwise default to pwsh, where $RUNNER_NAME does not resolve);
-        # every HELIOS runner box has bash via its git toolchain.
-        shell: bash
+        # GitHub-expression interpolation (${{ }}) is substituted BEFORE any
+        # shell runs, so this works under every default shell — bash, pwsh,
+        # powershell 5.1, or cmd. register-runner.* guarantees no particular
+        # shell on the box, so the workflow must assume none.
         run: |
-          echo "runner name : $RUNNER_NAME"
-          echo "runner os   : $RUNNER_OS ($RUNNER_ARCH)"
-          echo "environment : ${RUNNER_ENVIRONMENT:-self-hosted}"
+          echo "runner name : ${{ runner.name }}"
+          echo "runner os   : ${{ runner.os }} (${{ runner.arch }})"
+          echo "environment : ${{ runner.environment }}"
           echo "matched via : runs-on [self-hosted, helios] (labels are set at registration by scripts/runners/register-runner.*; the full set is in Settings -> Actions -> Runners)"
-          echo "workdir     : $PWD"
       - name: Exit green
-        shell: bash
         run: echo "Self-hosted runner is alive and accepting jobs."

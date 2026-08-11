@@ -97,8 +97,11 @@ $arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitect
 $configFlags = @('--unattended')
 if ($Ephemeral) { $configFlags += '--ephemeral' }
 
+# The hint is printed after Pop-Location, so it must carry the runner
+# directory itself — a bare .\config.cmd would resolve against the caller's
+# original working directory and fail.
 $serviceHint = if ($IsWindows) {
-    "re-run $configCmd with --runasservice (or use run.cmd interactively)"
+    "cd $TargetDir; re-run .\config.cmd with --runasservice (or run .\run.cmd interactively)"
 }
 else {
     "cd $TargetDir && sudo ./svc.sh install && sudo ./svc.sh start"
