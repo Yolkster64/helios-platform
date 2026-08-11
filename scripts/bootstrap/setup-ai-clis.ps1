@@ -103,7 +103,7 @@ $cliSpecs = @(
         NpmPackage  = $null
         Optional    = $false
         AgentShape  = 'gh models run {model} {prompt}'
-        InstallHint = 'https://cli.github.com (pre-installed in Cloud Shell; base tools are not installed here)'
+        InstallHint = 'gh itself: https://cli.github.com (base tool, not installed here); models subcommand: gh extension install github/gh-models'
         Auth        = 'gh auth login --web device-code flow; gh-models needs the models:read scope — connect-github.sh sets both'
     }
     # The fifth cliAgent in config/aihub.json. Optional: there is no public
@@ -173,6 +173,26 @@ $results = @(foreach ($spec in $cliSpecs) {
         }
         $command = Get-CliCommand -Name $spec.Command
         if ($command) { $status = 'installed' }
+    }
+
+    # gh alone cannot run the gh-models agent shape: the `models` subcommand
+    # comes from the github/gh-models extension. `gh extension list` reads local
+    # state only (no network); in install mode the extension is added — that is
+    # tool setup, not an auth mutation.
+    if ($command -and $spec.Name -eq 'gh') {
+        $extensions = @(& $command.Source extension list 2>$null | ForEach-Object { "$_" })
+        if (-not ($extensions -match 'gh-models')) {
+            if (-not $VerifyOnly) {
+                Write-Host '  gh: installing the github/gh-models extension ...'
+                & $command.Source extension install github/gh-models 2>&1 | Out-Null
+                $extensions = @(& $command.Source extension list 2>$null | ForEach-Object { "$_" })
+                if ($extensions -match 'gh-models') { $status = 'installed' }
+            }
+            if (-not ($extensions -match 'gh-models')) {
+                # Report as missing: the configured agent shape fails without it.
+                $command = $null
+            }
+        }
     }
 
     if ($command) {

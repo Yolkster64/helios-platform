@@ -77,16 +77,41 @@ jobs:
           existing_id=$(gql 'query($t:String!){ issues(filter:{title:{startsWith:$t}}, first:1){ nodes { id url } } }' \
             "$(jq -n --arg t "$prefix" '{t:$t}')" | jq -r '.data.issues.nodes[0].id // empty')
 
+          # Resolve the mapped Linear labels for this issue's CURRENT GitHub
+          # labels (githubLabelToLinear), creating any that don't exist in the
+          # team yet. GitHub stays the source of truth: on update the mapped set
+          # REPLACES the Linear issue's labels.
+          mapped_names=$(jq -r --arg labels "$ISSUE_LABELS" '
+            (.linear.githubLabelToLinear // {}) as $m
+            | ($labels | split(",")) | map($m[.] // empty) | unique | .[]' config/connectors.json)
+          label_ids='[]'
+          for name in $mapped_names; do
+            lid=$(gql 'query($t:ID!,$n:String!){ issueLabels(filter:{team:{id:{eq:$t}}, name:{eq:$n}}, first:1){ nodes { id } } }' \
+              "$(jq -n --arg t "$team_id" --arg n "$name" '{t:$t,n:$n}')" | jq -r '.data.issueLabels.nodes[0].id // empty')
+            if [ -z "$lid" ]; then
+              lid=$(gql 'mutation($t:String!,$n:String!){ issueLabelCreate(input:{teamId:$t, name:$n}){ issueLabel { id } } }' \
+                "$(jq -n --arg t "$team_id" --arg n "$name" '{t:$t,n:$n}')" | jq -r '.data.issueLabelCreate.issueLabel.id // empty')
+            fi
+            [ -n "$lid" ] && label_ids=$(jq -c --arg id "$lid" '. + [$id]' <<< "$label_ids")
+          done
+
           case "$EVENT_ACTION" in
             opened|labeled)
               if [ -n "$existing_id" ]; then
-                echo "Linear issue already exists for #$ISSUE_NUMBER."
+                if [ "$EVENT_ACTION" = "labeled" ] && [ "$label_ids" != "[]" ]; then
+                  gql 'mutation($id:String!, $labelIds:[String!]!){ issueUpdate(id:$id, input:{labelIds:$labelIds}){ success } }' \
+                    "$(jq -n --arg id "$existing_id" --argjson labelIds "$label_ids" '{id:$id, labelIds:$labelIds}')" > /dev/null
+                  echo "Refreshed mapped labels on the existing Linear issue."
+                else
+                  echo "Linear issue already exists for #$ISSUE_NUMBER."
+                fi
                 exit 0
               fi
               created=$(gql 'mutation($input:IssueCreateInput!){ issueCreate(input:$input){ issue { identifier url } } }' \
                 "$(jq -n --arg teamId "$team_id" --arg title "${prefix}${ISSUE_TITLE}" \
                     --arg desc "Mirrored from ${ISSUE_URL} (labels: ${ISSUE_LABELS})." \
-                    '{input:{teamId:$teamId, title:$title, description:$desc}}')")
+                    --argjson labelIds "$label_ids" \
+                    '{input:{teamId:$teamId, title:$title, description:$desc, labelIds:$labelIds}}')")
               url=$(jq -r '.data.issueCreate.issue.url // empty' <<< "$created")
               ident=$(jq -r '.data.issueCreate.issue.identifier // empty' <<< "$created")
               if [ -n "$url" ]; then

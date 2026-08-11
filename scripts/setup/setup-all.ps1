@@ -142,8 +142,22 @@ Write-ChildOutput @($components[-1].Detail)
 # --- b. Auth state (read-only) ----------------------------------------------------
 Write-Section ''
 Write-Section '-- b. Auth state (verify-only; nothing is mutated) --'
-$ghCommand = Get-Command gh -ErrorAction SilentlyContinue
-$azCommand = Get-Command az -ErrorAction SilentlyContinue
+# Application only: the probes below launch $command.Source as an external
+# executable, which a profile alias or function shadowing gh/az can never back.
+$ghCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+$azCommand = Get-Command az -CommandType Application -ErrorAction SilentlyContinue
+
+function Invoke-GhAuthStatus {
+    # --active restricts the check to the account later gh commands actually
+    # use — a stale token on some OTHER stored account must not fail readiness.
+    # Older gh without the flag (pre-2.40) falls back to the all-accounts view.
+    param([Parameter(Mandatory)][string]$GhExe)
+    $result = Invoke-Step -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com', '--active')
+    if ($result.ExitCode -ne 0 -and ((@($result.Output) -join ' ') -match 'unknown flag')) {
+        $result = Invoke-Step -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com')
+    }
+    $result
+}
 
 # GitHub: the connect script owns the check. Bash-less hosts (bare Windows) fall back
 # to the exact probe connect-github.sh --verify-only runs — still read-only.
@@ -153,7 +167,7 @@ if ($bashCommand) {
     $githubDetail = Get-FirstLine $step.Output
 }
 elseif ($ghCommand) {
-    $step = Invoke-Step -Executable $ghCommand.Source -Arguments @('auth', 'status', '--hostname', 'github.com')
+    $step = Invoke-GhAuthStatus -GhExe $ghCommand.Source
     $githubDetail = if ($step.ExitCode -eq 0) { 'GitHub: authenticated (gh auth status; bash unavailable for connect-github.sh).' }
     else { 'GitHub: not authenticated (gh auth status).' }
 }
@@ -168,7 +182,8 @@ else {
 # PAT shapes) stay ready but say the scope could not be verified.
 $githubReady = ($step.ExitCode -eq 0)
 if ($githubReady -and $ghCommand) {
-    $scopeLine = @(& $ghCommand.Source auth status --hostname github.com 2>&1 |
+    $authView = Invoke-GhAuthStatus -GhExe $ghCommand.Source
+    $scopeLine = @($authView.Output |
             Where-Object { "$_" -match 'Token scopes:' } | Select-Object -First 1)
     if ($scopeLine.Count -gt 0) {
         if ("$($scopeLine[0])" -notmatch 'models') {
