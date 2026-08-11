@@ -93,13 +93,16 @@ if ($RunId) {
     }
 }
 else {
-    $running = @($manifestFiles | Where-Object {
-            (Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running') -eq 'running' })
-    if ($running.Count -eq 0) {
-        Write-Host 'No running fleet runs found. Nothing to stop.'
+    # 'stopped-partial' is selectable on purpose: such a run may still have a
+    # live-but-unverifiable worker, and excluding it would mean the orphan is
+    # only ever retried when an operator hand-supplies -RunId.
+    $stoppable = @($manifestFiles | Where-Object {
+            (Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running') -in @('running', 'stopped-partial') })
+    if ($stoppable.Count -eq 0) {
+        Write-Host 'No running (or partially stopped) fleet runs found. Nothing to stop.'
         exit 0
     }
-    $manifestFiles = if ($All) { $running } else { @($running | Select-Object -Last 1) }
+    $manifestFiles = if ($All) { $stoppable } else { @($stoppable | Select-Object -Last 1) }
 }
 
 foreach ($manifestPath in $manifestFiles) {
@@ -119,10 +122,11 @@ foreach ($manifestPath in $manifestFiles) {
         }
     }
     # A pid-unverifiable worker may STILL BE ALIVE (identity could not be
-    # confirmed either way, so it was deliberately not killed). Marking such a
-    # run plain 'stopped' would orphan that worker: later stop passes skip
-    # non-running manifests entirely. 'stopped-partial' keeps it visible;
-    # pid-reused is different — that process is definitively not ours.
+    # confirmed either way, so it was deliberately not killed). 'stopped-partial'
+    # keeps the run visible AND selectable — default and -All stop passes
+    # re-include it (see the discovery filter above) so the orphan is retried
+    # automatically; pid-reused is different — that process is definitively
+    # not ours.
     $manifest.status = if ($counts['pid-unverifiable'] -gt 0) { 'stopped-partial' } else { 'stopped' }
     $stoppedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     if ($null -ne $manifest.PSObject.Properties['stoppedAt']) { $manifest.stoppedAt = $stoppedAt }

@@ -40,7 +40,7 @@ pwsh scripts/setup/setup-all.ps1 -Fix       # also installs missing AI CLIs via 
 ```bash
 dotnet build HELIOS.sln -c Release
 dotnet test tests/HELIOS.AIHub.Tests -c Release --no-build
-cd src/ai/python && python3 -m pytest tests -q && cd ../..
+(cd src/ai/python && python3 -m pytest tests -q)
 ```
 
 **Expected**:

@@ -90,7 +90,17 @@ jobs:
           # labels (githubLabelToLinear), creating any that don't exist in the
           # team yet. GitHub stays the source of truth: on update the mapped set
           # REPLACES the Linear issue's labels.
-          mapped_names=$(jq -r --arg labels "$ISSUE_LABELS" '
+          #
+          # Re-read the labels live instead of trusting the event payload:
+          # label events run as independent workflow jobs that can finish out
+          # of order, and a delayed 'labeled' run replacing the mirror's labels
+          # with its historical snapshot would resurrect labels GitHub no
+          # longer has. Reading at mutation time makes stale runs converge on
+          # the same current truth. Falls back to the payload snapshot only if
+          # the live read fails (issue deleted mid-run).
+          current_labels=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" \
+            --jq '[.labels[].name] | join(",")' 2>/dev/null) || current_labels="$ISSUE_LABELS"
+          mapped_names=$(jq -r --arg labels "$current_labels" '
             (.linear.githubLabelToLinear // {}) as $m
             | ($labels | split(",")) | map($m[.] // empty) | unique | .[]' config/connectors.json)
           label_ids='[]'
@@ -125,7 +135,7 @@ jobs:
               fi
               created=$(gql 'mutation($input:IssueCreateInput!){ issueCreate(input:$input){ issue { identifier url } } }' \
                 "$(jq -n --arg teamId "$team_id" --arg title "${prefix}${ISSUE_TITLE}" \
-                    --arg desc "Mirrored from ${ISSUE_URL} (labels: ${ISSUE_LABELS})." \
+                    --arg desc "Mirrored from ${ISSUE_URL} (labels: ${current_labels})." \
                     --argjson labelIds "$label_ids" \
                     '{input:{teamId:$teamId, title:$title, description:$desc, labelIds:$labelIds}}')")
               url=$(jq -r '.data.issueCreate.issue.url // empty' <<< "$created")

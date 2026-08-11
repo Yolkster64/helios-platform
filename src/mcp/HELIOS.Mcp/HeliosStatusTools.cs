@@ -146,10 +146,12 @@ public static class HeliosStatusTools
             // Latest-only is the common, frequently polled path: walk timestamp
             // groups from the newest end and stop at the first group with a readable
             // manifest, instead of parsing every historical run. Within one group the
-            // second-resolution timestamps tie and the random run-id suffix is NOT
-            // chronological, so ties break on the manifest's startedAt (also second
-            // resolution — equal values fall back to name order, which is at least
-            // deterministic rather than suffix-lottery).
+            // second-resolution runId timestamps tie and the random run-id suffix is
+            // NOT chronological, so ties break on the manifest's startedAt —
+            // start-fleet records it at round-trip ('o') precision exactly so this
+            // comparison resolves same-second launches; legacy whole-second values
+            // (or true ties) fall back to name order, which is at least
+            // deterministic rather than suffix-lottery.
             foreach (var group in orderedRunDirs
                          .GroupBy(TimestampPrefix)
                          .OrderByDescending(g => g.Key, StringComparer.Ordinal))

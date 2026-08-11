@@ -265,7 +265,11 @@ foreach ($sub in @('boards', 'locks', 'logs')) {
 # and leaves it as 'failed', so no worker is ever orphaned without a manifest
 # for stop-fleet.ps1 to find.
 $manifestPath = Join-Path $runDir 'manifest.json'
-$startedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+# Round-trip ('o') precision, not whole seconds: two launches in the same
+# second produce runIds that differ only by random GUID suffix, and the MCP
+# latest-run selection tie-breaks on this value — fractional ticks make that
+# tie-break real instead of falling through to suffix order.
+$startedAt = (Get-Date).ToUniversalTime().ToString('o')
 $manifestPools = [System.Collections.Generic.List[object]]::new()
 Write-FleetManifest -Status 'starting'
 
