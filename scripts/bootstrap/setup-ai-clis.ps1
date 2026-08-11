@@ -123,7 +123,10 @@ $cliSpecs = @(
 
 function Get-CliCommand {
     param([Parameter(Mandatory)][string]$Name)
-    Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Application only: AIHub launches these agents as OS subprocesses, which can
+    # never resolve a PowerShell alias or function shadowing the name — counting
+    # one as "present" would pass setup and fail at first invocation.
+    Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
 function Get-CliVersion {

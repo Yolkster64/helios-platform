@@ -261,18 +261,24 @@ public static class HeliosStatusTools
                 continue;
             }
 
+            // The identity contract needs BOTH halves: start-fleet.ps1 records a null
+            // startTime when the process start is unreadable, and a pid alone can be
+            // reused by an unrelated process after the worker exits — an entry whose
+            // recorded start time is absent or unparseable is unverifiable, not live.
+            if (!worker.TryGetProperty("startTime", out var startElement) ||
+                startElement.ValueKind != JsonValueKind.String ||
+                !DateTimeOffset.TryParse(startElement.GetString(), out var recorded))
+            {
+                continue;
+            }
+
             try
             {
                 using var process = System.Diagnostics.Process.GetProcessById(pid);
-                if (worker.TryGetProperty("startTime", out var startElement) &&
-                    startElement.ValueKind == JsonValueKind.String &&
-                    DateTimeOffset.TryParse(startElement.GetString(), out var recorded))
+                var actual = new DateTimeOffset(process.StartTime.ToUniversalTime());
+                if (Math.Abs((actual - recorded.ToUniversalTime()).TotalSeconds) > 2)
                 {
-                    var actual = new DateTimeOffset(process.StartTime.ToUniversalTime());
-                    if (Math.Abs((actual - recorded.ToUniversalTime()).TotalSeconds) > 2)
-                    {
-                        continue; // pid reused by an unrelated process
-                    }
+                    continue; // pid reused by an unrelated process
                 }
                 live++;
             }

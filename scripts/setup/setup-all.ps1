@@ -161,7 +161,26 @@ else {
     $step = [pscustomobject]@{ ExitCode = 1; Output = @('gh (GitHub CLI) is not installed.') }
     $githubDetail = 'gh (GitHub CLI) is not installed.'
 }
-$components += New-Component -Name 'github-auth' -Ready ($step.ExitCode -eq 0) -Detail $githubDetail `
+# A token can authenticate fine yet lack the models:read scope the gh-models
+# cliAgent needs; the full connect-github.sh login treats that scope as
+# required, so this readiness verdict must too. Read-only: parse the scopes
+# line from `gh auth status`. Tokens whose scopes are not listed at all (some
+# PAT shapes) stay ready but say the scope could not be verified.
+$githubReady = ($step.ExitCode -eq 0)
+if ($githubReady -and $ghCommand) {
+    $scopeLine = @(& $ghCommand.Source auth status --hostname github.com 2>&1 |
+            Where-Object { "$_" -match 'Token scopes:' } | Select-Object -First 1)
+    if ($scopeLine.Count -gt 0) {
+        if ("$($scopeLine[0])" -notmatch 'models') {
+            $githubReady = $false
+            $githubDetail = 'GitHub: authenticated, but the token lacks the models:read scope the gh-models agent requires.'
+        }
+    }
+    else {
+        $githubDetail += ' (models:read scope not verifiable from gh auth status)'
+    }
+}
+$components += New-Component -Name 'github-auth' -Ready $githubReady -Detail $githubDetail `
     -FixCommand 'scripts/bootstrap/connect-github.sh   # device-code login + models:read scope'
 Write-ChildOutput $step.Output
 
