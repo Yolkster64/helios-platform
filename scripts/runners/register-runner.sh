@@ -42,6 +42,10 @@
 set -euo pipefail
 
 repo="Yolkster64/helios-platform"
+# The default lives inside the checkout and is covered by .gitignore
+# (actions-runner/) because config.sh writes LIVE credentials (.credentials,
+# RSA params) into it. A custom --dir inside the repo must be gitignored too —
+# otherwise a routine `git add -A` can stage runner credentials.
 runner_dir="./actions-runner"
 runner_name="$(hostname)-helios"
 extra_labels=""

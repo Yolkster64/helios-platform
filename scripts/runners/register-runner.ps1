@@ -44,7 +44,11 @@ runners is ARC — see docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md
 GitHub repository as owner/repo. Default: Yolkster64/helios-platform.
 
 .PARAMETER TargetDir
-Directory to download/unpack the runner into. Default: ./actions-runner.
+Directory to download/unpack the runner into. Default: ./actions-runner — inside
+the checkout but covered by .gitignore (actions-runner/), because config.cmd/.sh
+writes LIVE credentials (.credentials, RSA params) into it. A custom TargetDir
+inside the repo must be gitignored too, or git add -A can stage runner
+credentials.
 
 .PARAMETER RunnerName
 Runner name shown in Settings -> Actions -> Runners. Default: <hostname>-helios.
