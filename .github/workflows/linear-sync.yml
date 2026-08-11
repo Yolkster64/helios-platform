@@ -77,8 +77,14 @@ jobs:
             exit 0
           fi
 
-          existing_id=$(gql 'query($t:String!){ issues(filter:{title:{startsWith:$t}}, first:1){ nodes { id url } } }' \
-            "$(jq -n --arg t "$prefix" '{t:$t}')" | jq -r '.data.issues.nodes[0].id // empty')
+          # The [GH-N] prefix alone is ambiguous across repositories syncing into
+          # one workspace: issue N exists everywhere. Every mirror's description
+          # carries this repo's issue URL, so require it before treating a match
+          # as OUR mirror — otherwise a label update could clobber a stranger.
+          existing_id=$(gql 'query($t:String!){ issues(filter:{title:{startsWith:$t}}, first:10){ nodes { id description } } }' \
+            "$(jq -n --arg t "$prefix" '{t:$t}')" |
+            jq -r --arg url "$ISSUE_URL" \
+              '.data.issues.nodes | map(select((.description // "") | contains($url))) | .[0].id // empty')
 
           # Resolve the mapped Linear labels for this issue's CURRENT GitHub
           # labels (githubLabelToLinear), creating any that don't exist in the

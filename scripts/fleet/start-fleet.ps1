@@ -85,14 +85,20 @@ function Stop-FleetWorker {
     $proc = Get-Process -Id $WorkerPid -ErrorAction SilentlyContinue
     if (-not $proc) { return 'already-exited' }
 
-    if ($ExpectedStartTime) {
-        $actualStart = $null
-        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
-        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    # Both halves of the identity are required — a null recorded start time
+    # means unverifiable, never kill-on-pid-alone (keep in sync with
+    # stop-fleet.ps1 and scale-fleet.ps1).
+    if (-not $ExpectedStartTime) { return 'pid-unverifiable' }
+    $actualStart = $null
+    try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+    if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    $expected = $null
+    try {
         $expected = [datetime]::Parse($ExpectedStartTime, $null,
             [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
     }
+    catch { return 'pid-unverifiable' }
+    if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
 
     if (-not $IsWindows) {
         & kill -TERM $WorkerPid 2> $null

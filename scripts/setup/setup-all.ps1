@@ -130,7 +130,18 @@ if ($toolchain) {
     else {
         'missing required: ' + (($missingRequired | ForEach-Object Tool) -join ', ')
     }
-    $components += New-Component -Name 'toolchain' -Ready ([bool]$toolchain.ready) -Detail $detail `
+    # verify-readiness treats bicep and az as individually optional, but CI's
+    # infra gate needs at least ONE Bicep compiler (standalone bicep, or az —
+    # which fetches bicep itself on first `az bicep` use). Neither present
+    # means the infra validation this repo runs everywhere cannot run here.
+    $toolchainReady = [bool]$toolchain.ready
+    $bicepPath = (Get-Command bicep -CommandType Application -ErrorAction SilentlyContinue) -or
+        (Get-Command az -CommandType Application -ErrorAction SilentlyContinue)
+    if ($toolchainReady -and -not $bicepPath) {
+        $toolchainReady = $false
+        $detail += '; no Bicep compiler (need bicep or az for infra/main.bicep validation)'
+    }
+    $components += New-Component -Name 'toolchain' -Ready $toolchainReady -Detail $detail `
         -FixCommand 'pwsh scripts/build/verify-readiness.ps1   # lists each missing tool and why it is needed'
 }
 else {

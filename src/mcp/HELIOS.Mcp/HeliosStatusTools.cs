@@ -62,7 +62,7 @@ public static class HeliosStatusTools
         Watchlist watchlist;
         try
         {
-            using var stream = File.OpenRead(watchlistPath);
+            using var stream = OpenSharedRead(watchlistPath);
             watchlist = JsonSerializer.Deserialize<Watchlist>(stream, ReadOptions)
                         ?? throw new InvalidDataException($"'{watchlistPath}' deserialized to null.");
         }
@@ -148,7 +148,7 @@ public static class HeliosStatusTools
             FleetManifest? manifest;
             try
             {
-                using var stream = File.OpenRead(manifestPath);
+                using var stream = OpenSharedRead(manifestPath);
                 manifest = JsonSerializer.Deserialize<FleetManifest>(stream, ReadOptions);
             }
             catch (Exception ex) when (
@@ -186,6 +186,16 @@ public static class HeliosStatusTools
         }, WriteOptions);
     }
 
+    /// <summary>
+    /// Read with full sharing (write + delete). On Windows, a plain OpenRead denies
+    /// delete sharing for its duration — and fleet_worker.py persists board claims by
+    /// atomically REPLACING the file (os.replace), so a frequently polled status read
+    /// could make a worker's save fail with a sharing violation. Status must never
+    /// block or break the processes it observes.
+    /// </summary>
+    private static FileStream OpenSharedRead(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
     /// <summary>Same repo-root resolution as helios_infra_validate: config/aihub.json's grandparent.</summary>
     private static string ResolveRepoRoot(string? startDirectory)
     {
@@ -208,7 +218,7 @@ public static class HeliosStatusTools
         {
             try
             {
-                using var stream = File.OpenRead(file);
+                using var stream = OpenSharedRead(file);
                 var report = JsonSerializer.Deserialize<BenchmarkReport>(stream, ReadOptions);
                 if (report is { Pr: > 0 })
                 {
@@ -316,7 +326,7 @@ public static class HeliosStatusTools
         BoardFile? board;
         try
         {
-            using var stream = File.OpenRead(resolved);
+            using var stream = OpenSharedRead(resolved);
             board = JsonSerializer.Deserialize<BoardFile>(stream, ReadOptions);
         }
         catch (Exception ex) when (

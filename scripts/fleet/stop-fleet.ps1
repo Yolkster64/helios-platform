@@ -49,16 +49,20 @@ function Stop-FleetWorker {
     # Identity check before killing: after a worker exits naturally its pid can be
     # reused by an unrelated process. The manifest records the worker's start time;
     # a mismatch (beyond 2s tolerance for clock rounding) means this is not our
-    # process, so leave it alone. If either side is unreadable, be conservative
-    # and skip rather than kill a stranger.
-    if ($ExpectedStartTime) {
-        $actualStart = $null
-        try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
-        if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    # process, so leave it alone. BOTH halves are required: start-fleet can record
+    # a null start time when the read failed, and killing on pid alone would hit
+    # whatever process reused it — unverifiable means untouchable.
+    if (-not $ExpectedStartTime) { return 'pid-unverifiable' }
+    $actualStart = $null
+    try { $actualStart = $proc.StartTime.ToUniversalTime() } catch { }
+    if ($null -eq $actualStart) { return 'pid-unverifiable' }
+    $expected = $null
+    try {
         $expected = [datetime]::Parse($ExpectedStartTime, $null,
             [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-        if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
     }
+    catch { return 'pid-unverifiable' }
+    if ([math]::Abs(($actualStart - $expected).TotalSeconds) -gt 2) { return 'pid-reused' }
 
     if (-not $IsWindows) {
         & kill -TERM $WorkerPid 2> $null
