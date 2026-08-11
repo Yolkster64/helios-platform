@@ -98,8 +98,11 @@ MCP wiring in [`../mcp/CLIENT_SETUP.md`](../mcp/CLIENT_SETUP.md).
 Both workflow paths **skip green with a `::notice::`** when Copilot isn't
 available in the repo. If the default `GITHUB_TOKEN` is refused for
 coding-agent assignment, set the optional **`COPILOT_DISPATCH_TOKEN`** Actions
-secret (fine-grained PAT of a user with Copilot access, repo issues: write) —
-the workflow prefers it automatically.
+secret (fine-grained PAT of a user with Copilot access) — the workflow prefers
+it automatically **for both of its jobs**, so the PAT needs **Issues: write
+AND Pull requests: write** on this repo (the request-reviewers endpoint
+requires the latter; an issues-only token would silently reduce every
+automatic review request to a `::notice::`).
 
 ## GitHub ↔ Claude
 

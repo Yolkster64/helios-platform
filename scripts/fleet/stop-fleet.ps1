@@ -96,13 +96,27 @@ else {
     # 'stopped-partial' is selectable on purpose: such a run may still have a
     # live-but-unverifiable worker, and excluding it would mean the orphan is
     # only ever retried when an operator hand-supplies -RunId.
-    $stoppable = @($manifestFiles | Where-Object {
-            (Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running') -in @('running', 'stopped-partial') })
+    $stoppable = @($manifestFiles | ForEach-Object {
+            [pscustomobject]@{
+                Path   = $_
+                Status = [string](Get-OptionalProperty (Get-Content -Raw -Path $_ | ConvertFrom-Json) 'status' 'running')
+            }
+        } | Where-Object { $_.Status -in @('running', 'stopped-partial') })
     if ($stoppable.Count -eq 0) {
         Write-Host 'No running (or partially stopped) fleet runs found. Nothing to stop.'
         exit 0
     }
-    $manifestFiles = if ($All) { $stoppable } else { @($stoppable | Select-Object -Last 1) }
+    $manifestFiles = if ($All) { @($stoppable | ForEach-Object Path) }
+    else {
+        # The default stays "stop the most recent RUNNING run"; a
+        # stopped-partial run is retried only when no running run exists.
+        # Otherwise a newest run stuck partial on a permanently unverifiable
+        # worker would be re-selected forever while older running runs'
+        # workers were stranded.
+        $runningOnly = @($stoppable | Where-Object { $_.Status -eq 'running' })
+        $pick = if ($runningOnly.Count -gt 0) { $runningOnly[-1] } else { $stoppable[-1] }
+        @($pick.Path)
+    }
 }
 
 foreach ($manifestPath in $manifestFiles) {

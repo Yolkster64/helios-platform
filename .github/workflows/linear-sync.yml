@@ -94,10 +94,12 @@ jobs:
 
           # The [GH-N] prefix alone is ambiguous across repositories syncing into
           # one workspace: issue N exists everywhere. Every mirror's description
-          # carries this repo's issue URL, so require it before treating a match
-          # as OUR mirror — otherwise a label update could clobber a stranger.
-          existing_id=$(gql 'query($t:String!){ issues(filter:{title:{startsWith:$t}}, first:10){ nodes { id description } } }' \
-            "$(jq -n --arg t "$prefix" '{t:$t}')" |
+          # carries this repo's issue URL, so filter on it SERVER-SIDE — a
+          # client-side check over a fixed first:10 page could miss the right
+          # mirror once enough same-number mirrors exist, and a duplicate
+          # would then be created. The client-side re-check stays as a belt.
+          existing_id=$(gql 'query($t:String!,$u:String!){ issues(filter:{title:{startsWith:$t}, description:{contains:$u}}, first:5){ nodes { id description } } }' \
+            "$(jq -n --arg t "$prefix" --arg u "$ISSUE_URL" '{t:$t,u:$u}')" |
             jq -r --arg url "$ISSUE_URL" \
               '.data.issues.nodes | map(select((.description // "") | contains($url))) | .[0].id // empty')
 
