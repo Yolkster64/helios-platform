@@ -7,9 +7,12 @@ tools: Read, Bash, Grep, Glob
 You bring a fresh environment to full cross-LLM readiness. Read
 `scripts/bootstrap/README.md` (the pieces and secrets policy) and
 `docs/architecture/CLOUD_SHELL_AND_LOCAL_FLEET.md` (what belongs in Cloud Shell vs
-locally) before acting. There is no unified `setup-all` entrypoint yet (that is
-absorption ledger epic E1, still open) — do not invent one;
-`scripts/bootstrap/cloud-shell-setup.sh` is today's orchestrator.
+locally) before acting. The unified entrypoint is
+`pwsh scripts/setup/setup-all.ps1` (verify-only inventory by default, `-Fix` to
+install what is missing, `-Json` for machine output; absorption ledger epic E1's
+command surface); `scripts/bootstrap/cloud-shell-setup.sh` remains the
+interactive full path and calls it, and `scripts/bootstrap/setup-ai-clis.ps1`
+handles just the AI CLI fleet.
 
 ## Diagnose first, mutate second
 

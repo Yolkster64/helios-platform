@@ -10,6 +10,8 @@
 #   3. Prints the env-wiring commands (gh token -> GitHub Models, Key Vault -> API keys).
 #   4. Smoke-tests the AIHub: builds helios-ai, then runs `status` and `routing`
 #      in parallel — the same fan-out pattern CompareAsync/TandemAsync use.
+#   5. Prints the unified readiness inventory (scripts/setup/setup-all.ps1 — the
+#      absorption-epic-E1 command surface): one table, a fix command per gap.
 #
 # No secrets are written to disk at any step.
 #
@@ -134,6 +136,21 @@ if [[ -z "$skip_smoke" ]]; then
   else
     echo "  dotnet: not installed — skipped (Cloud Shell has it; locally: https://dot.net)" >&2
   fi
+fi
+
+# --- 5. Unified readiness inventory (absorption epic E1) --------------------------
+# setup-all.ps1 is the one-command E1 surface: toolchain readiness, GitHub/Azure auth
+# state, the AI CLI fleet (setup-ai-clis.ps1), fleet topology, and MCP registration,
+# rendered as a single inventory table with a fix command per gap. It is verify-only
+# from here (installs already ran above; auth is never mutated by setup-all), and its
+# exit 2 just means "attention needed" — the table says what and how, so it must not
+# abort this script under `set -e`.
+if command -v pwsh >/dev/null 2>&1; then
+  echo
+  echo "-- Unified readiness inventory (scripts/setup/setup-all.ps1) --"
+  pwsh "$repo_root/scripts/setup/setup-all.ps1" || true
+else
+  echo "  pwsh: not installed — skipped scripts/setup/setup-all.ps1 (Cloud Shell ships pwsh)" >&2
 fi
 
 echo
