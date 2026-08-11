@@ -109,7 +109,15 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "error: gh CLI not found — install it and run gh auth login." >&2
   exit 1
 fi
-if ! gh auth status >/dev/null 2>&1; then
+# gh auth status tests EVERY stored account and exits 1 when any is stale;
+# --active scopes the check to the account the gh api calls below will use.
+# Fall back to the unscoped form only on a gh too old to know the flag.
+gh_auth_ok=false
+auth_out=$(gh auth status --hostname github.com --active 2>&1) && gh_auth_ok=true
+if [[ "$gh_auth_ok" != true ]] && grep -qi 'unknown flag' <<< "$auth_out"; then
+  gh auth status --hostname github.com >/dev/null 2>&1 && gh_auth_ok=true
+fi
+if [[ "$gh_auth_ok" != true ]]; then
   echo "error: gh is not authenticated. Run gh auth login as a user with ADMIN on $repo" >&2
   echo "       (the registration-token endpoint requires repo admin)." >&2
   exit 1

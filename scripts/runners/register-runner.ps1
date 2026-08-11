@@ -131,9 +131,17 @@ if ($DryRun) {
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw 'gh CLI not found — install it and run gh auth login.'
 }
-& gh auth status *> $null
+# gh auth status tests EVERY stored account and exits 1 when any is stale;
+# --active scopes the check to the account the gh api calls below will use.
+# Fall back to the unscoped form only on a gh too old to know the flag.
+$authOut = & gh auth status --hostname github.com --active 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw "gh is not authenticated. Run gh auth login as a user with ADMIN on $Repo (the registration-token endpoint requires repo admin)."
+    if ("$authOut" -match 'unknown flag') {
+        & gh auth status --hostname github.com *> $null
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "gh is not authenticated. Run gh auth login as a user with ADMIN on $Repo (the registration-token endpoint requires repo admin)."
+    }
 }
 
 # --- Download the latest runner release (idempotent) ------------------------------

@@ -154,8 +154,18 @@ docker compose --profile fleet up fleet-stub
 ```
 
 **Expected**: the `fleet-stub` service starts and polls `/fleet/board.json` forever
-(`HERMES_KANBAN_MAX_IDLE_POLLS=0`). With no board seeded it idles — pair it with the
-seeding step in the fleet lane below, or stop it with Ctrl-C.
+(`HERMES_KANBAN_MAX_IDLE_POLLS=0`). With no board seeded it idles — stop it with
+Ctrl-C, or feed it. Note the compose stub reads **only** `.helios/fleet/board.json`;
+the fleet lane's `seed-absorption-tasks.ps1` seeds a *running fleet run's* per-pool
+boards (`.helios/fleet/<runId>/boards/…`), a different surface this container never
+polls. Feed the compose board with the lock-aware enqueue instead:
+
+```bash
+[ -f .helios/fleet/board.json ] || echo '{"tasks": []}' > .helios/fleet/board.json
+(cd src/ai/python && HERMES_KANBAN_DB="$(git rev-parse --show-toplevel)/.helios/fleet/board.json" \
+  python3 -m helios_agents.fleet_worker --enqueue \
+  '{"id": "demo-1", "lane": "code_generation", "status": "open", "prompt": "demo task"}')
+```
 
 ## 7. Local fleet (keyless; stub workers unless Hermes is installed)
 
