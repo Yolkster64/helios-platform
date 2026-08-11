@@ -209,6 +209,16 @@ is one as of this writing):
 pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
 ```
 
+> **Trust boundary**: the gate *executes the merged tree* — the candidate PR's own
+> `build-native.sh`, MSBuild targets, and pytest conftests run on your machine with
+> your environment. For a PR you haven't read, prefer the keyless hosted lane, which
+> runs the same script on a disposable runner with a read-only token and no secrets,
+> and publishes the report as an artifact:
+>
+> ```bash
+> gh workflow run absorption-benchmark.yml -f pr_number=222
+> ```
+
 **Expected**: the script fetches the upstream PR head (`M0nado/helios-platform` —
 public, read-only, no credentials), trial-merges it in a disposable worktree, runs the
 same gate CI runs, and writes a scored report to `.helios/absorption/pr-222.json` with
