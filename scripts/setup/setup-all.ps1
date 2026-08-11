@@ -55,6 +55,13 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 # settings stay isolated, and their exit codes come back clean.
 $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
 $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
+if (-not $pwshExe) {
+    # Fail fast: every child step runs through $pwshExe, and a null here would
+    # surface later as an opaque "cannot bind argument" from Invoke-Step.
+    Write-Error ("Cannot locate a PowerShell 7 executable (pwsh is not on PATH and the " +
+        'host process path is unknown). Install PowerShell 7 or invoke this script via pwsh.')
+    exit 2
+}
 $bashCommand = Get-Command bash -ErrorAction SilentlyContinue
 
 function Invoke-Step {

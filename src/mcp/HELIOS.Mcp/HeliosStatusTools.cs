@@ -9,11 +9,13 @@ namespace HELIOS.Mcp;
 
 /// <summary>
 /// Read-only repo-state tools: absorption-program status (the curated upstream-PR
-/// watchlist merged with local benchmark reports, mirroring `helios-ai absorb-status`)
-/// and fleet run status (run manifests plus advisory board task counts, mirroring
-/// scripts/fleet/fleet-status.ps1). Nothing here fetches, locks, or mutates anything —
-/// these tools only report. Repo root resolution matches the other MCP tools: walk up
-/// to config/aihub.json via <see cref="AIHubOptions.FindConfigFile"/>.
+/// watchlist merged with local benchmark reports — a superset of `helios-ai
+/// absorb-status`, adding per-candidate gatePassed and a warnings array) and fleet run
+/// status (run manifests plus advisory open/claimed/done board counts — a summary,
+/// not scripts/fleet/fleet-status.ps1's full per-worker view). Nothing here fetches,
+/// locks, or mutates anything — these tools only report. Repo root resolution matches
+/// the other MCP tools: walk up to config/aihub.json via
+/// <see cref="AIHubOptions.FindConfigFile"/>.
 /// </summary>
 [McpServerToolType]
 public static class HeliosStatusTools
@@ -32,7 +34,7 @@ public static class HeliosStatusTools
     };
 
     [McpServerTool(Name = "helios_absorb_status_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Absorption-program status: the upstream-PR watchlist (config/absorption/pr-watchlist.json) as { upstream, total, by_status, candidates }, each candidate merged with any local benchmark report (.helios/absorption/pr-<n>.json) as verdict/gatePassed/benchmarked. Read-only; same shape as `helios-ai absorb-status`.")]
+    [Description("Absorption-program status: the upstream-PR watchlist (config/absorption/pr-watchlist.json) as { upstream, total, by_status, candidates }, each candidate merged with any local benchmark report (.helios/absorption/pr-<n>.json) as verdict/gatePassed/benchmarked. Read-only; a superset of `helios-ai absorb-status` output (adds gatePassed and warnings).")]
     public static string GetAbsorbStatus() => BuildAbsorbStatusJson(startDirectory: null);
 
     [McpServerTool(Name = "helios_fleet_status_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
@@ -125,8 +127,17 @@ public static class HeliosStatusTools
         var runs = new List<FleetRunRow>();
         // Run ids start with a UTC timestamp (yyyyMMdd-HHmmss-xxxxxx), so ordinal
         // name order is chronological — same ordering fleet-status.ps1 uses.
-        foreach (var runDir in Directory.EnumerateDirectories(fleetDir)
-                     .OrderBy(Path.GetFileName, StringComparer.Ordinal))
+        var orderedRunDirs = Directory.EnumerateDirectories(fleetDir)
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .ToList();
+        if (!allRuns)
+        {
+            // Latest-only is the common, frequently polled path: walk from the newest
+            // end and stop at the first readable manifest instead of parsing every
+            // historical run. Unreadable manifests passed on the way still warn.
+            orderedRunDirs.Reverse();
+        }
+        foreach (var runDir in orderedRunDirs)
         {
             var manifestPath = Path.Combine(runDir, "manifest.json");
             if (!File.Exists(manifestPath))
@@ -160,11 +171,11 @@ public static class HeliosStatusTools
                     .Select(pool => BuildPoolRow(pool, runDir, warnings))
                     .ToList(),
             });
-        }
-
-        if (!allRuns && runs.Count > 1)
-        {
-            runs = new List<FleetRunRow> { runs[^1] };
+            if (!allRuns)
+            {
+                // The reversed walk means the first readable manifest IS the latest.
+                break;
+            }
         }
 
         return JsonSerializer.Serialize(new FleetReport
