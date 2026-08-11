@@ -118,7 +118,12 @@ foreach ($manifestPath in $manifestFiles) {
             Write-Host "  $assignee (pid $workerPid): $outcome"
         }
     }
-    $manifest.status = 'stopped'
+    # A pid-unverifiable worker may STILL BE ALIVE (identity could not be
+    # confirmed either way, so it was deliberately not killed). Marking such a
+    # run plain 'stopped' would orphan that worker: later stop passes skip
+    # non-running manifests entirely. 'stopped-partial' keeps it visible;
+    # pid-reused is different — that process is definitively not ours.
+    $manifest.status = if ($counts['pid-unverifiable'] -gt 0) { 'stopped-partial' } else { 'stopped' }
     $stoppedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     if ($null -ne $manifest.PSObject.Properties['stoppedAt']) { $manifest.stoppedAt = $stoppedAt }
     else { $manifest | Add-Member -NotePropertyName 'stoppedAt' -NotePropertyValue $stoppedAt }
@@ -126,5 +131,11 @@ foreach ($manifestPath in $manifestFiles) {
     Write-Host ("  run {0}: {1} stopped, {2} killed, {3} already exited, {4} pid reused/unverifiable (left alone)" -f
         $manifestRunId, $counts['stopped'], $counts['killed'], $counts['already-exited'],
         ($counts['pid-reused'] + $counts['pid-unverifiable']))
+    if ($counts['pid-unverifiable'] -gt 0) {
+        Write-Warning ("run {0}: {1} worker(s) could not be identity-verified and were left " +
+            "alone - they may still be running. Manifest kept as 'stopped-partial'; check the " +
+            'pids above manually and rerun stop-fleet.ps1 -RunId {0} once resolved.' -f
+            $manifestRunId, $counts['pid-unverifiable'])
+    }
 }
 exit 0

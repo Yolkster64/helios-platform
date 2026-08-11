@@ -130,51 +130,42 @@ public static class HeliosStatusTools
         var orderedRunDirs = Directory.EnumerateDirectories(fleetDir)
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)
             .ToList();
-        if (!allRuns)
+        if (allRuns)
         {
-            // Latest-only is the common, frequently polled path: walk from the newest
-            // end and stop at the first readable manifest instead of parsing every
-            // historical run. Unreadable manifests passed on the way still warn.
-            orderedRunDirs.Reverse();
+            foreach (var runDir in orderedRunDirs)
+            {
+                var manifest = ReadManifest(runDir, warnings);
+                if (manifest is not null)
+                {
+                    runs.Add(BuildRunRow(manifest, runDir, warnings));
+                }
+            }
         }
-        foreach (var runDir in orderedRunDirs)
+        else
         {
-            var manifestPath = Path.Combine(runDir, "manifest.json");
-            if (!File.Exists(manifestPath))
+            // Latest-only is the common, frequently polled path: walk timestamp
+            // groups from the newest end and stop at the first group with a readable
+            // manifest, instead of parsing every historical run. Within one group the
+            // second-resolution timestamps tie and the random run-id suffix is NOT
+            // chronological, so ties break on the manifest's startedAt (also second
+            // resolution — equal values fall back to name order, which is at least
+            // deterministic rather than suffix-lottery).
+            foreach (var group in orderedRunDirs
+                         .GroupBy(TimestampPrefix)
+                         .OrderByDescending(g => g.Key, StringComparer.Ordinal))
             {
-                continue;
-            }
-
-            FleetManifest? manifest;
-            try
-            {
-                using var stream = OpenSharedRead(manifestPath);
-                manifest = JsonSerializer.Deserialize<FleetManifest>(stream, ReadOptions);
-            }
-            catch (Exception ex) when (
-                ex is IOException or UnauthorizedAccessException or JsonException)
-            {
-                warnings.Add($"Skipping unreadable manifest '{manifestPath}': {ex.Message}");
-                continue;
-            }
-            if (manifest is null)
-            {
-                warnings.Add($"Skipping empty manifest '{manifestPath}'.");
-                continue;
-            }
-
-            runs.Add(new FleetRunRow
-            {
-                RunId = manifest.RunId ?? Path.GetFileName(runDir),
-                Status = manifest.Status,
-                Pools = manifest.Pools
-                    .Select(pool => BuildPoolRow(pool, runDir, warnings))
-                    .ToList(),
-            });
-            if (!allRuns)
-            {
-                // The reversed walk means the first readable manifest IS the latest.
-                break;
+                var parsed = group
+                    .Select(dir => (Dir: dir, Manifest: ReadManifest(dir, warnings)))
+                    .Where(p => p.Manifest is not null)
+                    .OrderBy(p => p.Manifest!.StartedAt ?? "", StringComparer.Ordinal)
+                    .ThenBy(p => Path.GetFileName(p.Dir), StringComparer.Ordinal)
+                    .ToList();
+                if (parsed.Count > 0)
+                {
+                    var latest = parsed[^1];
+                    runs.Add(BuildRunRow(latest.Manifest!, latest.Dir, warnings));
+                    break;
+                }
             }
         }
 
@@ -185,6 +176,49 @@ public static class HeliosStatusTools
             Warnings = warnings.Count == 0 ? null : warnings,
         }, WriteOptions);
     }
+
+    /// <summary>The run id's second-resolution timestamp part (yyyyMMdd-HHmmss).</summary>
+    private static string TimestampPrefix(string runDir)
+    {
+        var name = Path.GetFileName(runDir);
+        return name.Length >= 15 ? name[..15] : name;
+    }
+
+    /// <summary>Parse a run's manifest; null (with a warning where meaningful) on any failure.</summary>
+    private static FleetManifest? ReadManifest(string runDir, List<string> warnings)
+    {
+        var manifestPath = Path.Combine(runDir, "manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            return null;
+        }
+        try
+        {
+            using var stream = OpenSharedRead(manifestPath);
+            var manifest = JsonSerializer.Deserialize<FleetManifest>(stream, ReadOptions);
+            if (manifest is null)
+            {
+                warnings.Add($"Skipping empty manifest '{manifestPath}'.");
+            }
+            return manifest;
+        }
+        catch (Exception ex) when (
+            ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            warnings.Add($"Skipping unreadable manifest '{manifestPath}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private static FleetRunRow BuildRunRow(FleetManifest manifest, string runDir, List<string> warnings) =>
+        new()
+        {
+            RunId = manifest.RunId ?? Path.GetFileName(runDir),
+            Status = manifest.Status,
+            Pools = manifest.Pools
+                .Select(pool => BuildPoolRow(pool, runDir, warnings))
+                .ToList(),
+        };
 
     /// <summary>
     /// Read with full sharing (write + delete). On Windows, a plain OpenRead denies
@@ -457,6 +491,9 @@ public static class HeliosStatusTools
     {
         [JsonPropertyName("runId")]
         public string? RunId { get; init; }
+
+        [JsonPropertyName("startedAt")]
+        public string? StartedAt { get; init; }
 
         [JsonPropertyName("status")]
         public string? Status { get; init; }

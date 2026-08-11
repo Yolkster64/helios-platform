@@ -65,7 +65,7 @@ if (-not $pwshExe) {
 # On Windows, a bash.exe on PATH is usually WSL's: it cannot resolve the Windows
 # repo paths handed to the .sh probes, and that failure mode would mask the
 # native gh/az fallbacks below. Windows always takes the native probe path.
-$bashCommand = if ($IsWindows) { $null } else { Get-Command bash -ErrorAction SilentlyContinue }
+$bashCommand = if ($IsWindows) { $null } else { Get-Command bash -CommandType Application -ErrorAction SilentlyContinue }
 
 function Invoke-Step {
     param(
