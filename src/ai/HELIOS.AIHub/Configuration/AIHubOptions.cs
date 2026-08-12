@@ -30,9 +30,23 @@ public sealed class AIHubOptions
 
     public static AIHubOptions Load(string path)
     {
-        using var stream = File.OpenRead(path);
-        return JsonSerializer.Deserialize<AIHubOptions>(stream, SerializerOptions)
-               ?? throw new InvalidDataException($"'{path}' deserialized to null.");
+        AIHubOptions options;
+        using (var stream = File.OpenRead(path))
+        {
+            options = JsonSerializer.Deserialize<AIHubOptions>(stream, SerializerOptions)
+                      ?? throw new InvalidDataException($"'{path}' deserialized to null.");
+        }
+        // A relative learning path must anchor to the CONFIG ROOT (the directory
+        // holding config/), not the process working directory: with recording on
+        // by default, CWD-relative resolution would scatter .helios/ trees into
+        // whatever directory helios-ai happens to run from.
+        if (!Path.IsPathRooted(options.Learning.LocalPath))
+        {
+            var configDir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            var root = Directory.GetParent(configDir)?.FullName ?? configDir;
+            options.Learning.LocalPath = Path.Combine(root, options.Learning.LocalPath);
+        }
+        return options;
     }
 
     /// <summary>

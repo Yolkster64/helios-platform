@@ -346,8 +346,8 @@ public class AIHubServiceTests
         var hub = new AIHubService(AIHubOptions.Load(path!));
         var status = hub.GetStatus();
 
-        // 6 API providers + 5 CLI agents from config/aihub.json.
-        Assert.Equal(11, status.Count);
+        // 7 API providers + 5 CLI agents from config/aihub.json.
+        Assert.Equal(12, status.Count);
         // Nothing requiring secrets should be Ready in a keyless environment.
         Assert.Equal(ProviderReadiness.Unconfigured,
             status.Single(p => p.Name == "anthropic").Readiness);

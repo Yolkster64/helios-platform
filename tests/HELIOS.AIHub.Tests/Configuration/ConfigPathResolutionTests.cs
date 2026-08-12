@@ -47,6 +47,29 @@ public class ConfigPathResolutionTests : IDisposable
         Assert.False(options.Providers.ContainsKey("ollama"));
     }
 
+    [Fact]
+    public void RelativeLearningPath_ResolvesUnderConfigRoot_NotCwd()
+    {
+        // Recording is on by default, so a relative localPath anchored to the
+        // process CWD would scatter .helios/ trees wherever helios-ai runs.
+        var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var configDir = Path.Combine(root, "config");
+        Directory.CreateDirectory(configDir);
+        try
+        {
+            var path = Path.Combine(configDir, "aihub.json");
+            File.WriteAllText(path,
+                """{ "providers": {}, "learning": { "localPath": ".helios/learning/outcomes.jsonl" } }""");
+            var options = AIHubOptions.Load(path);
+            Assert.True(Path.IsPathRooted(options.Learning.LocalPath));
+            Assert.StartsWith(root, options.Learning.LocalPath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CloudProfilePath()
     {
         var basePath = AIHubOptions.FindConfigFile(AppContext.BaseDirectory);
