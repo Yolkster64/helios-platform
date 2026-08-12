@@ -35,6 +35,11 @@ WORKDIR /source
 # HELIOS.AIHub.Api -> HELIOS.AIHub -> HELIOS.AIHub.Domain (F#); the source-linked
 # core seam files are compile-time only and arrive with the full source copy below.
 COPY nuget.config ./
+# Central package management: restore resolves versions from these root
+# files - without them in the layer, versionless PackageReference items
+# degrade to bogus resolutions (Azure.Identity 1.0.0 etc.) and the build
+# fails far from the cause.
+COPY Directory.Packages.props Directory.Build.props Directory.Build.targets ./
 COPY src/ai/HELIOS.AIHub.Domain/HELIOS.AIHub.Domain.fsproj src/ai/HELIOS.AIHub.Domain/
 COPY src/ai/HELIOS.AIHub/HELIOS.AIHub.csproj src/ai/HELIOS.AIHub/
 COPY src/ai/HELIOS.AIHub.Api/HELIOS.AIHub.Api.csproj src/ai/HELIOS.AIHub.Api/

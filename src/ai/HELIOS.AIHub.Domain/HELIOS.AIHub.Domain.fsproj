@@ -6,6 +6,10 @@
     <RootNamespace>HELIOS.AIHub.Domain</RootNamespace>
     <Description>F# domain model for AIHub cost and routing decisions. Pure functions only — the C# orchestrator owns all I/O.</Description>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- The explicit FSharp.Core reference below replaces the SDK's
+         implicit injection entirely; without this switch the two coexist
+         in non-CPM restore contexts and NU1504 duplicate warnings fire. -->
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
 
   <ItemGroup>
