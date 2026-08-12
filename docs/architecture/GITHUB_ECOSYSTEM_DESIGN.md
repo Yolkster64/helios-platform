@@ -4,6 +4,9 @@ The org-level operating model around helios-platform. This PR ships the design +
 in-repo pieces (CI fixes, agent instruction files, MCP registration); execution of the
 org-level pieces is roadmap PR5.
 
+> Practical setup companion: [`CONNECTIONS_SETUP.md`](CONNECTIONS_SETUP.md) — the
+> per-connection wiring matrix, owner actions, secrets/variables, and verification steps.
+
 ## Repository topology
 
 | Repo | Role |

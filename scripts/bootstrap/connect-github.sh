@@ -18,6 +18,24 @@
 set -uo pipefail
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] && set -e
 
+# gh auth status checks EVERY stored account by default and exits 1 when any
+# of them is stale — a healthy active account would still read as broken here.
+# --active restricts the check to the account subsequent gh commands actually
+# use; fall back to the unscoped form only on CLIs too old to know the flag.
+gh_auth_status() {
+  local out
+  if out=$(gh auth status --hostname github.com --active 2>&1); then
+    printf '%s\n' "$out"
+    return 0
+  fi
+  if grep -qi 'unknown flag' <<< "$out"; then
+    gh auth status --hostname github.com 2>&1
+    return
+  fi
+  printf '%s\n' "$out"
+  return 1
+}
+
 main() {
   if ! command -v gh >/dev/null 2>&1; then
     echo "error: gh (GitHub CLI) is not installed." >&2
@@ -34,7 +52,7 @@ main() {
   # Verify-only: report the auth state and stop — no login flow, no token refresh,
   # nothing written anywhere. Exit 0 when authenticated, 1 when not.
   if [[ "$mode" == "--verify-only" ]]; then
-    if gh auth status --hostname github.com >/dev/null 2>&1; then
+    if gh_auth_status >/dev/null; then
       echo "GitHub: authenticated as $(gh api user --jq .login 2>/dev/null || echo '?')."
       return 0
     fi
@@ -43,7 +61,7 @@ main() {
   fi
 
   local force="$mode"
-  if gh auth status --hostname github.com >/dev/null 2>&1 && [[ "$force" != "--force" ]]; then
+  if gh_auth_status >/dev/null && [[ "$force" != "--force" ]]; then
     echo "GitHub: already authenticated as $(gh api user --jq .login 2>/dev/null || echo '?')."
   else
     echo "GitHub: starting browser/device-code login (a one-time code will be shown)..."
@@ -52,7 +70,7 @@ main() {
     gh auth login --hostname github.com --git-protocol https --web --scopes "models:read"
   fi
 
-  if ! gh auth status --hostname github.com 2>&1 | grep -q "models:read"; then
+  if ! gh_auth_status | grep -q "models:read"; then
     echo "GitHub: note — the current token lacks the models:read scope; the github-models"
     echo "        provider will fail. Fix with: gh auth refresh --hostname github.com --scopes models:read"
   fi
