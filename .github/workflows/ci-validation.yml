@@ -6,10 +6,36 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    name: Preflight Validation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate workflow prerequisites
+        run: |
+          set -euo pipefail
+          start_time=$(date +%s)
+          test -f HELIOS.sln
+          test -d .github/workflows
+          pwsh --version
+          python3 --version
+          dotnet --version
+          end_time=$(date +%s)
+          {
+            echo "## Preflight"
+            echo "- Workflow files: $(find .github/workflows -maxdepth 1 -name '*.yml' | wc -l)"
+            echo "- Duration: $((end_time - start_time))s"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   syntax-check:
     runs-on: ubuntu-latest
     name: PowerShell Syntax Validation
+    needs: preflight
     
     steps:
       - uses: actions/checkout@v4
@@ -66,9 +92,17 @@ jobs:
   markdown-check:
     runs-on: ubuntu-latest
     name: Markdown Validation
+    needs: preflight
     
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache npm package data
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: markdownlint-npm-${{ runner.os }}-0.33.0
+          restore-keys: markdownlint-npm-${{ runner.os }}-
       
       # Plain npm install instead of the Docker-based action: the action builds
       # its container FROM docker.io at run time, Docker Hub pulls from CI
@@ -83,6 +117,7 @@ jobs:
   documentation-check:
     runs-on: ubuntu-latest
     name: Documentation Completeness
+    needs: preflight
     
     steps:
       - uses: actions/checkout@v4
@@ -112,6 +147,7 @@ jobs:
   test-scripts:
     runs-on: ubuntu-latest
     name: Test PowerShell Scripts
+    needs: preflight
     
     steps:
       - uses: actions/checkout@v4
@@ -132,12 +168,17 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     name: Security Scanning
+    needs: preflight
+    # Only this job uploads SARIF; the write grant stays scoped to it.
+    permissions:
+      contents: read
+      security-events: write
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Run Trivy Vulnerability Scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -146,7 +187,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload Trivy Results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
         continue-on-error: true
@@ -154,6 +195,7 @@ jobs:
   file-integrity:
     runs-on: ubuntu-latest
     name: File Structure Validation
+    needs: preflight
     
     steps:
       - uses: actions/checkout@v4
@@ -184,16 +226,19 @@ jobs:
   validation-summary:
     name: Validation Summary
     if: always()
-    needs: [syntax-check, markdown-check, documentation-check, test-scripts, security-scan, file-integrity]
+    needs: [preflight, syntax-check, markdown-check, documentation-check, test-scripts, security-scan, file-integrity]
     runs-on: ubuntu-latest
     steps:
       - name: Report Status
         run: |
-          echo "## Validation Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Syntax Check: ${{ needs.syntax-check.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Markdown Check: ${{ needs.markdown-check.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Documentation: ${{ needs.documentation-check.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Script Tests: ${{ needs.test-scripts.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- File Integrity: ${{ needs.file-integrity.result }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Validation Results"
+            echo ""
+            echo "- Preflight: ${{ needs.preflight.result }}"
+            echo "- Syntax Check: ${{ needs.syntax-check.result }}"
+            echo "- Markdown Check: ${{ needs.markdown-check.result }}"
+            echo "- Documentation: ${{ needs.documentation-check.result }}"
+            echo "- Script Tests: ${{ needs.test-scripts.result }}"
+            echo "- Security Scan: ${{ needs.security-scan.result }}"
+            echo "- File Integrity: ${{ needs.file-integrity.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"
