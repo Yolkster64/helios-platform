@@ -3,6 +3,5 @@
     <Authors Condition="'$(Authors)' == ''">HELIOS Team</Authors>
     <Company Condition="'$(Company)' == ''">HELIOS Platform</Company>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/Yolkster64/helios-platform</RepositoryUrl>
-    <PackageLicenseExpression Condition="'$(PackageLicenseExpression)' == '' and '$(IsPackable)' == 'true'">MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>
