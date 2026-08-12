@@ -9,6 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Explicit (versionless - central package management supplies 8.0.403):
+         the SDK's implicit FSharp.Core does not flow transitively under CPM,
+         which strips FSharp.Core.dll from consuming C# project outputs. -->
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="Pricing.fs" />
     <Compile Include="ContextBudget.fs" />
     <Compile Include="ModelSelection.fs" />

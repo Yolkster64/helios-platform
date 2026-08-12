@@ -11,6 +11,13 @@
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.10.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <!-- The F# SDK injects FSharp.Core implicitly; under central package
+         management that implicit reference stops flowing FSharp.Core.dll
+         transitively into consuming C# outputs (the AIHub tests fail with
+         FileNotFoundException without this). Pin it centrally and reference
+         it explicitly in the Domain fsproj. 8.0.403 is what the repo
+         resolved before centralization. -->
+    <PackageVersion Include="FSharp.Core" Version="8.0.403" />
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
