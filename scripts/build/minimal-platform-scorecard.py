@@ -10,14 +10,30 @@ def parse_trx(path: Path) -> tuple[int, int, int]:
     if not path.exists():
         return 0, 0, 0
 
-    root = ET.parse(path).getroot()
+    # A crashed/interrupted test step can leave a truncated TRX; raising here
+    # would kill the generator before ANY output exists, and the workflow's
+    # continue-on-error would mask it - exactly the failed run that most needs
+    # an unhealthy record. Zero counters fail the passed>0 health gate.
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return 0, 0, 0
     counters = root.find(".//{*}ResultSummary/{*}Counters")
     if counters is None:
         return 0, 0, 0
 
-    total = int(counters.attrib.get("total", "0"))
-    passed = int(counters.attrib.get("passed", "0"))
-    failed = int(counters.attrib.get("failed", "0")) + int(counters.attrib.get("error", "0"))
+    def n(name: str) -> int:
+        try:
+            return int(counters.attrib.get(name, "0"))
+        except ValueError:
+            return 0
+
+    total = n("total")
+    passed = n("passed")
+    # Every unsuccessful terminal counter VSTest can record counts as a
+    # failure - timeouts/aborts land in their own counters, not "failed".
+    failed = sum(n(name) for name in (
+        "failed", "error", "timeout", "aborted", "notRunnable", "disconnected"))
     return total, passed, failed
 
 
