@@ -33,7 +33,8 @@ def parse_trx(path: Path) -> tuple[int, int, int]:
     # Every unsuccessful terminal counter VSTest can record counts as a
     # failure - timeouts/aborts land in their own counters, not "failed".
     failed = sum(n(name) for name in (
-        "failed", "error", "timeout", "aborted", "notRunnable", "disconnected"))
+        "failed", "error", "timeout", "aborted", "notRunnable", "disconnected",
+        "passedButRunAborted"))
     return total, passed, failed
 
 
