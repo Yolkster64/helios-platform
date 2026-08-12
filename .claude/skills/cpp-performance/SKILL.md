@@ -121,3 +121,13 @@ For UI-facing components, ship a C++/WinRT runtime class instead and reference t
 MSVC release: `/O2 /GL /Qpar /arch:AVX2 /fp:fast /EHsc /GS /guard:cf /sdl` with link `/LTCG /CETCOMPAT /DYNAMICBASE /HIGHENTROPYVA`. PGO: link `/GENPROFILE`, run the training workload, relink `/USEPROFILE`.
 
 clang-cl alternative (drop-in for MSVC command lines): `clang-cl /O2 -mavx2 -flto=thin /guard:cf`, link with `lld-link`. Use it to cross-check codegen and for better sanitizer diagnostics; keep MSVC as the shipping compiler unless benchmarks say otherwise.
+
+## Reference material
+
+Depth lives in `references/` (index: `.claude/skills/README.md`):
+
+- `references/build-and-packaging.md` — grounded walkthrough of
+  `src/ai/HELIOS.AIHub.Native/CMakeLists.txt` and `scripts/build/build-native.sh`
+  (LTO probe, load-bearing output paths, the CI assert), the canonical
+  CMakePresets.json shape (none exists yet), the no-ctest gap, and vcpkg manifest
+  mode plus the spoke rule that keeps the dependency count at zero.

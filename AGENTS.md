@@ -59,4 +59,5 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 `docs/architecture/MULTI_LLM_INTEGRATION.md` (this design), `GITHUB_ECOSYSTEM_DESIGN.md`
 (runners/Projects/wiki/connectors), `HERMES_FLEET_AND_XCORE.md` (agent fleet),
 `GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
-known-red workflow inventory). Coding skills live in `.claude/skills/`.
+known-red workflow inventory). Coding skills live in `.claude/skills/` (index and
+per-stack library references: `.claude/skills/README.md`).
