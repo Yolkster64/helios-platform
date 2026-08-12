@@ -14,10 +14,24 @@ work identically from Cloud Shell, a Codespace, an SSH box, or a laptop.
 
 ### Bootstrap (device-code auth)
 
-One command stands up the whole shell:
+One command brings the shell to readiness — the unified `setup-all` surface
+(absorption ledger epic E1):
 
 ```bash
-scripts/bootstrap/cloud-shell-setup.sh          # CLI fleet + both auth flows + smoke test
+pwsh scripts/setup/setup-all.ps1 -Fix           # readiness inventory + install missing AI CLIs
+```
+
+It verifies the toolchain (`scripts/build/verify-readiness.ps1`), the GitHub/Azure
+auth state (the connect scripts' verify-only modes — read-only, never a login flow),
+the AI CLI fleet (`scripts/bootstrap/setup-ai-clis.ps1`; `-Fix` installs what's
+missing via npm), the fleet topology, and the MCP registration, then prints one
+INVENTORY table with a fix command per gap (`-Json` for machine output; exit 0 ready,
+2 attention needed). Auth is never mutated: when the inventory says so, run the
+device-code logins yourself — or use the full interactive bring-up, which chains the
+auth flows, the smoke test, and the same inventory:
+
+```bash
+scripts/bootstrap/cloud-shell-setup.sh          # CLI fleet + both auth flows + smoke test + inventory
 ```
 
 The pieces, each usable on its own (details in `scripts/bootstrap/README.md`):
@@ -25,6 +39,7 @@ The pieces, each usable on its own (details in `scripts/bootstrap/README.md`):
 | Script | Role |
 | --- | --- |
 | `scripts/bootstrap/connect-github.sh` | `gh auth login --web` device-code flow. **Source it** to also export `GITHUB_MODELS_TOKEN` from the gh token — flips the `github-models` provider to Ready with no manually-handled key. |
+| `scripts/bootstrap/setup-ai-clis.ps1` | Installs/verifies the `cliAgents` CLIs from `config/aihub.json` (`claude`, `codex`, `copilot` via npm; verifies `gh` for gh-models) and prints per-CLI headless-auth guidance. `-VerifyOnly` reports without installing. |
 | `scripts/bootstrap/connect-azure.sh` | `az login --use-device-code`; detects Cloud Shell's implicit login and skips. `--subscription <id>` selects a subscription. |
 | `scripts/bootstrap/connect-azure.ps1` | Azure PowerShell twin (`Connect-AzAccount -UseDeviceAuthentication`), same Cloud Shell detection. |
 | `scripts/bootstrap/load-env-from-keyvault.sh` | **Source it** after Azure login: pulls `openai-api-key` / `anthropic-api-key` / `github-models-token` from the Key Vault at `AZURE_KEY_VAULT_URI` into the env vars `config/aihub.json` names. |

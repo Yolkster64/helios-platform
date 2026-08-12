@@ -40,6 +40,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The documented -SkipSteps values (fields,templates,automation,views) are
+# short aliases; the skip comparison below matches the full step names passed
+# to Invoke-SetupStep. Translate aliases (and split any comma-joined single
+# argument) so both forms — and the full names themselves — actually skip.
+$stepAliases = @{
+    fields     = 'Custom Fields'
+    templates  = 'Phase Templates'
+    automation = 'Automation Rules'
+    views      = 'Board Views'
+}
+$SkipSteps = @($SkipSteps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } |
+    ForEach-Object {
+        if ($stepAliases.ContainsKey($_.ToLowerInvariant())) { $stepAliases[$_.ToLowerInvariant()] } else { $_ }
+    })
 $VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
