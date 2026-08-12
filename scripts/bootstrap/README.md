@@ -20,10 +20,11 @@ parallel, and finishes with the unified readiness inventory
 | `connect-github.sh` | `gh auth login --web` device-code flow. **Source it** to also export `GITHUB_MODELS_TOKEN` from the gh token, which flips the `github-models` provider in `config/aihub.json` to Ready with no manually-handled key. |
 | `connect-azure.sh` | `az login --use-device-code` (URL + one-time code, works from any browser on any device). Detects Cloud Shell's implicit login and skips. `--subscription <id>` selects a subscription. |
 | `connect-azure.ps1` | Azure PowerShell twin: `Connect-AzAccount -UseDeviceAuthentication`, same Cloud Shell detection and `-Subscription` selection, for shells where Az cmdlets are the native tool. |
+| `connect-all.ps1` | One command, every interactive login lane, **verify-first**: skips providers already authenticated, then runs the device-code / no-browser flows for the rest — `gh` (device-code), `az` (device-code; Cloud Shell implicit login skipped), `ant` (`ant auth login --no-browser`, per the CLI authentication docs); codex stays env-var-driven (`OPENAI_API_KEY`). Humans only — CI/fleet use OIDC/WIF/managed identity. Lanes table: `docs/architecture/CONNECTIONS_SETUP.md` § One-command login. |
 | `load-env-from-keyvault.sh` | **Source it** after Azure login. Pulls `openai-api-key`, `anthropic-api-key`, `github-models-token` from the Key Vault at `AZURE_KEY_VAULT_URI` (provisioned by `infra/main.bicep`) into the matching env vars from `config/aihub.json`. |
 | `azure-up.sh` | End-to-end cloud bring-up: device-code login → resource group → `infra/main.bicep` deployment (with your objectId for the RBAC grants) → writes endpoint wiring to `.helios/azure.env` and points `AIHUB_CONFIG` at the cloud profile. |
 | `azure-up.ps1` | Azure PowerShell twin of `azure-up.sh` (`New-AzResourceGroupDeployment`); writes `.helios/azure.env.ps1` for dot-sourcing. |
-| `setup-ai-clis.ps1` | Installs/verifies the AI agent CLIs behind `config/aihub.json`'s `cliAgents`: `claude`, `codex`, `copilot` (all npm), and verifies `gh` for gh-models. Idempotent; prints headless-auth guidance per CLI; never prompts, never stores secrets. |
+| `setup-ai-clis.ps1` | Installs/verifies the AI agent CLIs behind `config/aihub.json`'s `cliAgents`: `claude`, `codex`, `copilot` (all npm), and verifies `gh` for gh-models. Idempotent; prints headless-auth guidance per CLI; never prompts, never stores secrets. `-ProbeAuth` adds a read-only, informational auth column (never changes the exit code). |
 | `cloud-shell-setup.sh` | Orchestrates the CLI fleet + both auth flows. `--skip-auth` / `--skip-smoke` to narrow it. |
 
 ## AI CLI setup: `setup-ai-clis.ps1`
@@ -47,8 +48,20 @@ used (and this matches what `cloud-shell-setup.sh` already installs).
 ```powershell
 pwsh scripts/bootstrap/setup-ai-clis.ps1               # install what's missing
 pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly   # report-only (repo verify-only convention)
+pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly -ProbeAuth   # + informational auth column
 pwsh scripts/bootstrap/setup-ai-clis.ps1 -Skip codex,copilot
 ```
+
+**`-ProbeAuth`** (opt-in) probes each *present* CLI read-only: `codex login status`;
+`gh auth status --hostname github.com --active` (automatic fallback when an older
+gh lacks `--active`); env-var *presence* for claude/copilot (`ANTHROPIC_API_KEY`,
+`GH_TOKEN`/`GITHUB_TOKEN` — names only, values never read or printed); and, when
+the `ant` CLI is already on PATH, a grep of `ant auth status` stdout (its exit
+status is documented as not scriptable, per the CLI authentication docs). Results
+are informational — `authenticated | not-authenticated | unknown` — and never
+change the exit code; an older CLI without the status subcommand reports `unknown`
+instead of failing setup. The contract stands: no login flow is ever run, nothing
+is prompted for, nothing is stored.
 
 Idempotent (present CLIs are skipped with their version printed) and secret-free: it
 prints per-CLI headless-auth guidance — `ANTHROPIC_API_KEY` / `claude setup-token`,

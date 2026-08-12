@@ -401,6 +401,9 @@ else {
     }
     else {
         Write-Host "Attention needed: $($needsAttention.Count) component(s) — run the 'Next command' column entries."
+        if (@($needsAttention | Where-Object { $_.Component -like '*-auth' }).Count -gt 0) {
+            Write-Host "Auth in one pass: pwsh scripts/bootstrap/connect-all.ps1   # verifies every login lane, then runs only the device-code logins still needed"
+        }
     }
 }
 

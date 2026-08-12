@@ -7,6 +7,47 @@ checklist (including the GitHub settings pages) is
 [`../OWNER_START_HERE.md`](../OWNER_START_HERE.md). Hard rule everywhere below:
 **no secrets in the repo** — config files carry env-var *names* only.
 
+## One-command login (Cloud Shell and hybrid)
+
+`pwsh scripts/bootstrap/connect-all.ps1` runs every interactive login lane in one
+pass, **verify-first**: lanes already authenticated are detected and skipped, the
+rest get a device-code / no-browser flow (a URL plus a one-time code you finish in
+any browser). It never prompts for a key and never stores a secret; check the
+result any time with `pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly
+-ProbeAuth` (informational auth column, exit code unchanged).
+
+| Provider | What it unlocks | Command (what the lane runs) |
+|---|---|---|
+| GitHub (`gh`) | `gh-models` provider, `copilot` CLI (reuses the gh login), repo/Actions operations | `gh auth login --web` device-code (`scripts/bootstrap/connect-github.sh`) |
+| Azure (`az`) | Key Vault env loading (`load-env-from-keyvault.sh`), `azure-openai`/`azure-foundry` via Entra ID, Bicep deploys | `az login --use-device-code` (`connect-azure.sh` / `connect-azure.ps1`; Cloud Shell is implicitly logged in and skipped) |
+| Anthropic (`ant`) | Profile credentials for the `anthropic` provider and `claude` CLI without handling a raw key | `ant auth login --no-browser` (prints the authorize URL, accepts the pasted code) |
+| OpenAI (`codex`) | `codex` cliAgent (`codex exec {prompt}`) | Headless: `OPENAI_API_KEY` from Key Vault (`openai-api-key`); `codex login` only where a browser exists |
+
+**ant CLI facts** (per the CLI authentication docs):
+
+- Interactive login is `ant auth login` (browser OAuth). On a remote or
+  browserless host — Cloud Shell included — use `ant auth login --no-browser`,
+  which prints the authorize URL and accepts the pasted code.
+- `--profile <name>` names profiles; `--workspace-id` skips the workspace picker.
+  Credentials store under `$ANTHROPIC_CONFIG_DIR`.
+- `ant auth status` prints the selected credential source, but its exit status
+  must not be scripted against (the docs say so) — grep its stdout instead, which
+  is exactly what `setup-ai-clis.ps1 -ProbeAuth` does.
+- `ANTHROPIC_API_KEY` overrides every profile — unset it when the profile
+  credentials should win. `ant auth logout` clears stored credentials.
+- Non-interactive workloads (CI, servers) should use **Workload Identity
+  Federation**, not interactive login.
+
+**Visual Studio**: no lane needed — Visual Studio signs into Entra ID and GitHub
+itself (File → Account Settings…), and the Copilot/Azure tooling inside VS rides
+those logins rather than anything a script here sets up.
+
+**The hybrid rule**: interactive device-code / no-browser logins are for *humans*
+on workstations and Cloud Shell. CI and fleet workers never log in interactively —
+they use OIDC (`scripts/bootstrap/azure-oidc-setup.sh`), Workload Identity
+Federation, or managed identity, with keys arriving only via environment variables
+or Key Vault.
+
 ## The matrix
 
 | Connection | What flows | Carried by (in this repo) | Repo-side config needed |
