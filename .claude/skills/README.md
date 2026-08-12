@@ -18,16 +18,17 @@ skill and are stated once, here:
 | PowerShell 7 automation | `powershell-automation` | `modules.md`, `script-patterns.md` | `.github/workflows/{code-checks,ci-validation,quality}.yml`, `.github/ps1-parse-baseline.txt`, `scripts/bootstrap/`, `scripts/fleet/stop-fleet.ps1` |
 | GitHub Actions / JSON / MSBuild config | `pipelines-config` | `actions-tooling.md`, `msbuild-and-config.md` | `.github/workflows/`, `config/aihub.json`, the csproj files |
 | Bicep / ARM / Terraform | `iac-azure` | `bicep-tooling.md`, `terraform-azurerm.md` | `infra/main.bicep`, `infra/terraform/`, `.github/workflows/helios-deploy.yml` |
-| C++ native spoke | `cpp-performance` | `build-and-packaging.md` | `src/ai/HELIOS.AIHub.Native/CMakeLists.txt`, `scripts/build/build-native.sh`, `src/ai/HELIOS.AIHub/Native/NativeMethods.cs` |
-| Python agents spoke | `python-agents` | already deep — none | `src/ai/python/` |
-| F# domain modeling | `fsharp-functional` | already deep — none | `src/ai/HELIOS.AIHub.Domain/` |
+| C++ native spoke | `cpp-performance` | `build-and-packaging.md`, `rendering-gpu.md` | `src/ai/HELIOS.AIHub.Native/CMakeLists.txt`, `scripts/build/build-native.sh`, `src/ai/HELIOS.AIHub/Native/NativeMethods.cs` |
+| Python agents spoke | `python-agents` | `ml-and-rl.md` | `src/ai/python/` |
+| F# domain modeling | `fsharp-functional` | `analytics-patterns.md` | `src/ai/HELIOS.AIHub.Domain/` |
 | Cross-format wiring (workflows ↔ IaC ↔ config) | `automation-wiring` | `github-actions.md`, `bicep-arm.md`, `terraform.md`, `config-schemas.md`, `rest-curl.md` | `.github/workflows/`, `infra/`, `config/` |
 | Hub extension recipes (provider / CLI / MCP tool) | `api-creator` | already deep — none | `src/ai/HELIOS.AIHub*`, `src/mcp/HELIOS.Mcp/`, `config/aihub.json` |
-| WinUI 3 desktop shell | `winui3-shell` | already deep — none | `src/gui/`, `docs/architecture/GUI_THEME_ANALYSIS.md` |
+| WinUI 3 desktop shell | `winui3-shell` | `xaml-authoring.md`, `rendering-interop.md` | `src/gui/`, `docs/architecture/GUI_THEME_ANALYSIS.md` |
 
-"Already deep": `python-agents`, `fsharp-functional`, `automation-wiring`,
-`api-creator`, and `winui3-shell` carried real library knowledge before the reference
-packs were added, so they get no new reference files. `automation-wiring`'s five
+"Already deep": `automation-wiring` and `api-creator` carried real library
+knowledge before the reference packs were added, so they get no new reference
+files; `python-agents`, `fsharp-functional`, and `winui3-shell` were already strong
+and received one deepening pack each (ML/RL, analytics, XAML+rendering). `automation-wiring`'s five
 pre-existing references set the precedent for this layout.
 
 ## Ecosystem repos

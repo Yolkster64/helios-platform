@@ -131,3 +131,7 @@ Depth lives in `references/` (index: `.claude/skills/README.md`):
   (LTO probe, load-bearing output paths, the CI assert), the canonical
   CMakePresets.json shape (none exists yet), the no-ctest gap, and vcpkg manifest
   mode plus the spoke rule that keeps the dependency count at zero.
+- `references/rendering-gpu.md` — D3D12/Win2D rendering for the shell's native
+  spoke: device/queue/swapchain for a SwapChainPanel target, fence-based frame
+  sync, the Win2D-vs-raw-D3D12 decision table, and the flat-C-ABI boundary rules
+  mapped to concrete function examples.

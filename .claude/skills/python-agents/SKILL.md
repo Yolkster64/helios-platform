@@ -126,3 +126,12 @@ uv resolves and caches the environment on first run. Use this for agents under ~
 | Notebooks, quick throwaway scripts | copilot | Inline completion |
 | Local/offline experimentation, air-gapped runs | ollama | No network required |
 | Workloads over enterprise/tenant data | azure-foundry | Data residency |
+
+## Reference material
+
+- `references/ml-and-rl.md` — the `[ml]` extra (numpy/scikit-learn) and the
+  guard pattern for degrading gracefully without it; numpy/sklearn usage as
+  practiced in `src/ai/python/helios_agents/`; the advisory-only RL integration
+  lane (Yolkster64/RL fork, `outcomes.jsonl` as dataset seed, and the E28/ltrain
+  never-auto-execute rule). Read it before touching `analysis.py`, `textwork.py`,
+  the `[ml]` extra, or anything RL-adjacent.
