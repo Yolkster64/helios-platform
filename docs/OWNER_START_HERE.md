@@ -74,7 +74,7 @@ values:
 | --- | --- | --- |
 | `SLACK_WEBHOOK_URL` | Actions secret (and locally if testing) | CI/deploy/fleet notifications to `#helios-ci`, `#helios-deploys`, `#helios-fleet` |
 | `SLACK_BOT_TOKEN` | Env / Actions secret | Bot-token Slack calls (future `HELIOS.Connectors` service) |
-| `LINEAR_API_KEY` | Actions secret | Mirroring labeled GitHub issues into Linear team `HEL` |
+| `LINEAR_API_KEY` | Actions secret | Mirroring labeled GitHub issues into Linear team `JOH` (the workspace's team key — `config/connectors.json` `linear.teamKey` must match your Linear team or the sync exits with a warning) |
 
 Routing choices (which workflows notify on failure vs. always, which labels
 sync) are edited in `config/connectors.json` itself, not in the workflows.
