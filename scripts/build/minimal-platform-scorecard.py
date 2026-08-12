@@ -33,7 +33,16 @@ def main() -> int:
     args = parser.parse_args()
 
     total, passed, failed = parse_trx(Path(args.trx))
-    healthy = args.build == "success" and args.tests == "success" and failed == 0
+    # healthy must reflect every signal the scorecard reports: a failed
+    # smoke step with if:always() generation would otherwise publish
+    # healthy=true against a red job.
+    healthy = (
+        all(
+            outcome == "success"
+            for outcome in (args.build, args.tests, args.native_smoke, args.cli_smoke)
+        )
+        and failed == 0
+    )
 
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
