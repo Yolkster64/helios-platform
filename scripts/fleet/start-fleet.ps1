@@ -191,6 +191,16 @@ function Get-EffectivePoolSize {
             $size = $cap
         }
     }
+    # hermesFleet.maxConcurrentLanes is the pool's declared concurrency
+    # contract (LLM_STRENGTHS_PLAYBOOK scaling table). Enforce it at spawn
+    # time so the declared ceiling is real: a pool never gets more workers
+    # than lanes it may run concurrently.
+    $hermes = Get-OptionalProperty $Pool 'hermesFleet' (Get-OptionalProperty $Defaults 'hermesFleet')
+    $laneCap = [int](Get-OptionalProperty $hermes 'maxConcurrentLanes' 0)
+    if ($laneCap -gt 0 -and $size -gt $laneCap) {
+        Write-Host "  $($Pool.name): maxConcurrentLanes cap $laneCap (was $size)"
+        $size = $laneCap
+    }
     return $size
 }
 

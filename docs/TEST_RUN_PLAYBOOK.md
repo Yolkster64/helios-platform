@@ -219,11 +219,15 @@ is one as of this writing):
 pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
 ```
 
-> **Trust boundary**: the gate *executes the merged tree* — the candidate PR's own
-> `build-native.sh`, MSBuild targets, and pytest conftests run on your machine with
-> your environment. For a PR you haven't read, prefer the keyless hosted lane, which
-> runs the same script on a disposable runner with a read-only token and no secrets,
-> and publishes the report as an artifact:
+> **Trust boundary (enforced)**: the gate *executes the merged tree* — the candidate
+> PR's own `build-native.sh`, MSBuild targets, and pytest conftests run on your
+> machine with your environment. The script now **refuses (exit 3)** on a
+> credential-bearing host (provider API keys in env, or `~/.config/gh` / `~/.azure`
+> present) unless you pass `-AcceptCredentialExposure` or set
+> `HELIOS_ABSORB_ACCEPT_CREDENTIALS=1`. For a PR you haven't read, use the keyless
+> hosted lane, which runs the same script on a disposable runner with a read-only
+> token and no secrets (it sets the opt-in itself), and publishes the report as an
+> artifact:
 >
 > ```bash
 > gh workflow run absorption-benchmark.yml -f pr_number=222

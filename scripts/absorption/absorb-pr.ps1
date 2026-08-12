@@ -27,12 +27,43 @@ param(
     [string]$Upstream = 'M0nado/helios-platform',
     [switch]$Apply,
     [switch]$SkipTests,
+    [switch]$AcceptCredentialExposure,
     [string]$ApiKey = $env:HELIOS_API_ACCESS_KEY,
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# --- Untrusted-code boundary -------------------------------------------------------
+# The gate EXECUTES the merged tree's own code (its build-native.sh via bash,
+# its MSBuild targets, its pytest conftests) with this process's environment.
+# On a credential-bearing host that hands the candidate PR's author your keys
+# and login stores. Refuse by default; the keyless hosted workflow
+# (.github/workflows/absorption-benchmark.yml) sets the env opt-in explicitly.
+if (-not $AcceptCredentialExposure -and $env:HELIOS_ABSORB_ACCEPT_CREDENTIALS -ne '1') {
+    $credentialEnvNames = @(
+        'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_MODELS_TOKEN',
+        'AZURE_OPENAI_API_KEY', 'HELIOS_API_ACCESS_KEY', 'GH_TOKEN', 'GITHUB_TOKEN'
+    ) | Where-Object { -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($_)) }
+    $credentialStores = @(
+        (Join-Path $HOME '.config' 'gh'),
+        (Join-Path $HOME '.azure')
+    ) | Where-Object { Test-Path $_ }
+    if ($credentialEnvNames.Count -gt 0 -or $credentialStores.Count -gt 0) {
+        # Write-Host + explicit exit: under ErrorActionPreference=Stop a
+        # Write-Error here would throw past the exit and yield code 1 instead
+        # of the documented 3.
+        @(
+            'REFUSED: benchmarking untrusted upstream code in a credential-bearing environment.'
+            "  credential env vars set: $(if ($credentialEnvNames) { $credentialEnvNames -join ', ' } else { '(none)' })"
+            "  credential stores found: $(if ($credentialStores) { $credentialStores -join ', ' } else { '(none)' })"
+            "  Safe lane:   gh workflow run absorption-benchmark.yml -f pr_number=$PrNumber"
+            '  Override:    -AcceptCredentialExposure (or HELIOS_ABSORB_ACCEPT_CREDENTIALS=1) on a host you accept exposing.'
+        ) | ForEach-Object { Write-Host $_ }
+        exit 3
+    }
+}
 
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Body)

@@ -427,6 +427,12 @@ function Invoke-ReconcilePass {
         $scaleUpDepth = [math]::Max(1, [int](Get-OptionalProperty $auto 'scaleUpQueueDepth' 3))
         $idleWindow = [math]::Max(0, [int](Get-OptionalProperty $auto 'scaleDownIdleSeconds' 300))
         if ($mode -eq 'cloud') { $minLanes = 0; $maxLanes = 0 }   # cloud pools hold no local lanes
+        # hermesFleet.maxConcurrentLanes is the pool's declared concurrency
+        # contract; the reconciler must never scale local lanes past it
+        # (start-fleet enforces the same cap at spawn time).
+        $hermes = Get-OptionalProperty $pool 'hermesFleet' (Get-OptionalProperty $defaults 'hermesFleet')
+        $laneCap = [int](Get-OptionalProperty $hermes 'maxConcurrentLanes' 0)
+        if ($laneCap -gt 0 -and $maxLanes -gt $laneCap) { $maxLanes = $laneCap }
         if ($maxLanes -lt $minLanes) { $maxLanes = $minLanes }
 
         $manifestPool = @($manifestPools | Where-Object {
