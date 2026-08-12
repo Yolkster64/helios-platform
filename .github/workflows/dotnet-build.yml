@@ -10,6 +10,9 @@ on:
       - 'scripts/build/**'
       - '**.csproj'
       - 'HELIOS.sln'
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - '.github/workflows/dotnet-build.yml'
   pull_request:
@@ -21,6 +24,9 @@ on:
       - 'scripts/build/**'
       - '**.csproj'
       - 'HELIOS.sln'
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - '.github/workflows/dotnet-build.yml'
   workflow_dispatch:

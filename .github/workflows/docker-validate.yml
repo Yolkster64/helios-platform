@@ -13,6 +13,13 @@ on:
       - '.dockerignore'
       - 'docker-compose.yml'
       - 'src/ai/**'
+      # The image's restore layer copies these central build files - a
+      # change to any of them can break the container while the normal
+      # solution build still passes.
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'nuget.config'
       - '.github/workflows/docker-validate.yml'
   push:
     branches: [main]
@@ -21,6 +28,13 @@ on:
       - '.dockerignore'
       - 'docker-compose.yml'
       - 'src/ai/**'
+      # The image's restore layer copies these central build files - a
+      # change to any of them can break the container while the normal
+      # solution build still passes.
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'nuget.config'
       - '.github/workflows/docker-validate.yml'
 
 permissions:

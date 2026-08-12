@@ -1,0 +1,104 @@
+name: NuGet Version Audit (Report Only)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Directory.Packages.props'
+      - '**/*.csproj'
+      - 'HELIOS.sln'
+      - 'src/gui/HELIOS.Shell.sln'
+      - '.github/workflows/nuget-version-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-central-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Summarize centralized versions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          props = Path("Directory.Packages.props")
+          root = ET.parse(props).getroot()
+          versions = []
+          for node in root.findall(".//PackageVersion"):
+            include = node.attrib.get("Include")
+            version = node.attrib.get("Version")
+            if include and version:
+              versions.append((include, version))
+
+          versions.sort(key=lambda item: item[0].lower())
+          print("## Central NuGet versions")
+          print(f"- Total packages: {len(versions)}")
+          print("")
+          print("| Package | Version |")
+          print("|---|---|")
+          for package, version in versions:
+            print(f"| `{package}` | `{version}` |")
+          PY
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("Directory.Packages.props").getroot()
+          versions = sorted(
+            (
+              node.attrib.get("Include", ""),
+              node.attrib.get("Version", ""),
+            )
+            for node in root.findall(".//PackageVersion")
+          )
+          print("## Central NuGet versions")
+          print(f"- Total packages: {len(versions)}")
+          print("")
+          print("| Package | Version |")
+          print("|---|---|")
+          for package, version in versions:
+            print(f"| `{package}` | `{version}` |")
+          PY
+
+  audit-solution-restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore HELIOS.sln
+        continue-on-error: true
+        run: dotnet restore HELIOS.sln
+
+      - name: Outdated packages (HELIOS.sln, report only)
+        continue-on-error: true
+        run: dotnet list HELIOS.sln package --outdated --include-transitive
+
+  audit-gui-restore:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore src/gui/HELIOS.Shell.sln
+        continue-on-error: true
+        run: dotnet restore src/gui/HELIOS.Shell.sln
+
+      - name: Outdated packages (HELIOS.Shell.sln, report only)
+        continue-on-error: true
+        run: dotnet list src/gui/HELIOS.Shell.sln package --outdated --include-transitive

@@ -410,7 +410,8 @@
     {
       "pr": 101,
       "title": "Centralize HELIOS NuGet versions, shared metadata, version-audit workflow",
-      "status": "candidate",
+      "status": "absorbed",
+      "reason": "Landed via Copilot agent PR #97-era batch: Directory.Packages.props + Directory.Build.props/.targets + nuget-version-audit.yml (PR #95).",
       "epic": "E34",
       "why": "Central package versions + shared metadata + version audit — directly portable as central package management.",
       "absorb": ["central version file", "version-audit workflow"],
