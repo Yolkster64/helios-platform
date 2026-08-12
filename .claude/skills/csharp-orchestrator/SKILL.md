@@ -56,3 +56,17 @@ preview only** (ships Nov 2026) — never claim .NET 11 GA or target it in commi
 The net10.0 upgrade is a scheduled roadmap PR; keep new code free of net8-only
 assumptions (prefer `TimeProvider` over `DateTime.UtcNow` for testability, `LibraryImport`
 over `DllImport`).
+
+## Reference material
+
+Depth lives in `references/` — every claim there cites the repo file that grounds it:
+
+- `references/nuget-packages.md` — per-csproj package inventory with exact pins, upgrade
+  pitfalls (the Azure.AI.OpenAI 2.x rewrite trap, Mvc.Testing TFM matching), and the
+  deliberately-absent list (Polly, System.CommandLine, OTel) with adoption criteria.
+- `references/provider-sdks.md` — working API knowledge per SDK behind
+  `src/ai/HELIOS.AIHub/Providers/`: the `IChatClient` seam, Azure deployment-vs-model and
+  credential-chain traps, Anthropic/Ollama/Foundry-Agents/KeyVault/Tables/MCP surfaces.
+- `references/testing.md` — test idioms: hand-rolled fakes over Moq,
+  `WebApplicationFactory`, shipped-config drift tests, keyless determinism, TimeProvider
+  injection.
