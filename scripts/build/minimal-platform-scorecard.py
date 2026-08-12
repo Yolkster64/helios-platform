@@ -27,6 +27,8 @@ def main() -> int:
     parser.add_argument("--build", required=True)
     parser.add_argument("--tests", required=True)
     parser.add_argument("--cli-smoke", required=True)
+    parser.add_argument("--publish", required=True)
+    parser.add_argument("--artifact-smoke", required=True)
     parser.add_argument("--native-smoke", required=True)
     parser.add_argument("--out-json", required=True)
     parser.add_argument("--out-md", required=True)
@@ -39,9 +41,19 @@ def main() -> int:
     healthy = (
         all(
             outcome == "success"
-            for outcome in (args.build, args.tests, args.native_smoke, args.cli_smoke)
+            for outcome in (
+                args.build,
+                args.tests,
+                args.native_smoke,
+                args.cli_smoke,
+                args.publish,
+                args.artifact_smoke,
+            )
         )
         and failed == 0
+        # Zero tests is not health - a missing/counterless TRX or an empty
+        # discovery must not publish a healthy artifact without evidence.
+        and total > 0
     )
 
     payload = {
@@ -53,6 +65,8 @@ def main() -> int:
             "tests": args.tests,
             "native_smoke": args.native_smoke,
             "cli_smoke": args.cli_smoke,
+            "publish": args.publish,
+            "artifact_smoke": args.artifact_smoke,
         },
         "metrics": {
             "tests_total": total,
@@ -75,6 +89,8 @@ def main() -> int:
             f"- Tests: `{args.tests}`",
             f"- Native smoke: `{args.native_smoke}`",
             f"- CLI smoke: `{args.cli_smoke}`",
+            f"- Publish: `{args.publish}`",
+            f"- Artifact smoke: `{args.artifact_smoke}`",
             f"- Tests total/passed/failed: `{total}/{passed}/{failed}`",
             f"- Healthy signal: `{'yes' if healthy else 'no'}`",
         ]

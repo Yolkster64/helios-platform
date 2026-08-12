@@ -95,20 +95,6 @@ jobs:
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- routing
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- engines
 
-      - name: Generate minimal platform scorecard (informational)
-        if: always()
-        continue-on-error: true
-        run: |
-          python3 scripts/build/minimal-platform-scorecard.py \
-            --trx ./test-results/aihub-tests.trx \
-            --build "${{ steps.build.outcome }}" \
-            --tests "${{ steps.test.outcome }}" \
-            --native-smoke "${{ steps.native_smoke.outcome }}" \
-            --cli-smoke "${{ steps.cli_smoke.outcome }}" \
-            --out-json ./scorecard/minimal-platform-scorecard.json \
-            --out-md ./scorecard/minimal-platform-scorecard.md
-          cat ./scorecard/minimal-platform-scorecard.md >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -117,18 +103,8 @@ jobs:
           path: test-results/
           if-no-files-found: warn
 
-      - name: Upload minimal platform scorecard
-        if: always()
-        # Informational artifact - a quota/transport failure here must not
-        # redden an otherwise green build, same as its generator step.
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: minimal-platform-scorecard
-          path: scorecard/
-          if-no-files-found: warn
-
       - name: Publish CLI artifact
+        id: publish
         run: |
           dotnet publish src/ai/HELIOS.AIHub.Cli -c Release --no-build -o ./publish/helios-ai
           # Ship the default config next to the executable so the extracted artifact
@@ -139,6 +115,7 @@ jobs:
           cp -R src/ai/python/helios_agents ./publish/helios-ai/python-spoke/
 
       - name: Smoke-test extracted CLI artifact
+        id: artifact_smoke
         run: |
           helios_artifact="$GITHUB_WORKSPACE/publish/helios-ai/helios-ai"
           helios_smoke_dir="$(mktemp -d)"
@@ -172,6 +149,37 @@ jobs:
           assert plan["inputs"]["include_candidates"] is False
           assert plan["candidate_count"] == 0
           PY
+
+      # Generated LAST so the scorecard reflects every gating signal in this
+      # job - a red publish/artifact-smoke can no longer leave behind a
+      # healthy dashboard artifact (it runs via if: always(), so it also
+      # reports on failed runs).
+      - name: Generate minimal platform scorecard (informational)
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 scripts/build/minimal-platform-scorecard.py \
+            --trx ./test-results/aihub-tests.trx \
+            --build "${{ steps.build.outcome }}" \
+            --tests "${{ steps.test.outcome }}" \
+            --native-smoke "${{ steps.native_smoke.outcome }}" \
+            --cli-smoke "${{ steps.cli_smoke.outcome }}" \
+            --publish "${{ steps.publish.outcome }}" \
+            --artifact-smoke "${{ steps.artifact_smoke.outcome }}" \
+            --out-json ./scorecard/minimal-platform-scorecard.json \
+            --out-md ./scorecard/minimal-platform-scorecard.md
+          cat ./scorecard/minimal-platform-scorecard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload minimal platform scorecard
+        if: always()
+        # Informational artifact - a quota/transport failure here must not
+        # redden an otherwise green build, same as its generator step.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: minimal-platform-scorecard
+          path: scorecard/
+          if-no-files-found: warn
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
