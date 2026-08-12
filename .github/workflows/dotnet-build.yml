@@ -96,6 +96,7 @@ jobs:
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- engines
 
       - name: Upload test results
+        id: upload_test_results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -150,6 +151,13 @@ jobs:
           assert plan["candidate_count"] == 0
           PY
 
+      - name: Upload CLI artifact
+        id: upload_cli
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-ai
+          path: publish/helios-ai/
+
       # Generated LAST so the scorecard reflects every gating signal in this
       # job - a red publish/artifact-smoke can no longer leave behind a
       # healthy dashboard artifact (it runs via if: always(), so it also
@@ -166,6 +174,8 @@ jobs:
             --cli-smoke "${{ steps.cli_smoke.outcome }}" \
             --publish "${{ steps.publish.outcome }}" \
             --artifact-smoke "${{ steps.artifact_smoke.outcome }}" \
+            --upload-test-results "${{ steps.upload_test_results.outcome }}" \
+            --upload-cli "${{ steps.upload_cli.outcome }}" \
             --out-json ./scorecard/minimal-platform-scorecard.json \
             --out-md ./scorecard/minimal-platform-scorecard.md
           cat ./scorecard/minimal-platform-scorecard.md >> "$GITHUB_STEP_SUMMARY"
@@ -181,11 +191,6 @@ jobs:
           path: scorecard/
           if-no-files-found: warn
 
-      - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: helios-ai
-          path: publish/helios-ai/
 
   # The legacy core project (src/core/HELIOS.Platform) does not compile today
   # (~323 pre-existing errors). This job tracks its state in the step summary

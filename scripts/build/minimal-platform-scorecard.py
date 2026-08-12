@@ -29,6 +29,8 @@ def main() -> int:
     parser.add_argument("--cli-smoke", required=True)
     parser.add_argument("--publish", required=True)
     parser.add_argument("--artifact-smoke", required=True)
+    parser.add_argument("--upload-test-results", required=True)
+    parser.add_argument("--upload-cli", required=True)
     parser.add_argument("--native-smoke", required=True)
     parser.add_argument("--out-json", required=True)
     parser.add_argument("--out-md", required=True)
@@ -48,12 +50,16 @@ def main() -> int:
                 args.cli_smoke,
                 args.publish,
                 args.artifact_smoke,
+                args.upload_test_results,
+                args.upload_cli,
             )
         )
         and failed == 0
-        # Zero tests is not health - a missing/counterless TRX or an empty
-        # discovery must not publish a healthy artifact without evidence.
-        and total > 0
+        # Health requires positive PASSED evidence: a missing/counterless TRX,
+        # an empty discovery, or a TRX of only skipped/notExecuted entries must
+        # not publish a healthy artifact (failed==0 with passed==0 is not
+        # proof of anything).
+        and passed > 0
     )
 
     payload = {
@@ -67,6 +73,8 @@ def main() -> int:
             "cli_smoke": args.cli_smoke,
             "publish": args.publish,
             "artifact_smoke": args.artifact_smoke,
+            "upload_test_results": args.upload_test_results,
+            "upload_cli": args.upload_cli,
         },
         "metrics": {
             "tests_total": total,
@@ -91,6 +99,8 @@ def main() -> int:
             f"- CLI smoke: `{args.cli_smoke}`",
             f"- Publish: `{args.publish}`",
             f"- Artifact smoke: `{args.artifact_smoke}`",
+            f"- Test-results upload: `{args.upload_test_results}`",
+            f"- CLI artifact upload: `{args.upload_cli}`",
             f"- Tests total/passed/failed: `{total}/{passed}/{failed}`",
             f"- Healthy signal: `{'yes' if healthy else 'no'}`",
         ]
