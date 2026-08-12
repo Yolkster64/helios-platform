@@ -133,6 +133,28 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task EngineRecommendation_RejectsInvalidSecurityProfile()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/v1/engines/recommend",
+            new EngineRecommendationRequest(SecurityProfile: "invalid-profile"),
+            Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task EngineRecommendation_RejectsOutOfRangeFleetSize()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/v1/engines/recommend",
+            new EngineRecommendationRequest(FleetSize: 100_001),
+            Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task EngineRecommendation_IsAdvisoryAndSeparatesCandidates()
     {
         var response = await _client.PostAsJsonAsync(
@@ -180,6 +202,16 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task PostLearning_RejectsMissingTaskType()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/learning",
+            new AdvisoryOutcomeRequest(TaskType: null, Source: "absorption-benchmark",
+                Provider: "M0nado/helios-platform#222", Model: "abc", Success: true), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PostLearning_AcceptsAdvisoryOutcome_AndReportsStoreState()
     {
         var response = await _client.PostAsJsonAsync("/v1/learning",
@@ -218,6 +250,15 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     {
         var response = await _client.PostAsJsonAsync(
             "/v1/route", new RouteRequest(TaskType: null, Prompt: "hello"), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Tandem_RejectsMissingTaskType()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/v1/tandem", new RouteRequest(TaskType: null, Prompt: "hello"), Json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
