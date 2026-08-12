@@ -1,0 +1,8 @@
+<Project>
+  <!-- Evaluated AFTER the project body and SDK defaults, unlike
+       Directory.Build.props - IsPackable has its real value here, so the
+       license default actually applies to packable projects. -->
+  <PropertyGroup>
+    <PackageLicenseExpression Condition="'$(PackageLicenseExpression)' == '' and '$(IsPackable)' == 'true'">MIT</PackageLicenseExpression>
+  </PropertyGroup>
+</Project>

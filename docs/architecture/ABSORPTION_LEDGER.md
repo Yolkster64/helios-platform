@@ -431,7 +431,7 @@ the UI.
   wiring context); UI defers to GUI_THEME_ANALYSIS.md
 - Risks: the UI is WPF-era; our shell direction is WinUI 3
 
-## E34 — NuGet version centralization & audit (`build-ci`) — open
+## E34 — NuGet version centralization & audit (`build-ci`) — absorbed (PR #95)
 
 Centralized HELIOS NuGet versions with shared metadata and a version-audit workflow
 — the governance that would have made the era's dependabot bumps (#58/#60) one-line

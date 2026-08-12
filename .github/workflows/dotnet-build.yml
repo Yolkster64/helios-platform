@@ -10,6 +10,9 @@ on:
       - 'scripts/build/**'
       - '**.csproj'
       - 'HELIOS.sln'
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - '.github/workflows/dotnet-build.yml'
   pull_request:
@@ -21,6 +24,9 @@ on:
       - 'scripts/build/**'
       - '**.csproj'
       - 'HELIOS.sln'
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - '.github/workflows/dotnet-build.yml'
   workflow_dispatch:
@@ -70,15 +76,18 @@ jobs:
         run: python3 scripts/build/validate-model-catalog.py
 
       - name: Build
+        id: build
         run: dotnet build HELIOS.sln -c Release --no-restore
 
       # The runtime degrades gracefully when the native library is missing, which is
       # right for dev machines but would let CI silently stop testing the native paths.
       # Fail loudly here instead.
       - name: Assert native library reached test output
+        id: native_smoke
         run: test -f tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so
 
       - name: Test
+        id: test
         run: >
           dotnet test tests/HELIOS.AIHub.Tests/HELIOS.AIHub.Tests.csproj
           -c Release --no-build
@@ -86,12 +95,14 @@ jobs:
           --results-directory ./test-results
 
       - name: Smoke-test cross-LLM shell
+        id: cli_smoke
         run: |
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- status
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- routing
           dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release --no-build -- engines
 
       - name: Upload test results
+        id: upload_test_results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -100,6 +111,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish CLI artifact
+        id: publish
         run: |
           dotnet publish src/ai/HELIOS.AIHub.Cli -c Release --no-build -o ./publish/helios-ai
           # Ship the default config next to the executable so the extracted artifact
@@ -110,6 +122,7 @@ jobs:
           cp -R src/ai/python/helios_agents ./publish/helios-ai/python-spoke/
 
       - name: Smoke-test extracted CLI artifact
+        id: artifact_smoke
         run: |
           helios_artifact="$GITHUB_WORKSPACE/publish/helios-ai/helios-ai"
           helios_smoke_dir="$(mktemp -d)"
@@ -145,10 +158,45 @@ jobs:
           PY
 
       - name: Upload CLI artifact
+        id: upload_cli
         uses: actions/upload-artifact@v4
         with:
           name: helios-ai
           path: publish/helios-ai/
+
+      # Generated LAST so the scorecard reflects every gating signal in this
+      # job - a red publish/artifact-smoke can no longer leave behind a
+      # healthy dashboard artifact (it runs via if: always(), so it also
+      # reports on failed runs).
+      - name: Generate minimal platform scorecard (informational)
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 scripts/build/minimal-platform-scorecard.py \
+            --trx ./test-results/aihub-tests.trx \
+            --build "${{ steps.build.outcome }}" \
+            --tests "${{ steps.test.outcome }}" \
+            --native-smoke "${{ steps.native_smoke.outcome }}" \
+            --cli-smoke "${{ steps.cli_smoke.outcome }}" \
+            --publish "${{ steps.publish.outcome }}" \
+            --artifact-smoke "${{ steps.artifact_smoke.outcome }}" \
+            --upload-test-results "${{ steps.upload_test_results.outcome }}" \
+            --upload-cli "${{ steps.upload_cli.outcome }}" \
+            --out-json ./scorecard/minimal-platform-scorecard.json \
+            --out-md ./scorecard/minimal-platform-scorecard.md
+          cat ./scorecard/minimal-platform-scorecard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload minimal platform scorecard
+        if: always()
+        # Informational artifact - a quota/transport failure here must not
+        # redden an otherwise green build, same as its generator step.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: minimal-platform-scorecard
+          path: scorecard/
+          if-no-files-found: warn
+
 
   # The legacy core project (src/core/HELIOS.Platform) does not compile today
   # (~323 pre-existing errors). This job tracks its state in the step summary
