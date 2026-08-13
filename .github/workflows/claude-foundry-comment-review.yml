@@ -1,0 +1,105 @@
+name: Claude Foundry PR comment review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: claude-foundry-comment-review-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-helios-ai' }}
+  CLAUDE_CODE_USE_FOUNDRY: '1'
+  ANTHROPIC_DEFAULT_SONNET_MODEL: ${{ vars.ANTHROPIC_DEFAULT_SONNET_MODEL || 'claude-sonnet-4-6' }}
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ vars.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'claude-haiku-4-5' }}
+  ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ vars.ANTHROPIC_DEFAULT_OPUS_MODEL || 'claude-opus-4-6' }}
+
+jobs:
+  owner-comment-review:
+    name: Owner @claude review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Determine whether this run should execute Claude review
+        id: guard
+        run: |
+          should_run='false'
+          if [ "${{ github.event.issue.pull_request != null }}" = 'true' ] && \
+             [ "${{ github.actor == github.repository_owner }}" = 'true' ] && \
+             [ "${{ contains(github.event.comment.body, '@claude') }}" = 'true' ]; then
+            should_run='true'
+          fi
+          echo "run=$should_run" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted default branch
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check Azure OIDC configuration
+        if: steps.guard.outputs.run == 'true'
+        id: oidc
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Claude Foundry skipped: configure AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID as repository variables (legacy identifier secrets are also accepted). No client secret is used.'
+          fi
+
+      - name: Azure login with GitHub OIDC
+        if: steps.guard.outputs.run == 'true' && steps.oidc.outputs.configured == 'true'
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Foundry resource
+        if: steps.guard.outputs.run == 'true' && steps.oidc.outputs.configured == 'true'
+        env:
+          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE || secrets.ANTHROPIC_FOUNDRY_RESOURCE }}
+        run: |
+          resource="$CONFIGURED_RESOURCE"
+          if [ -z "$resource" ]; then
+            mapfile -t resources < <(az cognitiveservices account list \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[?kind=='AIServices'].name" -o tsv)
+            if [ "${#resources[@]}" -ne 1 ]; then
+              echo "Expected exactly one AIServices Foundry account in $AZURE_RESOURCE_GROUP; found ${#resources[@]}. Set ANTHROPIC_FOUNDRY_RESOURCE as a repository variable." >&2
+              exit 1
+            fi
+            resource="${resources[0]}"
+          fi
+          echo "ANTHROPIC_FOUNDRY_RESOURCE=$resource" >> "$GITHUB_ENV"
+          echo "Using Foundry resource: $resource"
+
+      - name: Claude PR review
+        if: steps.guard.outputs.run == 'true' && steps.oidc.outputs.configured == 'true'
+        uses: anthropics/claude-code-action@239e3a730883eeb5c53db12b0fc9573b3024b126
+        with:
+          use_foundry: true
+          github_token: ${{ github.token }}
+          settings: .claude/settings.json
+          prompt: ${{ github.event.comment.body }}
+          claude_args: >-
+            --permission-mode dontAsk
+            --max-turns 20
+            --allowedTools "Read,Glob,Grep,Bash(git diff *),Bash(git status *),Bash(dotnet build *),Bash(dotnet test *),Bash(python3 -m pytest *),Bash(python3 -m compileall *)"
+            --disallowedTools "Edit,Write,Bash(az *),Bash(git push *),Bash(gh *),Bash(curl *),Bash(wget *)"
+          use_sticky_comment: true
+          show_full_output: false
+          display_report: false

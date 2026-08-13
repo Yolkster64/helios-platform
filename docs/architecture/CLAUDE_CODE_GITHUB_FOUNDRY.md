@@ -81,9 +81,9 @@ models, write secrets, or assign RBAC.
 
 ## GitHub review workflow
 
-After `.github/workflows/claude-foundry.yml` is on `main`, the repository owner can add
-an `@claude` comment to a pull request. The action runs only when the actor is the
-repository owner.
+After `.github/workflows/claude-foundry-comment-review.yml` is on `main`, the repository
+owner can add an `@claude` comment to a pull request. The action runs only when the
+actor is the repository owner.
 
 The review lane uses:
 
@@ -102,7 +102,7 @@ The first job can edit only its ephemeral checkout. It cannot push. The validati
 and publish jobs then:
 
 1. downloads the patch artifact;
-2. applies it to current `main`;
+2. applies it to the same immutable base commit SHA captured before Claude edited;
 3. builds the native spoke;
 4. builds/tests .NET;
 5. compiles/tests Python;
