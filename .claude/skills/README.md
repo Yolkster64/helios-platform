@@ -24,6 +24,7 @@ skill and are stated once, here:
 | Cross-format wiring (workflows ↔ IaC ↔ config) | `automation-wiring` | `github-actions.md`, `bicep-arm.md`, `terraform.md`, `config-schemas.md`, `rest-curl.md` | `.github/workflows/`, `infra/`, `config/` |
 | Hub extension recipes (provider / CLI / MCP tool) | `api-creator` | already deep — none | `src/ai/HELIOS.AIHub*`, `src/mcp/HELIOS.Mcp/`, `config/aihub.json` |
 | WinUI 3 desktop shell | `winui3-shell` | `xaml-authoring.md`, `rendering-interop.md` | `src/gui/`, `docs/architecture/GUI_THEME_ANALYSIS.md` |
+| Microsoft ecosystem (Entra / M365 Copilot / Purview / Fabric) | `microsoft-ecosystem` | `graph-and-copilot.md` | `integrations/m365/`, `docs/architecture/{IDENTITY_ARCHITECTURE,HYBRID_CLOUD_ARCHITECTURE,GOVERNANCE_PURVIEW_FABRIC}.md` |
 
 "Already deep": `automation-wiring` and `api-creator` carried real library
 knowledge before the reference packs were added, so they get no new reference

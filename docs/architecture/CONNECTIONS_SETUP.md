@@ -200,6 +200,16 @@ per `githubLabelToLinear`, and close/reopen moves the Linear state. Enable
 with `gh secret set LINEAR_API_KEY` / `gh secret set SLACK_WEBHOOK_URL`;
 routing changes are edits to `config/connectors.json`, never to the workflows.
 
+> **Owner action — disable Linear's own GitHub sync for team John.** Linear's
+> built-in GitHub integration must NOT also be linked to this repository for
+> team `JOH`, or the two syncs loop: Linear re-creates its mirrored issues back
+> on GitHub as new issues (this produced duplicates #54–#93, closed 2026-08-12,
+> and closing the GitHub twins then cancelled the Linear mirrors, which had to
+> be restored). Click path: Linear → **Settings → Integrations → GitHub** →
+> under the team `John` link, disable issue sync for `Yolkster64/helios-platform`
+> (leave PR-link previews on if desired). One direction only: this repo's
+> `linear-sync.yml` is the writer; Linear stays the mirror.
+
 ## GitHub Project board
 
 `scripts/board-setup/setup-board.ps1` orchestrates the board setup steps, but
