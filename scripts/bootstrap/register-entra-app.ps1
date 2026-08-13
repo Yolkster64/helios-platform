@@ -69,19 +69,38 @@ $oidcAudience = 'api://AzureADTokenExchange'
 
 # --- Input validation (refusals exit 2 with an explanation, never Write-Error) ----
 if ($GitHubOidcSubject) {
-    if ($GitHubOidcSubject -notmatch '^repo:[^/:]+/[^/:]+:') {
-        Write-Host ("Refusing OIDC subject '{0}': expected the form " -f $GitHubOidcSubject)
-        Write-Host '  repo:<owner>/<repo>:ref:refs/heads/<branch>  or  repo:<owner>/<repo>:environment:<name>'
-        Write-Host 'The subject must match what the workflow run presents EXACTLY, or token'
-        Write-Host 'exchange fails with AADSTS700213.'
-        exit 2
-    }
+    # pull_request first, so it gets its specific rationale rather than the
+    # generic malformed-subject refusal below.
     if ($GitHubOidcSubject -match ':pull_request$') {
         Write-Host 'Refusing a pull_request OIDC subject: a PR workflow is modifiable by the'
         Write-Host 'PR itself, so the generic pull_request subject would let any PR with'
         Write-Host 'id-token: write mint tokens as this caller (which can spend provider'
         Write-Host 'quota through /v1/*). Use a branch or environment subject instead — the'
         Write-Host 'same stance azure-oidc-setup.ps1 takes for the deploy identity.'
+        exit 2
+    }
+    # Anchored, complete documented forms only. A prefix-only check would let
+    # malformed suffixes through — 'repo:o/r:ref:refs/heads/' (empty branch) or
+    # 'repo:o/r:environment' (no name) — which Azure stores happily and -Apply
+    # reports as success, but no workflow run's token ever matches: the failure
+    # only surfaces later as AADSTS700213 at token exchange.
+    $validSubjectForms = @(
+        '^repo:[^/:]+/[^/:]+:ref:refs/(heads|tags)/.+$',
+        '^repo:[^/:]+/[^/:]+:environment:.+$'
+    )
+    $subjectValid = $false
+    foreach ($form in $validSubjectForms) {
+        if ($GitHubOidcSubject -match $form) { $subjectValid = $true; break }
+    }
+    if (-not $subjectValid) {
+        Write-Host ("Refusing OIDC subject '{0}': it must match one of the accepted forms" -f $GitHubOidcSubject)
+        Write-Host '  repo:<owner>/<repo>:ref:refs/heads/<branch>'
+        Write-Host '  repo:<owner>/<repo>:ref:refs/tags/<tag>'
+        Write-Host '  repo:<owner>/<repo>:environment:<name>'
+        Write-Host 'completely (non-empty branch/tag/environment name). The subject must match'
+        Write-Host 'what the workflow run presents EXACTLY — Azure accepts any stored string,'
+        Write-Host 'but a partial one never matches a real run token and token exchange fails'
+        Write-Host 'later with AADSTS700213.'
         exit 2
     }
 }

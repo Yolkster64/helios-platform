@@ -27,10 +27,14 @@ never logged in again.
   github        gh auth status --hostname github.com --active (unknown-flag fallback
                 for pre-2.40 gh) -> scripts/bootstrap/connect-github.sh (device-code
                 web login with the models:read scope). ONE login covers: the gh CLI,
-                the GitHub Models provider (gh's token doubles as
-                GITHUB_MODELS_TOKEN — source connect-github.sh to export it), the
-                standalone copilot CLI (@github/copilot reuses the GitHub login),
-                and Copilot sign-in inside VS Code / Visual Studio.
+                the standalone copilot CLI (@github/copilot reuses the GitHub login),
+                and Copilot sign-in inside VS Code / Visual Studio. The GitHub Models
+                provider is covered only when GITHUB_MODELS_TOKEN or GITHUB_TOKEN is
+                ALSO set (checked by NAME): the hub reads only those env vars (or Key
+                Vault), and neither this script nor a child connect script can export
+                a token back into the caller's shell — so gh-authenticated with
+                neither env var set reports needs-attention (exit 2) with the export
+                hint, never ready. This script never runs `gh auth token` for you.
   azure-entra   az account show -> az login --use-device-code. ONE login covers:
                 Azure REST via az, every Azure SDK through AzureCliCredential /
                 DefaultAzureCredential, and Azure AI Foundry — the azure-foundry
@@ -162,7 +166,7 @@ $lanes = @(
         Interactive = $true
         Covers      = 'gh CLI; GitHub Models provider (GITHUB_MODELS_TOKEN); standalone copilot CLI; Copilot in VS Code / Visual Studio'
         LoginLabel  = 'device-code web login via scripts/bootstrap/connect-github.sh (models:read scope)'
-        FixHint     = 'scripts/bootstrap/connect-github.sh   # device-code login + models:read scope'
+        FixHint     = 'scripts/bootstrap/connect-github.sh   # device-code login + models:read scope; already logged in? export GITHUB_MODELS_TOKEN (see lane detail)'
         Verify      = {
             $gh = Get-CliCommand -Name 'gh'
             if (-not $gh) {
@@ -170,7 +174,18 @@ $lanes = @(
             }
             $status = Invoke-GhAuthStatus -GhExe $gh.Source
             if ($status.ExitCode -eq 0) {
-                New-LaneState -Kind ok -Detail 'gh authenticated against github.com (active account); token also feeds GitHub Models, the copilot CLI, and Copilot surfaces'
+                # gh's keyring login is real, but the hub's GitHub Models provider
+                # reads only the GITHUB_MODELS_TOKEN / GITHUB_TOKEN env vars (or Key
+                # Vault) — and neither this script nor a child connect script can
+                # export a token back into the caller's shell. Presence is checked by
+                # NAME only; the value is never read, printed, or exported, and
+                # `gh auth token` is never run here — the human runs it.
+                if ($env:GITHUB_MODELS_TOKEN -or $env:GITHUB_TOKEN) {
+                    New-LaneState -Kind ok -Detail 'gh authenticated against github.com (active account) and GITHUB_MODELS_TOKEN/GITHUB_TOKEN is set (names checked only) — gh CLI, GitHub Models provider, copilot CLI, and Copilot surfaces are covered'
+                }
+                else {
+                    New-LaneState -Kind blocked -Detail ('gh is authenticated, but neither GITHUB_MODELS_TOKEN nor GITHUB_TOKEN is set, and the GitHub Models provider reads only those env vars (or Key Vault) — export one in THIS shell yourself, e.g. pwsh: $env:GITHUB_MODELS_TOKEN = (gh auth token) | bash: export GITHUB_MODELS_TOKEN="$(gh auth token)" (a child script cannot export it for you)')
+                }
             }
             else {
                 New-LaneState -Kind 'needs-login' -Detail 'gh is not authenticated against github.com'

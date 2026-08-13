@@ -433,6 +433,18 @@ function Invoke-ReconcilePass {
         $hermes = Get-OptionalProperty $pool 'hermesFleet' (Get-OptionalProperty $defaults 'hermesFleet')
         $laneCap = [int](Get-OptionalProperty $hermes 'maxConcurrentLanes' 0)
         if ($laneCap -gt 0 -and $maxLanes -gt $laneCap) { $maxLanes = $laneCap }
+        if ($laneCap -gt 0 -and $minLanes -gt $laneCap) {
+            # The cap always wins: without this clamp the max-raise below would
+            # lift $maxLanes straight back to $minLanes and the reconciler
+            # could scale local lanes past the pool's declared hard cap.
+            # Parentheses around the concatenation matter: -f binds tighter
+            # than +, so without them the placeholders would print literally.
+            Write-Host (('warning: pool {0}: topology sets minLocalLanes {1} above ' +
+                'hermesFleet.maxConcurrentLanes {2} - the topology is inconsistent and the ' +
+                'cap wins; clamping minLocalLanes to {2}.') -f
+                $poolName, $minLanes, $laneCap)
+            $minLanes = $laneCap
+        }
         if ($maxLanes -lt $minLanes) { $maxLanes = $minLanes }
 
         $manifestPool = @($manifestPools | Where-Object {

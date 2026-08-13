@@ -8,8 +8,11 @@
 
       1. resolves the ProjectV2 by owner login + project number, including its
          single-select fields and their options
-      2. pages through the project's existing items (100/page) to learn what is
-         already on the board
+      2. pages through the project's existing items (100/page) TO COMPLETION to
+         learn what is already on the board; if the inventory cannot be completed
+         (100-page runaway ceiling hit with more pages remaining) it aborts with
+         exit 1 before any mutation - an incomplete presence check would let step 5
+         overwrite fields on items that were already on the board
       3. resolves the issue node IDs for the epic issue range with one aliased query
          against the repository (missing issue numbers are tolerated and reported)
       4. adds each epic that is not already on the board via addProjectV2ItemById
@@ -51,7 +54,9 @@
     Exit codes (the contract):
       0 = every existing epic is on the board and field stamping succeeded where the
           fields exist; also -DryRun and the no-token dry-run
-      1 = fatal: auth failure, project or repository not resolvable
+      1 = fatal: auth failure, project or repository not resolvable, or the
+          existing-item inventory could not be completed (paging ceiling hit) -
+          nothing is mutated in that case
       2 = partial: some issue numbers in the range do not exist, or some add/update
           mutations failed (details in the summary)
 .EXAMPLE
@@ -313,11 +318,20 @@ if ($null -eq $project) {
 $projectId = $project.id
 $fieldNodes = @($project.fields.nodes | Where-Object { $null -ne $_ })
 
-# Existing items: content node id -> project item id (paged; cap at 10 pages = 1000 items).
+# Existing items: content node id -> project item id, paged to COMPLETION. The
+# presence check must be exhaustive: addProjectV2ItemById returns the EXISTING
+# item when the content is already on the board, so an epic missed by an
+# incomplete inventory would be "re-added" and then have its Status/Priority
+# overwritten by the field stamping below - violating the documented promise
+# that items already on the board are left untouched. $maxItemPages is a
+# runaway guard, not a sampling cap: hitting it (or pageInfo still reporting
+# more) aborts BEFORE any mutation.
 $existingItems = @{}
 $cursor = $null
 $itemsTotal = 0
-for ($page = 1; $page -le 10; $page++) {
+$maxItemPages = 100
+$inventoryComplete = $false
+for ($page = 1; $page -le $maxItemPages; $page++) {
     try {
         $pageData = Invoke-GitHubGraphQL -Query $itemsPageQuery -Variables @{
             login = $OrganizationName
@@ -338,12 +352,20 @@ for ($page = 1; $page -le 10; $page++) {
             $existingItems[[string]$content.id] = [string]$node.id
         }
     }
-    if (-not $itemsConn.pageInfo.hasNextPage) { break }
-    $cursor = $itemsConn.pageInfo.endCursor
-    if ($page -eq 10) {
-        Write-Host ("WARNING: project has more than 1000 items; the already-on-board check " +
-            'covered only the first 1000.') -ForegroundColor Yellow
+    if (-not $itemsConn.pageInfo.hasNextPage) {
+        $inventoryComplete = $true
+        break
     }
+    $cursor = $itemsConn.pageInfo.endCursor
+}
+if (-not $inventoryComplete) {
+    # Parentheses around the concatenation matter: -f binds tighter than +.
+    Write-Host (("ABORT: the project still reported more items after {0} pages ({1} items); " +
+        'the already-on-board presence check is incomplete. Mutating on an incomplete ' +
+        'inventory could overwrite Status/Priority on items already on the board ' +
+        '(addProjectV2ItemById returns the existing item), so NO mutations were run.') -f
+        $maxItemPages, ($maxItemPages * 100)) -ForegroundColor Red
+    exit 1
 }
 
 # Epic issue node ids (gaps in the range tolerated, reported below).

@@ -35,37 +35,75 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# --- Untrusted-code boundary -------------------------------------------------------
+# --- Untrusted-code boundary (best-effort tripwire - NOT isolation) -----------------
 # The gate EXECUTES the merged tree's own code (its build-native.sh via bash,
-# its MSBuild targets, its pytest conftests) with this process's environment.
-# On a credential-bearing host that hands the candidate PR's author your keys
-# and login stores. Refuse by default; the keyless hosted workflow
-# (.github/workflows/absorption-benchmark.yml) sets the env opt-in explicitly.
+# its MSBuild targets, its pytest conftests) with this process's full
+# environment and HOME. On a credential-bearing host that hands the candidate
+# PR's author your keys and login stores. The scan below checks KNOWN env var
+# names and KNOWN store locations only; it cannot enumerate everything a
+# process can reach and it sandboxes nothing. The keyless hosted workflow
+# (.github/workflows/absorption-benchmark.yml, which sets the env opt-in
+# explicitly) is the only sanctioned lane for untrusted code; the override
+# flags mean accepting exposure of ANYTHING in this environment/HOME - scanned
+# or not. Refuse by default.
 if (-not $AcceptCredentialExposure -and $env:HELIOS_ABSORB_ACCEPT_CREDENTIALS -ne '1') {
-    $credentialEnvNames = @(
+    # @() wraps the WHOLE pipeline: with zero matches Where-Object yields $null,
+    # and $null.Count below would throw under StrictMode - crashing with exit 1
+    # instead of the documented refusal exit 3.
+    $credentialEnvNames = @(@(
         'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_MODELS_TOKEN',
         'AZURE_OPENAI_API_KEY', 'HELIOS_API_ACCESS_KEY', 'GH_TOKEN', 'GITHUB_TOKEN'
-    ) | Where-Object { -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($_)) }
+    ) | Where-Object { -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($_)) })
     # gh resolves its config dir as GH_CONFIG_DIR > XDG_CONFIG_HOME/gh >
     # %AppData%/GitHub CLI (Windows) > ~/.config/gh - check every candidate,
-    # not just the Unix default, or a Windows host with a logged-in gh slips through.
-    $credentialStores = @(
+    # not just the Unix default, or a Windows host with a logged-in gh slips
+    # through. Beyond gh/az: SSH keys, AWS profiles, docker registry logins
+    # (config.json holds base64 auths), kubeconfigs, and git credential-store
+    # files are all readable by anything the gate runs.
+    $credentialStores = @(@(
         $env:GH_CONFIG_DIR,
         $(if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'gh' }),
         $(if ($env:APPDATA) { Join-Path $env:APPDATA 'GitHub CLI' }),
         (Join-Path $HOME '.config' 'gh'),
-        (Join-Path $HOME '.azure')
-    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-    if ($credentialEnvNames.Count -gt 0 -or $credentialStores.Count -gt 0) {
+        (Join-Path $HOME '.azure'),
+        (Join-Path $HOME '.ssh'),
+        (Join-Path $HOME '.aws'),
+        (Join-Path $HOME '.docker' 'config.json'),
+        $(if ($env:DOCKER_CONFIG) { Join-Path $env:DOCKER_CONFIG 'config.json' }),
+        (Join-Path $HOME '.kube'),
+        $env:KUBECONFIG,
+        # git credential-store defaults (git-credential-store(1)).
+        (Join-Path $HOME '.git-credentials'),
+        $(if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'git' 'credentials' }
+            else { Join-Path $HOME '.config' 'git' 'credentials' })
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)
+    # A configured git credential helper (manager, osxkeychain, store, cache,
+    # inline '!...' commands) hands whatever it guards to any git process the
+    # merged tree spawns. Helper VALUES are never printed - an inline helper
+    # can embed a literal secret - only the count is reported.
+    $gitCredentialHelpers = @()
+    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($gitCommand) {
+        $gitCredentialHelpers = @(& $gitCommand.Source -C $RepoRoot config --get-all credential.helper 2>$null |
+            Where-Object { $_ })
+    }
+    if ($credentialEnvNames.Count -gt 0 -or $credentialStores.Count -gt 0 -or
+        $gitCredentialHelpers.Count -gt 0) {
         # Write-Host + explicit exit: under ErrorActionPreference=Stop a
         # Write-Error here would throw past the exit and yield code 1 instead
         # of the documented 3.
         @(
             'REFUSED: benchmarking untrusted upstream code in a credential-bearing environment.'
-            "  credential env vars set: $(if ($credentialEnvNames) { $credentialEnvNames -join ', ' } else { '(none)' })"
-            "  credential stores found: $(if ($credentialStores) { $credentialStores -join ', ' } else { '(none)' })"
-            "  Safe lane:   gh workflow run absorption-benchmark.yml -f pr_number=$PrNumber"
-            '  Override:    -AcceptCredentialExposure (or HELIOS_ABSORB_ACCEPT_CREDENTIALS=1) on a host you accept exposing.'
+            "  credential env vars set:   $(if ($credentialEnvNames) { $credentialEnvNames -join ', ' } else { '(none)' })"
+            "  credential stores found:   $(if ($credentialStores) { $credentialStores -join ', ' } else { '(none)' })"
+            "  git credential helper(s):  $(if ($gitCredentialHelpers.Count -gt 0) { "$($gitCredentialHelpers.Count) configured (values never printed; inspect: git config --get-all credential.helper)" } else { '(none)' })"
+            '  This scan is a best-effort tripwire over known names and locations - it is NOT'
+            '  isolation: the gate would run the merged tree with this process''s full'
+            '  environment and HOME, scanned or not.'
+            "  Safe lane:   gh workflow run absorption-benchmark.yml -f pr_number=$PrNumber   # keyless hosted runner - the only sanctioned lane for untrusted code"
+            '  Override:    -AcceptCredentialExposure (or HELIOS_ABSORB_ACCEPT_CREDENTIALS=1) means'
+            '               accepting exposure of anything in this environment/HOME to the PR author''s code.'
         ) | ForEach-Object { Write-Host $_ }
         exit 3
     }
