@@ -33,6 +33,20 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 - Root-level `*_COMPLETE/*_REPORT/*_SUMMARY.md` status docs are historical and
   unreliable; trust `docs/CONSOLIDATION_BLUEPRINT.md` and `docs/architecture/`.
 
+## Claude Code / Microsoft Foundry
+
+- Local PowerShell: `scripts/ai-integration/Connect-ClaudeFoundry.ps1` verifies the
+  current Azure CLI session, resolves the Foundry resource, sets Claude Foundry
+  environment variables, and can launch `claude` with `-Launch`.
+- GitHub automation: `.github/workflows/claude-foundry.yml` supports owner-only
+  `@claude` PR review and manual review/implementation through Microsoft Foundry.
+- The implementation lane deliberately separates authority: Claude's Azure-authenticated
+  job has a read-only GitHub token and emits a patch; a second job has GitHub write
+  permission but no Azure OIDC token and can only publish a validated draft PR.
+- Project permission denials live in `.claude/settings.json`. Never use a bypass-permission
+  mode in CI.
+- Full operator setup: `docs/architecture/CLAUDE_CODE_GITHUB_FOUNDRY.md`.
+
 ## Multi-LLM hub
 
 - `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `tandem` /
