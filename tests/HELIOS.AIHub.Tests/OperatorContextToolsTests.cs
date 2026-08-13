@@ -158,7 +158,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         Assert.Equal("ready", first.Azure.Status);
         Assert.True(first.Azure.ResourcesIncluded);
         Assert.False(first.Changes.Comparable);
-        Assert.Equal("<redacted>", first.Azure.ResourceGroups[0].Tags["api-key"]);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", first.Azure.ResourceGroups[0].Tags["api-key"]);
 
         runner.SnapshotVersion = 2;
         var second = await store.SyncAsync(
@@ -187,7 +187,33 @@ public sealed class OperatorContextToolsTests : IDisposable
 
         var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
 
-        Assert.Equal("<redacted>", snapshot.Azure.ResourceGroups[0].Tags["clientSecret"]);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.ResourceGroups[0].Tags["clientSecret"]);
+    }
+
+    [Fact]
+    public async Task ContextSync_RotatedSecretTagValue_SurfacesAsChange()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var first = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        // Same inventory, same secret: the keyed fingerprint compares equal.
+        var unchanged = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.True(unchanged.Changes.Comparable);
+        Assert.Empty(unchanged.Changes.ResourceGroupsChanged);
+
+        // Rotating the secret changes the fingerprint, so the delta surfaces.
+        var rotated = $"sk-{new string('y', 24)}";
+        runner.CredentialValue = rotated;
+        var changed = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.True(changed.Changes.Comparable);
+        Assert.Contains("rg-core", changed.Changes.ResourceGroupsChanged);
+        Assert.NotEqual(
+            first.Azure.ResourceGroups[0].Tags["api-key"],
+            changed.Azure.ResourceGroups[0].Tags["api-key"]);
+        var context = File.ReadAllText(store.ContextPath);
+        Assert.DoesNotContain(rotated, context, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -284,6 +310,13 @@ public sealed class OperatorContextToolsTests : IDisposable
         Assert.False(failed.Changes.Comparable);
         // The failure still drives the next-step suggestion.
         Assert.Contains(failed.NextSteps, step => step.Id == "azure-sign-in");
+        // The append-only journal must record that Azure evidence was unavailable at
+        // this receipt, even though the stored counts describe the carried baseline.
+        using (var receipt = JsonDocument.Parse(File.ReadLines(store.JournalPath).Last()))
+        {
+            Assert.Equal("not-authenticated", receipt.RootElement.GetProperty("azureCaptureStatus").GetString());
+            Assert.Equal("sub-1", receipt.RootElement.GetProperty("azureSubscriptionId").GetString());
+        }
 
         // The next successful capture compares against the preserved baseline.
         runner.AzureNotAuthenticated = false;
@@ -345,6 +378,98 @@ public sealed class OperatorContextToolsTests : IDisposable
             "integration/claude-code-operator-plugin",
             entry.RootElement.GetProperty("repositoryBranch").GetString());
         Assert.Equal("0123456789abcdef", entry.RootElement.GetProperty("repositoryHead").GetString());
+        // Azure was not requested: the receipt must say so instead of implying evidence.
+        Assert.Equal(JsonValueKind.Null, entry.RootElement.GetProperty("azureCaptureStatus").ValueKind);
+    }
+
+    [Fact]
+    public async Task ContextSync_GroupsOnlySync_RetainsResourceInclusiveBaseline()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var first = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.True(first.Azure.ResourcesIncluded);
+        Assert.Single(first.Azure.Resources);
+
+        // A groups-only ready sync must not drop the resource inventory from the baseline.
+        var groupsOnly = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.True(groupsOnly.Azure.ResourcesIncluded);
+        Assert.Single(groupsOnly.Azure.Resources);
+        Assert.False(groupsOnly.Changes.ResourcesComparable);
+
+        // The next resource-inclusive sync compares against the retained resources.
+        runner.SnapshotVersion = 2;
+        var third = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.True(third.Changes.ResourcesComparable);
+        Assert.Contains("rg-ai|Microsoft.KeyVault/vaults|helios-kv", third.Changes.ResourcesAdded);
+    }
+
+    [Fact]
+    public async Task ContextSync_NonEnabledSubscription_IsNotDeploymentReadyEvidence()
+    {
+        var runner = new FakeCommandRunner { SubscriptionState = "Disabled" };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("ready", snapshot.Azure.Status);
+        Assert.Equal("Disabled", snapshot.Azure.SubscriptionState);
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "review-subscription-state");
+        Assert.DoesNotContain(snapshot.NextSteps, step => step.Id == "review-azure-plan");
+    }
+
+    [Fact]
+    public async Task ContextSync_DetachedHead_RecommendsTaskBranch()
+    {
+        var runner = new FakeCommandRunner { DetachedHead = true };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("ready", snapshot.Repository.Status);
+        Assert.Null(snapshot.Repository.Branch);
+        Assert.True(snapshot.Repository.IsDetachedHead);
+        Assert.False(snapshot.Repository.IsMainBranch);
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "create-task-branch");
+    }
+
+    [Fact]
+    public void LockWaitBudget_CoversWorstCaseCaptureWindow()
+    {
+        // Sync holds the lock across four git commands and all three Azure reads; the
+        // waiter budget is derived from the same constants so they cannot drift apart.
+        var worstCaseHold = 4 * OperatorContextStore.GitCommandTimeout
+            + OperatorContextStore.AzureAccountTimeout
+            + OperatorContextStore.AzureGroupListTimeout
+            + OperatorContextStore.AzureResourceListTimeout;
+
+        Assert.True(OperatorContextStore.LockWaitBudget >= worstCaseHold);
+    }
+
+    [Fact]
+    public void CreateStartInfo_WindowsBatchShim_LaunchesViaCmd()
+    {
+        var info = SystemCommandRunner.CreateStartInfo(
+            "az",
+            new[] { "account", "show" },
+            @"C:\Tools\az.cmd");
+
+        Assert.EndsWith("cmd.exe", info.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[] { "/d", "/c", @"C:\Tools\az.cmd", "account", "show" }, info.ArgumentList);
+        Assert.False(info.UseShellExecute);
+    }
+
+    [Fact]
+    public void CreateStartInfo_NativeExecutables_LaunchDirectly()
+    {
+        var resolved = SystemCommandRunner.CreateStartInfo("az", new[] { "account" }, @"C:\Tools\az.exe");
+        Assert.Equal(@"C:\Tools\az.exe", resolved.FileName);
+        Assert.Equal(new[] { "account" }, resolved.ArgumentList);
+
+        // Non-Windows (or unresolved) commands keep the bare name and arguments.
+        var bare = SystemCommandRunner.CreateStartInfo("git", new[] { "status" }, null);
+        Assert.Equal("git", bare.FileName);
+        Assert.Equal(new[] { "status" }, bare.ArgumentList);
     }
 
     public void Dispose()
@@ -376,8 +501,11 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal int SnapshotVersion { get; set; } = 1;
         internal bool GitAvailable { get; set; } = true;
         internal bool GitStatusFails { get; set; }
+        internal bool DetachedHead { get; set; }
         internal bool AzureNotAuthenticated { get; set; }
         internal string SubscriptionId { get; set; } = "sub-1";
+        internal string SubscriptionState { get; set; } = "Enabled";
+        internal string CredentialValue { get; set; } = CredentialLike;
         internal int GroupTagCount { get; set; }
         internal bool LongGroupTagName { get; set; }
         internal Action? OnCommand { get; set; }
@@ -406,7 +534,8 @@ public sealed class OperatorContextToolsTests : IDisposable
             var command = arguments.Skip(2).ToArray();
             return command switch
             {
-                ["branch", "--show-current"] => Success("integration/claude-code-operator-plugin\n"),
+                ["branch", "--show-current"] => Success(
+                    DetachedHead ? string.Empty : "integration/claude-code-operator-plugin\n"),
                 ["rev-parse", "HEAD"] => Success("0123456789abcdef\n"),
                 ["remote", "get-url", "origin"] => Success("git@github.com:Yolkster64/helios-platform.git\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
@@ -424,7 +553,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             }
             return GroupTagCount > 0
                 ? "{" + string.Join(',', Enumerable.Range(0, GroupTagCount).Select(i => $"\"tag{i:D2}\":\"v\"")) + "}"
-                : "{\"api-key\":\"" + CredentialLike + "\",\"clientSecret\":\"rotate-me\",\"project\":\"helios\"}";
+                : "{\"api-key\":\"" + CredentialValue + "\",\"clientSecret\":\"rotate-me\",\"project\":\"helios\"}";
         }
 
         private CommandResult Azure(IReadOnlyList<string> arguments)
@@ -435,7 +564,7 @@ public sealed class OperatorContextToolsTests : IDisposable
                 {
                     return new CommandResult(true, 1, string.Empty, "Please run 'az login' to setup account.");
                 }
-                return Success("{\"id\":\"" + SubscriptionId + "\",\"name\":\"HELIOS Dev\",\"tenantId\":\"tenant-1\",\"state\":\"Enabled\"}");
+                return Success("{\"id\":\"" + SubscriptionId + "\",\"name\":\"HELIOS Dev\",\"tenantId\":\"tenant-1\",\"state\":\"" + SubscriptionState + "\"}");
             }
             if (arguments.Take(2).SequenceEqual(new[] { "group", "list" }))
             {

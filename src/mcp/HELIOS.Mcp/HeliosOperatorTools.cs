@@ -122,6 +122,16 @@ internal sealed class OperatorContextStore
     private const int MaxResourceGroups = 200;
     private const int MaxResources = 500;
     private const int MaxTags = 32;
+    internal static readonly TimeSpan GitCommandTimeout = TimeSpan.FromSeconds(10);
+    internal static readonly TimeSpan AzureAccountTimeout = TimeSpan.FromSeconds(20);
+    internal static readonly TimeSpan AzureGroupListTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan AzureResourceListTimeout = TimeSpan.FromSeconds(45);
+    // A healthy lock holder can legitimately run four git commands plus all three Azure
+    // reads while holding the lock, so the waiter budget is derived from those same
+    // timeouts (plus margin) rather than a magic number that could silently drift.
+    internal static readonly TimeSpan LockWaitBudget =
+        4 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
+        + TimeSpan.FromSeconds(15);
     private static readonly Regex SafeSurface = new("^[a-z0-9][a-z0-9-]{0,47}$", RegexOptions.CultureInvariant);
     private static readonly Regex SafeLocation = new("^[a-z0-9][a-z0-9-]{1,49}$", RegexOptions.CultureInvariant);
     private static readonly Regex SafePrefix = new("^[a-z0-9](?:[a-z0-9-]{0,22}[a-z0-9])?$", RegexOptions.CultureInvariant);
@@ -148,6 +158,7 @@ internal sealed class OperatorContextStore
     private readonly ICommandRunner _runner;
     private readonly Func<DateTimeOffset> _clock;
     private readonly Func<IReadOnlyDictionary<string, bool>> _cliDetector;
+    private byte[]? _tagSalt;
 
     internal OperatorContextStore(
         string repoRoot,
@@ -252,6 +263,7 @@ internal sealed class OperatorContextStore
                 RepositoryBranch: null,
                 RepositoryHead: null,
                 AzureSubscriptionId: null,
+                AzureCaptureStatus: null,
                 ResourceGroupCount: null,
                 ResourceCount: null,
                 ChangeSummary: null),
@@ -300,7 +312,7 @@ internal sealed class OperatorContextStore
         // forward; a failed capture is surfaced separately via AzureCaptureFailure.
         var priorReadyBaseline = prior?.Azure is { Status: "ready" } baseline ? baseline : null;
         var azure = capturedAzure is { Status: "ready" }
-            ? capturedAzure
+            ? WithCarriedResourceBaseline(capturedAzure, priorReadyBaseline)
             : priorReadyBaseline ?? capturedAzure ?? AzureSnapshot.NotRequested;
         var changes = capturedAzure is null
             ? OperatorChangeSet.NotRequested
@@ -333,6 +345,11 @@ internal sealed class OperatorContextStore
                 RepositoryBranch: repository.Branch,
                 RepositoryHead: repository.HeadSha,
                 AzureSubscriptionId: azure.SubscriptionId,
+                // The attempted capture's own status (null = Azure not requested). The
+                // counts below describe the STORED baseline, which may be carried
+                // forward — this field is what proves whether fresh Azure evidence was
+                // actually available at this receipt.
+                AzureCaptureStatus: capturedAzure?.Status,
                 ResourceGroupCount: azure.ResourceGroups.Count,
                 ResourceCount: azure.Resources.Count,
                 ChangeSummary: changes.Summary),
@@ -377,6 +394,15 @@ internal sealed class OperatorContextStore
                 "git switch -c <task-branch>",
                 "none"));
         }
+        else if (repository.IsDetachedHead)
+        {
+            steps.Add(new OperatorNextStep(
+                "create-task-branch",
+                "Create a task branch",
+                "The checkout is on a detached HEAD; commits made here are easy to lose and invisible to review until they live on a branch.",
+                "git switch -c <task-branch>",
+                "none"));
+        }
         else if (repository.IsDirty == true)
         {
             steps.Add(new OperatorNextStep(
@@ -407,12 +433,25 @@ internal sealed class OperatorContextStore
         }
         else if (azure.Status == "ready")
         {
-            steps.Add(new OperatorNextStep(
-                "review-azure-plan",
-                "Generate the next Azure what-if",
-                $"The saved inventory covers {azure.ResourceGroups.Count} resource group(s) and {azure.Resources.Count} resource(s); use that evidence to produce the smallest Bicep plan.",
-                "Follow infra/README.md and save the what-if output before apply.",
-                "review"));
+            if (azure.SubscriptionState is not null
+                && !string.Equals(azure.SubscriptionState, "Enabled", StringComparison.OrdinalIgnoreCase))
+            {
+                steps.Add(new OperatorNextStep(
+                    "review-subscription-state",
+                    "Review the subscription state",
+                    $"az reports the subscription state as '{azure.SubscriptionState}'; the read plane may still answer, but this is not deployment-ready evidence.",
+                    "Resolve the subscription state (billing/policy) in the Azure portal before planning any deployment.",
+                    "review"));
+            }
+            else
+            {
+                steps.Add(new OperatorNextStep(
+                    "review-azure-plan",
+                    "Generate the next Azure what-if",
+                    $"The saved inventory covers {azure.ResourceGroups.Count} resource group(s) and {azure.Resources.Count} resource(s); use that evidence to produce the smallest Bicep plan.",
+                    "Follow infra/README.md and save the what-if output before apply.",
+                    "review"));
+            }
         }
 
         if (!IsCliAvailable(cli, "claude") && !IsCliAvailable(cli, "codex") && !IsCliAvailable(cli, "copilot"))
@@ -459,7 +498,13 @@ internal sealed class OperatorContextStore
             return RepositorySnapshot.Empty with { Status = "not-a-git-checkout" };
         }
 
-        var branch = await RunGitValueAsync(new[] { "branch", "--show-current" }, cancellationToken);
+        var branchResult = await RunGitAsync(new[] { "branch", "--show-current" }, cancellationToken);
+        var branch = branchResult.Started && branchResult.ExitCode == 0
+            ? NullIfEmpty(branchResult.StandardOutput.Trim())
+            : null;
+        // Detached HEAD is a successful branch query with empty output — distinct from a
+        // failed query, and it needs its own task-branch safeguard downstream.
+        var isDetachedHead = branchResult.Started && branchResult.ExitCode == 0 && branch is null;
         var remote = await RunGitValueAsync(new[] { "remote", "get-url", "origin" }, cancellationToken);
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
 
@@ -472,14 +517,15 @@ internal sealed class OperatorContextStore
             IsDirty: status.Started && status.ExitCode == 0
                 ? !string.IsNullOrWhiteSpace(status.StandardOutput)
                 : null,
-            IsMainBranch: string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase));
+            IsMainBranch: string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase),
+            IsDetachedHead: isDetachedHead);
     }
 
     private Task<CommandResult> RunGitAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
         var allArgs = new List<string> { "-C", RepoRoot };
         allArgs.AddRange(args);
-        return _runner.RunAsync("git", allArgs, TimeSpan.FromSeconds(10), cancellationToken);
+        return _runner.RunAsync("git", allArgs, GitCommandTimeout, cancellationToken);
     }
 
     private async Task<string?> RunGitValueAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
@@ -507,7 +553,7 @@ internal sealed class OperatorContextStore
                 "account", "show", "--only-show-errors", "--output", "json",
                 "--query", "{id:id,name:name,tenantId:tenantId,state:state}",
             },
-            TimeSpan.FromSeconds(20),
+            AzureAccountTimeout,
             cancellationToken);
         if (!accountResult.Started || accountResult.ExitCode != 0)
         {
@@ -524,6 +570,7 @@ internal sealed class OperatorContextStore
         var subscriptionId = GetString(account, "id");
         var subscriptionName = GetString(account, "name");
         var tenantId = GetString(account, "tenantId");
+        var subscriptionState = GetString(account, "state");
 
         var groupsResult = await _runner.RunAsync(
             "az",
@@ -532,7 +579,7 @@ internal sealed class OperatorContextStore
                 "group", "list", "--only-show-errors", "--output", "json",
                 "--query", $"[0:{MaxResourceGroups + 1}].{{name:name,location:location,provisioningState:properties.provisioningState,tags:tags}}",
             },
-            TimeSpan.FromSeconds(30),
+            AzureGroupListTimeout,
             cancellationToken);
         if (!groupsResult.Started || groupsResult.ExitCode != 0)
         {
@@ -541,6 +588,7 @@ internal sealed class OperatorContextStore
                 SubscriptionId = subscriptionId,
                 SubscriptionName = subscriptionName,
                 TenantId = tenantId,
+                SubscriptionState = subscriptionState,
             };
         }
 
@@ -556,7 +604,7 @@ internal sealed class OperatorContextStore
                     "resource", "list", "--only-show-errors", "--output", "json",
                     "--query", $"[0:{MaxResources + 1}].{{id:id,name:name,type:type,location:location,resourceGroup:resourceGroup,tags:tags}}",
                 },
-                TimeSpan.FromSeconds(45),
+                AzureResourceListTimeout,
                 cancellationToken);
             if (!resourcesResult.Started || resourcesResult.ExitCode != 0)
             {
@@ -570,7 +618,8 @@ internal sealed class OperatorContextStore
                     Resources: Array.Empty<AzureResourceSnapshot>(),
                     ResourcesIncluded: true,
                     ResourcesTruncated: false,
-                    ErrorHint: $"Resource groups were saved, but resource inventory failed: {SanitizeError(resourcesResult.StandardError)}");
+                    ErrorHint: $"Resource groups were saved, but resource inventory failed: {SanitizeError(resourcesResult.StandardError)}",
+                    SubscriptionState: subscriptionState);
             }
 
             resources = ParseResources(resourcesResult.StandardOutput, out resourcesTruncated);
@@ -586,10 +635,50 @@ internal sealed class OperatorContextStore
             Resources: resources,
             ResourcesIncluded: includeResources,
             ResourcesTruncated: resourcesTruncated,
-            ErrorHint: null);
+            ErrorHint: null,
+            SubscriptionState: subscriptionState);
     }
 
-    private static IReadOnlyList<AzureResourceGroupSnapshot> ParseResourceGroups(string json, out bool truncated)
+    /// <summary>
+    /// Replaces a sensitive tag value with a deterministic keyed fingerprint,
+    /// "&lt;redacted:xxxxxxxxxxxx&gt;", so an unchanged secret compares equal across syncs
+    /// while a rotated secret surfaces as a change — without ever storing the value. The
+    /// key is a random per-checkout salt kept next to the context files (same local
+    /// trust domain), so the marker is safe to share and resists offline guessing.
+    /// </summary>
+    private string RedactValue(string value)
+    {
+        var digest = HMACSHA256.HashData(GetOrCreateTagSalt(), Encoding.UTF8.GetBytes(value));
+        return $"<redacted:{Convert.ToHexString(digest.AsSpan(0, 6)).ToLowerInvariant()}>";
+    }
+
+    private byte[] GetOrCreateTagSalt()
+    {
+        if (_tagSalt is not null)
+        {
+            return _tagSalt;
+        }
+
+        // Captures run under the cross-process lock, so first-time creation is race-safe.
+        var saltPath = Path.Combine(OperatorDirectory, "tag-salt.bin");
+        if (File.Exists(saltPath))
+        {
+            var existing = File.ReadAllBytes(saltPath);
+            if (existing.Length >= 16)
+            {
+                _tagSalt = existing;
+                return existing;
+            }
+        }
+
+        Directory.CreateDirectory(OperatorDirectory);
+        var salt = RandomNumberGenerator.GetBytes(32);
+        File.WriteAllBytes(saltPath, salt);
+        _tagSalt = salt;
+        return salt;
+    }
+
+    private IReadOnlyList<AzureResourceGroupSnapshot> ParseResourceGroups(string json, out bool truncated)
     {
         using var document = JsonDocument.Parse(json);
         var items = document.RootElement.EnumerateArray().ToArray();
@@ -605,7 +694,7 @@ internal sealed class OperatorContextStore
             .ToArray();
     }
 
-    private static IReadOnlyList<AzureResourceSnapshot> ParseResources(string json, out bool truncated)
+    private IReadOnlyList<AzureResourceSnapshot> ParseResources(string json, out bool truncated)
     {
         using var document = JsonDocument.Parse(json);
         var items = document.RootElement.EnumerateArray().ToArray();
@@ -625,7 +714,7 @@ internal sealed class OperatorContextStore
             .ToArray();
     }
 
-    private static SortedDictionary<string, string> ParseAzureTags(JsonElement item, out bool truncated)
+    private SortedDictionary<string, string> ParseAzureTags(JsonElement item, out bool truncated)
     {
         truncated = false;
         var tags = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -646,10 +735,35 @@ internal sealed class OperatorContextStore
             // tag-count truncation above.
             truncated |= property.Name.Length > 128 || value.Length > 256;
             tags[Truncate(property.Name, 128)] = IsSensitiveName(property.Name) || SensitiveValue.IsMatch(value)
-                ? "<redacted>"
+                ? RedactValue(value)
                 : Truncate(value, 256);
         }
         return tags;
+    }
+
+    /// <summary>
+    /// A groups-only ready capture must not drop the last resource inventory: the prior
+    /// ready, resource-inclusive baseline (same subscription and tenant) is carried into
+    /// the stored snapshot until another resource-inclusive ready capture replaces it —
+    /// the same pattern used when a failed capture carries the whole baseline forward.
+    /// </summary>
+    private static AzureSnapshot WithCarriedResourceBaseline(AzureSnapshot fresh, AzureSnapshot? priorReady)
+    {
+        if (fresh.ResourcesIncluded
+            || priorReady is not { ResourcesIncluded: true }
+            || priorReady.SubscriptionId is null || priorReady.TenantId is null
+            || !string.Equals(priorReady.SubscriptionId, fresh.SubscriptionId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(priorReady.TenantId, fresh.TenantId, StringComparison.OrdinalIgnoreCase))
+        {
+            return fresh;
+        }
+
+        return fresh with
+        {
+            Resources = priorReady.Resources,
+            ResourcesIncluded = true,
+            ResourcesTruncated = priorReady.ResourcesTruncated,
+        };
     }
 
     private static OperatorChangeSet BuildChanges(AzureSnapshot? prior, AzureSnapshot current)
@@ -899,21 +1013,25 @@ internal sealed class OperatorContextStore
     {
         Directory.CreateDirectory(OperatorDirectory);
         var lockPath = Path.Combine(OperatorDirectory, ".write.lock");
-        // Sync holds this lock across its git/Azure capture, so a waiter may legitimately
-        // queue for tens of seconds; the OS releases the handle if the holder dies.
-        for (var attempt = 0; attempt < 600; attempt++)
+        // Sync holds this lock across its full git/Azure capture, so wait at least the
+        // worst-case capture window; the OS releases the handle if the holder dies.
+        var stopwatch = Stopwatch.StartNew();
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             }
-            catch (IOException) when (attempt < 599)
+            catch (IOException)
             {
+                if (stopwatch.Elapsed >= LockWaitBudget)
+                {
+                    throw new IOException("Timed out waiting for the HELIOS operator-context lock.");
+                }
                 await Task.Delay(100, cancellationToken);
             }
         }
-        throw new IOException("Timed out waiting for the HELIOS operator-context lock.");
     }
 
     /// <summary>Writes the serialized value atomically and returns the exact bytes written.</summary>
@@ -946,12 +1064,19 @@ internal sealed class OperatorContextStore
             cancellationToken);
     }
 
-    private static bool CommandExists(string command)
+    private static bool CommandExists(string command) => ResolveCommandPath(command) is not null;
+
+    /// <summary>
+    /// Resolves a command name to the full path of the file that PATH (and PATHEXT on
+    /// Windows) discovery would find, including its real extension — so callers can see
+    /// that "az" is actually az.cmd and launch it accordingly. Returns null when absent.
+    /// </summary>
+    internal static string? ResolveCommandPath(string command)
     {
         var path = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrWhiteSpace(path))
         {
-            return false;
+            return null;
         }
 
         var extensions = OperatingSystem.IsWindows()
@@ -964,9 +1089,10 @@ internal sealed class OperatorContextStore
             {
                 try
                 {
-                    if (File.Exists(Path.Combine(directory.Trim(), command + extension)))
+                    var candidate = Path.Combine(directory.Trim(), command + extension);
+                    if (File.Exists(candidate))
                     {
-                        return true;
+                        return candidate;
                     }
                 }
                 catch (ArgumentException)
@@ -975,7 +1101,7 @@ internal sealed class OperatorContextStore
                 }
             }
         }
-        return false;
+        return null;
     }
 
     private static string? NormalizeRepositoryName(string? remote)
@@ -1035,18 +1161,10 @@ internal sealed class SystemCommandRunner : ICommandRunner
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        var startInfo = CreateStartInfo(
+            fileName,
+            arguments,
+            OperatingSystem.IsWindows() ? OperatorContextStore.ResolveCommandPath(fileName) : null);
 
         Process? process;
         try
@@ -1088,6 +1206,47 @@ internal sealed class SystemCommandRunner : ICommandRunner
             var stderr = await stderrTask;
             return new CommandResult(true, process.ExitCode, stdout, stderr);
         }
+    }
+
+    /// <summary>
+    /// Builds the launch configuration. On Windows, PATH/PATHEXT discovery can resolve a
+    /// command like "az" to a batch shim (az.cmd) that CreateProcess cannot start
+    /// directly with shell execution disabled, so batch shims are launched via
+    /// "cmd.exe /d /c &lt;resolved path&gt;". Arguments always go through ArgumentList
+    /// (never string concatenation); all HELIOS capture arguments are fixed literals —
+    /// no repository or Azure data flows into a command line. resolvedWindowsPath is
+    /// null on non-Windows platforms, which keeps their behavior unchanged.
+    /// </summary>
+    internal static ProcessStartInfo CreateStartInfo(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string? resolvedWindowsPath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        if (resolvedWindowsPath is not null
+            && (resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+                || resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)))
+        {
+            startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add(resolvedWindowsPath);
+        }
+        else
+        {
+            startInfo.FileName = resolvedWindowsPath ?? fileName;
+        }
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+        return startInfo;
     }
 
     private static void TryKill(Process process)
@@ -1150,7 +1309,8 @@ internal sealed record RepositorySnapshot(
     string? Branch,
     string? HeadSha,
     bool? IsDirty,
-    bool IsMainBranch)
+    bool IsMainBranch,
+    bool IsDetachedHead = false)
 {
     internal static readonly RepositorySnapshot Empty = new("not-captured", null, null, null, null, false);
 }
@@ -1165,7 +1325,11 @@ internal sealed record AzureSnapshot(
     IReadOnlyList<AzureResourceSnapshot> Resources,
     bool ResourcesIncluded,
     bool ResourcesTruncated,
-    string? ErrorHint)
+    string? ErrorHint,
+    // az account show state (Enabled/Disabled/Warned/...); anything other than Enabled
+    // means the inventory is readable but NOT deployment-ready evidence. Null = unknown
+    // (older snapshots).
+    string? SubscriptionState = null)
 {
     internal static readonly AzureSnapshot NotRequested = Empty("not-requested", null);
     internal static readonly AzureSnapshot CliUnavailable = Empty("cli-unavailable", "Azure CLI was not found on PATH.");
@@ -1243,6 +1407,7 @@ internal sealed record OperatorJournalEntry(
     string? RepositoryBranch,
     string? RepositoryHead,
     string? AzureSubscriptionId,
+    string? AzureCaptureStatus,
     int? ResourceGroupCount,
     int? ResourceCount,
     string? ChangeSummary);
