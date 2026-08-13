@@ -429,7 +429,28 @@ internal sealed class OperatorContextStore
                 "none"));
         }
 
-        if (repository.IsMainBranch)
+        // A failed repository capture leaves branch flags and IsDirty empty, so none of
+        // the branch/diff proposals below can fire; without an explicit recovery step the
+        // operator would continue with no branch, HEAD, or worktree evidence at all.
+        if (repository.Status == "git-unavailable")
+        {
+            steps.Add(new OperatorNextStep(
+                "install-git",
+                "Install Git",
+                "git could not be started, so the saved context carries no branch, HEAD, or worktree evidence for other assistants to continue from.",
+                "Install Git and ensure it is on PATH, then re-run helios_operator_context_sync.",
+                "none"));
+        }
+        else if (repository.Status == "not-a-git-checkout")
+        {
+            steps.Add(new OperatorNextStep(
+                "open-git-checkout",
+                "Reopen the HELIOS git checkout",
+                "The configured repo root is not a git checkout, so the saved context carries no branch, HEAD, or worktree evidence for other assistants to continue from.",
+                "Point HELIOS_REPO_ROOT (or the client working directory) at the actual helios-platform checkout, then re-run helios_operator_context_sync.",
+                "none"));
+        }
+        else if (repository.IsMainBranch)
         {
             steps.Add(new OperatorNextStep(
                 "create-task-branch",
@@ -881,7 +902,13 @@ internal sealed class OperatorContextStore
             // sharing a prefix would collapse into one entry), so flag it like the
             // tag-count truncation above.
             truncated |= property.Name.Length > 128 || value.Length > 256;
-            tags[Truncate(property.Name, 128)] = IsSensitiveName(property.Name) || SensitiveValue.IsMatch(value)
+            // A credential used as the tag NAME must never reach disk either: it gets the
+            // same keyed fingerprint as values, so an unchanged key still compares equal
+            // across syncs without the raw credential ever being persisted.
+            var name = SensitiveValue.IsMatch(property.Name)
+                ? RedactValue(property.Name)
+                : Truncate(property.Name, 128);
+            tags[name] = IsSensitiveName(property.Name) || SensitiveValue.IsMatch(value)
                 ? RedactValue(value)
                 : Truncate(value, 256);
         }
@@ -1177,6 +1204,11 @@ internal sealed class OperatorContextStore
             {
                 throw new ArgumentException($"Tag '{key}' must be at most 256 printable characters.");
             }
+            if (SensitiveValue.IsMatch(key))
+            {
+                // The key itself is the credential here: never echo it back to the caller.
+                throw new ArgumentException("A tag name looks credential-like; store secret values in Key Vault, not the operator profile.");
+            }
             if (IsSensitiveName(key) || SensitiveValue.IsMatch(value))
             {
                 throw new ArgumentException($"Tag '{key}' looks credential-like; store secret values in Key Vault, not the operator profile.");
@@ -1206,6 +1238,13 @@ internal sealed class OperatorContextStore
         if (!SafeSurface.IsMatch(surface))
         {
             throw new ArgumentException("surface must be 1-48 lowercase letters, digits, or hyphens.");
+        }
+        // The lowercase/digit/hyphen shape alone still admits key-shaped labels such as
+        // sk-...; run the shared credential check so one never lands in context, profile,
+        // or journal. Never echo the rejected label back — it may BE the credential.
+        if (SensitiveValue.IsMatch(surface))
+        {
+            throw new ArgumentException("surface looks credential-like; use a plain assistant label such as claude-code or codex.");
         }
         return surface;
     }

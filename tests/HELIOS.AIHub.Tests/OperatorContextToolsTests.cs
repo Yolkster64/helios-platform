@@ -803,6 +803,72 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task CredentialLookingTagKeys_AreRejectedInProfile_AndFingerprintedInAzureTags()
+    {
+        var pat = $"github_pat_11ABCDE0123456789_{new string('q', 40)}";
+        var store = CreateStore(new FakeCommandRunner());
+
+        // A credential used as the tag NAME (with an innocuous value) is rejected on the
+        // profile input path, and the rejection never echoes the key back.
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => store.SaveProfileAsync(
+            null, null, null, $"{{\"{pat}\":\"true\"}}", null, CancellationToken.None));
+        Assert.DoesNotContain(pat, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(store.ProfilePath));
+
+        // Azure inventory tags with a credential NAME get the key fingerprinted; the
+        // innocuous value survives and the raw key never reaches disk.
+        var runner = new FakeCommandRunner { GroupTagsJsonOverride = "{\"" + pat + "\":\"true\"}" };
+        var tagStore = CreateStore(runner);
+        var snapshot = await tagStore.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        var key = Assert.Single(snapshot.Azure.ResourceGroups[0].Tags.Keys);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", key);
+        Assert.Equal("true", snapshot.Azure.ResourceGroups[0].Tags[key]);
+        Assert.DoesNotContain("github_pat_", File.ReadAllText(tagStore.ContextPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContextSync_FailedRepositoryCapture_GetsRecoveryStep()
+    {
+        // git cannot start: the operator must be told to install Git, not left without
+        // any repository next step at all.
+        var runner = new FakeCommandRunner { GitAvailable = false };
+        var store = CreateStore(runner);
+        var unavailable = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-unavailable", unavailable.Repository.Status);
+        Assert.Contains(unavailable.NextSteps, step => step.Id == "install-git");
+        // The read-time tool surfaces the same recovery step from the stored context.
+        Assert.Contains(store.GetCurrentNextSteps(), step => step.Id == "install-git");
+
+        // git runs but the configured root is not a checkout: point at the real checkout.
+        runner.GitAvailable = true;
+        runner.GitRevParseFails = true;
+        var notCheckout = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("not-a-git-checkout", notCheckout.Repository.Status);
+        Assert.Contains(notCheckout.NextSteps, step => step.Id == "open-git-checkout");
+        Assert.DoesNotContain(notCheckout.NextSteps, step => step.Id == "install-git");
+    }
+
+    [Fact]
+    public async Task CredentialLookingSurfaceLabels_AreRejected_WithoutEchoingTheValue()
+    {
+        // Lowercase letters/digits/hyphens alone would let an sk-style label through.
+        var credentialSurface = FakeCommandRunner.CredentialLike;
+        var store = CreateStore(new FakeCommandRunner());
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => store.SyncAsync(
+            credentialSurface, includeAzure: false, includeResources: false, CancellationToken.None));
+        Assert.DoesNotContain(credentialSurface, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(store.ContextPath));
+        Assert.False(File.Exists(store.JournalPath));
+
+        // assistantSurfaces entries go through the same shared check on the profile path.
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveProfileAsync(
+            null, null, null, null, $"claude-code,{credentialSurface}", CancellationToken.None));
+        Assert.False(File.Exists(store.ProfilePath));
+    }
+
+    [Fact]
     public async Task ContextSync_PinsListCommandsToTheCapturedSubscription()
     {
         var runner = new FakeCommandRunner();
@@ -910,6 +976,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal static readonly string CredentialLike = $"sk-{new string('x', 24)}";
         internal int SnapshotVersion { get; set; } = 1;
         internal bool GitAvailable { get; set; } = true;
+        internal bool GitRevParseFails { get; set; }
         internal bool GitStatusFails { get; set; }
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
@@ -958,7 +1025,9 @@ public sealed class OperatorContextToolsTests : IDisposable
             {
                 ["branch", "--show-current"] => Success(
                     DetachedHead ? string.Empty : BranchName + "\n"),
-                ["rev-parse", "HEAD"] => Success("0123456789abcdef\n"),
+                ["rev-parse", "HEAD"] => GitRevParseFails
+                    ? new CommandResult(true, 128, string.Empty, "fatal: not a git repository")
+                    : Success("0123456789abcdef\n"),
                 ["remote", "get-url", "origin"] => Success(RemoteUrl + "\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: unable to read the index")
