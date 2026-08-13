@@ -59,7 +59,7 @@ or Key Vault.
 | Self-hosted runners | `runs-on: [self-hosted, helios]` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
 | GitHub ↔ Linear | Labeled issues mirrored to the Linear board | `.github/workflows/linear-sync.yml` + `config/connectors.json` | `LINEAR_API_KEY` secret |
 | GitHub ↔ Slack | CI/deploy outcomes posted to channels | `.github/workflows/notify-slack.yml` + `config/connectors.json` | `SLACK_WEBHOOK_URL` secret |
-| GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/setup-board.ps1` | User PAT with `project` scope (run-time param, never stored) |
+| GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/` (custom fields, validation, and epic wiring via GraphQL; views/templates/automation are manual UI steps the scripts document) | User PAT with `project` scope (run-time param, never stored) |
 
 ## GitHub Actions ↔ Azure (OIDC, no stored credential)
 
@@ -202,9 +202,27 @@ routing changes are edits to `config/connectors.json`, never to the workflows.
 
 ## GitHub Project board
 
-`scripts/board-setup/setup-board.ps1` orchestrates the full board build
-(custom fields → phase templates → automation rules → views, each a sibling
-script in `scripts/board-setup/`; check afterwards with `validate-board.ps1`):
+`scripts/board-setup/setup-board.ps1` orchestrates the board setup steps, but
+only part of the build is real API provisioning — GitHub's ProjectV2 GraphQL
+API cannot create views, item templates, or built-in workflows:
+
+- **Custom fields — real**: `setup-custom-fields.ps1` creates the 25 fields via
+  GraphQL mutations against `api.github.com/graphql`.
+- **Views / phase templates / automation rules — manual + local simulation**:
+  `setup-views.ps1`, `setup-templates.ps1`, and `setup-automation-rules.ps1`
+  make **zero API calls** (a real API limitation, not a script bug). They write
+  the intended configuration to local JSON (`.views/`, `templates/`,
+  `.automation/`) and generate manual click-path guides under `logs/`; those
+  steps are performed by hand in the GitHub UI.
+- **Validation — real**: `validate-board.ps1` does a read-only GraphQL query of
+  the project's fields and items (first 100), verifies the 25 expected custom
+  fields, and reports counts. Without a token it prints exactly what it would
+  query and exits 0 (`NO TOKEN - DRY-RUN`).
+- **Epics — real**: `add-epics-to-board.ps1` puts epic issues #14–#53 of
+  `Yolkster64/helios-platform` on the board via `addProjectV2ItemById` and
+  stamps Status/Priority via `updateProjectV2ItemFieldValue` where those fields
+  exist. Idempotent; `-DryRun` prints the per-issue plan; degrades to the same
+  no-token dry-run.
 
 ```powershell
 ./scripts/board-setup/setup-board.ps1 -GitHubToken $token -ProjectNumber 1 `
@@ -220,6 +238,9 @@ Real parameters: `-GitHubToken` (mandatory), `-ProjectNumber` (mandatory, int),
 **Projects v2 needs a user PAT with the `project` scope** (classic token; the
 Actions `GITHUB_TOKEN` cannot manage Projects v2) — pass it as `-GitHubToken`
 at run time from a workstation; it is a parameter, never a stored setting.
+`validate-board.ps1` and `add-epics-to-board.ps1` also fall back to the
+`GITHUB_TOKEN` environment variable (name only — the value is never stored or
+printed) and print a dry-run plan and exit 0 when it is absent.
 
 ## Connection checklist
 
@@ -232,4 +253,4 @@ at run time from a workstation; it is a parameter, never a stored setting.
 | Self-hosted runners | Run `scripts/runners/register-runner.sh` (or `.ps1`) as repo admin, start the runner | Labels `helios,xcore` (+ pool extras, e.g. `xcore-native`) | `gh workflow run runner-smoke.yml`; runner listed in Settings → Actions → Runners |
 | Linear | Create a Linear personal API key | Secret `LINEAR_API_KEY` (+ `linear.teamKey` in `config/connectors.json`) | Label an issue `bug` (or another sync label) → `[GH-n]` issue appears in Linear |
 | Slack | Create an incoming webhook | Secret `SLACK_WEBHOOK_URL` (+ `slack.notifyOn` routing) | Re-run any listed workflow; failure/`always` outcomes post to the channel |
-| Project board | Run `setup-board.ps1` with a `project`-scope user PAT | PAT passed as `-GitHubToken` (never stored) | `scripts/board-setup/validate-board.ps1`; board visible under the org's Projects |
+| Project board | Run `setup-board.ps1` with a `project`-scope user PAT (custom fields via API; views/templates/automation are manual UI steps — the scripts only simulate locally); add epics with `add-epics-to-board.ps1` | PAT passed as `-GitHubToken` or via `GITHUB_TOKEN` (never stored) | `scripts/board-setup/validate-board.ps1` (real GraphQL read of fields/items); board visible under the org's Projects |

@@ -1,364 +1,256 @@
 <#
 .SYNOPSIS
-    Validates HELIOS Platform board configuration
+    Validates the HELIOS Platform board with a REAL ProjectV2 GraphQL read (fields + items)
 .DESCRIPTION
-    Comprehensive validation of all board elements: fields, templates, automation, views
+    What is real vs simulated in this directory: setup-custom-fields.ps1 performs real
+    GraphQL mutations, and THIS script performs a real read-only GraphQL query against
+    https://api.github.com/graphql. The setup-views.ps1 / setup-templates.ps1 /
+    setup-automation-rules.ps1 siblings are LOCAL SIMULATIONS because the ProjectV2
+    GraphQL API cannot create views, item templates, or built-in workflows.
+
+    This script:
+      * resolves the ProjectV2 by owner login + project number (works for both user and
+        organization owners via repositoryOwner { ... on ProjectV2Owner })
+      * reads the project's fields (first 100) and items (first 100)
+      * verifies the 25 expected custom fields (the exact list setup-custom-fields.ps1
+        creates) exist on the project
+      * reports field/item counts and names any missing fields
+
+    What it deliberately does NOT validate (real API limitation, not a script choice):
+    board views, phase templates, and built-in workflow/automation configuration are not
+    creatable through the ProjectV2 GraphQL API and are configured manually in the GitHub
+    UI - verify those by hand there.
+
+    Degrades gracefully without credentials: if no token is available (-GitHubToken empty
+    and the GITHUB_TOKEN environment variable unset), it prints exactly what it would
+    query under a "NO TOKEN - DRY-RUN" banner and exits 0. Token values are never printed.
 .PARAMETER GitHubToken
-    GitHub Personal Access Token
+    GitHub Personal Access Token (classic, 'project' scope; read access suffices).
+    Defaults to the GITHUB_TOKEN environment variable. Never printed.
 .PARAMETER ProjectNumber
     Project number to validate
 .PARAMETER OrganizationName
-    Organization name
+    Login of the project owner (organization or user account)
 .PARAMETER GenerateReport
-    Generate comprehensive validation report
-.PARAMETER Verbose
-    Detailed output
+    Also write the validation result JSON to logs/validation-report_<timestamp>.json
+.PARAMETER DryRun
+    Print exactly what would be queried without calling the GitHub API, then exit 0
+.NOTES
+    Exit codes (the contract):
+      0 = validation passed, or -DryRun / no-token dry-run
+      1 = API/auth failure, or the project could not be resolved
+      2 = query succeeded but one or more expected custom fields are missing
+.EXAMPLE
+    ./validate-board.ps1 -ProjectNumber 1 -OrganizationName "Yolkster64"
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$GitHubToken,
-    
+    [Parameter(Mandatory=$false)]
+    [string]$GitHubToken = $env:GITHUB_TOKEN,
+
     [Parameter(Mandatory=$true)]
     [int]$ProjectNumber,
-    
+
     [Parameter(Mandatory=$true)]
     [string]$OrganizationName,
-    
+
     [switch]$GenerateReport,
-    [switch]$Verbose
+    [switch]$DryRun
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
-$logFile = "logs/validation_$timestamp.log"
 $reportFile = "logs/validation-report_$timestamp.json"
+$graphQlEndpoint = 'https://api.github.com/graphql'
 
-if (-not (Test-Path 'logs')) { New-Item -ItemType Directory -Path 'logs' -Force | Out-Null }
+# The 25 custom fields setup-custom-fields.ps1 creates (keep the two lists in sync).
+$expectedFields = @(
+    'Priority', 'Sprint', 'Effort', 'Component', 'DueDate',
+    'AssignedTo', 'ProgressStatus', 'QAStatus', 'BlockedBy', 'TimeEstimate',
+    'ReviewStatus', 'ReviewedBy', 'ApprovalRequired', 'RiskLevel', 'ComplianceCheck',
+    'DeploymentEnvironment', 'DeploymentStatus', 'IntegrationPoints', 'DependsOn', 'DataMigration',
+    'SuccessMetrics', 'UserImpact', 'PerformanceImpact', 'Documentation', 'ArchitectureDecision'
+)
 
-function Write-Log {
-    param([string]$Message, [string]$Level = 'INFO')
-    $ts = Get-Date -Format 'HH:mm:ss'
-    $entry = "[$ts] [$Level] $Message"
-    Add-Content -Path $logFile -Value $entry
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
+# Single read-only query: project identity + fields + items.
+$projectQuery = @'
+query ($login: String!, $projectNum: Int!) {
+  repositoryOwner(login: $login) {
+    ... on ProjectV2Owner {
+      projectV2(number: $projectNum) {
+        id
+        title
+        fields(first: 100) {
+          totalCount
+          nodes {
+            ... on ProjectV2FieldCommon { id name dataType }
+          }
+        }
+        items(first: 100) {
+          totalCount
+          nodes { id type }
+        }
+      }
+    }
+  }
 }
+'@
 
-function Validate-CustomFields {
-    Write-Log 'Validating custom fields...'
-    
-    $validationResults = @{
-        expectedFields = 25
-        foundFields = 0
-        fieldsByTier = @{ tier1 = 0; tier2 = 0; tier3 = 0; tier4 = 0; tier5 = 0 }
-        missingFields = @()
-        details = @()
-    }
-    
-    $expectedFields = @(
-        'Priority', 'Sprint', 'Effort', 'Component', 'DueDate',
-        'AssignedTo', 'ProgressStatus', 'QAStatus', 'BlockedBy', 'TimeEstimate',
-        'ReviewStatus', 'ReviewedBy', 'ApprovalRequired', 'RiskLevel', 'ComplianceCheck',
-        'DeploymentEnvironment', 'DeploymentStatus', 'IntegrationPoints', 'DependsOn', 'DataMigration',
-        'SuccessMetrics', 'UserImpact', 'PerformanceImpact', 'Documentation', 'ArchitectureDecision'
-    )
-    
-    if (Test-Path '.fields') {
-        $fieldFiles = Get-ChildItem '.fields' -Filter '*.json' -ErrorAction SilentlyContinue
-        foreach ($file in $fieldFiles) {
-            $field = Get-Content $file.FullName | ConvertFrom-Json
-            $validationResults.foundFields++
-            $validationResults.details += @{ name = $field.name; file = $file.Name; status = 'found' }
-        }
-    }
-    
-    foreach ($field in $expectedFields) {
-        if ($validationResults.details.name -notcontains $field) {
-            $validationResults.missingFields += $field
-        }
-    }
-    
-    $validationResults.isValid = ($validationResults.foundFields -ge 20)
-    
-    Write-Log "  Fields Found: $($validationResults.foundFields) / $($validationResults.expectedFields)" $(if ($validationResults.isValid) { 'SUCCESS' } else { 'ERROR' })
-    if ($validationResults.missingFields.Count -gt 0) {
-        Write-Log "  Missing Fields: $(($validationResults.missingFields) -join ', ')" 'ERROR'
-    }
-    
-    return $validationResults
-}
-
-function Validate-Templates {
-    Write-Log 'Validating phase templates...'
-    
-    $validationResults = @{
-        expectedTemplates = 8
-        foundTemplates = 0
-        templates = @()
-        missingTemplates = @()
-        details = @()
-    }
-    
-    $expectedPhases = @(
-        'Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 
-        'Phase 5', 'Phase 6', 'Phase 7', 'Phase 8'
-    )
-    
-    if (Test-Path 'templates') {
-        $templateFiles = Get-ChildItem 'templates' -Filter '*.json' -ErrorAction SilentlyContinue
-        foreach ($file in $templateFiles) {
-            $template = Get-Content $file.FullName | ConvertFrom-Json
-            $validationResults.foundTemplates++
-            $validationResults.details += @{
-                name = $template.name
-                phase = $template.phase
-                file = $file.Name
-                status = 'found'
-            }
-            $validationResults.templates += $template
-        }
-    }
-    
-    foreach ($phase in $expectedPhases) {
-        if ($validationResults.templates.phase -notcontains $phase) {
-            $validationResults.missingTemplates += $phase
-        }
-    }
-    
-    $validationResults.isValid = ($validationResults.foundTemplates -eq 8)
-    
-    Write-Log "  Templates Found: $($validationResults.foundTemplates) / $($validationResults.expectedTemplates)" $(if ($validationResults.isValid) { 'SUCCESS' } else { 'ERROR' })
-    if ($validationResults.missingTemplates.Count -gt 0) {
-        Write-Log "  Missing Phases: $(($validationResults.missingTemplates) -join ', ')" 'ERROR'
-    }
-    
-    return $validationResults
-}
-
-function Validate-AutomationRules {
-    Write-Log 'Validating automation rules...'
-    
-    $validationResults = @{
-        expectedRules = 4
-        foundRules = 0
-        rules = @()
-        details = @()
-        validationsPassed = @()
-        validationsFailed = @()
-    }
-    
-    if (Test-Path '.automation') {
-        $ruleFiles = Get-ChildItem '.automation' -Filter '*.json' -ErrorAction SilentlyContinue
-        foreach ($file in $ruleFiles) {
-            $rule = Get-Content $file.FullName | ConvertFrom-Json
-            $validationResults.foundRules++
-            
-            # Validate rule structure
-            $ruleValid = @{
-                name = $rule.name
-                id = $rule.id
-                checks = @{}
-            }
-            
-            # Check 1: Trigger valid
-            $ruleValid.checks['triggerValid'] = $rule.trigger -in @('ItemAdded', 'FieldChanged', 'PullRequestMerged', 'IssueOpened')
-            
-            # Check 2: Action valid
-            $ruleValid.checks['actionValid'] = $rule.action -in @('SetField', 'SendNotification', 'MultiAction', 'MoveColumn')
-            
-            # Check 3: Error handling valid
-            $ruleValid.checks['errorHandlingValid'] = $rule.errorHandling -in @('Continue', 'Stop', 'Notify', 'Retry')
-            
-            # Check 4: Conditions count valid
-            $ruleValid.checks['conditionsValid'] = ($rule.conditions.Count -le 5)
-            
-            $allChecksPass = $ruleValid.checks.Values | Where-Object { $_ -eq $true } | Measure-Object | Select-Object -ExpandProperty Count
-            
-            if ($allChecksPass -eq 4) {
-                $validationResults.validationsPassed += $ruleValid.name
-                $ruleValid.status = 'valid'
-            }
-            else {
-                $validationResults.validationsFailed += $ruleValid.name
-                $ruleValid.status = 'invalid'
-            }
-            
-            $validationResults.details += $ruleValid
-        }
-    }
-    
-    $validationResults.isValid = ($validationResults.foundRules -eq 4) -and ($validationResults.validationsFailed.Count -eq 0)
-    
-    Write-Log "  Rules Found: $($validationResults.foundRules) / $($validationResults.expectedRules)" $(if ($validationResults.foundRules -eq 4) { 'SUCCESS' } else { 'ERROR' })
-    Write-Log "  Rules Valid: $($validationResults.validationsPassed.Count), Invalid: $($validationResults.validationsFailed.Count)" $(if ($validationResults.validationsFailed.Count -eq 0) { 'SUCCESS' } else { 'ERROR' })
-    
-    return $validationResults
-}
-
-function Validate-Views {
-    Write-Log 'Validating board views...'
-    
-    $validationResults = @{
-        expectedViews = 6
-        foundViews = 0
-        views = @()
-        details = @()
-        validationsPassed = @()
-        validationsFailed = @()
-    }
-    
-    if (Test-Path '.views') {
-        $viewFiles = Get-ChildItem '.views' -Filter '*.json' -ErrorAction SilentlyContinue
-        foreach ($file in $viewFiles) {
-            $view = Get-Content $file.FullName | ConvertFrom-Json
-            $validationResults.foundViews++
-            
-            # Validate view structure
-            $viewValid = @{
-                name = $view.name
-                id = $view.id
-                checks = @{}
-            }
-            
-            # Check 1: Layout valid
-            $viewValid.checks['layoutValid'] = $view.layout -in @('table', 'board', 'roadmap')
-            
-            # Check 2: GroupBy specified
-            $viewValid.checks['groupByValid'] = -not [string]::IsNullOrEmpty($view.groupBy)
-            
-            # Check 3: Sort order valid
-            $viewValid.checks['sortValid'] = -not [string]::IsNullOrEmpty($view.sortBy.order)
-            
-            # Check 4: Filters structure valid
-            $viewValid.checks['filtersValid'] = $view.filters -is [array]
-            
-            # Check 5: Field visibility configured
-            $viewValid.checks['fieldsValid'] = $view.fieldVisibility.Count -gt 0
-            
-            $passedChecks = ($viewValid.checks.Values | Where-Object { $_ -eq $true } | Measure-Object | Select-Object -ExpandProperty Count)
-            
-            if ($passedChecks -ge 4) {
-                $validationResults.validationsPassed += $viewValid.name
-                $viewValid.status = 'valid'
-            }
-            else {
-                $validationResults.validationsFailed += $viewValid.name
-                $viewValid.status = 'invalid'
-            }
-            
-            $validationResults.details += $viewValid
-        }
-    }
-    
-    $validationResults.isValid = ($validationResults.foundViews -eq 6) -and ($validationResults.validationsFailed.Count -eq 0)
-    
-    Write-Log "  Views Found: $($validationResults.foundViews) / $($validationResults.expectedViews)" $(if ($validationResults.foundViews -eq 6) { 'SUCCESS' } else { 'ERROR' })
-    Write-Log "  Views Valid: $($validationResults.validationsPassed.Count), Invalid: $($validationResults.validationsFailed.Count)" $(if ($validationResults.validationsFailed.Count -eq 0) { 'SUCCESS' } else { 'ERROR' })
-    
-    return $validationResults
-}
-
-function Generate-ValidationReport {
+function Invoke-GitHubGraphQL {
     param(
-        [hashtable]$FieldsValidation,
-        [hashtable]$TemplatesValidation,
-        [hashtable]$RulesValidation,
-        [hashtable]$ViewsValidation
+        [Parameter(Mandatory)][string]$Query,
+        [hashtable]$Variables = @{}
     )
-    
-    $report = @{
-        timestamp = $timestamp
-        projectNumber = $ProjectNumber
-        organization = $OrganizationName
-        validations = @{
-            fields = $FieldsValidation
-            templates = $TemplatesValidation
-            rules = $RulesValidation
-            views = $ViewsValidation
+
+    $headers = @{
+        'Authorization'         = "bearer $GitHubToken"
+        'Content-Type'          = 'application/json'
+        'X-Github-Api-Version'  = '2022-11-28'
+    }
+    $body = @{ query = $Query; variables = $Variables } | ConvertTo-Json -Depth 10
+
+    $maxAttempts = 3
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            $response = Invoke-RestMethod -Uri $graphQlEndpoint -Method Post `
+                -Headers $headers -Body $body -TimeoutSec 60
+
+            if ($response.PSObject.Properties['errors'] -and $response.errors) {
+                $messages = @($response.errors | ForEach-Object { $_.message }) -join '; '
+                throw "GraphQL error: $messages"
+            }
+            return $response.data
         }
-        summary = @{
-            allValid = ($FieldsValidation.isValid -and $TemplatesValidation.isValid -and $RulesValidation.isValid -and $ViewsValidation.isValid)
-            fieldsValid = $FieldsValidation.isValid
-            templatesValid = $TemplatesValidation.isValid
-            rulesValid = $RulesValidation.isValid
-            viewsValid = $ViewsValidation.isValid
-        }
-        completionPercentage = @{
-            fields = [math]::Round(($FieldsValidation.foundFields / $FieldsValidation.expectedFields) * 100, 2)
-            templates = [math]::Round(($TemplatesValidation.foundTemplates / $TemplatesValidation.expectedTemplates) * 100, 2)
-            rules = [math]::Round(($RulesValidation.foundRules / $RulesValidation.expectedRules) * 100, 2)
-            views = [math]::Round(($ViewsValidation.foundViews / $ViewsValidation.expectedViews) * 100, 2)
+        catch [Microsoft.PowerShell.Commands.HttpResponseException] {
+            # Retry only what is retryable: 429 and 5xx. A non-429 4xx is deterministic.
+            $status = [int]$_.Exception.Response.StatusCode
+            if (-not ($status -eq 429 -or $status -ge 500) -or $attempt -eq $maxAttempts) { throw }
+            $delaySeconds = [math]::Pow(2, $attempt) * (0.5 + (Get-Random -Minimum 0.0 -Maximum 0.5))
+            $retryAfter = $_.Exception.Response.Headers.RetryAfter
+            if ($null -ne $retryAfter -and $null -ne $retryAfter.Delta) {
+                $delaySeconds = [math]::Max($delaySeconds, $retryAfter.Delta.TotalSeconds)
+            }
+            Write-Host ("  HTTP {0} from {1} - retrying in {2:n1}s (attempt {3}/{4})" -f `
+                $status, $graphQlEndpoint, $delaySeconds, $attempt, $maxAttempts)
+            Start-Sleep -Seconds $delaySeconds
         }
     }
-    
-    if ($GenerateReport) {
-        $report | ConvertTo-Json -Depth 10 | Set-Content -Path $reportFile
-        Write-Log "Report saved: $reportFile" 'SUCCESS'
-    }
-    
-    return $report
 }
 
-function Display-ValidationSummary {
-    param([hashtable]$Report)
-    
-    Write-Host "`n" -ForegroundColor Cyan
-    Write-Host "╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║          BOARD VALIDATION SUMMARY                     ║" -ForegroundColor Cyan
-    Write-Host "╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-    
-    Write-Host "`nValidation Results:" -ForegroundColor Green
-    Write-Host "  Custom Fields: " -NoNewline
-    Write-Host "$($Report.validations.fields.foundFields)/$($Report.validations.fields.expectedFields) ($($Report.completionPercentage.fields)%)" `
-        -ForegroundColor $(if ($Report.validations.fields.isValid) { 'Green' } else { 'Red' })
-    
-    Write-Host "  Phase Templates: " -NoNewline
-    Write-Host "$($Report.validations.templates.foundTemplates)/$($Report.validations.templates.expectedTemplates) ($($Report.completionPercentage.templates)%)" `
-        -ForegroundColor $(if ($Report.validations.templates.isValid) { 'Green' } else { 'Red' })
-    
-    Write-Host "  Automation Rules: " -NoNewline
-    Write-Host "$($Report.validations.rules.foundRules)/$($Report.validations.rules.expectedRules) ($($Report.completionPercentage.rules)%)" `
-        -ForegroundColor $(if ($Report.validations.rules.isValid) { 'Green' } else { 'Red' })
-    
-    Write-Host "  Board Views: " -NoNewline
-    Write-Host "$($Report.validations.views.foundViews)/$($Report.validations.views.expectedViews) ($($Report.completionPercentage.views)%)" `
-        -ForegroundColor $(if ($Report.validations.views.isValid) { 'Green' } else { 'Red' })
-    
-    Write-Host "`nOverall Status: " -NoNewline
-    if ($Report.summary.allValid) {
-        Write-Host "✓ VALID" -ForegroundColor Green
+$hasToken = -not [string]::IsNullOrWhiteSpace($GitHubToken)
+
+if ($DryRun -or -not $hasToken) {
+    Write-Host '============================================================'
+    if (-not $hasToken) {
+        Write-Host ' NO TOKEN - DRY-RUN (no GitHub API call will be made)'
     }
     else {
-        Write-Host "✗ INVALID" -ForegroundColor Red
+        Write-Host ' DRY-RUN (no GitHub API call will be made)'
     }
-    
-    Write-Host "`n"
+    Write-Host '============================================================'
+    if (-not $hasToken) {
+        Write-Host 'No token available: -GitHubToken was empty and the GITHUB_TOKEN'
+        Write-Host 'environment variable is not set. Token values are never printed.'
+    }
+    Write-Host ''
+    Write-Host ("Would POST one read-only GraphQL query to {0}:" -f $graphQlEndpoint)
+    Write-Host ("  repositoryOwner(login: '{0}') -> projectV2(number: {1})" -f $OrganizationName, $ProjectNumber)
+    Write-Host '    -> fields(first: 100): id, name, dataType'
+    Write-Host '    -> items(first: 100):  id, type'
+    Write-Host ''
+    Write-Host ("Would verify these {0} expected custom fields (list from setup-custom-fields.ps1):" -f $expectedFields.Count)
+    foreach ($fieldName in $expectedFields) { Write-Host ("  - {0}" -f $fieldName) }
+    Write-Host ''
+    Write-Host "To run for real: set GITHUB_TOKEN (classic PAT, 'project' scope) or pass -GitHubToken."
+    exit 0
 }
 
 try {
-    Write-Log '╔═══════════════════════════════════════════════════════╗'
-    Write-Log '║         BOARD VALIDATION SCRIPT                      ║'
-    Write-Log '╚═══════════════════════════════════════════════════════╝'
-    
-    Write-Log "Validating board configuration..."
-    
-    $fieldsVal = Validate-CustomFields
-    $templatesVal = Validate-Templates
-    $rulesVal = Validate-AutomationRules
-    $viewsVal = Validate-Views
-    
-    $report = Generate-ValidationReport -FieldsValidation $fieldsVal -TemplatesValidation $templatesVal `
-        -RulesValidation $rulesVal -ViewsValidation $viewsVal
-    
-    Display-ValidationSummary -Report $report
-    
-    Write-Log 'Validation complete' 'SUCCESS'
-    
-    $report | ConvertTo-Json -Depth 10
+    $data = Invoke-GitHubGraphQL -Query $projectQuery -Variables @{
+        login = $OrganizationName
+        projectNum = $ProjectNumber
+    }
 }
 catch {
-    Write-Log "Validation failed: $_" 'ERROR'
+    Write-Host ("Validation failed: {0}" -f $_) -ForegroundColor Red
     exit 1
 }
+
+$project = $null
+if ($null -ne $data -and $data.PSObject.Properties['repositoryOwner'] -and $null -ne $data.repositoryOwner) {
+    $repoOwner = $data.repositoryOwner
+    if ($repoOwner.PSObject.Properties['projectV2']) { $project = $repoOwner.projectV2 }
+}
+if ($null -eq $project) {
+    Write-Host ("Validation failed: project #{0} not found for owner '{1}' " -f $ProjectNumber, $OrganizationName) -ForegroundColor Red
+    Write-Host '(check the owner login, the project number, and that the token has the project scope).'
+    exit 1
+}
+
+$fieldNodes = @($project.fields.nodes | Where-Object { $null -ne $_ -and $_.PSObject.Properties['name'] })
+$foundNames = @($fieldNodes | ForEach-Object { $_.name })
+$presentFields = @($expectedFields | Where-Object { $foundNames -contains $_ })
+$missingFields = @($expectedFields | Where-Object { $foundNames -notcontains $_ })
+
+$itemNodes = @($project.items.nodes | Where-Object { $null -ne $_ })
+$itemsByType = [ordered]@{}
+foreach ($item in $itemNodes) {
+    $itemType = if ($item.PSObject.Properties['type'] -and $item.type) { [string]$item.type } else { 'UNKNOWN' }
+    if (-not $itemsByType.Contains($itemType)) { $itemsByType[$itemType] = 0 }
+    $itemsByType[$itemType]++
+}
+
+Write-Host '============================================================'
+Write-Host ' BOARD VALIDATION (real ProjectV2 GraphQL read)'
+Write-Host '============================================================'
+Write-Host ("Project:                {0}  (owner: {1}, number: {2})" -f $project.title, $OrganizationName, $ProjectNumber)
+Write-Host ("Fields on project:      {0} total ({1} read)" -f $project.fields.totalCount, $fieldNodes.Count)
+Write-Host ("Expected custom fields: {0}/{1} present" -f $presentFields.Count, $expectedFields.Count) `
+    -ForegroundColor $(if ($missingFields.Count -eq 0) { 'Green' } else { 'Red' })
+if ($missingFields.Count -gt 0) {
+    Write-Host ("Missing fields:         {0}" -f ($missingFields -join ', ')) -ForegroundColor Red
+}
+Write-Host ("Items on project:       {0} total ({1} read; first 100 only)" -f $project.items.totalCount, $itemNodes.Count)
+foreach ($typeName in $itemsByType.Keys) {
+    Write-Host ("  {0}: {1}" -f $typeName, $itemsByType[$typeName])
+}
+Write-Host 'Not validated here (ProjectV2 API cannot create them; check the GitHub UI):'
+Write-Host '  views, phase templates, built-in workflow/automation rules.'
+
+$result = [ordered]@{
+    timestamp     = $timestamp
+    organization  = $OrganizationName
+    projectNumber = $ProjectNumber
+    projectId     = $project.id
+    projectTitle  = $project.title
+    source        = 'live ProjectV2 GraphQL read (fields + items, first 100 each)'
+    fieldsTotal   = $project.fields.totalCount
+    expected      = $expectedFields.Count
+    present       = $presentFields.Count
+    missingFields = $missingFields
+    itemsTotal    = $project.items.totalCount
+    itemsRead     = $itemNodes.Count
+    itemsByType   = $itemsByType
+    isValid       = ($missingFields.Count -eq 0)
+}
+
+if ($GenerateReport) {
+    if (-not (Test-Path 'logs')) { New-Item -ItemType Directory -Path 'logs' -Force | Out-Null }
+    $result | ConvertTo-Json -Depth 10 | Set-Content -Path $reportFile
+    Write-Host ("Report saved: {0}" -f $reportFile)
+}
+
+# Emit the result object as JSON for orchestrators that capture output.
+$result | ConvertTo-Json -Depth 10
+
+if ($missingFields.Count -gt 0) {
+    Write-Host ("VALIDATION FAILED: {0} expected custom field(s) missing." -f $missingFields.Count) -ForegroundColor Red
+    exit 2
+}
+Write-Host 'VALIDATION PASSED: all expected custom fields present.' -ForegroundColor Green
+exit 0

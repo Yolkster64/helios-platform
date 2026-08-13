@@ -1,16 +1,29 @@
 <#
 .SYNOPSIS
-    Configures 4 automation rules for HELIOS Platform board
+    LOCAL SIMULATION - documents 4 automation rules; makes NO GitHub API calls
 .DESCRIPTION
-    Sets up workflow automation rules with triggers, conditions, and actions
+    What is real vs simulated: GitHub's ProjectV2 GraphQL API cannot create or configure
+    the board's built-in workflows/automation (there are no mutations for project
+    workflows) - a real API limitation, not a script shortcut - so this script never
+    touches the GitHub API. What it actually does, locally:
+      * structurally validates the 4 rule definitions (trigger/action/error-handling
+        enums, condition count) - this "testing" is schema-checking the local JSON,
+        not exercising any live automation
+      * writes them to .automation/*.json
+      * generates logs/automation-rules-documentation_<timestamp>.md - the manual
+        click-path is the project's UI: Project -> menu -> "Workflows" (for built-ins
+        like item-added/PR-merged) plus Actions workflows for anything richer
+    Compare: setup-custom-fields.ps1 (real GraphQL mutations), validate-board.ps1 (real
+    GraphQL read), add-epics-to-board.ps1 (real GraphQL mutations).
 .PARAMETER GitHubToken
-    GitHub Personal Access Token
+    Accepted only for interface parity with the sibling scripts; NOT used - this script
+    makes no API calls
 .PARAMETER ProjectNumber
-    Project number
+    Project number (recorded in the report; no API call is made against it)
 .PARAMETER OrganizationName
-    Organization name
+    Organization name (recorded in the report; no API call is made against it)
 .PARAMETER DryRun
-    Preview mode
+    Preview mode (skips even the local .automation/*.json writes)
 .PARAMETER Verbose
     Detailed output
 #>
@@ -25,12 +38,13 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$OrganizationName,
     
-    [switch]$DryRun,
-    [switch]$Verbose
+    [switch]$DryRun
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
 $ErrorActionPreference = 'Stop'
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
 $logFile = "logs/automation-rules_$timestamp.log"
@@ -43,7 +57,7 @@ function Write-Log {
     $ts = Get-Date -Format 'HH:mm:ss'
     $entry = "[$ts] [$Level] $Message"
     Add-Content -Path $logFile -Value $entry
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
+    if ($VerbosePreference -eq 'Continue' -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
 }
 
 # 4 Automation Rules Definition
@@ -338,6 +352,7 @@ try {
     
     $report = @{
         timestamp = $timestamp
+        mode = 'local-simulation (ProjectV2 GraphQL API cannot create workflows; no API calls made)'
         projectNumber = $ProjectNumber
         organization = $OrganizationName
         totalRules = $automationRules.Count
@@ -349,9 +364,13 @@ try {
     
     $report | ConvertTo-Json -Depth 10 | Set-Content -Path $reportFile
     
-    Write-Log '=== Automation Rules Setup Complete ===' 'SUCCESS'
-    Write-Log "Created: $($report.created), Failed: $($report.failed), Tests Passed: $($report.testsPassed)" 'INFO'
-    
+    Write-Log '=== Automation Rules Setup Complete (LOCAL SIMULATION) ===' 'SUCCESS'
+    Write-Log "Saved locally: $($report.created), Failed: $($report.failed), Schema checks passed: $($report.testsPassed)" 'INFO'
+    Write-Host 'NOTE: local simulation only - no GitHub API calls were made.' -ForegroundColor Yellow
+    Write-Host '      The ProjectV2 GraphQL API cannot create built-in workflows; enable them by'
+    Write-Host '      hand (Project -> ... menu -> Workflows) using the generated reference:'
+    Write-Host "      logs/automation-rules-documentation_$timestamp.md"
+
     $report | ConvertTo-Json -Depth 10
 }
 catch {
