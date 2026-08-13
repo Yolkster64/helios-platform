@@ -434,6 +434,59 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_CarriedAzureBaseline_IsNotCurrentPlanningEvidence()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var fresh = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.NotNull(fresh.Azure.CapturedAtUtc);
+        Assert.Contains(fresh.NextSteps, step => step.Id == "review-azure-plan");
+
+        // A repo-only sync keeps the baseline for deltas but must not present it as
+        // current evidence for planning; it recommends refreshing first.
+        var repoOnly = await store.SyncAsync("codex", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("ready", repoOnly.Azure.Status);
+        Assert.Null(repoOnly.AzureCaptureStatus);
+        Assert.Contains(repoOnly.NextSteps, step => step.Id == "refresh-azure-inventory");
+        Assert.DoesNotContain(repoOnly.NextSteps, step => step.Id == "review-azure-plan");
+    }
+
+    [Fact]
+    public async Task NextSteps_AreRecomputedFromCurrentProfileAtReadTime()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "complete-profile");
+
+        // Completing the profile retires the suggestion immediately, without a new sync.
+        await store.SaveProfileAsync(null, "southcentralus", "helios-jm", null, null, CancellationToken.None);
+        var recomputed = store.GetCurrentNextSteps();
+
+        Assert.DoesNotContain(recomputed, step => step.Id == "complete-profile");
+        // The cached snapshot on disk still holds the stale list; only the read path recomputes.
+        Assert.Contains(store.GetLatestContext()!.NextSteps, step => step.Id == "complete-profile");
+    }
+
+    [Fact]
+    public async Task ContextSync_GroupsOnlyInventory_IsNotPresentedAsZeroResources()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+
+        var groupsOnly = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.DoesNotContain(groupsOnly.NextSteps, step => step.Id == "review-azure-plan");
+        var inventoryStep = Assert.Single(groupsOnly.NextSteps, step => step.Id == "inventory-resources");
+        Assert.DoesNotContain("0 resource(s)", inventoryStep.Reason);
+
+        var full = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        var planStep = Assert.Single(full.NextSteps, step => step.Id == "review-azure-plan");
+        Assert.Contains("1 resource(s)", planStep.Reason);
+    }
+
+    [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
         // Sync holds the lock across four git commands and all three Azure reads; the

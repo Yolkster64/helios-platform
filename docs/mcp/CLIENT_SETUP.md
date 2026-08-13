@@ -34,7 +34,9 @@ Or install it from the repository marketplace after it reaches the default branc
 ```
 
 Choose project scope, then invoke `/helios-operator:operate-helios` or mention
-`@helios-operator:fabric-operator`.
+`@helios-operator:fabric-operator`. The plugin adds the skill and agent only — the MCP
+server itself still comes from the repo-level `.mcp.json`, so enabling the plugin does
+not produce duplicate `helios_*` tools or a second server process.
 
 ## VS Code / GitHub Copilot
 

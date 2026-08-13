@@ -21,9 +21,10 @@ Copilot, ChatGPT, Hermes, and XCore can continue from the same inspectable evide
 4. Read `helios_operator_next_steps_get`, compare the suggestions with the user's actual
    request, and take only the steps that are in scope.
 
-When installed as this plugin, MCP tool names are scoped under the plugin and server. When
-the repo-level `.mcp.json` is active, the prefix differs. Match the stable tool-name suffix
-instead of assuming one client-specific prefix.
+The plugin bundles no MCP server of its own: inside a HELIOS checkout the tools come from
+the repo-level `.mcp.json` (`helios`) server, so enabling the plugin never launches a
+duplicate server instance. Client prefixes still differ across surfaces, so match the
+stable tool-name suffix instead of assuming one client-specific prefix.
 
 ## Remember only explicit preferences
 

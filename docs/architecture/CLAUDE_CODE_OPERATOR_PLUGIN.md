@@ -28,15 +28,17 @@ is not silently uploaded, shared across machines, or used as a credential store.
 | `config/aihub.json` | providers and task routing | HELIOS AI tools | Config stores environment-variable names, never key values |
 | Prior and current snapshots | added, removed, changed identities | deterministic next steps | Truncated or incomplete inventories are marked non-comparable |
 | Context/profile writes | SHA-256 receipt | `journal.jsonl` | Cross-process lock and atomic latest-snapshot replacement |
-| Claude marketplace | `helios-operator` package path | Claude Code plugin cache | Plugin uses the active `${CLAUDE_PROJECT_DIR}` checkout; no files are fetched by hooks |
+| Claude marketplace | `helios-operator` package path | Claude Code plugin cache | Plugin ships skill + agent only; the MCP server comes from the checkout's own `.mcp.json`, so no duplicate server is launched and no files are fetched by hooks |
 
 ## Components
 
 - `.claude-plugin/marketplace.json` catalogs the plugin from this Git repository. The
   plugin manifest carries a semver release; bump it whenever the packaged components
   change so installed copies update predictably.
-- `plugins/helios-operator/.mcp.json` starts `src/mcp/HELIOS.Mcp` from the active HELIOS
-  checkout and passes `HELIOS_REPO_ROOT` explicitly.
+- The plugin bundles no MCP server of its own. Inside a HELIOS checkout the repo-level
+  `.mcp.json` already starts `src/mcp/HELIOS.Mcp` (passing `HELIOS_REPO_ROOT`); a bundled
+  duplicate would launch a second server instance with duplicate `helios_*` tools and two
+  concurrent Release builds of the same output. `validate_contract.py` enforces this.
 - `/helios-operator:operate-helios` establishes context, routes work deliberately, and
   preserves approval boundaries.
 - `@helios-operator:fabric-operator` coordinates work that crosses code, CI, MCP, Azure,

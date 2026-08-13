@@ -40,7 +40,7 @@ def main() -> int:
     errors: list[str] = []
     manifest = load_json(PLUGIN_ROOT / ".claude-plugin" / "plugin.json", errors)
     marketplace = load_json(REPO_ROOT / ".claude-plugin" / "marketplace.json", errors)
-    mcp = load_json(PLUGIN_ROOT / ".mcp.json", errors)
+    mcp = load_json(REPO_ROOT / ".mcp.json", errors)
     settings = load_json(REPO_ROOT / ".claude" / "settings.json", errors)
 
     require(manifest.get("name") == "helios-operator", "plugin name must be helios-operator", errors)
@@ -52,17 +52,26 @@ def main() -> int:
         require(entries[0].get("name") == "helios-operator", "marketplace plugin name drifted", errors)
         require(entries[0].get("source") == "./plugins/helios-operator", "marketplace source drifted", errors)
 
-    server = mcp.get("mcpServers", {}).get("operator", {})
-    args = server.get("args", [])
-    require(server.get("command") == "dotnet", "operator MCP command must be dotnet", errors)
+    # The plugin deliberately bundles NO MCP server: inside a HELIOS checkout the
+    # repo-level .mcp.json already launches src/mcp/HELIOS.Mcp, and a bundled duplicate
+    # would start a second server instance with duplicate helios_* tools and racing
+    # Release builds of the same output.
     require(
-        "${CLAUDE_PROJECT_DIR}/src/mcp/HELIOS.Mcp" in args,
-        "operator MCP must resolve the server from the active HELIOS checkout",
+        not (PLUGIN_ROOT / ".mcp.json").exists(),
+        "plugin must not bundle a second MCP server; the repo-level .mcp.json provides it",
+        errors,
+    )
+    server = mcp.get("mcpServers", {}).get("helios", {})
+    args = server.get("args", [])
+    require(server.get("command") == "dotnet", "repo-level MCP command must be dotnet", errors)
+    require(
+        "src/mcp/HELIOS.Mcp" in args,
+        "repo-level MCP must launch src/mcp/HELIOS.Mcp",
         errors,
     )
     require(
-        server.get("env", {}).get("HELIOS_REPO_ROOT") == "${CLAUDE_PROJECT_DIR}",
-        "operator MCP must pass the active HELIOS repo root",
+        server.get("env", {}).get("HELIOS_REPO_ROOT") == ".",
+        "repo-level MCP must pass the HELIOS repo root",
         errors,
     )
 

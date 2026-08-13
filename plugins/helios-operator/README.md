@@ -4,9 +4,13 @@ This project-scoped plugin adds:
 
 - `/helios-operator:operate-helios` — the operating workflow;
 - `@helios-operator:fabric-operator` — a specialist coordinating repo, MCP, Azure
-  preflight, and model handoffs;
-- the `operator` MCP server — the existing HELIOS AI tools plus four durable-context
-  tools.
+  preflight, and model handoffs.
+
+The MCP tools (the existing HELIOS AI tools plus four durable-context operator tools)
+come from the repo-level `.mcp.json` (`helios` server), which every HELIOS checkout
+already registers. The plugin deliberately bundles no second MCP server: a bundled copy
+would launch a duplicate `dotnet run` of the same project inside the checkout, exposing
+every `helios_*` tool twice and racing two Release builds over the same output.
 
 Prerequisites: Claude Code and the .NET 8 SDK. Start Claude Code from the root of a HELIOS
 checkout.

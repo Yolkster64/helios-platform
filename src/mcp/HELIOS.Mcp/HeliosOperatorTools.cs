@@ -90,7 +90,7 @@ public static class HeliosOperatorTools
     }
 
     [McpServerTool(Name = "helios_operator_next_steps_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Return deterministic next-step proposals from the last saved HELIOS operator context. Suggestions share the same repository/Azure evidence across assistants; this tool performs no model call or cloud mutation.")]
+    [Description("Return deterministic next-step proposals recomputed from the current operator profile and the last saved HELIOS context evidence (repository, Azure). Suggestions share the same evidence across assistants; this tool performs no model call or cloud mutation.")]
     public static string GetNextSteps()
     {
         try
@@ -102,11 +102,7 @@ public static class HeliosOperatorTools
                 {
                     snapshotAvailable = snapshot is not null,
                     contextPath = ".helios/operator/context.json",
-                    nextSteps = snapshot?.NextSteps ?? store.BuildNextSteps(
-                        store.GetProfile(),
-                        RepositorySnapshot.Empty,
-                        AzureSnapshot.NotRequested,
-                        OperatorContextStore.DetectCliAvailability()),
+                    nextSteps = store.GetCurrentNextSteps(),
                 },
                 JsonOptions);
         }
@@ -317,7 +313,12 @@ internal sealed class OperatorContextStore
         var changes = capturedAzure is null
             ? OperatorChangeSet.NotRequested
             : BuildChanges(priorReadyBaseline, capturedAzure);
-        var nextSteps = BuildNextSteps(profile, repository, capturedAzure ?? azure, cli);
+        var nextSteps = BuildNextSteps(
+            profile,
+            repository,
+            capturedAzure ?? azure,
+            cli,
+            azureEvidenceCurrent: capturedAzure is { Status: "ready" });
 
         var snapshot = new OperatorContextSnapshot(
             SchemaVersion: 1,
@@ -328,6 +329,7 @@ internal sealed class OperatorContextStore
             CliAvailability: cli,
             Azure: azure,
             AzureCaptureFailure: capturedAzure is null or { Status: "ready" } ? null : capturedAzure,
+            AzureCaptureStatus: capturedAzure?.Status,
             Changes: changes,
             NextSteps: nextSteps);
 
@@ -357,11 +359,31 @@ internal sealed class OperatorContextStore
         return snapshot;
     }
 
+    /// <summary>
+    /// Next steps for the read-time tool: profile-dependent suggestions are rebuilt from
+    /// the CURRENT profile (a profile save must retire "complete-profile" immediately),
+    /// while repository/Azure evidence is reused from the last saved snapshot.
+    /// </summary>
+    internal IReadOnlyList<OperatorNextStep> GetCurrentNextSteps()
+    {
+        var snapshot = GetLatestContext();
+        var profile = GetProfile();
+        return snapshot is null
+            ? BuildNextSteps(profile, RepositorySnapshot.Empty, AzureSnapshot.NotRequested, _cliDetector(), azureEvidenceCurrent: false)
+            : BuildNextSteps(
+                profile,
+                snapshot.Repository,
+                snapshot.AzureCaptureFailure ?? snapshot.Azure,
+                snapshot.CliAvailability,
+                azureEvidenceCurrent: snapshot.AzureCaptureStatus == "ready");
+    }
+
     internal IReadOnlyList<OperatorNextStep> BuildNextSteps(
         OperatorProfile profile,
         RepositorySnapshot repository,
         AzureSnapshot azure,
-        IReadOnlyDictionary<string, bool> cli)
+        IReadOnlyDictionary<string, bool> cli,
+        bool azureEvidenceCurrent)
     {
         var steps = new List<OperatorNextStep>();
 
@@ -433,7 +455,21 @@ internal sealed class OperatorContextStore
         }
         else if (azure.Status == "ready")
         {
-            if (azure.SubscriptionState is not null
+            if (!azureEvidenceCurrent)
+            {
+                // A carried-forward baseline is delta evidence, not planning evidence:
+                // never recommend generating a plan from an inventory of unknown age.
+                var capturedAt = azure.CapturedAtUtc is { } at
+                    ? at.ToString("u", System.Globalization.CultureInfo.InvariantCulture)
+                    : "an earlier sync";
+                steps.Add(new OperatorNextStep(
+                    "refresh-azure-inventory",
+                    "Refresh the Azure inventory",
+                    $"The saved inventory is carried forward from {capturedAt} and was not re-captured in the latest sync; do not plan against it without refreshing.",
+                    "Re-run helios_operator_context_sync with includeAzure=true first.",
+                    "none"));
+            }
+            else if (azure.SubscriptionState is not null
                 && !string.Equals(azure.SubscriptionState, "Enabled", StringComparison.OrdinalIgnoreCase))
             {
                 steps.Add(new OperatorNextStep(
@@ -443,12 +479,23 @@ internal sealed class OperatorContextStore
                     "Resolve the subscription state (billing/policy) in the Azure portal before planning any deployment.",
                     "review"));
             }
+            else if (!azure.ResourcesIncluded)
+            {
+                // Not-queried is not the same as empty: never present an absent resource
+                // inventory as "0 resource(s)".
+                steps.Add(new OperatorNextStep(
+                    "inventory-resources",
+                    "Capture the resource inventory",
+                    $"Resource groups are inventoried ({azure.ResourceGroups.Count}{(azure.ResourceGroupsTruncated ? "+" : string.Empty)}), but resources were not queried; a truthful plan needs resource-level evidence.",
+                    "Re-run helios_operator_context_sync with includeAzure=true and includeResources=true.",
+                    "none"));
+            }
             else
             {
                 steps.Add(new OperatorNextStep(
                     "review-azure-plan",
                     "Generate the next Azure what-if",
-                    $"The saved inventory covers {azure.ResourceGroups.Count} resource group(s) and {azure.Resources.Count} resource(s); use that evidence to produce the smallest Bicep plan.",
+                    $"The saved inventory covers {azure.ResourceGroups.Count}{(azure.ResourceGroupsTruncated ? "+" : string.Empty)} resource group(s) and {azure.Resources.Count}{(azure.ResourcesTruncated ? "+" : string.Empty)} resource(s); use that evidence to produce the smallest Bicep plan.",
                     "Follow infra/README.md and save the what-if output before apply.",
                     "review"));
             }
@@ -541,9 +588,10 @@ internal sealed class OperatorContextStore
         IReadOnlyDictionary<string, bool> cli,
         CancellationToken cancellationToken)
     {
+        var capturedAtUtc = _clock();
         if (!IsCliAvailable(cli, "az"))
         {
-            return AzureSnapshot.CliUnavailable;
+            return AzureSnapshot.CliUnavailable with { CapturedAtUtc = capturedAtUtc };
         }
 
         var accountResult = await _runner.RunAsync(
@@ -562,7 +610,7 @@ internal sealed class OperatorContextStore
                 || error.Contains("subscription", StringComparison.OrdinalIgnoreCase)
                 ? "not-authenticated"
                 : "error";
-            return AzureSnapshot.Failed(status, error);
+            return AzureSnapshot.Failed(status, error) with { CapturedAtUtc = capturedAtUtc };
         }
 
         using var accountDocument = JsonDocument.Parse(accountResult.StandardOutput);
@@ -589,6 +637,7 @@ internal sealed class OperatorContextStore
                 SubscriptionName = subscriptionName,
                 TenantId = tenantId,
                 SubscriptionState = subscriptionState,
+                CapturedAtUtc = capturedAtUtc,
             };
         }
 
@@ -619,7 +668,8 @@ internal sealed class OperatorContextStore
                     ResourcesIncluded: true,
                     ResourcesTruncated: false,
                     ErrorHint: $"Resource groups were saved, but resource inventory failed: {SanitizeError(resourcesResult.StandardError)}",
-                    SubscriptionState: subscriptionState);
+                    SubscriptionState: subscriptionState,
+                    CapturedAtUtc: capturedAtUtc);
             }
 
             resources = ParseResources(resourcesResult.StandardOutput, out resourcesTruncated);
@@ -636,7 +686,8 @@ internal sealed class OperatorContextStore
             ResourcesIncluded: includeResources,
             ResourcesTruncated: resourcesTruncated,
             ErrorHint: null,
-            SubscriptionState: subscriptionState);
+            SubscriptionState: subscriptionState,
+            CapturedAtUtc: capturedAtUtc);
     }
 
     /// <summary>
@@ -1301,7 +1352,10 @@ internal sealed record OperatorContextSnapshot(
     IReadOnlyList<OperatorNextStep> NextSteps,
     // Non-null only when an Azure capture was requested but did not return ready; the
     // Azure field then still holds the carried-forward last ready baseline.
-    AzureSnapshot? AzureCaptureFailure = null);
+    AzureSnapshot? AzureCaptureFailure = null,
+    // Status of THIS sync's Azure capture attempt (null = not requested). "ready" is the
+    // only value under which the stored Azure inventory is current planning evidence.
+    string? AzureCaptureStatus = null);
 
 internal sealed record RepositorySnapshot(
     string Status,
@@ -1329,7 +1383,10 @@ internal sealed record AzureSnapshot(
     // az account show state (Enabled/Disabled/Warned/...); anything other than Enabled
     // means the inventory is readable but NOT deployment-ready evidence. Null = unknown
     // (older snapshots).
-    string? SubscriptionState = null)
+    string? SubscriptionState = null,
+    // When this inventory was actually captured from az. A baseline carried forward
+    // across later syncs keeps its original timestamp, so staleness stays visible.
+    DateTimeOffset? CapturedAtUtc = null)
 {
     internal static readonly AzureSnapshot NotRequested = Empty("not-requested", null);
     internal static readonly AzureSnapshot CliUnavailable = Empty("cli-unavailable", "Azure CLI was not found on PATH.");
