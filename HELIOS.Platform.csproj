@@ -88,6 +88,9 @@
          default globs would otherwise pull its .cs AND .xaml into this project. -->
     <Compile Remove="src/gui/**/*.cs" />
     <Page Remove="src/gui/**/*.xaml" />
+    <!-- docs/ui-xenoblade is recovered WPF reference material (design mining only),
+         never part of this project's compile/page set. -->
+    <Page Remove="docs/**/*.xaml" />
     <Compile Remove="src/**/Migrations/**/*.cs" />
     <Compile Remove="HELIOS.Platform.Tray/**/*.cs" />
     <Compile Remove="HELIOS.Platform.ShellExtension/**/*.cs" />
