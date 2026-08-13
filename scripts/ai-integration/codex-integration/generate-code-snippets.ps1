@@ -141,7 +141,7 @@ Include:
         prompt = $prompt
         max_tokens = [int](Get-ConfigValue -Key "CODEX_MAX_TOKENS" -Default "2048")
         temperature = [float](Get-ConfigValue -Key "CODEX_TEMPERATURE" -Default "0.5")
-        stop = @("```", "# End of code")
+        stop = @('```', "# End of code")
     }
     
     try {

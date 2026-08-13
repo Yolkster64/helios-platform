@@ -154,21 +154,21 @@ function Test-DotNetSDK {
     Write-Host "`n[3/8] Checking .NET SDK..." -ForegroundColor Cyan
     
     try {
-        # Check for .NET 8 SDK
+        # Check for .NET 10 SDK
         $dotnetPath = Get-Command dotnet -ErrorAction Stop | Select-Object -ExpandProperty Source
         $output = & $dotnetPath --version
-        
+
         $version = $output.Split(' ')[0]
         $majorVersion = [int]$version.Split('.')[0]
-        
-        if ($majorVersion -ge 8) {
+
+        if ($majorVersion -ge 10) {
             Add-CheckResult -CheckName ".NET SDK" -Passed $true `
                 -Message ".NET SDK $version installed" -Status "Success"
             return $true
         }
         else {
             Add-CheckResult -CheckName ".NET SDK" -Passed $false `
-                -Message "Requires .NET 8 SDK or later. Found: $version" -Status "Error"
+                -Message "Requires .NET 10 SDK or later. Found: $version" -Status "Error"
             return $false
         }
     }

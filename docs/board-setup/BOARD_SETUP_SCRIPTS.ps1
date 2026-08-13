@@ -186,7 +186,7 @@ jobs:
         env:
           GITHUB_TOKEN: `${{ secrets.GITHUB_TOKEN }}
         run: |
-          ISSUE_NUMBER=\$(grep -oP '#\K[0-9]+' <<< "`${{ github.event.pull_request.body }}" | head -1)
+          ISSUE_NUMBER=`$(grep -oP '#\K[0-9]+' <<< "`${{ github.event.pull_request.body }}" | head -1)
           PR_NUMBER=`${{ github.event.pull_request.number }}
           
           if [ -z "\$ISSUE_NUMBER" ]; then

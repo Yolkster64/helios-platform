@@ -94,7 +94,7 @@ try {
                     Copy-Item -Path $file.FullName -Destination $destFile -Force -ErrorAction SilentlyContinue
                 }
                 
-                Write-BackupLog -Message "Differential backup for $dirName: $($changedFiles.Count) files" -Level "INFO" -LogFile $logFile
+                Write-BackupLog -Message "Differential backup for ${dirName}: $($changedFiles.Count) files" -Level "INFO" -LogFile $logFile
             }
         }
     }

@@ -1,0 +1,46 @@
+# HELIOS Platform code ownership.
+#
+# Single-owner repo today (@Yolkster64), so every rule resolves to the same
+# reviewer — the value here is the reviewed-paths STRUCTURE plus the lane
+# comments naming which agent lane authors each area (owner lanes are defined
+# in docs/architecture/FORWARD_PLAN.md). When collaborators or teams arrive,
+# swap the owner on the relevant line without redesigning the map.
+#
+# CODEOWNERS semantics: gitignore-style patterns, LAST matching rule wins —
+# keep general rules first, specific rules last. Owners without write access
+# are silently ignored by GitHub.
+
+# --- Default: everything not matched below routes to the owner. -------------
+# Authored by: any lane; reviewed through the Copilot+Codex loop, owner merges.
+*                       @Yolkster64
+
+# --- CI / workflows: owner-only lane. ----------------------------------------
+# Workflow changes alter what CI enforces, so they never ride an agent lane
+# unreviewed. Agents author via PR; the owner is always the reviewer of record.
+/.github/workflows/     @Yolkster64
+
+# --- Multi-LLM hub (C#/F# + Python spoke): Claude session + Copilot agent lane.
+/src/ai/                @Yolkster64
+
+# --- MCP server: Claude session lane (tool surface consumed by Claude Code).
+/src/mcp/               @Yolkster64
+
+# --- GUI shell (WinUI 3, Windows-only solution): Claude session dispatching
+# ui-designer/theme-designer/ux-reviewer agents (FORWARD_PLAN T5).
+/src/gui/               @Yolkster64
+
+# --- Azure infrastructure (Bicep/Terraform): Claude session authors, owner
+# applies (deploys are owner-gated OIDC via helios-deploy.yml).
+/infra/                 @Yolkster64
+
+# --- Agent instructions and skills: Claude session lane. Changes here steer
+# every future agent session — treat edits like config for the whole program.
+/.claude/               @Yolkster64
+
+# --- Architecture docs (wiki source of truth): Claude session lane.
+/docs/                  @Yolkster64
+
+# --- Governance artifacts themselves: owner-only (rulesets gate the repo).
+/.github/rulesets/      @Yolkster64
+/.github/CODEOWNERS     @Yolkster64
+/.github/dependabot.yml @Yolkster64

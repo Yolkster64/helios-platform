@@ -77,7 +77,7 @@ class ParallelMigrationCoordinator {
     [System.Collections.Generic.List[ParallelMigrationWorker]] $Workers
     [System.Collections.Generic.Queue[object]] $GlobalTaskQueue
     [hashtable] $GlobalResults
-    [MigrationProgressTracker] $ProgressTracker
+    $ProgressTracker
     [threading.ManualResetEvent] $AllTasksCompleteEvent
 
     ParallelMigrationCoordinator([int]$maxWorkers, [string]$logPath) {
@@ -85,7 +85,7 @@ class ParallelMigrationCoordinator {
         $this.Workers = [System.Collections.Generic.List[ParallelMigrationWorker]]::new()
         $this.GlobalTaskQueue = [System.Collections.Generic.Queue[object]]::new()
         $this.GlobalResults = @{}
-        $this.ProgressTracker = [MigrationProgressTracker]::new($logPath)
+        $this.ProgressTracker = New-Object MigrationProgressTracker -ArgumentList $logPath
         $this.AllTasksCompleteEvent = [threading.ManualResetEvent]::new($false)
         
         $this.InitializeWorkers()
@@ -220,11 +220,11 @@ class ParallelMigrationCoordinator {
 
 class DistributedMigrationExecutor {
     [ParallelMigrationCoordinator] $Coordinator
-    [DataTransformer] $Transformer
+    $Transformer
     [int] $ChunkSize
     [hashtable] $ExecutionLog
 
-    DistributedMigrationExecutor([int]$maxWorkers, [string]$logPath, [DataTransformer]$transformer) {
+    DistributedMigrationExecutor([int]$maxWorkers, [string]$logPath, $transformer) {
         $this.Coordinator = [ParallelMigrationCoordinator]::new($maxWorkers, $logPath)
         $this.Transformer = $transformer
         $this.ChunkSize = 100
@@ -256,7 +256,7 @@ class DistributedMigrationExecutor {
             # Create tasks for parallel execution
             $tasks = [System.Collections.Generic.List[object]]::new()
 
-            foreach ($i = 0; $i -lt $chunks.Count; $i++) {
+            for ($i = 0; $i -lt $chunks.Count; $i++) {
                 $task = @{
                     Id = "chunk_$i"
                     ChunkIndex = $i
@@ -307,10 +307,10 @@ class DistributedMigrationExecutor {
         $chunks = [System.Collections.Generic.List[System.Collections.Generic.List[hashtable]]]::new()
         
         for ($i = 0; $i -lt $records.Count; $i += $this.ChunkSize) {
-            $chunkSize = [math]::Min($this.ChunkSize, $records.Count - $i)
+            $currentChunkSize = [math]::Min($this.ChunkSize, $records.Count - $i)
             $chunk = [System.Collections.Generic.List[hashtable]]::new()
-            
-            for ($j = 0; $j -lt $chunkSize; $j++) {
+
+            for ($j = 0; $j -lt $currentChunkSize; $j++) {
                 $chunk.Add($records[$i + $j])
             }
             
@@ -387,6 +387,7 @@ class WorkDistributionEngine {
                 return 0
             }
         }
+        return 0
     }
 
     [object] GetNextWork([int]$workerId) {

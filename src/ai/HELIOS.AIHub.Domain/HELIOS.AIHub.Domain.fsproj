@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <RootNamespace>HELIOS.AIHub.Domain</RootNamespace>
     <Description>F# domain model for AIHub cost and routing decisions. Pure functions only — the C# orchestrator owns all I/O.</Description>
@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Explicit (versionless - central package management supplies 8.0.403):
+    <!-- Explicit (versionless - central package management supplies 10.1.400):
          the SDK's implicit FSharp.Core does not flow transitively under CPM,
          which strips FSharp.Core.dll from consuming C# project outputs. -->
     <PackageReference Include="FSharp.Core" />

@@ -1,0 +1,64 @@
+# Dependabot policy — HELIOS Platform.
+# Four ecosystems, all weekly, minor+patch grouped into one PR per ecosystem
+# (majors arrive as individual PRs for deliberate review). Every PR is labeled
+# "dependencies" and capped at 5 open PRs per ecosystem so the review loop
+# never drowns. No target-branch key on purpose: main is already the default,
+# and per GitHub docs setting target-branch stops these settings (groups,
+# labels) applying to security-update PRs — which would also drop them out of
+# pr-pipeline.yml's dependabot trust patterns. NuGet resolves through
+# central package management
+# (Directory.Packages.props at the repo root).
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      nuget-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+
+  # Python spoke (src/ai/python, pyproject.toml — dependency-free core with an
+  # optional [ml] extra).
+  - package-ecosystem: "pip"
+    directory: "/src/ai/python"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      pip-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Base images for docker/*.Dockerfile (helios-ai-api).
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"

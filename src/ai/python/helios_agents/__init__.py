@@ -5,4 +5,4 @@ network. The C# orchestrator invokes it as a subprocess (``python3 -m
 helios_agents``) with one JSON request on stdin and one JSON response on stdout.
 """
 
-__all__ = ["analysis", "engines", "textwork"]
+__all__ = ["analysis", "engines", "fleet_learning", "textwork"]

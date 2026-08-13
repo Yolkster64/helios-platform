@@ -1,0 +1,130 @@
+# Label-gated auto-merge enablement.
+#
+# Scope boundary: session-stewarded and owner-labeled PRs only. Adding the 'automerge'
+# label — by the repo owner or a collaborator with write/admin permission — only ARMS
+# GitHub's native auto-merge (squash); required checks still gate the actual merge, and
+# the merge fires only when they pass. This workflow never merges anything directly.
+# Removing the label disarms auto-merge again (no permission gate on disarm: it is the
+# fail-safe direction, and label removal already requires triage access).
+#
+# Hard exclusions, enforced in the run block:
+#   - PRs whose head repo is not this repository (external/fork heads) are never
+#     acted on. Tested by full_name, because this repo is itself a fork and the
+#     head.repo.fork flag is true even for same-repo PRs.
+#   - Absorption-lane branches (absorb/*, absorb-*, absorption/*, absorption-* — in any
+#     path segment, e.g. copilot/absorption-*) are never auto-merged: committing
+#     absorbed upstream code is always a deliberate
+#     human action (docs/architecture/ABSORPTION_PIPELINE.md, "Boundaries: No auto-merge").
+#
+# Known limitation: a merge performed by GITHUB_TOKEN-armed auto-merge does not trigger
+# downstream `on: push` workflows (GITHUB_TOKEN cannot cascade workflows).
+#
+# PR facts (head ref, fork flag, state) are fetched server-side via `gh api` from the
+# event's PR number rather than interpolated from `github.event.pull_request.*`, so no
+# attacker-controlled context ever enters the script or its environment as template text.
+name: Auto-merge Label Gate
+
+on:
+  pull_request:
+    types: [labeled, unlabeled]
+
+permissions:
+  contents: write      # arming auto-merge requires merge rights on the repo
+  pull-requests: write
+
+concurrency:
+  group: automerge-${{ github.event.number }}
+  cancel-in-progress: false # process label add/remove in order, never drop the disarm
+
+jobs:
+  manage-automerge:
+    name: Arm or disarm auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Every label other than 'automerge' is a no-op; skip without spending a runner step.
+    if: github.event.label.name == 'automerge'
+    steps:
+      - name: Arm or disarm auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.number }}
+          SENDER: ${{ github.event.sender.login }}
+        run: |
+          set -euo pipefail
+
+          # Server-side PR facts: authoritative, and keeps tainted contexts
+          # (branch names) out of the workflow template entirely.
+          PR_JSON="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}")"
+          HEAD_REF="$(printf '%s' "${PR_JSON}" | jq -r '.head.ref // ""')"
+          HEAD_REPO="$(printf '%s' "${PR_JSON}" | jq -r '.head.repo.full_name // ""')"
+          PR_STATE="$(printf '%s' "${PR_JSON}" | jq -r '.state // "unknown"')"
+
+          if [ "${PR_STATE}" != "open" ]; then
+            echo "::notice::Auto-merge gate: PR #${PR_NUMBER} is ${PR_STATE} - nothing to do."
+            exit 0
+          fi
+
+          # Guard: never act on external PRs — tested by full_name, NOT the
+          # .head.repo.fork flag: this repository is itself a GitHub fork, so that
+          # flag is true even for same-repo PRs and would silently disarm the whole
+          # label lane (their runs get a read-only token anyway; this keeps the run
+          # green and the policy explicit).
+          if [ "${HEAD_REPO}" != "${REPO}" ]; then
+            echo "::notice::Auto-merge gate: PR #${PR_NUMBER} head repo '${HEAD_REPO}' is not ${REPO} - auto-merge is never managed for external PRs."
+            exit 0
+          fi
+
+          # Guard: the absorption lane is explicitly excluded from any auto-merge
+          # (docs/architecture/ABSORPTION_PIPELINE.md, "Boundaries").
+          case "${HEAD_REF}" in
+            absorb/*|absorb-*|absorption/*|absorption-*|*/absorb/*|*/absorb-*|*/absorption/*|*/absorption-*)
+              echo "::notice::Auto-merge gate: head branch '${HEAD_REF}' is in the absorption lane - absorbed upstream code always merges through deliberate human review, never auto-merge."
+              exit 0
+              ;;
+          esac
+
+          if [ "${EVENT_ACTION}" = "labeled" ]; then
+            # Guard: only the repo owner or a collaborator with write/admin may arm
+            # auto-merge. The collaborator-permission API returns 'admin' for the
+            # owner, so one check covers both.
+            PERMISSION="$(gh api "/repos/${REPO}/collaborators/${SENDER}/permission" \
+              --jq '.permission // "none"' 2>/dev/null || echo "none")"
+            case "${PERMISSION}" in
+              admin|write) ;;
+              *)
+                echo "::notice::Auto-merge gate: '${SENDER}' has '${PERMISSION}' permission (write or admin required) - not arming auto-merge. Remove and re-add the label from an authorized account."
+                exit 0
+                ;;
+            esac
+
+            set +e
+            OUTPUT="$(gh pr merge --auto --squash --repo "${REPO}" "${PR_NUMBER}" 2>&1)"
+            STATUS=$?
+            set -e
+            if [ "${STATUS}" -eq 0 ]; then
+              echo "Auto-merge (squash) armed for PR #${PR_NUMBER}; it will merge only after every required check passes."
+            elif printf '%s\n' "${OUTPUT}" | grep -qiE 'auto[ -]?merge is not allowed|not allowed for this repository'; then
+              # Repo setting off: green-skip with the exact click-path instead of a red X.
+              echo "::notice::The repository setting 'Allow auto-merge' is disabled, so auto-merge cannot be armed. One-time enable: Settings -> General -> Pull Requests -> check 'Allow auto-merge'. Then remove and re-add the automerge label."
+            elif printf '%s\n' "${OUTPUT}" | grep -qi 'clean status'; then
+              echo "::notice::PR #${PR_NUMBER} already passes all checks, so GitHub refuses to arm auto-merge for it. Merge it through normal review instead."
+            else
+              printf '%s\n' "${OUTPUT}"
+              exit 1
+            fi
+          else
+            set +e
+            OUTPUT="$(gh pr merge --disable-auto --repo "${REPO}" "${PR_NUMBER}" 2>&1)"
+            STATUS=$?
+            set -e
+            if [ "${STATUS}" -eq 0 ]; then
+              echo "Auto-merge disarmed for PR #${PR_NUMBER}."
+            elif printf '%s\n' "${OUTPUT}" | grep -qiE 'not enabled|no auto[ -]?merge|not in auto[ -]?merge'; then
+              echo "::notice::Auto-merge was not armed on PR #${PR_NUMBER} - nothing to disarm."
+            else
+              printf '%s\n' "${OUTPUT}"
+              exit 1
+            fi
+          fi

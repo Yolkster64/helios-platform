@@ -106,6 +106,24 @@ param githubModelsToken string = ''
 @description('Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created.')
 param principalId string = ''
 
+// --- AI Search connection + agent capability host (opt-in) ------------------------
+// OFF by default so existing deployments are unchanged. Requires the account/project
+// created by this template (not aiServiceAccountResourceId): the module wires the
+// connection and capability hosts onto that project. Identity-based auth only — the
+// search service disables API keys entirely.
+
+@description('Deploy an Azure AI Search service, a CognitiveSearch project connection, and the account+project capability hosts that let Foundry agents use it as their vector store. OFF by default; ignored when aiServiceAccountResourceId is set.')
+param deployAiSearchConnection bool = false
+
+@description('Name for the Azure AI Search service (lowercase letters, digits, dashes; 2-60 chars). Empty string means a name is generated.')
+param aiSearchServiceName string = ''
+
+@description('SKU (pricing tier) for the Azure AI Search service.')
+param aiSearchSkuName string = 'basic'
+
+@description('Name of the Foundry project connection agents reference for AI Search.')
+param aiSearchConnectionName string = 'ai-search-connection'
+
 // --- Fleet burst VMSS (opt-in; docs/architecture/HERMES_FLEET_AND_XCORE.md) -------
 // OFF by default and doubly gated (deployFleetVmss AND a non-empty SSH key), so the
 // live rg-helios-ai stack redeploys unchanged until an operator opts in. See
@@ -149,6 +167,20 @@ param fleetRepoUrl string = 'https://github.com/Yolkster64/helios-platform'
 @description('Git ref (branch or tag) checked out on each VMSS instance.')
 param fleetRepoRef string = 'main'
 
+// --- Learning-store Azure backend (opt-in) ----------------------------------------
+// OFF by default so existing deployments are unchanged. The AIHub learning store
+// defaults to local JSONL (config/aihub.json learning.localPath); this module is the
+// Azure half of the hybrid lane.
+
+@description('Deploy the Azure Table Storage backend for the AIHub learning store: a storage account plus the aihubOutcomes table. The hub records routing outcomes to local JSONL by default (.helios/learning/outcomes.jsonl); this opt-in backend enables learning.mode=azure (or hybrid) by supplying the endpoint the hub reads from AZURE_LEARNING_TABLE_ENDPOINT (config/aihub.json learning.tableEndpointEnv). OFF by default.')
+param deployLearningStorage bool = false
+
+@description('Name for the learning storage account (3-24 lowercase letters and digits, globally unique). Empty string means a name is generated.')
+param learningStorageAccountName string = ''
+
+@description('Object ID of the principal granted Storage Table Data Contributor on the learning storage account, so the hub identity can write outcomes (shared-key auth is disabled — RBAC only). Empty string means no role assignment is created.')
+param learningStorePrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -165,6 +197,16 @@ var aiServiceExists = !empty(aiServiceAccountResourceId)
 // Both gates must open: the flag, and an SSH key (SSH-key-only auth means a VMSS
 // without a key would be undeployable anyway).
 var fleetVmssEnabled = deployFleetVmss && vmssAdminPublicKey != ''
+
+// AI Search wiring needs the account+project deployed HERE — with an existing account
+// supplied, this template creates no project to attach the connection to.
+var aiSearchEnabled = deployAiSearchConnection && !aiServiceExists
+var effectiveAiSearchName = empty(aiSearchServiceName) ? 'srch-helios-${uniqueSuffix}' : aiSearchServiceName
+
+// Storage account names allow no dashes: lowercase alphanumerics only, 3-24 chars.
+var effectiveLearningStorageName = empty(learningStorageAccountName)
+  ? 'sthelioslearn${uniqueSuffix}'
+  : learningStorageAccountName
 
 var allModelDeployments = concat(
   [
@@ -220,6 +262,24 @@ module keyVault 'modules/keyvault.bicep' = {
   }
 }
 
+// AI Search vector store for Foundry agents — search service + AAD project connection
+// + capability hosts. Opt-in (deployAiSearchConnection); a redeploy of the live stack
+// with defaults creates nothing new. NOTE: each account/project allows exactly ONE
+// capability host and updates are unsupported — if one already exists (e.g. created in
+// the portal) this module 409s; delete it first or leave this flag off.
+module aiSearch 'modules/ai-search-connection.bicep' = if (aiSearchEnabled) {
+  name: 'ai-search-${uniqueSuffix}'
+  params: {
+    accountName: foundryAccount!.outputs.accountName
+    projectName: foundryProject!.outputs.projectName
+    searchServiceName: effectiveAiSearchName
+    location: location
+    tags: tags
+    searchSkuName: aiSearchSkuName
+    connectionName: aiSearchConnectionName
+  }
+}
+
 // Hermes/Xcore fleet burst capacity — VMSS + autoscale for cloud fleet-worker
 // lanes. Conditional on BOTH deployFleetVmss and a supplied SSH public key, so a
 // redeploy of the live stack with defaults creates nothing new.
@@ -239,6 +299,20 @@ module fleetVmss 'modules/fleet-vmss.bicep' = if (fleetVmssEnabled) {
     burstMinInstances: fleetBurstMinInstances
     burstMaxInstances: fleetBurstMaxInstances
     scaleDownIdleSeconds: fleetScaleDownIdleSeconds
+  }
+}
+
+// Learning-store Azure backend — storage account + the aihubOutcomes table
+// (the exact table AzureTableLearningStore writes) for the hub's hybrid learning
+// lane. Opt-in (deployLearningStorage); a redeploy of the live stack with defaults
+// creates nothing new.
+module learningStorage 'modules/learning-storage.bicep' = if (deployLearningStorage) {
+  name: 'learning-storage-${uniqueSuffix}'
+  params: {
+    storageAccountName: effectiveLearningStorageName
+    location: location
+    tags: tags
+    principalId: learningStorePrincipalId
   }
 }
 
@@ -263,6 +337,18 @@ output keyVaultUri string = keyVault.outputs.vaultUri
 
 @description('Names of all model deployments created on the account.')
 output modelDeploymentNames array = aiServiceExists ? [] : foundryAccount!.outputs.deploymentNames
+
+@description('Azure AI Search endpoint wired to the Foundry project for agent vector storage (empty string when the AI Search connection is disabled).')
+output aiSearchEndpoint string = aiSearchEnabled ? aiSearch!.outputs.searchEndpoint : ''
+
+@description('Name of the Foundry project connection agents reference for AI Search (empty string when disabled).')
+output aiSearchConnectionName string = aiSearchEnabled ? aiSearch!.outputs.connectionName : ''
+
+@description('Resource ID of the Azure AI Search service (empty string when disabled).')
+output aiSearchServiceId string = aiSearchEnabled ? aiSearch!.outputs.searchServiceId : ''
+
+@description('Table service endpoint of the learning storage account — set it as AZURE_LEARNING_TABLE_ENDPOINT so the hub runs learning.mode=azure or hybrid (empty string when learning storage is disabled).')
+output learningTableEndpoint string = deployLearningStorage ? learningStorage!.outputs.tableEndpoint : ''
 
 @description('Name of the fleet burst VM scale set — the az vmss scale target for scripts/fleet/scale-fleet.ps1 (empty string when the VMSS is disabled).')
 output fleetVmssName string = fleetVmssEnabled ? fleetVmss!.outputs.vmssName : ''

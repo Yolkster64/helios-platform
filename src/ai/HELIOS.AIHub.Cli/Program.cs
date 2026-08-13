@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using HELIOS.AIHub;
 using HELIOS.AIHub.Abstractions;
+using HELIOS.AIHub.Fleet;
 using HELIOS.AIHub.Learning;
 
 namespace HELIOS.AIHub.Cli;
@@ -266,6 +267,55 @@ public static class Program
                 return 0;
             }
 
+            case "fleet-plan":
+            {
+                if (positionals.Count != 0)
+                {
+                    return Fail("Usage: helios-ai fleet-plan [--topology <path>] [--json]");
+                }
+                if (FindUnexpectedOption(options, "config", "topology", "json") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for fleet-plan.");
+                }
+                if (options.TryGetValue("topology", out var topologyPath)
+                    && string.IsNullOrWhiteSpace(topologyPath))
+                {
+                    return Fail("--topology requires a path.");
+                }
+                if (!TryReadFlag(options, "json", out var asJson, out var flagError))
+                {
+                    return Fail(flagError!);
+                }
+
+                var loaded = FleetTopology.TryLoad(topologyPath);
+                if (loaded.Topology is null)
+                {
+                    return Fail(loaded.Error!);
+                }
+
+                var plan = await hub.CreateFleetPlanner().PlanAsync(loaded.Topology);
+                if (asJson)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(plan, JsonOptions));
+                }
+                else
+                {
+                    foreach (var entry in plan)
+                    {
+                        var changed = !entry.LearnedChain.SequenceEqual(entry.ConfiguredChain, StringComparer.Ordinal);
+                        var chains = string.Join(" → ", entry.ConfiguredChain)
+                                     + (changed ? $"  ⇒  {string.Join(" → ", entry.LearnedChain)}" : "");
+                        Console.WriteLine($"{(changed ? "≠" : " ")} {entry.Pool,-16} {entry.TaskType,-24} " +
+                                          $"{entry.SampleCount,4} {entry.Engine,-7} {chains}");
+                    }
+                }
+                // Same advisory voice as engines/engine-plan: this command only reports.
+                Console.Error.WriteLine(
+                    "[fleet-plan is advisory only — nothing was routed, installed, or reconfigured; " +
+                    "pool chains change only by editing config/fleet/fleet-topology.json]");
+                return 0;
+            }
+
             case "absorb-status":
             {
                 if (positionals.Count != 0)
@@ -330,6 +380,10 @@ public static class Program
                           [--fleet-size N] [--cuda[=BOOL]]
                           [--include-candidates[=BOOL]]
                                                                         Recommend available implementations; candidates stay advisory
+              fleet-plan [--topology <path>] [--json]                   Score the hub's learned routing against each fleet pool's
+                                                                        configured provider chain (default topology:
+                                                                        config/fleet/fleet-topology.json). Advisory only — topology
+                                                                        changes are config edits, never made by this command
               absorb-status                                             Upstream PR watchlist + benchmark reports as JSON (read-only)
               help                                                      This text
 

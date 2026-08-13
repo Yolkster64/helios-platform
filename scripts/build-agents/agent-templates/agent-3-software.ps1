@@ -56,7 +56,7 @@ try {
     # Task 2: Install .NET runtime
     Write-Log "Task 2: Installing .NET runtime" "INFO"
     if ($DryRun) {
-        Write-Log "  [DRY RUN] Would install .NET 8.0 LTS runtime" "WARN"
+        Write-Log "  [DRY RUN] Would install .NET 10.0 LTS runtime" "WARN"
     }
     else {
         Write-Log "  .NET runtime installed" "SUCCESS"
@@ -134,7 +134,7 @@ try {
     else {
         @{
             Timestamp = Get-Date
-            Runtime = ".NET 8.0"
+            Runtime = ".NET 10.0"
             DevTools = "Git, Node.js, Python"
             Utilities = "7-Zip, VLC, SysInternals"
             Status = "Installed"
