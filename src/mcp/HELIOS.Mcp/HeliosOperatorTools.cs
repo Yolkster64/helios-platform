@@ -248,7 +248,10 @@ internal sealed class OperatorContextStore
             return current;
         }
 
-        await WriteJsonAtomicallyAsync(ProfilePath, next, cancellationToken);
+        var profileBytes = await WriteJsonAtomicallyAsync(ProfilePath, next, cancellationToken);
+        var profileDigest = Convert.ToHexString(SHA256.HashData(profileBytes)).ToLowerInvariant();
+        // The profile write is committed: complete the receipt even if the request is
+        // canceled now, so the durable profile can never exist without its journal entry.
         await AppendJournalLineAsync(
             new OperatorJournalEntry(
                 SchemaVersion: 1,
@@ -256,6 +259,7 @@ internal sealed class OperatorContextStore
                 Event: "profile-saved",
                 Surface: "operator-profile",
                 ContextSha256: null,
+                ProfileSha256: profileDigest,
                 RepositoryBranch: null,
                 RepositoryHead: null,
                 AzureSubscriptionId: null,
@@ -263,7 +267,7 @@ internal sealed class OperatorContextStore
                 ResourceGroupCount: null,
                 ResourceCount: null,
                 ChangeSummary: null),
-            cancellationToken);
+            CancellationToken.None);
         return next;
     }
 
@@ -318,7 +322,8 @@ internal sealed class OperatorContextStore
             repository,
             capturedAzure ?? azure,
             cli,
-            azureEvidenceCurrent: capturedAzure is { Status: "ready" });
+            azureEvidenceCurrent: capturedAzure is { Status: "ready" },
+            resourcesEvidenceCurrent: capturedAzure is { Status: "ready", ResourcesIncluded: true });
 
         var snapshot = new OperatorContextSnapshot(
             SchemaVersion: 1,
@@ -330,6 +335,7 @@ internal sealed class OperatorContextStore
             Azure: azure,
             AzureCaptureFailure: capturedAzure is null or { Status: "ready" } ? null : capturedAzure,
             AzureCaptureStatus: capturedAzure?.Status,
+            AzureCaptureIncludedResources: capturedAzure is { Status: "ready", ResourcesIncluded: true },
             Changes: changes,
             NextSteps: nextSteps);
 
@@ -337,6 +343,8 @@ internal sealed class OperatorContextStore
         // the journal receipt.
         var contextBytes = await WriteJsonAtomicallyAsync(ContextPath, snapshot, cancellationToken);
         var digest = Convert.ToHexString(SHA256.HashData(contextBytes)).ToLowerInvariant();
+        // The context write is committed: complete the receipt with CancellationToken.None
+        // so a canceled request can never leave a durable context without a journal entry.
         await AppendJournalLineAsync(
             new OperatorJournalEntry(
                 SchemaVersion: 1,
@@ -344,6 +352,7 @@ internal sealed class OperatorContextStore
                 Event: "context-synced",
                 Surface: surface,
                 ContextSha256: digest,
+                ProfileSha256: null,
                 RepositoryBranch: repository.Branch,
                 RepositoryHead: repository.HeadSha,
                 AzureSubscriptionId: azure.SubscriptionId,
@@ -355,7 +364,7 @@ internal sealed class OperatorContextStore
                 ResourceGroupCount: azure.ResourceGroups.Count,
                 ResourceCount: azure.Resources.Count,
                 ChangeSummary: changes.Summary),
-            cancellationToken);
+            CancellationToken.None);
         return snapshot;
     }
 
@@ -369,13 +378,20 @@ internal sealed class OperatorContextStore
         var snapshot = GetLatestContext();
         var profile = GetProfile();
         return snapshot is null
-            ? BuildNextSteps(profile, RepositorySnapshot.Empty, AzureSnapshot.NotRequested, _cliDetector(), azureEvidenceCurrent: false)
+            ? BuildNextSteps(
+                profile,
+                RepositorySnapshot.Empty,
+                AzureSnapshot.NotRequested,
+                _cliDetector(),
+                azureEvidenceCurrent: false,
+                resourcesEvidenceCurrent: false)
             : BuildNextSteps(
                 profile,
                 snapshot.Repository,
                 snapshot.AzureCaptureFailure ?? snapshot.Azure,
                 snapshot.CliAvailability,
-                azureEvidenceCurrent: snapshot.AzureCaptureStatus == "ready");
+                azureEvidenceCurrent: snapshot.AzureCaptureStatus == "ready",
+                resourcesEvidenceCurrent: snapshot.AzureCaptureIncludedResources);
     }
 
     internal IReadOnlyList<OperatorNextStep> BuildNextSteps(
@@ -383,7 +399,8 @@ internal sealed class OperatorContextStore
         RepositorySnapshot repository,
         AzureSnapshot azure,
         IReadOnlyDictionary<string, bool> cli,
-        bool azureEvidenceCurrent)
+        bool azureEvidenceCurrent,
+        bool resourcesEvidenceCurrent)
     {
         var steps = new List<OperatorNextStep>();
 
@@ -425,7 +442,11 @@ internal sealed class OperatorContextStore
                 "git switch -c <task-branch>",
                 "none"));
         }
-        else if (repository.IsDirty == true)
+
+        // Independent of the branch-state proposal: a dirty checkout on main or a
+        // detached HEAD must still get the diff-review step, or uncommitted unrelated
+        // changes would be carried into the new task branch unreviewed.
+        if (repository.IsDirty == true)
         {
             steps.Add(new OperatorNextStep(
                 "review-local-diff",
@@ -490,6 +511,17 @@ internal sealed class OperatorContextStore
                     "Re-run helios_operator_context_sync with includeAzure=true and includeResources=true.",
                     "none"));
             }
+            else if (!resourcesEvidenceCurrent)
+            {
+                // Groups are fresh but the resource inventory was carried forward from an
+                // earlier resource-inclusive sync: it is delta evidence, not plan evidence.
+                steps.Add(new OperatorNextStep(
+                    "refresh-resource-inventory",
+                    "Refresh the resource inventory",
+                    "Resource groups are current, but the resource inventory is carried forward from an earlier sync; do not plan against it without refreshing.",
+                    "Re-run helios_operator_context_sync with includeAzure=true and includeResources=true.",
+                    "none"));
+            }
             else
             {
                 steps.Add(new OperatorNextStep(
@@ -499,6 +531,24 @@ internal sealed class OperatorContextStore
                     "Follow infra/README.md and save the what-if output before apply.",
                     "review"));
             }
+        }
+        else if (azure.Status == "partial")
+        {
+            steps.Add(new OperatorNextStep(
+                "retry-resource-inventory",
+                "Retry the resource inventory",
+                azure.ErrorHint ?? "Resource groups were captured, but the resource inventory failed.",
+                "Re-run helios_operator_context_sync with includeAzure=true and includeResources=true.",
+                "none"));
+        }
+        else if (azure.Status == "error")
+        {
+            steps.Add(new OperatorNextStep(
+                "retry-azure-inventory",
+                "Retry the Azure inventory",
+                azure.ErrorHint ?? "The Azure CLI returned an error during capture.",
+                "Check az account show / az group list manually, then re-run helios_operator_context_sync with includeAzure=true.",
+                "review"));
         }
 
         if (!IsCliAvailable(cli, "claude") && !IsCliAvailable(cli, "codex") && !IsCliAvailable(cli, "copilot"))
@@ -552,6 +602,14 @@ internal sealed class OperatorContextStore
         // Detached HEAD is a successful branch query with empty output — distinct from a
         // failed query, and it needs its own task-branch safeguard downstream.
         var isDetachedHead = branchResult.Started && branchResult.ExitCode == 0 && branch is null;
+        var isMainBranch = string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase);
+        // Branch metadata flows into context.json, the journal, and tool output, so a
+        // credential-looking branch name (e.g. incident/sk-...) gets the same keyed
+        // fingerprint redaction as profile fields and Azure tags.
+        if (branch is not null && SensitiveValue.IsMatch(branch))
+        {
+            branch = RedactValue(branch);
+        }
         var remote = await RunGitValueAsync(new[] { "remote", "get-url", "origin" }, cancellationToken);
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
 
@@ -564,7 +622,7 @@ internal sealed class OperatorContextStore
             IsDirty: status.Started && status.ExitCode == 0
                 ? !string.IsNullOrWhiteSpace(status.StandardOutput)
                 : null,
-            IsMainBranch: string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase),
+            IsMainBranch: isMainBranch,
             IsDetachedHead: isDetachedHead);
     }
 
@@ -642,6 +700,7 @@ internal sealed class OperatorContextStore
         }
 
         var groups = ParseResourceGroups(groupsResult.StandardOutput, out var groupsTruncated);
+        var tagSaltId = GetTagSaltId();
         IReadOnlyList<AzureResourceSnapshot> resources = Array.Empty<AzureResourceSnapshot>();
         var resourcesTruncated = false;
         if (includeResources)
@@ -669,7 +728,8 @@ internal sealed class OperatorContextStore
                     ResourcesTruncated: false,
                     ErrorHint: $"Resource groups were saved, but resource inventory failed: {SanitizeError(resourcesResult.StandardError)}",
                     SubscriptionState: subscriptionState,
-                    CapturedAtUtc: capturedAtUtc);
+                    CapturedAtUtc: capturedAtUtc,
+                    TagSaltId: tagSaltId);
             }
 
             resources = ParseResources(resourcesResult.StandardOutput, out resourcesTruncated);
@@ -687,7 +747,8 @@ internal sealed class OperatorContextStore
             ResourcesTruncated: resourcesTruncated,
             ErrorHint: null,
             SubscriptionState: subscriptionState,
-            CapturedAtUtc: capturedAtUtc);
+            CapturedAtUtc: capturedAtUtc,
+            TagSaltId: tagSaltId);
     }
 
     /// <summary>
@@ -702,6 +763,9 @@ internal sealed class OperatorContextStore
         var digest = HMACSHA256.HashData(GetOrCreateTagSalt(), Encoding.UTF8.GetBytes(value));
         return $"<redacted:{Convert.ToHexString(digest.AsSpan(0, 6)).ToLowerInvariant()}>";
     }
+
+    private string GetTagSaltId() =>
+        Convert.ToHexString(SHA256.HashData(GetOrCreateTagSalt()).AsSpan(0, 4)).ToLowerInvariant();
 
     private byte[] GetOrCreateTagSalt()
     {
@@ -828,7 +892,12 @@ internal sealed class OperatorContextStore
             || !string.Equals(prior.TenantId, current.TenantId, StringComparison.OrdinalIgnoreCase)
             // Items whose tag maps were truncated cannot prove "unchanged".
             || prior.ResourceGroups.Any(group => group.TagsTruncated)
-            || current.ResourceGroups.Any(group => group.TagsTruncated))
+            || current.ResourceGroups.Any(group => group.TagsTruncated)
+            // Redaction fingerprints are keyed by the per-checkout salt: captures made
+            // under different salts (e.g. tag-salt.bin lost in a partial restore) would
+            // read as every redacted tag changing at once, so they are not comparable.
+            || prior.TagSaltId is null
+            || !string.Equals(prior.TagSaltId, current.TagSaltId, StringComparison.OrdinalIgnoreCase))
         {
             return OperatorChangeSet.NotComparable;
         }
@@ -851,8 +920,8 @@ internal sealed class OperatorContextStore
         var resourcesChanged = Array.Empty<string>();
         if (resourcesComparable)
         {
-            var oldResources = prior.Resources.ToDictionary(ResourceKey, StringComparer.OrdinalIgnoreCase);
-            var newResources = current.Resources.ToDictionary(ResourceKey, StringComparer.OrdinalIgnoreCase);
+            var oldResources = BuildResourceIndex(prior.Resources);
+            var newResources = BuildResourceIndex(current.Resources);
             resourcesAdded = newResources.Keys.Except(oldResources.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
             resourcesRemoved = oldResources.Keys.Except(newResources.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
             resourcesChanged = newResources.Keys.Intersect(oldResources.Keys, StringComparer.OrdinalIgnoreCase)
@@ -877,8 +946,26 @@ internal sealed class OperatorContextStore
             Summary: summary);
     }
 
+    /// <summary>
+    /// Keys primarily by the Azure resource ID, which is unique — child/extension
+    /// resources under different parents can legitimately share resourceGroup+type+leaf
+    /// name, so the composite is only a fallback when the ID is absent.
+    /// </summary>
     private static string ResourceKey(AzureResourceSnapshot resource) =>
-        $"{resource.ResourceGroup ?? "<none>"}|{resource.Type}|{resource.Name}";
+        resource.Id ?? $"{resource.ResourceGroup ?? "<none>"}|{resource.Type}|{resource.Name}";
+
+    private static Dictionary<string, AzureResourceSnapshot> BuildResourceIndex(
+        IReadOnlyList<AzureResourceSnapshot> resources)
+    {
+        // Last-wins indexer instead of ToDictionary: a residual duplicate key (only
+        // possible for ID-less entries) must never abort the whole context update.
+        var index = new Dictionary<string, AzureResourceSnapshot>(StringComparer.OrdinalIgnoreCase);
+        foreach (var resource in resources)
+        {
+            index[ResourceKey(resource)] = resource;
+        }
+        return index;
+    }
 
     private static bool ResourceGroupEquals(AzureResourceGroupSnapshot left, AzureResourceGroupSnapshot right) =>
         string.Equals(left.Location, right.Location, StringComparison.OrdinalIgnoreCase)
@@ -1356,7 +1443,10 @@ internal sealed record OperatorContextSnapshot(
     AzureSnapshot? AzureCaptureFailure = null,
     // Status of THIS sync's Azure capture attempt (null = not requested). "ready" is the
     // only value under which the stored Azure inventory is current planning evidence.
-    string? AzureCaptureStatus = null);
+    string? AzureCaptureStatus = null,
+    // True only when THIS sync's capture was ready AND resource-inclusive; a carried
+    // resource inventory keeps ResourcesIncluded=true on the baseline but is not current.
+    bool AzureCaptureIncludedResources = false);
 
 internal sealed record RepositorySnapshot(
     string Status,
@@ -1387,7 +1477,11 @@ internal sealed record AzureSnapshot(
     string? SubscriptionState = null,
     // When this inventory was actually captured from az. A baseline carried forward
     // across later syncs keeps its original timestamp, so staleness stays visible.
-    DateTimeOffset? CapturedAtUtc = null)
+    DateTimeOffset? CapturedAtUtc = null,
+    // Identity (first 8 hex of SHA-256) of the redaction salt used for this capture's
+    // tag fingerprints. Captures made under different salts are not comparable — a
+    // regenerated salt would otherwise read as every redacted tag changing at once.
+    string? TagSaltId = null)
 {
     internal static readonly AzureSnapshot NotRequested = Empty("not-requested", null);
     internal static readonly AzureSnapshot CliUnavailable = Empty("cli-unavailable", "Azure CLI was not found on PATH.");
@@ -1462,6 +1556,7 @@ internal sealed record OperatorJournalEntry(
     string Event,
     string Surface,
     string? ContextSha256,
+    string? ProfileSha256,
     string? RepositoryBranch,
     string? RepositoryHead,
     string? AzureSubscriptionId,

@@ -82,6 +82,8 @@ public sealed class OperatorContextToolsTests : IDisposable
     [InlineData("clientSecret")]
     [InlineData("sasToken")]
     [InlineData("SASToken")]
+    [InlineData("APIKey")]
+    [InlineData("DBPassword")]
     [InlineData("secretValue")]
     public async Task SaveProfile_RejectsCaseDelimitedCredentialTagNames(string tagName)
     {
@@ -94,6 +96,24 @@ public sealed class OperatorContextToolsTests : IDisposable
             $"{{\"{tagName}\":\"rotate-me\"}}",
             null,
             CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("SASH")]
+    [InlineData("Tokenizer")]
+    public async Task SaveProfile_AcceptsWordsThatMerelyContainCredentialStems(string tagName)
+    {
+        var store = CreateStore(new FakeCommandRunner());
+
+        var saved = await store.SaveProfileAsync(
+            null,
+            null,
+            null,
+            $"{{\"{tagName}\":\"plain-value\"}}",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("plain-value", saved.DefaultTags[tagName]);
     }
 
     [Fact]
@@ -172,8 +192,12 @@ public sealed class OperatorContextToolsTests : IDisposable
         Assert.Contains("rg-ai", second.Changes.ResourceGroupsAdded);
         Assert.Contains("rg-core", second.Changes.ResourceGroupsChanged);
         Assert.True(second.Changes.ResourcesComparable);
-        Assert.Contains("rg-ai|Microsoft.KeyVault/vaults|helios-kv", second.Changes.ResourcesAdded);
-        Assert.Contains("rg-core|Microsoft.Compute/virtualMachines|helios-vm", second.Changes.ResourcesChanged);
+        Assert.Contains(
+            "/subscriptions/sub-1/resourceGroups/rg-ai/providers/Microsoft.KeyVault/vaults/helios-kv",
+            second.Changes.ResourcesAdded);
+        Assert.Contains(
+            "/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.Compute/virtualMachines/helios-vm",
+            second.Changes.ResourcesChanged);
 
         var context = File.ReadAllText(store.ContextPath);
         Assert.False(context.Contains(FakeCommandRunner.CredentialLike, StringComparison.OrdinalIgnoreCase));
@@ -404,7 +428,9 @@ public sealed class OperatorContextToolsTests : IDisposable
         runner.SnapshotVersion = 2;
         var third = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
         Assert.True(third.Changes.ResourcesComparable);
-        Assert.Contains("rg-ai|Microsoft.KeyVault/vaults|helios-kv", third.Changes.ResourcesAdded);
+        Assert.Contains(
+            "/subscriptions/sub-1/resourceGroups/rg-ai/providers/Microsoft.KeyVault/vaults/helios-kv",
+            third.Changes.ResourcesAdded);
     }
 
     [Fact]
@@ -490,6 +516,139 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task NextSteps_CarriedResourceInventory_IsNotPlanEvidence()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.Contains(store.GetCurrentNextSteps(), step => step.Id == "review-azure-plan");
+
+        // Groups-only ready sync: the baseline keeps the carried resources for deltas,
+        // but read-time next steps must demand a fresh resource-inclusive sync.
+        var groupsOnly = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.True(groupsOnly.Azure.ResourcesIncluded);
+        var readTime = store.GetCurrentNextSteps();
+        Assert.Contains(readTime, step => step.Id == "refresh-resource-inventory");
+        Assert.DoesNotContain(readTime, step => step.Id == "review-azure-plan");
+
+        // A fresh resource-inclusive sync restores the plan recommendation.
+        await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.Contains(store.GetCurrentNextSteps(), step => step.Id == "review-azure-plan");
+    }
+
+    [Fact]
+    public async Task ContextSync_DuplicateResourceLeafNames_DoNotAbortTheSync()
+    {
+        var runner = new FakeCommandRunner { DuplicateResourceLeafNames = true };
+        var store = CreateStore(runner);
+
+        var first = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        var second = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+
+        Assert.Equal(2, first.Azure.Resources.Count);
+        Assert.True(second.Changes.ResourcesComparable);
+        Assert.Empty(second.Changes.ResourcesAdded);
+        Assert.Empty(second.Changes.ResourcesRemoved);
+        Assert.Empty(second.Changes.ResourcesChanged);
+    }
+
+    [Fact]
+    public async Task ContextSync_CanceledBeforeCommit_LeavesNoHalfState()
+    {
+        using var cts = new CancellationTokenSource();
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        runner.OnCommand = cts.Cancel;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            store.SyncAsync("manual", includeAzure: false, includeResources: false, cts.Token));
+
+        // Pre-commit cancellation must leave neither a context nor a dangling receipt;
+        // post-commit, the journal append runs under CancellationToken.None so a durable
+        // context can never exist without its receipt.
+        Assert.False(File.Exists(store.ContextPath));
+        Assert.False(File.Exists(store.JournalPath));
+    }
+
+    [Fact]
+    public async Task ContextSync_PartialAndErrorCaptures_GetRecoverySteps()
+    {
+        var runner = new FakeCommandRunner { AzureResourceListFails = true };
+        var store = CreateStore(runner);
+        var partial = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.Equal("partial", partial.AzureCaptureFailure?.Status);
+        Assert.Contains(partial.NextSteps, step => step.Id == "retry-resource-inventory");
+
+        runner.AzureResourceListFails = false;
+        runner.AzureGroupListFails = true;
+        var error = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.Equal("error", error.AzureCaptureFailure?.Status);
+        Assert.Contains(error.NextSteps, step => step.Id == "retry-azure-inventory");
+        // The read-time tool surfaces the same recovery step from the stored failure.
+        Assert.Contains(store.GetCurrentNextSteps(), step => step.Id == "retry-azure-inventory");
+    }
+
+    [Fact]
+    public async Task ContextSync_CredentialLookingBranchName_IsRedactedEverywhere()
+    {
+        var rawBranch = $"incident/sk-{new string('z', 24)}";
+        var runner = new FakeCommandRunner { BranchName = rawBranch };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Repository.Branch);
+        Assert.False(snapshot.Repository.IsMainBranch);
+        Assert.DoesNotContain(rawBranch, File.ReadAllText(store.ContextPath), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(rawBranch, File.ReadAllText(store.JournalPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContextSync_DirtyCheckoutOnMain_GetsBothBranchAndDiffSteps()
+    {
+        var runner = new FakeCommandRunner { BranchName = "main", GitStatusDirty = true };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.True(snapshot.Repository.IsMainBranch);
+        Assert.True(snapshot.Repository.IsDirty);
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "create-task-branch");
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "review-local-diff");
+    }
+
+    [Fact]
+    public async Task ContextSync_RegeneratedSalt_MakesCapturesNonComparable()
+    {
+        var runner = new FakeCommandRunner();
+        var storeBefore = CreateStore(runner);
+        var first = await storeBefore.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.NotNull(first.Azure.TagSaltId);
+
+        // Simulate a partial restore: context.json survives, the salt file does not.
+        File.Delete(Path.Combine(storeBefore.OperatorDirectory, "tag-salt.bin"));
+        var storeAfter = CreateStore(runner);
+        var second = await storeAfter.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.NotNull(second.Azure.TagSaltId);
+        Assert.NotEqual(first.Azure.TagSaltId, second.Azure.TagSaltId);
+        Assert.False(second.Changes.Comparable);
+    }
+
+    [Fact]
+    public async Task SaveProfile_JournalReceipt_MatchesProfileFileBytes()
+    {
+        var store = CreateStore(new FakeCommandRunner());
+
+        await store.SaveProfileAsync("John", null, null, null, null, CancellationToken.None);
+
+        using var entry = JsonDocument.Parse(File.ReadLines(store.JournalPath).Last());
+        var recordedSha = entry.RootElement.GetProperty("profileSha256").GetString();
+        var diskSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(store.ProfilePath))).ToLowerInvariant();
+        Assert.Equal(diskSha, recordedSha);
+    }
+
+    [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
         // Sync holds the lock across four git commands and all three Azure reads; the
@@ -557,8 +716,13 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal int SnapshotVersion { get; set; } = 1;
         internal bool GitAvailable { get; set; } = true;
         internal bool GitStatusFails { get; set; }
+        internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
+        internal string BranchName { get; set; } = "integration/claude-code-operator-plugin";
         internal bool AzureNotAuthenticated { get; set; }
+        internal bool AzureGroupListFails { get; set; }
+        internal bool AzureResourceListFails { get; set; }
+        internal bool DuplicateResourceLeafNames { get; set; }
         internal string SubscriptionId { get; set; } = "sub-1";
         internal string SubscriptionState { get; set; } = "Enabled";
         internal string CredentialValue { get; set; } = CredentialLike;
@@ -591,12 +755,12 @@ public sealed class OperatorContextToolsTests : IDisposable
             return command switch
             {
                 ["branch", "--show-current"] => Success(
-                    DetachedHead ? string.Empty : "integration/claude-code-operator-plugin\n"),
+                    DetachedHead ? string.Empty : BranchName + "\n"),
                 ["rev-parse", "HEAD"] => Success("0123456789abcdef\n"),
                 ["remote", "get-url", "origin"] => Success("git@github.com:Yolkster64/helios-platform.git\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: unable to read the index")
-                    : Success(string.Empty),
+                    : Success(GitStatusDirty ? " M src/some-file.cs\n" : string.Empty),
                 _ => new CommandResult(true, 1, string.Empty, "unexpected git command"),
             };
         }
@@ -624,12 +788,26 @@ public sealed class OperatorContextToolsTests : IDisposable
             }
             if (arguments.Take(2).SequenceEqual(new[] { "group", "list" }))
             {
+                if (AzureGroupListFails)
+                {
+                    return new CommandResult(true, 1, string.Empty, "The group listing request was rejected.");
+                }
                 return Success(SnapshotVersion == 1
                     ? "[{\"name\":\"rg-core\",\"location\":\"southcentralus\",\"provisioningState\":\"Succeeded\",\"tags\":" + GroupTagsJson() + "}]"
                     : "[{\"name\":\"rg-core\",\"location\":\"centralus\",\"provisioningState\":\"Succeeded\",\"tags\":{\"project\":\"helios\"}},{\"name\":\"rg-ai\",\"location\":\"centralus\",\"provisioningState\":\"Succeeded\",\"tags\":{}}]");
             }
             if (arguments.Take(2).SequenceEqual(new[] { "resource", "list" }))
             {
+                if (AzureResourceListFails)
+                {
+                    return new CommandResult(true, 1, string.Empty, "The resource listing request timed out.");
+                }
+                if (DuplicateResourceLeafNames)
+                {
+                    return Success(
+                        "[{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.Sql/servers/srv1/databases/master\",\"name\":\"master\",\"type\":\"Microsoft.Sql/servers/databases\",\"location\":\"southcentralus\",\"resourceGroup\":\"rg-core\",\"tags\":{}},"
+                        + "{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.Sql/servers/srv2/databases/master\",\"name\":\"master\",\"type\":\"Microsoft.Sql/servers/databases\",\"location\":\"southcentralus\",\"resourceGroup\":\"rg-core\",\"tags\":{}}]");
+                }
                 return Success(SnapshotVersion == 1
                     ? "[{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.Compute/virtualMachines/helios-vm\",\"name\":\"helios-vm\",\"type\":\"Microsoft.Compute/virtualMachines\",\"location\":\"southcentralus\",\"resourceGroup\":\"rg-core\",\"tags\":{}}]"
                     : "[{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.Compute/virtualMachines/helios-vm\",\"name\":\"helios-vm\",\"type\":\"Microsoft.Compute/virtualMachines\",\"location\":\"centralus\",\"resourceGroup\":\"rg-core\",\"tags\":{}},{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-ai/providers/Microsoft.KeyVault/vaults/helios-kv\",\"name\":\"helios-kv\",\"type\":\"Microsoft.KeyVault/vaults\",\"location\":\"centralus\",\"resourceGroup\":\"rg-ai\",\"tags\":{}}]");
