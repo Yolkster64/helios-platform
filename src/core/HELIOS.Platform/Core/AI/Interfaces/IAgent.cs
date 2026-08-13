@@ -93,7 +93,7 @@ namespace HELIOS.Platform.Core.AI.Interfaces
     public class AgentRequest
     {
         public string RequestId { get; set; } = Guid.NewGuid().ToString();
-        public string Operation { get; set; }
+        public string Operation { get; set; } = string.Empty;
         public Dictionary<string, object> Parameters { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
@@ -104,10 +104,10 @@ namespace HELIOS.Platform.Core.AI.Interfaces
     /// </summary>
     public class AgentResult
     {
-        public string RequestId { get; set; }
+        public string RequestId { get; set; } = string.Empty;
         public bool Success { get; set; }
-        public object ResultData { get; set; }
-        public string ErrorMessage { get; set; }
+        public object? ResultData { get; set; }
+        public string? ErrorMessage { get; set; }
         public TimeSpan ExecutionTime { get; set; }
         public DateTime CompletedAt { get; set; } = DateTime.UtcNow;
     }

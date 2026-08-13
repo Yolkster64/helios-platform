@@ -6,18 +6,38 @@ One tool surface for every agent. The HELIOS MCP server (stdio) exposes the mult
 `helios_task_routing_get`, `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
 `helios_infra_validate`, `helios_azure_inventory_get`, `helios_auth_status_get`,
 `helios_fleet_plan_get`, `helios_foundry_agent_list`,
-`helios_foundry_agent_create`) to any MCP
+`helios_foundry_agent_create`,
+`helios_operator_profile_get`, `helios_operator_profile_save`,
+`helios_operator_context_sync`, `helios_operator_next_steps_get`) to any MCP
 client, so Claude Code, GitHub Copilot, Codex CLI, and Cursor all drive the same providers
 with the same routing table. This is the cross-LLM fabric: each assistant can delegate to
 whichever model is best for the task.
 
-Prereqs: .NET 8 SDK; provider keys in the environment (see `.env.template`). Build once
+Prereqs: .NET 10 SDK; provider keys in the environment (see `.env.template`). Build once
 with `dotnet build HELIOS.sln -c Release`.
 
 ## Claude Code
 
 Already wired: `.mcp.json` at the repo root is picked up automatically when you open this
 repo. Verify with `/mcp`.
+
+For the packaged skill and specialist agent, test the checked-out plugin directly:
+
+```bash
+claude --plugin-dir ./plugins/helios-operator
+```
+
+Or install it from the repository marketplace after it reaches the default branch:
+
+```text
+/plugin marketplace add Yolkster64/helios-platform
+/plugin install helios-operator@helios-platform
+```
+
+Choose project scope, then invoke `/helios-operator:operate-helios` or mention
+`@helios-operator:fabric-operator`. The plugin adds the skill and agent only — the MCP
+server itself still comes from the repo-level `.mcp.json`, so enabling the plugin does
+not produce duplicate `helios_*` tools or a second server process.
 
 ## VS Code / GitHub Copilot
 
@@ -77,6 +97,8 @@ All tools are non-destructive. `helios_ai_*` call LLM providers (network, token 
 that separate implemented/runtime-available selections from candidates and never install
 or execute candidates;
 `helios_infra_validate` compiles `infra/main.bicep` locally with no subscription access;
+`helios_absorb_status_get` / `helios_fleet_status_get` are read-only local reads of the
+absorption watchlist and fleet run state;
 `helios_azure_inventory_get` is a strictly read-only Azure management-plane inventory
 (subscription, resource groups, resources via DefaultAzureCredential) — it lists and
 never creates, changes, or deletes anything, and without working credentials it returns
@@ -98,4 +120,8 @@ The one explicit mutation is `helios_foundry_agent_create`: it creates a single
 persistent agent on the Foundry project — parameters are validated before any network
 call, exactly one create is issued per call (never retried), and nothing is deleted,
 overwritten, or executed.
+`helios_operator_profile_save` and `helios_operator_context_sync` write only sanitized,
+gitignored files under `.helios/operator/`; Azure inventory is opt-in and uses read-only
+CLI commands. The other operator tools are local reads. Context is durable per checkout,
+not a cross-machine secret store, and should be refreshed before external decisions.
 Deployment tools are deliberately absent from v1 — see `docs/architecture/ROADMAP_MULTI_LLM.md`.

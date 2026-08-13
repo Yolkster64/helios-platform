@@ -15,7 +15,7 @@ namespace HELIOS.Platform.Core.AI.Router
         /// <summary>
         /// Registers an agent with the router
         /// </summary>
-        void RegisterAgent(Interfaces.IAgent agent, string[] tags = null);
+        void RegisterAgent(Interfaces.IAgent agent, string[]? tags = null);
 
         /// <summary>
         /// Unregisters an agent from the router
@@ -40,7 +40,7 @@ namespace HELIOS.Platform.Core.AI.Router
         /// <summary>
         /// Gets available agents matching criteria
         /// </summary>
-        IReadOnlyList<Interfaces.IAgent> GetAvailableAgents(string[] tags = null);
+        IReadOnlyList<Interfaces.IAgent> GetAvailableAgents(string[]? tags = null);
 
         /// <summary>
         /// Gets router statistics
@@ -73,7 +73,7 @@ namespace HELIOS.Platform.Core.AI.Router
         /// <summary>
         /// Selects the best agent for the request
         /// </summary>
-        Interfaces.IAgent SelectAgent(
+        Interfaces.IAgent? SelectAgent(
             AgentRoutingRequest request,
             IReadOnlyList<Interfaces.IAgent> availableAgents);
 
@@ -104,10 +104,10 @@ namespace HELIOS.Platform.Core.AI.Router
     /// </summary>
     public class RoutingResult
     {
-        public string RequestId { get; set; }
-        public Interfaces.IAgent SelectedAgent { get; set; }
+        public string RequestId { get; set; } = string.Empty;
+        public Interfaces.IAgent? SelectedAgent { get; set; }
         public double ScoreMetric { get; set; }
-        public string StrategyUsed { get; set; }
+        public string StrategyUsed { get; set; } = string.Empty;
         public TimeSpan RoutingLatency { get; set; }
         public bool CacheHit { get; set; }
     }
@@ -117,9 +117,10 @@ namespace HELIOS.Platform.Core.AI.Router
     /// </summary>
     public class RoutingResultSet
     {
-        public string RequestId { get; set; }
-        public IReadOnlyList<(Interfaces.IAgent Agent, double Score)> SelectedAgents { get; set; }
-        public string StrategyUsed { get; set; }
+        public string RequestId { get; set; } = string.Empty;
+        public IReadOnlyList<(Interfaces.IAgent Agent, double Score)> SelectedAgents { get; set; } =
+            Array.Empty<(Interfaces.IAgent Agent, double Score)>();
+        public string StrategyUsed { get; set; } = string.Empty;
         public TimeSpan RoutingLatency { get; set; }
     }
 

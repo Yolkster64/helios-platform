@@ -1,0 +1,14 @@
+{
+  "name": "helios-operator",
+  "displayName": "HELIOS Operator",
+  "version": "0.1.0",
+  "description": "Connects Claude Code to the HELIOS MCP fabric and a sanitized, durable repo/Azure operating context.",
+  "author": {
+    "name": "HELIOS Development Team",
+    "url": "https://github.com/Yolkster64"
+  },
+  "homepage": "https://github.com/Yolkster64/helios-platform/tree/main/docs/architecture/CLAUDE_CODE_OPERATOR_PLUGIN.md",
+  "repository": "https://github.com/Yolkster64/helios-platform",
+  "license": "MIT",
+  "keywords": ["azure", "claude-code", "mcp", "multi-llm", "operator"]
+}

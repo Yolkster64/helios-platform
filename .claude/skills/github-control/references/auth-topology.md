@@ -16,15 +16,19 @@ capability, not convenience — several capabilities are exclusive to one surfac
 
 ## 1. Actions `GITHUB_TOKEN`: deny-all default, per-job opt-ins
 
-The exemplar is `.github/workflows/claude-foundry.yml`: workflow-level
-`permissions: {}` at line 24, then each job opts into exactly what it needs —
-`contents: read` + `issues: write` + `pull-requests: write` + `id-token: write`
-for the owner-comment review job (`claude-foundry.yml:46-50`), `contents: read`
-+ `id-token: write` for manual review (`:124-126`), and a deliberate authority
-split for implementation: the Azure-authenticated job is GitHub-read-only
-(`:180-183`) while the publish job has `contents: write` +
-`pull-requests: write` but **no** `id-token: write` (`:251-253`) — the header
-comment at `:21-23` states the design.
+The exemplar is the claude-foundry pair — `.github/workflows/claude-foundry.yml`
+(owner-dispatched lanes) and `.github/workflows/claude-foundry-comment-review.yml`
+(the owner-comment review lane): workflow-level `permissions: {}` in both files
+(`claude-foundry.yml:22`, `claude-foundry-comment-review.yml:7`), then each job
+opts into exactly what it needs — `contents: read` + `issues: write` +
+`pull-requests: write` + `id-token: write` for the owner-comment review job
+(`claude-foundry-comment-review.yml:31-35`), `contents: read` +
+`id-token: write` for manual review (`claude-foundry.yml:40-42`), and a
+deliberate authority split for implementation: the Azure-authenticated job is
+GitHub-read-only (`claude-foundry.yml:130-133`) while the publish job has
+`contents: write` + `pull-requests: write` but **no** `id-token: write`
+(`:282-284`) — the header comment at `claude-foundry.yml:19-21` states the
+design.
 
 The contrast is the backlog: **seven workflows have no `permissions:` block at
 all** (verified by grep, 2026-08-13): `analysis.yml`, `code-checks.yml`,
@@ -109,12 +113,14 @@ separate read-only identity (`:120-122`).
 *identifiers, not secrets*, and live as repository **variables**, but legacy
 setups stored them as secrets — so consumers resolve both:
 `${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}` (and tenant/
-subscription likewise) in `helios-deploy.yml:62-64` and
-`claude-foundry.yml:61-63,76-78`. PR #102 (squash commit `57512b0`, verified
-against the GitHub API: it touches only `claude-foundry.yml`) brought
-claude-foundry in line with helios-deploy. The claude-foundry preflight prints
+subscription likewise) in `helios-deploy.yml:62-64`,
+`claude-foundry.yml:67-69,86-88`, and
+`claude-foundry-comment-review.yml:59-61,74-76`. PR #102 (squash commit
+`57512b0`, verified against the GitHub API: it touches only
+`claude-foundry.yml`, which then still carried the comment lane) brought
+claude-foundry in line with helios-deploy. The comment-lane preflight prints
 the no-secret contract explicitly: *"No client secret is used."*
-(`claude-foundry.yml:69`).
+(`claude-foundry-comment-review.yml:67`).
 
 **The one remaining anti-pattern** — `deploy.yml:25-30` still maps
 `AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}` into its env
@@ -186,9 +192,10 @@ Entra ID via `DefaultAzureCredential` (`.env.template:60`).
 The Azure side of CI is already automatic: `scripts/bootstrap/azure-oidc-setup.sh`
 federates the two subjects (`:112-115`, deliberately no `pull_request` subject —
 `:117-130`), and the consumers log in with identifiers only —
-`helios-deploy.yml:54-64` (azure/login, no creds JSON, no client secret) and
-`claude-foundry.yml`'s three Azure jobs (`:46-50,74-78`, `:124-126,134-137`,
-`:180-183,191-194`). The GitHub side of CI is surface 1 (`GITHUB_TOKEN`,
+`helios-deploy.yml:54-64` (azure/login, no creds JSON, no client secret), the
+comment lane's review job (`claude-foundry-comment-review.yml:31-35,74-76`),
+and `claude-foundry.yml`'s two dispatch Azure jobs (`:40-42,86-88`,
+`:130-133,182-184`). The GitHub side of CI is surface 1 (`GITHUB_TOKEN`,
 minted per run). A `needs-owner` on either in CI means the one-time bootstrap
 was never run, not a broken credential.
 

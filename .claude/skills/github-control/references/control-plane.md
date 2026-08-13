@@ -109,9 +109,9 @@ The scope boundary this repo draws:
   evidence and staged worktrees" — a human merges
   (`docs/architecture/ABSORPTION_PIPELINE.md:50`).
 - **claude-foundry implementation patches open as drafts**
-  (`gh pr create --draft`, `.github/workflows/claude-foundry.yml:303-308`);
+  (`gh pr create --draft`, `.github/workflows/claude-foundry.yml:339-344`);
   the PR body states "No automatic merge or Azure deployment is requested by
-  this workflow" (`:300`).
+  this workflow" (`:336`).
 - **Never let an agent-authored PR merge on a red or skipped check**
   (`GITHUB_ECOSYSTEM_DESIGN.md:74-75`).
 

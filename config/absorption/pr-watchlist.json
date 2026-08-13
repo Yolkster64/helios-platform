@@ -248,11 +248,38 @@
     {
       "pr": 130,
       "title": "Add shared repo-local tool resolver and surface resolved tools in build/readiness reports",
-      "status": "candidate",
+      "status": "benchmarked",
       "epic": "E14",
-      "why": "Repo-local tool resolution complements verify-readiness for hermetic dev setups.",
+      "why": "Ported to scripts/build/tool-resolver.ps1 and surfaced by verify-readiness.ps1/setup-all.ps1 reports.",
       "absorb": ["resolver precedence rules"],
       "risks": ["overlaps bootstrap scripts; keep one resolution story"]
+    },
+    {
+      "pr": 123,
+      "title": "Add helios.sh helper to generate PR body and ignore generated file",
+      "status": "benchmarked",
+      "epic": "E40",
+      "why": "Ported as scripts/dev/helios.ps1 pr-update and .gitignore coverage for .github/PULL_REQUEST_BODY.md.",
+      "absorb": ["PR body generator shape", "gitignore hygiene"],
+      "risks": ["ported to PS7 per repo convention; no shell wrapper absorbed"]
+    },
+    {
+      "pr": 124,
+      "title": "Add helios.sh prune-generated script and ignore generated artifacts",
+      "status": "benchmarked",
+      "epic": "E40",
+      "why": "Ported as scripts/dev/helios.ps1 prune-generated with matching generated-artifact ignore rules.",
+      "absorb": ["prune-generated behavior", "generated artifact ignore patterns"],
+      "risks": ["keep prune targets scoped to known generated paths"]
+    },
+    {
+      "pr": 131,
+      "title": "Add --include-readiness to build_graph and add helios.sh verify command",
+      "status": "benchmarked",
+      "epic": "E40",
+      "why": "Ported verify behavior to scripts/dev/helios.ps1 verify with --include-readiness on top of existing PS7 lanes.",
+      "absorb": ["verify command", "--include-readiness behavior"],
+      "risks": ["build_graph remains upstream-specific; only behavior was ported"]
     },
     {
       "pr": 110,

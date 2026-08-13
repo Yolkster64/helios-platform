@@ -119,12 +119,23 @@ npx @modelcontextprotocol/inspector -- dotnet run --project src/mcp/HELIOS.Mcp -
 **Expected**: the inspector lists the `helios_*` tools (`helios_ai_status`,
 `helios_providers_list`, `helios_task_routing_get`, `helios_engine_catalog_get`,
 `helios_engine_mix_recommend`, `helios_infra_validate`, `helios_absorb_status_get`,
-`helios_fleet_status_get`, plus the provider-calling `helios_ai_ask`/`route`/`tandem`/
-`compare`). Calling `helios_ai_status` returns the same readiness data as the CLI.
+`helios_fleet_status_get`, `helios_foundry_agent_list`, `helios_foundry_agent_create`,
+the operator-context tools `helios_operator_profile_get`/
+`profile_save`/`context_sync`/`next_steps_get`, plus the provider-calling
+`helios_ai_ask`/`route`/`tandem`/`compare`). Calling `helios_ai_status` returns the same
+readiness data as the CLI.
 
-**Needs credentials**: only the `helios_ai_*` provider-calling tools; everything named
-`*_get`/`*_list`/`helios_infra_validate` is a local read. `helios_infra_validate` also
-needs a Bicep compiler on PATH. Client wiring for Copilot/Codex/Cursor:
+**Needs credentials**: the `helios_ai_*` provider-calling tools and the two Foundry
+tools; everything else named `*_get`/`*_list`/`helios_infra_validate` is a local read.
+The Foundry pair is NOT local: with `AZURE_FOUNDRY_PROJECT_ENDPOINT` set,
+`helios_foundry_agent_list` authenticates via `DefaultAzureCredential` and reads the
+Azure project (a credentialed Azure read, despite the `_list` name), and
+`helios_foundry_agent_create` is a credentialed Azure **mutation** that persists an
+agent on the project; with the endpoint unset, list degrades to `{ configured: false }`
+and create refuses. `helios_infra_validate` also needs a Bicep compiler on PATH.
+`helios_operator_profile_save` and `helios_operator_context_sync` write only gitignored
+files under `.helios/operator/`; Azure inventory is opt-in, read-only, and degrades to a
+`not-authenticated` status without an `az login`. Client wiring for Copilot/Codex/Cursor:
 `docs/mcp/CLIENT_SETUP.md`.
 
 ## 6. Docker (needs Docker; keyless)

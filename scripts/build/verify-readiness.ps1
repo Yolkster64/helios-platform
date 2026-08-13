@@ -26,11 +26,21 @@ pwsh scripts/build/verify-readiness.ps1 -Json
 #Requires -Version 7
 [CmdletBinding()]
 param(
-    [switch]$Json
+    [switch]$Json,
+    [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$toolResolver = Join-Path $PSScriptRoot 'tool-resolver.ps1'
+if (-not (Test-Path -LiteralPath $toolResolver)) {
+    # Not Write-Error: under ErrorActionPreference=Stop it throws and exits 1,
+    # making the intended exit 2 unreachable.
+    [Console]::Error.WriteLine("Missing shared tool resolver: $toolResolver")
+    exit 2
+}
+. $toolResolver
+$effectivePathAdditions = @(Get-HeliosRepoToolPathAdditions -RepoRoot $RepoRoot -ExistingOnly)
 
 # Candidates: the first name found on PATH wins. python3 falls back to python for
 # hosts (typically Windows) that only ship the unversioned launcher.
@@ -49,20 +59,23 @@ $toolSpecs = @(
 function Get-ToolReport {
     param([hashtable]$Spec)
 
-    $command = $null
+    $resolution = $null
     foreach ($candidate in $Spec.Candidates) {
-        $command = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($command) { break }
+        $candidateResolution = Resolve-HeliosTool -Name $candidate -RepoRoot $RepoRoot
+        if ($candidateResolution.Found) {
+            $resolution = $candidateResolution
+            break
+        }
     }
 
-    if (-not $command) {
+    if (-not $resolution) {
         return [pscustomobject]@{
             Tool     = $Spec.Name
             Required = [bool]$Spec.Required
             Found    = $false
             Version  = ''
             Path     = ''
+            Source   = 'missing'
             Purpose  = $Spec.Purpose
         }
     }
@@ -73,7 +86,7 @@ function Get-ToolReport {
     # present but fails its own version command is still reported as found.
     $version = 'unknown'
     try {
-        $raw = @(& $command.Path @($Spec.VersionArgs) 2>$null)
+        $raw = @(& $resolution.Path @($Spec.VersionArgs) 2>$null)
         if ($LASTEXITCODE -eq 0 -and $raw.Count -gt 0 -and $raw[0]) {
             $version = ([string]$raw[0]).Trim()
         }
@@ -87,30 +100,44 @@ function Get-ToolReport {
         Required = [bool]$Spec.Required
         Found    = $true
         Version  = $version
-        Path     = $command.Path
+        Path     = $resolution.Path
+        Source   = $resolution.Source
         Purpose  = $Spec.Purpose
     }
 }
 
 $reports = @(foreach ($spec in $toolSpecs) { Get-ToolReport -Spec $spec })
+$resolvedTools = [ordered]@{}
+foreach ($report in $reports) {
+    $resolvedTools[$report.Tool] = if ($report.Found) { $report.Path } else { $null }
+}
 $missingRequired = @($reports | Where-Object { $_.Required -and -not $_.Found })
 $ready = $missingRequired.Count -eq 0
 
 if ($Json) {
     [pscustomobject]@{
-        generatedUtc = (Get-Date).ToUniversalTime().ToString('o')
-        ready        = $ready
-        required     = @($reports | Where-Object { $_.Required })
-        optional     = @($reports | Where-Object { -not $_.Required })
+        generatedUtc           = (Get-Date).ToUniversalTime().ToString('o')
+        ready                  = $ready
+        effectivePathAdditions = $effectivePathAdditions
+        resolvedTools          = [pscustomobject]$resolvedTools
+        required               = @($reports | Where-Object { $_.Required })
+        optional               = @($reports | Where-Object { -not $_.Required })
     } | ConvertTo-Json -Depth 4
 }
 else {
+    if ($effectivePathAdditions.Count -gt 0) {
+        Write-Host 'Repo-local PATH additions used for tool resolution:'
+        $effectivePathAdditions | ForEach-Object { Write-Host "  $_" }
+        Write-Host ''
+    }
+
     # Render through Out-String and print explicitly — Format-Table defers output
     # while sizing columns, and the explicit exit below can swallow it otherwise.
     $table = $reports |
         Select-Object Tool,
             @{ n = 'Tier';    e = { if ($_.Required) { 'required' } else { 'optional' } } },
             @{ n = 'Status';  e = { if ($_.Found) { 'found' } else { 'MISSING' } } },
+            @{ n = 'Resolved by'; e = { $_.Source } },
             Version, Path, Purpose |
         Format-Table -AutoSize | Out-String -Width 4096
     Write-Host $table.TrimEnd()

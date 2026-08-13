@@ -6,8 +6,8 @@
 #
 #   * app registration "helios-github-deploy" + service principal — no client secret
 #     is ever created, so there is nothing to leak or rotate;
-#   * federated credentials trusting GitHub's OIDC issuer for exactly three subjects:
-#     the repo's main branch, pull requests, and the "production" environment;
+#   * federated credentials trusting GitHub's OIDC issuer for the repo's main branch
+#     and the "production" environment subject used by environment-scoped jobs;
 #   * Contributor scoped to the resource group ONLY (least privilege: the workflow
 #     deploys one template into one RG — nothing subscription-wide, and the identity
 #     cannot create resource groups or assign roles);
