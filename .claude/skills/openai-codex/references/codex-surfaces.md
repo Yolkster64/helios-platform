@@ -142,3 +142,27 @@ authoring time `.github/copilot-instructions.md` still trails the other two
 (.NET 8 wording, pre-Foundry MCP list), so check for drift before trusting it.
 Copilot-side mechanics live in the `github-copilot` skill (authored in
 parallel; reference by path: `.claude/skills/github-copilot/`).
+
+## Automatic use
+
+**Auth for unattended use.** The API providers read exactly one credential:
+`OPENAI_API_KEY` from the environment, or the `openai-api-key` Key Vault secret
+(`config/aihub.json:10-16`; custody preference:
+`docs/architecture/ENTERPRISE_AI_CONNECTIONS.md:122-126`). `codex login` is the
+ChatGPT-plan path for the CLI only — `.env.template:17-20` documents both facts
+in one place: the CLI and the `openai-codex` provider share `OPENAI_API_KEY`,
+while a plan login covers just the CLI. Automatic diagnosis of this lane is the
+doctor's `codex` lane (`scripts/bootstrap/auth-doctor.ps1`, authored in
+parallel; reference by path) via `.claude/agents/auth-broker.md`.
+
+**Lanes that exercise Codex with no human in the loop:**
+
+1. **The cloud reviewer** — a wave on every PR open/ready/push, plus the
+   `@codex review` / `@codex address that feedback` commands; trigger table and
+   wave choreography in `docs/architecture/REVIEW_LOOP.md:14-17,30-48`.
+2. **The codex-liaison agent** (`.claude/agents/codex-liaison.md`) — pulls
+   drafts through the hub and reconciles them before anything lands.
+3. **The task-routing chains** — `codex`/`openai-codex` lead `code_generation`,
+   `code_refactoring`, and `test_creation`, and sit second/third in `debugging`
+   (`config/aihub.json:87-130`), so any `helios-ai route`/`tandem` call for
+   those task types reaches this lane with no human step in between.

@@ -8,7 +8,8 @@ description: Full GitHub control for HELIOS — authentication (Actions GITHUB_T
 Two reference packs carry the depth; this file is the decision map.
 
 - `references/auth-topology.md` — which of the five auth surfaces to use, the
-  OIDC federation contract, and the credential-guard interaction.
+  OIDC federation contract, the credential-guard interaction, and the automatic
+  authentication lane (`auth-doctor` + the automatic-first ordering).
 - `references/control-plane.md` — Projects v2 GraphQL (what is and is not
   automatable), rulesets/branch protection, auto-merge boundaries, wiki and
   Pages publication, issues automation.

@@ -147,3 +147,62 @@ needs-attention with an export hint instead of "ready"; presence is checked by
 env-var **name only** — the value is never read, printed, or exported, and
 `gh auth token` is never run by the script (`:187-189`) — the human runs
 `export GITHUB_MODELS_TOKEN=$(gh auth token)` in their own shell (`:194`).
+
+## Automatic authentication
+
+Everything above assumed someone picks a surface; the automatic lane mechanizes
+the picking. `scripts/bootstrap/auth-doctor.ps1` (authored in parallel with this
+section; reference by path) is the one command:
+
+- **Report-only by default** — probes five lanes (`gh`, `az`, `codex`, `claude`,
+  `copilot`) read-only; `-Json` emits the machine-readable report.
+- **`-Apply` = automatic non-interactive repair only** — re-resolving env/Key
+  Vault-sourced credentials and service-principal paths; never a device-code
+  flow, never anything a human must watch.
+- **Per-lane states**: `ready` | `repaired` (only under `-Apply`) |
+  `needs-owner` | `unavailable`. Exit 0 = everything ok; exit 2 = at least one
+  lane `needs-owner`.
+- The consuming agent is `.claude/agents/auth-broker.md` — report first, always;
+  `-Apply` only on an explicit ask. Its interactive counterpart stays
+  `connect-all.ps1` (human device-code flows, verify-first).
+
+### The automatic-first ordering — and why
+
+Per lane, credentials are tried in this order, stopping at the first that works:
+**CI OIDC federation → env token / service principal → managed identity →
+device-code (owner action, never automatic)**. The why is the repo's hybrid
+rule: interactive device-code logins are for *humans*; CI and fleet workers
+never log in interactively — they use OIDC, Workload Identity Federation, or
+managed identity, with keys arriving only via environment variables or Key Vault
+(`docs/architecture/CONNECTIONS_SETUP.md:45-49`, restated in
+`connect-all.ps1:16-21`). Each earlier rung carries less custody risk: the OIDC
+rung has **no stored secret at all** (`azure-oidc-setup.sh:7-8`), the env rung
+keeps values out of files (CLAUDE.md no-secrets rule), and the identity rung
+needs no key whatsoever — an empty `AZURE_OPENAI_API_KEY` deliberately means
+Entra ID via `DefaultAzureCredential` (`.env.template:60`).
+
+### Where OIDC already covers CI — nothing for the doctor to repair
+
+The Azure side of CI is already automatic: `scripts/bootstrap/azure-oidc-setup.sh`
+federates the two subjects (`:112-115`, deliberately no `pull_request` subject —
+`:117-130`), and the consumers log in with identifiers only —
+`helios-deploy.yml:54-64` (azure/login, no creds JSON, no client secret) and
+`claude-foundry.yml`'s three Azure jobs (`:46-50,74-78`, `:124-126,134-137`,
+`:180-183,191-194`). The GitHub side of CI is surface 1 (`GITHUB_TOKEN`,
+minted per run). A `needs-owner` on either in CI means the one-time bootstrap
+was never run, not a broken credential.
+
+### What stays owner-only, always
+
+- **Device-code / browser logins** — every surface-5-style flow; they are for
+  humans by rule (`CONNECTIONS_SETUP.md:45-46`).
+- **MFA re-login** — `AADSTS50078` (UserStrongAuthExpired) blocked both Azure
+  planes on 2026-08-13 (`docs/architecture/ENTERPRISE_AI_CONNECTIONS.md:13-14`);
+  the remediation is the owner's `az login --tenant …` sequence
+  (`ENTERPRISE_AI_CONNECTIONS.md:29-35`).
+- **Admin consent** — `az ad app permission admin-consent`
+  (`ENTERPRISE_AI_CONNECTIONS.md:83`); tenant mutations are owner actions
+  (`.claude/agents/m365-admin.md` hard rules).
+
+The doctor reports all three as `needs-owner` with the exact command to run —
+it never attempts them, and no future revision should.
