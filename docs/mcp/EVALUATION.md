@@ -1,10 +1,10 @@
 # HELIOS MCP Server — Evaluation
 
-Ten read-only, single-answer questions for evaluating whether an LLM can drive the HELIOS
-MCP server (per the MCP builder evaluation methodology). Every question is answerable
-using only non-destructive tools (`helios_ai_status`, `helios_providers_list`,
-`helios_task_routing_get`, `helios_infra_validate`) against a fresh checkout with **no
-provider keys configured**, so answers are stable. Verify answers after config changes —
+Eleven read-only, single-answer questions for evaluating whether an LLM can drive the
+HELIOS MCP server (per the MCP builder evaluation methodology). Every question is
+answerable using only non-destructive tools (`helios_ai_status`, `helios_providers_list`,
+`helios_task_routing_get`, `helios_infra_validate`, `helios_foundry_agent_list`) against
+a fresh checkout with **no provider keys configured**, so answers are stable. Verify answers after config changes —
 they are tied to `config/aihub.json`.
 
 Run: point an MCP-capable agent at the server (see CLIENT_SETUP.md), ask each question,
@@ -51,6 +51,10 @@ and string-compare the final answer.
   <qa_pair>
     <question>Does infra/main.bicep compile cleanly according to helios_infra_validate (yes/no)?</question>
     <answer>yes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>According to helios_foundry_agent_list, which environment variable must be set before Foundry agents can be listed?</question>
+    <answer>AZURE_FOUNDRY_PROJECT_ENDPOINT</answer>
   </qa_pair>
 </evaluation>
 ```

@@ -15,7 +15,7 @@ Framework: xunit 2.9.3 (`tests/HELIOS.AIHub.Tests/HELIOS.AIHub.Tests.csproj`). C
 | `Configuration/` | Shipped-config drift (`ConfigBindingTests`), cloud config, path resolution |
 | `Routing/`, `Learning/` | Task routing strategy; learning stores + F# interop |
 | `ApiEndpointTests.cs` | Full HTTP surface via `WebApplicationFactory<Program>` |
-| `McpEngineToolTests.cs`, `McpStatusToolsTests.cs` | MCP tool methods called directly |
+| `McpEngineToolTests.cs`, `McpStatusToolsTests.cs`, `McpFoundryToolTests.cs` | MCP tool methods called directly |
 
 ## Idiom 1 — hand-rolled fakes at provider seams, not Moq
 

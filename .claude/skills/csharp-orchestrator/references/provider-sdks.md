@@ -66,6 +66,13 @@ Pitfalls the implementation already encodes — keep them when touching it:
   `CancellationToken.None` (cleanup must run for cancelled callers), and swallow all
   cleanup failures: an orphaned thread beats masking a completed paid run.
 
+Administration surface (`Providers/FoundryAgentAdministrationService.cs`, behind the
+`helios_foundry_agent_*` MCP tools): `Administration.GetAgentsAsync(limit: …)` returns
+an `AsyncPageable<PersistentAgent>` that pages transparently — bound total enumeration
+yourself; `Administration.CreateAgentAsync(model, name, description, instructions)` is
+issued exactly once, never retried (a retry could double-create). The SDK client hides
+behind the `IFoundryAgentAdministration` seam so tests run keyless against a fake.
+
 ## Key Vault + Tables (Configuration/SecretResolver.cs, Learning/AzureTableLearningStore.cs)
 
 - `SecretClient(new Uri(uri), new DefaultAzureCredential())`; resolution order is env var
@@ -83,11 +90,12 @@ Pitfalls the implementation already encodes — keep them when touching it:
   .WithStdioServerTransport().WithToolsFromAssembly()`. **stdout belongs to the protocol**:
   clear the default console logger and re-add it with
   `LogToStandardErrorThreshold = LogLevel.Trace`, or JSON-RPC framing breaks.
-- Tools (`HeliosAiTools.cs`, `HeliosStatusTools.cs`): static class marked
-  `[McpServerToolType]`; each method `[McpServerTool(Name = "helios_…", Idempotent = …,
-  OpenWorld = …)]` + `[Description]` on method and every parameter. DI services
-  (`AIHubService`, `PythonInsightsSpoke`) are injected as ordinary leading parameters;
-  `CancellationToken` last. Return JSON strings (`JsonSerializer.Serialize`), not objects.
+- Tools (`HeliosAiTools.cs`, `HeliosStatusTools.cs`, `HeliosFoundryTools.cs`): static
+  class marked `[McpServerToolType]`; each method `[McpServerTool(Name = "helios_…",
+  Idempotent = …, OpenWorld = …)]` + `[Description]` on method and every parameter. DI
+  services (`AIHubService`, `PythonInsightsSpoke`, `FoundryAgentService`) are injected
+  as ordinary leading parameters; `CancellationToken` last. Return JSON strings
+  (`JsonSerializer.Serialize`), not objects.
 
 ## Not in the repo (candidates)
 
