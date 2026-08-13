@@ -1018,19 +1018,23 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
-    public void CreateStartInfo_ScriptShimPath_IsNeverWrappedInCmd()
+    public void CreateStartInfo_ScriptShim_LaunchesThroughGuardedCmd()
     {
-        // Shim launches are argument-hardened in RunAsync; the start info itself is
-        // always a direct launch (CreateProcess spawns the interpreter for a batch
-        // file), never an explicit cmd.exe /c line whose metacharacter rules
-        // ArgumentList quoting cannot express.
+        // A batch file handed to CreateProcess as the executable image raises
+        // Win32Exception, so a clean shim launches through cmd.exe /d /s /c. Plain
+        // double quoting is exact only because RefuseIfScriptShim has guaranteed no
+        // quote, cmd.exe metacharacter, or line break survives in the shim path or any
+        // argument; cmd.exe comes from the system directory, never from PATH.
         var info = SystemCommandRunner.CreateStartInfo(
             "az",
             new[] { "account", "show" },
             @"C:\Tools\az.cmd");
 
-        Assert.Equal(@"C:\Tools\az.cmd", info.FileName);
-        Assert.Equal(new[] { "account", "show" }, info.ArgumentList);
+        Assert.EndsWith("cmd.exe", info.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("/d /s /c ", info.Arguments, StringComparison.Ordinal);
+        Assert.Contains("\"C:\\Tools\\az.cmd\"", info.Arguments, StringComparison.Ordinal);
+        Assert.Contains("\"account\" \"show\"", info.Arguments, StringComparison.Ordinal);
+        Assert.Empty(info.ArgumentList);
         Assert.False(info.UseShellExecute);
     }
 
@@ -1038,9 +1042,20 @@ public sealed class OperatorContextToolsTests : IDisposable
     public void ScriptShims_RunWithCleanArguments_AndRefuseMetacharacterArguments()
     {
         // The standard Azure CLI install on Windows ships ONLY az.cmd, so shims must
-        // stay launchable when every argument is clean.
+        // stay launchable (through the guarded cmd.exe hop) when the shim path and
+        // every argument are clean.
         Assert.Null(SystemCommandRunner.RefuseIfScriptShim(
             "az", new[] { "account", "show", "--only-show-errors", "--output", "json" }, @"C:\Tools\az.cmd"));
+
+        // The SHIM PATH itself feeds the cmd.exe command line too: a metacharacter in
+        // the path must refuse, and the refusal must not echo the path.
+        var hostileShimPath = @"C:\Tools\odd&name\az.cmd";
+        var refusedPath = SystemCommandRunner.RefuseIfScriptShim(
+            "az", new[] { "account", "show" }, hostileShimPath);
+        Assert.NotNull(refusedPath);
+        Assert.False(refusedPath!.Started);
+        Assert.Contains("metacharacter", refusedPath.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(hostileShimPath, refusedPath.StandardError, StringComparison.OrdinalIgnoreCase);
 
         // ArgumentList performs CreateProcess quoting, not cmd.exe metacharacter
         // escaping, and CreateProcess spawns cmd.exe for a batch file: an argument

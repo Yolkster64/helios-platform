@@ -1589,38 +1589,51 @@ internal sealed class SystemCommandRunner : ICommandRunner
         }
     }
 
-    // The characters cmd.exe reinterprets on its command line, plus line breaks; see
-    // RefuseIfScriptShim. CreateProcess quoting cannot neutralize any of them once a
-    // batch interpreter is involved.
+    // The characters cmd.exe reinterprets on its command line (including the double
+    // quote, which would break the plain quoting CreateStartInfo relies on), plus line
+    // breaks; see RefuseIfScriptShim. CreateProcess quoting cannot neutralize any of
+    // them once the command line passes through cmd.exe.
     private static readonly char[] CmdMetacharacters = { '&', '|', '<', '>', '^', '%', '!', '"', '\r', '\n' };
+
+    internal static bool IsScriptShim(string? resolvedWindowsPath) =>
+        resolvedWindowsPath is not null
+        && (resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+            || resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// PATH/PATHEXT discovery on Windows can resolve a command to a batch shim — and for
     /// az that is the ONLY form the standard Windows install ships (there is no az.exe),
-    /// so shims must stay launchable. The risk is that CreateProcess runs a batch file
-    /// by silently spawning cmd.exe, and cmd.exe REINTERPRETS the command line:
-    /// ProcessStartInfo.ArgumentList performs CreateProcess quoting, not cmd.exe
-    /// metacharacter escaping, so a variable argument — e.g. a repo root containing an
-    /// unspaced '&amp;' flowing into "git -C &lt;root&gt;" — could split the command and
-    /// execute something unintended. A shim launch is therefore refused (Started=false,
-    /// the shape the capture paths already map to git-unavailable / cli-unavailable
-    /// recovery steps) only when ANY argument carries a cmd.exe metacharacter or line
-    /// break. The fixed literal arguments authored in this file contain none of the
-    /// scanned characters, so a hit always identifies a variable argument. Direct .exe
-    /// launches are unrestricted — CreateProcess quoting is sound without the cmd.exe
-    /// hop. Returns null when the launch is safe.
+    /// so shims must stay launchable. A batch file cannot be handed to CreateProcess as
+    /// the executable image (Win32Exception), so a clean shim launches through a cmd.exe
+    /// hop (see <see cref="CreateStartInfo"/>) — and cmd.exe REINTERPRETS its command
+    /// line, which CreateProcess-style quoting cannot escape. This guard is what makes
+    /// the hop sound: it refuses the launch (Started=false, the shape the capture paths
+    /// already map to git-unavailable / cli-unavailable recovery steps) when the SHIM
+    /// PATH ITSELF or ANY argument contains a cmd.exe metacharacter, a double quote, or
+    /// a line break, so everything that reaches the cmd.exe command line is exact under
+    /// plain double quoting. The fixed literal arguments authored in this file contain
+    /// none of the scanned characters, so an argument hit always identifies a variable
+    /// argument. Direct .exe launches are unrestricted and unscanned — CreateProcess
+    /// quoting is sound without the cmd.exe hop. Returns null when the launch is safe.
     /// </summary>
     internal static CommandResult? RefuseIfScriptShim(
         string fileName,
         IReadOnlyList<string> arguments,
         string? resolvedWindowsPath)
     {
-        var isScriptShim = resolvedWindowsPath is not null
-            && (resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
-                || resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase));
-        if (!isScriptShim)
+        if (!IsScriptShim(resolvedWindowsPath))
         {
             return null;
+        }
+        if (resolvedWindowsPath!.IndexOfAny(CmdMetacharacters) >= 0)
+        {
+            // Never echo the offending path: naming the character class is enough, and
+            // the path cannot be quoted safely into this message any more than into cmd.
+            return new CommandResult(
+                false,
+                -1,
+                string.Empty,
+                $"'{fileName}' resolves to a batch shim whose own path contains a cmd.exe metacharacter (& | < > ^ % ! \") or line break, so it cannot be launched safely through cmd.exe; reinstall the CLI under a clean path or point PATH at the command's real executable (.exe).");
         }
         for (var index = 0; index < arguments.Count; index++)
         {
@@ -1632,20 +1645,25 @@ internal sealed class SystemCommandRunner : ICommandRunner
                     false,
                     -1,
                     string.Empty,
-                    $"'{fileName}' resolves to the batch shim '{resolvedWindowsPath}', and argument {index} contains a cmd.exe metacharacter (& | < > ^ % ! \") or line break that CreateProcess quoting cannot make safe through a shim; remove the character or point PATH at the command's real executable (.exe).");
+                    $"'{fileName}' resolves to the batch shim '{resolvedWindowsPath}', and argument {index} contains a cmd.exe metacharacter (& | < > ^ % ! \") or line break that cannot be made safe through a shim; remove the character or point PATH at the command's real executable (.exe).");
             }
         }
         return null;
     }
 
     /// <summary>
-    /// Builds the launch configuration. The resolved path always launches directly with
-    /// shell execution disabled — never via an explicit cmd.exe /d /c line. For a script
-    /// shim (.cmd/.bat) CreateProcess spawns the interpreter itself, which is exactly why
-    /// <see cref="RefuseIfScriptShim"/> has already rejected any shim invocation whose
-    /// arguments carry cmd.exe metacharacters before this method runs. Arguments always
-    /// go through ArgumentList (never string concatenation). resolvedWindowsPath is null
-    /// on non-Windows platforms, which keeps their behavior unchanged.
+    /// Builds the launch configuration. Direct executables launch as-is with arguments
+    /// through ArgumentList (never string concatenation). A script shim (.cmd/.bat)
+    /// cannot be handed to CreateProcess as the executable image — that raises
+    /// Win32Exception — so it launches through "cmd.exe /d /s /c" with the shim path and
+    /// every argument wrapped in plain double quotes. An earlier revision removed an
+    /// UNGUARDED cmd.exe hop precisely because cmd.exe reinterprets metacharacters that
+    /// this quoting cannot escape; the hop is safe to reinstate ONLY because
+    /// <see cref="RefuseIfScriptShim"/> has already guaranteed that neither the shim
+    /// path nor any argument contains a double quote, a cmd.exe metacharacter, or a
+    /// line break — under that guarantee plain quoting is exact. cmd.exe is resolved
+    /// from the system directory, never from PATH. resolvedWindowsPath is null on
+    /// non-Windows platforms, which keeps their behavior unchanged.
     /// </summary>
     internal static ProcessStartInfo CreateStartInfo(
         string fileName,
@@ -1654,17 +1672,44 @@ internal sealed class SystemCommandRunner : ICommandRunner
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = resolvedWindowsPath ?? fileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var argument in arguments)
+        if (IsScriptShim(resolvedWindowsPath))
         {
-            startInfo.ArgumentList.Add(argument);
+            startInfo.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            startInfo.Arguments = BuildShimCommandLine(resolvedWindowsPath!, arguments);
+        }
+        else
+        {
+            startInfo.FileName = resolvedWindowsPath ?? fileName;
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
         }
         return startInfo;
+    }
+
+    /// <summary>
+    /// "/d /s /c" with the whole command wrapped in one outer quote pair: /s makes
+    /// cmd.exe strip exactly that pair, leaving the quoted shim and quoted arguments.
+    /// Plain double quoting is exact here because RefuseIfScriptShim guarantees no
+    /// double quote, cmd.exe metacharacter, or line break survives in any of them.
+    /// </summary>
+    private static string BuildShimCommandLine(string shimPath, IReadOnlyList<string> arguments)
+    {
+        var builder = new StringBuilder();
+        builder.Append("/d /s /c \"");
+        builder.Append('"').Append(shimPath).Append('"');
+        foreach (var argument in arguments)
+        {
+            builder.Append(' ').Append('"').Append(argument).Append('"');
+        }
+        builder.Append('"');
+        return builder.ToString();
     }
 
     private static void TryKill(Process process)
