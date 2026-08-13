@@ -143,7 +143,7 @@ internal sealed class OperatorContextStore
         "^[A-Za-z0-9._-]+@github\\.com:(?<path>[^:]+)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SensitiveValue = new(
-        "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|sig=[a-z0-9%+/]{12,}|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
+        "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|github_pat_[a-z0-9_]{20,}|accountkey=|sharedaccesssignature=|sig=[a-z0-9%+/]{12,}|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -620,7 +620,9 @@ internal sealed class OperatorContextStore
 
         return new RepositorySnapshot(
             Status: "ready",
-            Repository: NormalizeRepositoryName(remote),
+            // owner/repo segments are user-chosen identifiers: fingerprint them like
+            // branch names when they embed a credential-looking value.
+            Repository: SanitizeIdentifier(NormalizeRepositoryName(remote)),
             Branch: branch,
             HeadSha: headSha,
             // null = status capture failed; never claim a clean checkout without evidence.
@@ -683,6 +685,18 @@ internal sealed class OperatorContextStore
         // fingerprint sanitization as resource/branch identifiers. This one local feeds
         // every snapshot variant (ready, partial, group-list failure).
         var subscriptionName = SanitizeIdentifier(GetString(account, "name"));
+
+        // Pin the list commands to the subscription we just captured: a concurrent
+        // `az account set` in another shell would otherwise switch what the lists see,
+        // mislabeling the inventory and corrupting deltas. The id comes from az's own
+        // output, but it is validated as a GUID before being reused on a command line.
+        if (!Guid.TryParse(subscriptionId, out _))
+        {
+            return AzureSnapshot.Failed(
+                "error",
+                "az account show returned a non-GUID subscription id; the inventory cannot be pinned to a subscription.")
+                with { CapturedAtUtc = capturedAtUtc };
+        }
         var tenantId = GetString(account, "tenantId");
         var subscriptionState = GetString(account, "state");
 
@@ -691,6 +705,7 @@ internal sealed class OperatorContextStore
             new[]
             {
                 "group", "list", "--only-show-errors", "--output", "json",
+                "--subscription", subscriptionId!,
                 "--query", $"[0:{MaxResourceGroups + 1}].{{name:name,location:location,provisioningState:properties.provisioningState,tags:tags}}",
             },
             AzureGroupListTimeout,
@@ -718,6 +733,7 @@ internal sealed class OperatorContextStore
                 new[]
                 {
                     "resource", "list", "--only-show-errors", "--output", "json",
+                    "--subscription", subscriptionId!,
                     "--query", $"[0:{MaxResources + 1}].{{id:id,name:name,type:type,location:location,resourceGroup:resourceGroup,tags:tags}}",
                 },
                 AzureResourceListTimeout,

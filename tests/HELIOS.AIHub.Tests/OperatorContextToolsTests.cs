@@ -273,7 +273,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
 
         runner.SnapshotVersion = 2;
-        runner.SubscriptionId = "sub-2";
+        runner.SubscriptionId = "22222222-2222-2222-2222-222222222222";
         var second = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
 
         Assert.False(second.Changes.Comparable);
@@ -342,7 +342,9 @@ public sealed class OperatorContextToolsTests : IDisposable
         using (var receipt = JsonDocument.Parse(File.ReadLines(store.JournalPath).Last()))
         {
             Assert.Equal("not-authenticated", receipt.RootElement.GetProperty("azureCaptureStatus").GetString());
-            Assert.Equal("sub-1", receipt.RootElement.GetProperty("azureSubscriptionId").GetString());
+            Assert.Equal(
+                FakeCommandRunner.DefaultSubscriptionId,
+                receipt.RootElement.GetProperty("azureSubscriptionId").GetString());
         }
 
         // The next successful capture compares against the preserved baseline.
@@ -783,6 +785,65 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task FineGrainedGitHubPats_AreDetectedAsCredentialValues()
+    {
+        var pat = $"github_pat_11ABCDE0123456789_{new string('q', 40)}";
+        var store = CreateStore(new FakeCommandRunner());
+
+        // Profile tag values carrying a fine-grained PAT are rejected outright.
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveProfileAsync(
+            null, null, null, $"{{\"note\":\"{pat}\"}}", null, CancellationToken.None));
+
+        // Azure tag values get the fingerprint; the raw PAT never reaches disk.
+        var runner = new FakeCommandRunner { GroupTagsJsonOverride = "{\"note\":\"" + pat + "\"}" };
+        var tagStore = CreateStore(runner);
+        var snapshot = await tagStore.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.ResourceGroups[0].Tags["note"]);
+        Assert.DoesNotContain("github_pat_", File.ReadAllText(tagStore.ContextPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContextSync_PinsListCommandsToTheCapturedSubscription()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+
+        await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+
+        var groupArgs = runner.LastGroupListArguments!;
+        var resourceArgs = runner.LastResourceListArguments!;
+        Assert.Equal(FakeCommandRunner.DefaultSubscriptionId, groupArgs[groupArgs.ToList().IndexOf("--subscription") + 1]);
+        Assert.Equal(FakeCommandRunner.DefaultSubscriptionId, resourceArgs[resourceArgs.ToList().IndexOf("--subscription") + 1]);
+    }
+
+    [Fact]
+    public async Task ContextSync_NonGuidSubscriptionId_RefusesToInventory()
+    {
+        var runner = new FakeCommandRunner { SubscriptionId = "sub-legacy" };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("error", snapshot.AzureCaptureFailure?.Status);
+        Assert.Null(runner.LastGroupListArguments);
+    }
+
+    [Fact]
+    public async Task ContextSync_CredentialLookingRepoName_IsFingerprinted()
+    {
+        var runner = new FakeCommandRunner
+        {
+            RemoteUrl = $"git@github.com:owner/incident-ghp_{new string('a', 24)}.git",
+        };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Repository.Repository);
+        Assert.DoesNotContain("ghp_", File.ReadAllText(store.ContextPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
         // Sync holds the lock across four git commands and all three Azure reads; the
@@ -860,13 +921,16 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal bool DuplicateResourceLeafNames { get; set; }
         internal bool CredentialResourceName { get; set; }
         internal string? GroupTagsJsonOverride { get; set; }
-        internal string SubscriptionId { get; set; } = "sub-1";
+        internal const string DefaultSubscriptionId = "11111111-1111-1111-1111-111111111111";
+        internal string SubscriptionId { get; set; } = DefaultSubscriptionId;
         internal string SubscriptionState { get; set; } = "Enabled";
         internal string SubscriptionName { get; set; } = "HELIOS Dev";
         internal string CredentialValue { get; set; } = CredentialLike;
         internal int GroupTagCount { get; set; }
         internal bool LongGroupTagName { get; set; }
         internal Action? OnCommand { get; set; }
+        internal IReadOnlyList<string>? LastGroupListArguments { get; private set; }
+        internal IReadOnlyList<string>? LastResourceListArguments { get; private set; }
 
         public Task<CommandResult> RunAsync(
             string fileName,
@@ -930,6 +994,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             }
             if (arguments.Take(2).SequenceEqual(new[] { "group", "list" }))
             {
+                LastGroupListArguments = arguments;
                 if (AzureGroupListFails)
                 {
                     return new CommandResult(true, 1, string.Empty, "The group listing request was rejected.");
@@ -940,6 +1005,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             }
             if (arguments.Take(2).SequenceEqual(new[] { "resource", "list" }))
             {
+                LastResourceListArguments = arguments;
                 if (AzureResourceListFails)
                 {
                     return new CommandResult(true, 1, string.Empty, "The resource listing request timed out.");
