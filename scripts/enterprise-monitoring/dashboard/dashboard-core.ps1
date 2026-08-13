@@ -166,7 +166,7 @@ class DashboardCore {
     <div class="dashboard">
         <div class="card">
             <h3>System Health</h3>
-            <div class="metric">${($this.Metrics.SystemHealth.Status)}</div>
+            <div class="metric">$($this.Metrics.SystemHealth.Status)</div>
             <div class="status operational">$($this.Metrics.SystemHealth.Status)</div>
         </div>
         <div class="card">

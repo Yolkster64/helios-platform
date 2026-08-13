@@ -164,7 +164,7 @@ class DashboardGenerator {
         
         <h2>Top Recommendations</h2>
         <div class="chart-container">
-            <p>1. <strong>Fix memory leak in DataProcessor</strong> - Could save $3,200/month</p>
+            <p>1. <strong>Fix memory leak in DataProcessor</strong> - Could save `$3,200/month</p>
             <p>2. <strong>Add missing database indexes</strong> - Improve query performance by 40-50%</p>
             <p>3. <strong>Implement two-tier caching</strong> - Reduce database load by 60-70%</p>
             <p>4. <strong>Enable response compression</strong> - 70% reduction in transfer size</p>

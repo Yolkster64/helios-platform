@@ -6,7 +6,7 @@
          keep restoring exactly as before until the project builds again -
          without this opt-out, repo-root CPM fails the restore with NU1008. -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>

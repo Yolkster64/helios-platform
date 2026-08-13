@@ -11,7 +11,8 @@
 Requirements:
 
 - Windows 10 1809 (build 17763) or later / Windows 11.
-- .NET 8 SDK.
+- .NET 10 SDK (the repo-root `global.json` pins 10.0.400; the shell itself still
+  targets `net8.0-windows10.0.19041.0`, which the .NET 10 SDK builds fine).
 - Visual Studio 2022 17.10+ with the **Windows application development** workload
   (or plain `dotnet` CLI — the WinUI XAML compiler ships via the
   `Microsoft.WindowsAppSDK` NuGet package, so VS is convenient but not mandatory).
@@ -114,6 +115,8 @@ Windows lane and can be built and CI-verified on any platform:
   NavigationView placeholders exist, disabled.
 - Provider metrics (latency, success rate, tokens) + Win2D sparklines once the hub
   exposes `GetMetrics` over REST; per-provider enable toggles writing `config/aihub.json`.
-- net8.0 → net10.0 with the rest of the platform; `winui3-reviewer` agent gate on shell PRs.
+- net8.0-windows → the net10 equivalent once the pinned Windows App SDK line documents
+  net10 support (the rest of the platform is already on net10.0 — WASDK 1.6 documents
+  .NET 8 only); `winui3-reviewer` agent gate on shell PRs.
 - Live theme re-resolution for the readiness dot brushes (today they resolve at bind
   time — see `Helpers/ReadinessVisuals.cs`).

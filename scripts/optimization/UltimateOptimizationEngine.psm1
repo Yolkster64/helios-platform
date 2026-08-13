@@ -518,7 +518,7 @@ function Build-ModelMixingStrategy {
         cheap = 0.60      # 60% to cheap models (haiku, qwen)
         moderate = 0.30   # 30% to moderate (sonnet, gpt-4o)
         expensive = 0.10  # 10% to expensive (opus)
-        validation = @("cheap" = @("moderate", "expensive"))
+        validation = @{"cheap" = @("moderate", "expensive")}
     }
     
     # Quality-optimized mixing

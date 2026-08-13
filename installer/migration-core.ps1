@@ -344,6 +344,7 @@ class ConflictResolver {
                 return $conflict
             }
         }
+        return $conflict
     }
 
     [hashtable] MergeValues([hashtable]$old, [hashtable]$new) {

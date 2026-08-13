@@ -151,7 +151,7 @@ burst capacity (VMSS)".
 | `bicep: command not found` | Use the Azure CLI bundle instead: `az bicep build --file infra/main.bicep`. |
 | Python spoke tests fail on missing numpy/scikit-learn | Only the `[ml]` extra needs them; the bare path is dependency-free. `pip install '.[ml]'` inside `src/ai/python` if you want the ML backends. |
 | CI's "Python compile check" fails | `python3 -m compileall -q src/ai/python scripts` — a `.py` file under those trees has a syntax error; run the same command locally. |
-| MCP client does not list the `helios` server | Start the client from the repo root so it reads `.mcp.json`; the server itself needs the .NET 8 SDK. |
+| MCP client does not list the `helios` server | Start the client from the repo root so it reads `.mcp.json`; the server itself needs the .NET 10 SDK. |
 | Fleet VMSS missing after a deploy | Both gates must open: `deployFleetVmss=true` **and** a non-empty `vmssAdminPublicKey` (`infra/main.bicepparam`, `infra/README.md`). |
 | A `scripts/**.ps1` fails under Windows PowerShell 5.x | Scripts target PowerShell 7 (`#Requires -Version 7`); run them with `pwsh`. |
 

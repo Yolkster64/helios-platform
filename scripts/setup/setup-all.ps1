@@ -142,21 +142,21 @@ if ($toolchain) {
         $detail += '; no Bicep compiler (need bicep or az for infra/main.bicep validation)'
     }
     # verify-readiness only proves `dotnet` EXISTS; every AIHub/MCP project
-    # targets net8.0, so a host carrying only a pre-8 SDK would be declared
+    # targets net10.0, so a host carrying only a pre-10 SDK would be declared
     # ready while the advertised `dotnet build HELIOS.sln` cannot run.
-    # Require at least one SDK with major version >= 8.
+    # Require at least one SDK with major version >= 10.
     if ($toolchainReady) {
         $dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue |
             Select-Object -First 1
         $sdkOk = $false
         if ($dotnetCommand) {
             foreach ($line in @(& $dotnetCommand.Source --list-sdks 2>$null)) {
-                if ("$line" -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) { $sdkOk = $true; break }
+                if ("$line" -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { $sdkOk = $true; break }
             }
         }
         if (-not $sdkOk) {
             $toolchainReady = $false
-            $detail += '; no .NET SDK >= 8 (HELIOS.sln targets net8.0; dotnet --list-sdks lists none)'
+            $detail += '; no .NET SDK >= 10 (HELIOS.sln targets net10.0; dotnet --list-sdks lists none)'
         }
     }
     # Same shape for Python: presence is not compatibility. The spoke declares
@@ -401,6 +401,9 @@ else {
     }
     else {
         Write-Host "Attention needed: $($needsAttention.Count) component(s) — run the 'Next command' column entries."
+        if (@($needsAttention | Where-Object { $_.Component -like '*-auth' }).Count -gt 0) {
+            Write-Host "Auth in one pass: pwsh scripts/bootstrap/connect-all.ps1   # verifies every login lane, then runs only the device-code logins still needed"
+        }
     }
 }
 

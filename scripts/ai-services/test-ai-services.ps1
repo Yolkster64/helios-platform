@@ -216,7 +216,7 @@ function Test-PerformanceBenchmark {
         $minTime = ($times | Measure-Object -Minimum).Minimum
         $maxTime = ($times | Measure-Object -Maximum).Maximum
         
-        Write-Host "`n$service:"
+        Write-Host "`n${service}:"
         Write-Host "  Average: $([Math]::Round($avgTime, 2))ms"
         Write-Host "  Min: $minTime ms"
         Write-Host "  Max: $maxTime ms"

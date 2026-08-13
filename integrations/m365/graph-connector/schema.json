@@ -1,0 +1,55 @@
+{
+  "baseType": "microsoft.graph.externalItem",
+  "properties": [
+    {
+      "name": "title",
+      "type": "String",
+      "isSearchable": true,
+      "isQueryable": true,
+      "isRetrievable": true,
+      "labels": ["title"]
+    },
+    {
+      "name": "url",
+      "type": "String",
+      "isRetrievable": true,
+      "labels": ["url"]
+    },
+    {
+      "name": "category",
+      "type": "String",
+      "isQueryable": true,
+      "isRetrievable": true,
+      "isRefinable": true
+    },
+    {
+      "name": "epic",
+      "type": "String",
+      "isQueryable": true,
+      "isRetrievable": true,
+      "isRefinable": true
+    },
+    {
+      "name": "status",
+      "type": "String",
+      "isQueryable": true,
+      "isRetrievable": true
+    },
+    {
+      "name": "lastModified",
+      "type": "DateTime",
+      "isQueryable": true,
+      "isRetrievable": true,
+      "isRefinable": true,
+      "labels": ["lastModifiedDateTime"]
+    },
+    {
+      "name": "authors",
+      "type": "StringCollection",
+      "isSearchable": true,
+      "isQueryable": true,
+      "isRetrievable": true,
+      "labels": ["authors"]
+    }
+  ]
+}

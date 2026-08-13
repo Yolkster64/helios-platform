@@ -239,10 +239,10 @@ function New-TestAlert {
     )
     
     $alertId = $AlertManager.CreateAlert(
-        -Title "Test Alert - $Severity Severity"
-        -Severity $Severity
-        -Description "This is a test alert for demonstration purposes"
-        -Source "Testing"
+        "Test Alert - $Severity Severity",
+        $Severity,
+        "This is a test alert for demonstration purposes",
+        "Testing"
     )
     
     return $alertId

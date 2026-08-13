@@ -341,7 +341,7 @@ function Add-VMExtension {
     )
     
     try {
-        Write-Log "Adding VM Extension to $VMName: $ExtensionType"
+        Write-Log "Adding VM Extension to ${VMName}: $ExtensionType"
         
         if (-not $ExtensionName) {
             $ExtensionName = "$VMName-$ExtensionType-$(Get-Date -Format 'yyyyMMddHHmmss')"

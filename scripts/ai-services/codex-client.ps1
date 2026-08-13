@@ -266,7 +266,7 @@ Code:
     
     [string]BuildRefactoringPrompt([string]$Code, [string]$Language, [string]$Objective) {
         return @"
-Refactor this $Language code to $Objective:
+Refactor this $Language code to ${Objective}:
 
 Original code:
 ```$Language
@@ -356,6 +356,7 @@ Test code:
                 $delay = [Math]::Min($delay * $this.RetryPolicy.BackoffMultiplier, $this.RetryPolicy.MaxBackoffDelay)
             }
         }
+        throw "Max retries exceeded"
     }
     
     [PSCustomObject]MakeHttpRequest([hashtable]$RequestBody) {
@@ -384,9 +385,9 @@ Test code:
     }
     
     [double]CalculateCost([PSCustomObject]$Usage) {
-        $config = $this.Config.services.codex
-        $inputCost = ($Usage.prompt_tokens / 1000) * $config.costPerThousandTokens.input
-        $outputCost = ($Usage.completion_tokens / 1000) * $config.costPerThousandTokens.output
+        $svcConfig = $this.Config.services.codex
+        $inputCost = ($Usage.prompt_tokens / 1000) * $svcConfig.costPerThousandTokens.input
+        $outputCost = ($Usage.completion_tokens / 1000) * $svcConfig.costPerThousandTokens.output
         return $inputCost + $outputCost
     }
     

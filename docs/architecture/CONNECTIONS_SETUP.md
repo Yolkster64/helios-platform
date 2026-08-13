@@ -7,6 +7,58 @@ checklist (including the GitHub settings pages) is
 [`../OWNER_START_HERE.md`](../OWNER_START_HERE.md). Hard rule everywhere below:
 **no secrets in the repo** — config files carry env-var *names* only.
 
+## One-command login (Cloud Shell and hybrid)
+
+`pwsh scripts/bootstrap/connect-all.ps1` runs every interactive login lane in one
+pass, **verify-first**: lanes already authenticated are detected and skipped, the
+rest get a device-code / no-browser flow (a URL plus a one-time code you finish in
+any browser). It never prompts for a key and never stores a secret; check the
+result any time with `pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly
+-ProbeAuth` (informational auth column, exit code unchanged).
+
+When a lane is *broken* rather than not-yet-logged-in,
+`pwsh scripts/bootstrap/auth-doctor.ps1` is the automatic diagnose/repair entry
+point: report-only by default (it probes every lane, mutates nothing, exits 0),
+and `-Apply` adds non-interactive repair only — whatever needs a human comes back
+as an exact owner-action command. Its connector lanes (linear, slack, sharepoint,
+azure-devops) are **verify-only** and never gate the exit code: their fixes are
+repository secrets or tenant consent, not logins. Connector knowledge and
+operations live in the `connector-integrations` skill
+(`.claude/skills/connector-integrations/`) and the `connector-steward` agent
+(`.claude/agents/connector-steward.md`).
+
+| Provider | What it unlocks | Command (what the lane runs) |
+|---|---|---|
+| GitHub (`gh`) | `gh-models` provider, `copilot` CLI (reuses the gh login), repo/Actions operations | `gh auth login --web` device-code (`scripts/bootstrap/connect-github.sh`) |
+| Azure (`az`) | Key Vault env loading (`load-env-from-keyvault.sh`), `azure-openai`/`azure-foundry` via Entra ID, Bicep deploys | `az login --use-device-code` (`connect-azure.sh` / `connect-azure.ps1`; Cloud Shell is implicitly logged in and skipped) |
+| Anthropic (`ant`) | Profile credentials for the `anthropic` provider and `claude` CLI without handling a raw key | `ant auth login --no-browser` (prints the authorize URL, accepts the pasted code) |
+| OpenAI (`codex`) | `codex` cliAgent (`codex exec {prompt}`) | Headless: `OPENAI_API_KEY` from Key Vault (`openai-api-key`); `codex login` only where a browser exists |
+
+**ant CLI facts** (per the CLI authentication docs):
+
+- Interactive login is `ant auth login` (browser OAuth). On a remote or
+  browserless host — Cloud Shell included — use `ant auth login --no-browser`,
+  which prints the authorize URL and accepts the pasted code.
+- `--profile <name>` names profiles; `--workspace-id` skips the workspace picker.
+  Credentials store under `$ANTHROPIC_CONFIG_DIR`.
+- `ant auth status` prints the selected credential source, but its exit status
+  must not be scripted against (the docs say so) — grep its stdout instead, which
+  is exactly what `setup-ai-clis.ps1 -ProbeAuth` does.
+- `ANTHROPIC_API_KEY` overrides every profile — unset it when the profile
+  credentials should win. `ant auth logout` clears stored credentials.
+- Non-interactive workloads (CI, servers) should use **Workload Identity
+  Federation**, not interactive login.
+
+**Visual Studio**: no lane needed — Visual Studio signs into Entra ID and GitHub
+itself (File → Account Settings…), and the Copilot/Azure tooling inside VS rides
+those logins rather than anything a script here sets up.
+
+**The hybrid rule**: interactive device-code / no-browser logins are for *humans*
+on workstations and Cloud Shell. CI and fleet workers never log in interactively —
+they use OIDC (`scripts/bootstrap/azure-oidc-setup.sh`), Workload Identity
+Federation, or managed identity, with keys arriving only via environment variables
+or Key Vault.
+
 ## The matrix
 
 | Connection | What flows | Carried by (in this repo) | Repo-side config needed |
@@ -18,7 +70,7 @@ checklist (including the GitHub settings pages) is
 | Self-hosted runners | `runs-on: [self-hosted, helios]` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
 | GitHub ↔ Linear | Labeled issues mirrored to the Linear board | `.github/workflows/linear-sync.yml` + `config/connectors.json` | `LINEAR_API_KEY` secret |
 | GitHub ↔ Slack | CI/deploy outcomes posted to channels | `.github/workflows/notify-slack.yml` + `config/connectors.json` | `SLACK_WEBHOOK_URL` secret |
-| GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/setup-board.ps1` | User PAT with `project` scope (run-time param, never stored) |
+| GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/` (custom fields, validation, and epic wiring via GraphQL; views/templates/automation are manual UI steps the scripts document) | User PAT with `project` scope (run-time param, never stored) |
 
 ## GitHub Actions ↔ Azure (OIDC, no stored credential)
 
@@ -159,11 +211,39 @@ per `githubLabelToLinear`, and close/reopen moves the Linear state. Enable
 with `gh secret set LINEAR_API_KEY` / `gh secret set SLACK_WEBHOOK_URL`;
 routing changes are edits to `config/connectors.json`, never to the workflows.
 
+> **Owner action — disable Linear's own GitHub sync for team John.** Linear's
+> built-in GitHub integration must NOT also be linked to this repository for
+> team `JOH`, or the two syncs loop: Linear re-creates its mirrored issues back
+> on GitHub as new issues (this produced duplicates #54–#93, closed 2026-08-12,
+> and closing the GitHub twins then cancelled the Linear mirrors, which had to
+> be restored). Click path: Linear → **Settings → Integrations → GitHub** →
+> under the team `John` link, disable issue sync for `Yolkster64/helios-platform`
+> (leave PR-link previews on if desired). One direction only: this repo's
+> `linear-sync.yml` is the writer; Linear stays the mirror.
+
 ## GitHub Project board
 
-`scripts/board-setup/setup-board.ps1` orchestrates the full board build
-(custom fields → phase templates → automation rules → views, each a sibling
-script in `scripts/board-setup/`; check afterwards with `validate-board.ps1`):
+`scripts/board-setup/setup-board.ps1` orchestrates the board setup steps, but
+only part of the build is real API provisioning — GitHub's ProjectV2 GraphQL
+API cannot create views, item templates, or built-in workflows:
+
+- **Custom fields — real**: `setup-custom-fields.ps1` creates the 25 fields via
+  GraphQL mutations against `api.github.com/graphql`.
+- **Views / phase templates / automation rules — manual + local simulation**:
+  `setup-views.ps1`, `setup-templates.ps1`, and `setup-automation-rules.ps1`
+  make **zero API calls** (a real API limitation, not a script bug). They write
+  the intended configuration to local JSON (`.views/`, `templates/`,
+  `.automation/`) and generate manual click-path guides under `logs/`; those
+  steps are performed by hand in the GitHub UI.
+- **Validation — real**: `validate-board.ps1` does a read-only GraphQL query of
+  the project's fields and items (first 100), verifies the 25 expected custom
+  fields, and reports counts. Without a token it prints exactly what it would
+  query and exits 0 (`NO TOKEN - DRY-RUN`).
+- **Epics — real**: `add-epics-to-board.ps1` puts epic issues #14–#53 of
+  `Yolkster64/helios-platform` on the board via `addProjectV2ItemById` and
+  stamps Status/Priority via `updateProjectV2ItemFieldValue` where those fields
+  exist. Idempotent; `-DryRun` prints the per-issue plan; degrades to the same
+  no-token dry-run.
 
 ```powershell
 ./scripts/board-setup/setup-board.ps1 -GitHubToken $token -ProjectNumber 1 `
@@ -179,6 +259,45 @@ Real parameters: `-GitHubToken` (mandatory), `-ProjectNumber` (mandatory, int),
 **Projects v2 needs a user PAT with the `project` scope** (classic token; the
 Actions `GITHUB_TOKEN` cannot manage Projects v2) — pass it as `-GitHubToken`
 at run time from a workstation; it is a parameter, never a stored setting.
+`validate-board.ps1` and `add-epics-to-board.ps1` also fall back to the
+`GITHUB_TOKEN` environment variable (name only — the value is never stored or
+printed) and print a dry-run plan and exit 0 when it is absent.
+
+## GitHub governance (rulesets, Pages, auto-merge)
+
+The governance artifacts live in the repo — `.github/rulesets/main.json`,
+`.github/CODEOWNERS`, `.github/dependabot.yml`, and the PR/issue templates — and
+three owner clicks turn them on:
+
+1. **Apply the branch ruleset** — `pwsh scripts/github/apply-rulesets.ps1` first
+   (dry run: prints the exact `gh api` POST/PUT calls, changes nothing), then re-run
+   with `-Apply` under a `gh` login or PAT with the `admin:repo` scope. Idempotent:
+   it GETs existing rulesets and updates by name instead of duplicating; exits 2
+   with an explanation when `gh` or auth is missing. The check-name provenance and
+   exclusion rationale are in the script's header comment.
+2. **Enable GitHub Pages** — Settings → Pages → Source: **GitHub Actions**, so
+   `pages-dashboard.yml` can publish the status dashboard that
+   `status-dashboard.yml` collects from the real Actions API.
+3. **Enable "Allow auto-merge"** — Settings → General → Pull Requests, so
+   `auto-merge.yml` can arm merges.
+
+**Auto-merge label contract**: adding the **`automerge` label** is the arming
+decision. It is honored only when the sender has owner/write permission, and the
+absorption lane is excluded (absorption PRs never auto-merge). Arming never skips
+gates — the merge still waits for every required check in the `main` ruleset, and
+removing the label disarms.
+
+**Automatic lane**: `.github/workflows/pr-pipeline.yml` is the unattended
+counterpart to the label lane. For trusted authors only (the repo owner, the
+Copilot coding agent, and dependabot's grouped minor/patch updates) it readies the
+agent's draft PRs when all checks are green, and arms — or, on an already-clean
+PR, completes — a squash merge once review threads are resolved and every check on
+the head SHA passes (absorption branches always excluded). The same three owner
+clicks above are its prerequisites: the ruleset supplies the required checks it
+defers to, and "Allow auto-merge" lets it arm. To pause the automatic lane without
+touching the label lane, disable the workflow: Actions → **PR Pipeline** → "…" →
+Disable workflow (or `gh workflow disable pr-pipeline.yml`); re-enabling it
+resumes evaluation on the next PR event.
 
 ## Connection checklist
 
@@ -191,4 +310,4 @@ at run time from a workstation; it is a parameter, never a stored setting.
 | Self-hosted runners | Run `scripts/runners/register-runner.sh` (or `.ps1`) as repo admin, start the runner | Labels `helios,xcore` (+ pool extras, e.g. `xcore-native`) | `gh workflow run runner-smoke.yml`; runner listed in Settings → Actions → Runners |
 | Linear | Create a Linear personal API key | Secret `LINEAR_API_KEY` (+ `linear.teamKey` in `config/connectors.json`) | Label an issue `bug` (or another sync label) → `[GH-n]` issue appears in Linear |
 | Slack | Create an incoming webhook | Secret `SLACK_WEBHOOK_URL` (+ `slack.notifyOn` routing) | Re-run any listed workflow; failure/`always` outcomes post to the channel |
-| Project board | Run `setup-board.ps1` with a `project`-scope user PAT | PAT passed as `-GitHubToken` (never stored) | `scripts/board-setup/validate-board.ps1`; board visible under the org's Projects |
+| Project board | Run `setup-board.ps1` with a `project`-scope user PAT (custom fields via API; views/templates/automation are manual UI steps — the scripts only simulate locally); add epics with `add-epics-to-board.ps1` | PAT passed as `-GitHubToken` or via `GITHUB_TOKEN` (never stored) | `scripts/board-setup/validate-board.ps1` (real GraphQL read of fields/items); board visible under the org's Projects |

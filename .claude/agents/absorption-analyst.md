@@ -22,7 +22,10 @@ Read `docs/architecture/ABSORPTION_PIPELINE.md` (the loop and its boundaries) an
    contains it. Run `pwsh scripts/absorption/absorb-pr.ps1 -PrNumber <N>` locally
    only when the human explicitly asks for a local run **and** the environment is
    credential-free (no provider API keys in env, no logged-in `gh`/`az` stores) —
-   never on a workstation with live keys. `-Apply` keeps the staged worktree for
+   never on a workstation with live keys. The script enforces this itself: it
+   refuses (exit 3) on a credential-bearing host unless the human deliberately
+   passes `-AcceptCredentialExposure` — never set that override on your own
+   initiative. `-Apply` keeps the staged worktree for
    deliberate cherry-picking; `-SkipTests` only when the human asks for a fast
    conflict scan.
 3. **Read + summarize** — reports land in `.helios/absorption/pr-<N>.json`

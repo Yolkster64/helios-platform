@@ -241,7 +241,7 @@ function Generate-Conflict-Report {
 $(
     if ($Broken) {
         $Broken | ForEach-Object {
-            "- **$($_.name)** - `$($_.path)`"
+            "- **$($_.name)** - ``$($_.path)``"
         } | Out-String
     } else {
         "✓ No broken references found"

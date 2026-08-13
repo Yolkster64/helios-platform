@@ -28,12 +28,13 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$OrganizationName,
     
-    [switch]$DryRun,
-    [switch]$Verbose
+    [switch]$DryRun
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
 $ErrorActionPreference = 'Stop'
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 # Configuration
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
@@ -51,7 +52,7 @@ function Write-Log {
     $timestamp = Get-Date -Format 'HH:mm:ss'
     $logMessage = "[$timestamp] [$Level] $Message"
     Add-Content -Path $logFile -Value $logMessage
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') {
+    if ($VerbosePreference -eq 'Continue' -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') {
         Write-Host $logMessage
     }
 }

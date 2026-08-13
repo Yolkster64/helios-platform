@@ -78,7 +78,7 @@ class RecommendationEngine {
             title = "Right-size AI Model Usage"
             description = "Switch 40% of GPT-4 calls to Gemini-Pro for non-critical tasks"
             confidence = 0.92
-            impact = "\$2,500/month savings (22% cost reduction)"
+            impact = "`$2,500/month savings (22% cost reduction)"
             effort = "low"
             estimatedROI = 18.9
         }
@@ -89,7 +89,7 @@ class RecommendationEngine {
             title = "Archive Old Data"
             description = "Move 40% of database storage to cold storage archive"
             confidence = 0.85
-            impact = "\$2,100/month savings in storage"
+            impact = "`$2,100/month savings in storage"
             effort = "medium"
             estimatedROI = 8.7
         }

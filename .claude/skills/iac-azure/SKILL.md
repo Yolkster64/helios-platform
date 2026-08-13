@@ -53,3 +53,15 @@ deprecated; its parameter mapping lives in `infra/README.md`.
 | Reviewing template changes for security/idempotency | `security_analysis` → Claude |
 | Generating a new module from a resource spec | `code_generation` → Codex/GPT |
 | Explaining a what-if diff | `long_context_analysis` → Claude |
+
+## Reference material
+
+Generic Bicep/Terraform depth lives in `.claude/skills/automation-wiring/references/`;
+the files here are the HELIOS layer:
+
+- `references/bicep-tooling.md` — the validation ladder as CI runs it, what-if exit-code
+  truth (`--no-pretty-print` for machine-readable gating), the missing-bicepconfig.json
+  gap, AVM addressing and why this repo stays raw, deployment stacks as a candidate.
+- `references/terraform-azurerm.md` — the validate-only mirror's pins (azurerm `~> 4.0`,
+  lockfile at 4.81.0), azurerm 4.x/5.x notes, `plan -detailed-exitcode` as the what-if
+  analog, azapi-where-azurerm-falls-short patterns, divergence safety rules.

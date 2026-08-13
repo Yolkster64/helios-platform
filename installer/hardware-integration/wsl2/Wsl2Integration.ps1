@@ -326,7 +326,7 @@ case "$($agent.Type)" in
 esac
 
 echo "Agent $($agent.Name) is running on port $($agent.PortNumber)"
-@"
+"@
         return $script
     }
     
@@ -433,6 +433,7 @@ echo "Agent $($agent.Name) is running on port $($agent.PortNumber)"
                 return $candidates[0]
             }
         }
+        return $null
     }
     
     [bool] MonitorAgentHealth() {

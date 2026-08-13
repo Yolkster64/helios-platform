@@ -50,8 +50,8 @@ class AIServiceHub {
             if (-not (Test-Path $Path)) {
                 throw "Configuration file not found: $Path"
             }
-            $config = Get-Content $Path -Raw | ConvertFrom-Json
-            return $config | ConvertTo-Hashtable
+            $loadedConfig = Get-Content $Path -Raw | ConvertFrom-Json
+            return $loadedConfig | ConvertTo-Hashtable
         }
         catch {
             Write-Error "Failed to load configuration: $_"
@@ -104,12 +104,12 @@ class AIServiceHub {
     }
     
     [void]InitializeServices() {
-        $services = $this.Config.services
-        foreach ($serviceName in $services.PSObject.Properties.Name) {
-            if ($services.$serviceName.enabled) {
+        $svcConfigs = $this.Config.services
+        foreach ($serviceName in $svcConfigs.PSObject.Properties.Name) {
+            if ($svcConfigs.$serviceName.enabled) {
                 $this.Services[$serviceName] = [PSCustomObject]@{
                     Name = $serviceName
-                    Config = $services.$serviceName
+                    Config = $svcConfigs.$serviceName
                     IsHealthy = $true
                     LastError = $null
                     RequestCount = 0
@@ -203,7 +203,7 @@ class AIServiceHub {
             # Check cost limits
             $estimatedCost = $this.EstimateCost($Content, $servicesToUse)
             if (-not $this.CanAffordRequest($estimatedCost)) {
-                $this.LogWarning("Request would exceed budget limits. Estimated cost: $$estimatedCost")
+                $this.LogWarning("Request would exceed budget limits. Estimated cost: `$$estimatedCost")
                 throw "Request exceeds budget limits"
             }
             

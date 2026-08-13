@@ -173,7 +173,8 @@ $commands = @(
     @{ Action = 'Deploy (Ultimate)'; Command = 'gh workflow run deploy.yml -f tier=Ultimate' }
 )
 
-foreach ($i, $cmd in $commands | Enumerate) {
+for ($i = 0; $i -lt $commands.Count; $i++) {
+    $cmd = $commands[$i]
     $num = $i + 1
     Write-Host "  $num. $($cmd.Action)"
     Write-Host "     $ $($cmd.Command)"
