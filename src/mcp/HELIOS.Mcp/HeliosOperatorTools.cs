@@ -40,7 +40,7 @@ public static class HeliosOperatorTools
     }
 
     [McpServerTool(Name = "helios_operator_profile_save", ReadOnly = false, Idempotent = true, OpenWorld = false)]
-    [Description("Create or update the inspectable HELIOS operator profile under .helios/operator/profile.json. Omitted fields keep their current value; an empty string clears that field. Tags and assistant surfaces are validated, and secret-looking names or values are rejected.")]
+    [Description("Create or update the inspectable HELIOS operator profile under .helios/operator/profile.json. Omitted fields keep their current value; an empty string clears that field. A save that leaves the effective profile unchanged is a no-op (no rewrite, no journal entry). All fields are validated, and secret-looking names or values are rejected.")]
     public static async Task<string> SaveProfile(
         [Description("Optional display name to remember for generated labels and receipts; omit to keep it.")] string? displayName = null,
         [Description("Preferred Azure location such as southcentralus; omit to keep it.")] string? preferredAzureLocation = null,
@@ -67,7 +67,7 @@ public static class HeliosOperatorTools
     }
 
     [McpServerTool(Name = "helios_operator_context_sync", ReadOnly = false, Idempotent = false, OpenWorld = true)]
-    [Description("Capture the shared HELIOS repo/CLI context and append a sanitized journal receipt. Optionally reads the authenticated Azure CLI subscription, resource groups, resources, locations, and tags, then records a delta from the prior snapshot. It never applies, deletes, or changes Azure resources and never stores tokens or raw CLI output.")]
+    [Description("Capture the shared HELIOS repo/CLI context and append a sanitized journal receipt. Optionally reads the authenticated Azure CLI subscription, resource groups, resources, locations, and tags, then records a delta from the prior snapshot; a sync without Azure carries the last ready inventory forward unchanged so the comparison baseline survives. It never applies, deletes, or changes Azure resources and never stores tokens or raw CLI output.")]
     public static async Task<string> SyncContext(
         [Description("Calling surface label: claude-code, codex, chatgpt, copilot, github-cli, azure-cli, hermes, xcore, or manual.")] string surface = "manual",
         [Description("Read the current Azure CLI account and resource groups. Requires an existing az login or Cloud Shell session.")] bool includeAzure = false,
@@ -128,6 +128,9 @@ internal sealed class OperatorContextStore
     private static readonly Regex SensitiveName = new(
         "(^|[-_.])(secret|password|passwd|token|credential|api[-_]?key|private[-_]?key)($|[-_.])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex CamelCaseBoundary = new(
+        "(?<=[a-z0-9])(?=[A-Z])",
+        RegexOptions.CultureInvariant);
     private static readonly Regex SensitiveValue = new(
         "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -221,11 +224,22 @@ internal sealed class OperatorContextStore
             DisplayName: UpdateOptional(current.DisplayName, displayName, "displayName", 100),
             PreferredAzureLocation: UpdateLocation(current.PreferredAzureLocation, preferredAzureLocation),
             NamingPrefix: UpdatePrefix(current.NamingPrefix, namingPrefix),
-            DefaultTags: defaultTagsJson is null ? current.DefaultTags : ParseProfileTags(defaultTagsJson),
+            DefaultTags: defaultTagsJson is null
+                ? current.DefaultTags
+                : string.IsNullOrWhiteSpace(defaultTagsJson)
+                    ? new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    : ParseProfileTags(defaultTagsJson),
             AssistantSurfaces: assistantSurfaces is null
                 ? current.AssistantSurfaces
                 : ParseAssistantSurfaces(assistantSurfaces),
             UpdatedAtUtc: _clock());
+
+        if (ProfilesEquivalent(current, next))
+        {
+            // Idempotent contract: an effective no-op neither rewrites the profile nor
+            // appends a journal entry, so repeated identical saves leave no extra trace.
+            return current;
+        }
 
         await WriteJsonAtomicallyAsync(ProfilePath, next, cancellationToken);
         await AppendJournalLineAsync(
@@ -235,6 +249,7 @@ internal sealed class OperatorContextStore
                 Event: "profile-saved",
                 Surface: "operator-profile",
                 ContextSha256: null,
+                RepositoryBranch: null,
                 RepositoryHead: null,
                 AzureSubscriptionId: null,
                 ResourceGroupCount: null,
@@ -269,15 +284,21 @@ internal sealed class OperatorContextStore
 
         var cli = _cliDetector();
         var repository = await CaptureRepositoryAsync(cancellationToken);
-        var azure = includeAzure
+        var capturedAzure = includeAzure
             ? await CaptureAzureAsync(includeResources, cli, cancellationToken)
-            : AzureSnapshot.NotRequested;
+            : null;
 
         Directory.CreateDirectory(OperatorDirectory);
         await using var fileLock = await AcquireLockAsync(cancellationToken);
         var prior = GetLatestContext();
         var profile = GetProfile();
-        var changes = BuildChanges(prior?.Azure, azure);
+        // A repo-only sync must not destroy the last ready Azure inventory: carry it
+        // forward so the next Azure-enabled sync still has a comparable baseline.
+        var azure = capturedAzure
+            ?? (prior?.Azure is { Status: "ready" } baseline ? baseline : AzureSnapshot.NotRequested);
+        var changes = capturedAzure is null
+            ? OperatorChangeSet.NotRequested
+            : BuildChanges(prior?.Azure, capturedAzure);
         var nextSteps = BuildNextSteps(profile, repository, azure, cli);
 
         var snapshot = new OperatorContextSnapshot(
@@ -291,9 +312,10 @@ internal sealed class OperatorContextStore
             Changes: changes,
             NextSteps: nextSteps);
 
-        await WriteJsonAtomicallyAsync(ContextPath, snapshot, cancellationToken);
-        var contextJson = JsonSerializer.Serialize(snapshot, JsonOptions);
-        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(contextJson))).ToLowerInvariant();
+        // Hash exactly the bytes written to disk so `sha256sum context.json` matches
+        // the journal receipt.
+        var contextBytes = await WriteJsonAtomicallyAsync(ContextPath, snapshot, cancellationToken);
+        var digest = Convert.ToHexString(SHA256.HashData(contextBytes)).ToLowerInvariant();
         await AppendJournalLineAsync(
             new OperatorJournalEntry(
                 SchemaVersion: 1,
@@ -301,6 +323,7 @@ internal sealed class OperatorContextStore
                 Event: "context-synced",
                 Surface: surface,
                 ContextSha256: digest,
+                RepositoryBranch: repository.Branch,
                 RepositoryHead: repository.HeadSha,
                 AzureSubscriptionId: azure.SubscriptionId,
                 ResourceGroupCount: azure.ResourceGroups.Count,
@@ -347,7 +370,7 @@ internal sealed class OperatorContextStore
                 "git switch -c <task-branch>",
                 "none"));
         }
-        else if (repository.IsDirty)
+        else if (repository.IsDirty == true)
         {
             steps.Add(new OperatorNextStep(
                 "review-local-diff",
@@ -415,34 +438,46 @@ internal sealed class OperatorContextStore
 
     private async Task<RepositorySnapshot> CaptureRepositoryAsync(CancellationToken cancellationToken)
     {
-        if (!CommandExists("git"))
+        // Availability is derived from the injected runner (Started == false means the
+        // command could not launch), never from a static PATH probe, so tests can fake it.
+        var head = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
+        if (!head.Started)
         {
             return RepositorySnapshot.Empty with { Status = "git-unavailable" };
         }
 
+        var headSha = head.ExitCode == 0 ? NullIfEmpty(head.StandardOutput.Trim()) : null;
+        if (headSha is null)
+        {
+            return RepositorySnapshot.Empty with { Status = "not-a-git-checkout" };
+        }
+
         var branch = await RunGitValueAsync(new[] { "branch", "--show-current" }, cancellationToken);
-        var head = await RunGitValueAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
         var remote = await RunGitValueAsync(new[] { "remote", "get-url", "origin" }, cancellationToken);
-        var status = await _runner.RunAsync(
-            "git",
-            new[] { "-C", RepoRoot, "status", "--porcelain=v1" },
-            TimeSpan.FromSeconds(10),
-            cancellationToken);
+        var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
 
         return new RepositorySnapshot(
-            Status: head is null ? "not-a-git-checkout" : "ready",
+            Status: "ready",
             Repository: NormalizeRepositoryName(remote),
             Branch: branch,
-            HeadSha: head,
-            IsDirty: status.Started && status.ExitCode == 0 && !string.IsNullOrWhiteSpace(status.StandardOutput),
+            HeadSha: headSha,
+            // null = status capture failed; never claim a clean checkout without evidence.
+            IsDirty: status.Started && status.ExitCode == 0
+                ? !string.IsNullOrWhiteSpace(status.StandardOutput)
+                : null,
             IsMainBranch: string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private Task<CommandResult> RunGitAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
+    {
+        var allArgs = new List<string> { "-C", RepoRoot };
+        allArgs.AddRange(args);
+        return _runner.RunAsync("git", allArgs, TimeSpan.FromSeconds(10), cancellationToken);
     }
 
     private async Task<string?> RunGitValueAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
-        var allArgs = new List<string> { "-C", RepoRoot };
-        allArgs.AddRange(args);
-        var result = await _runner.RunAsync("git", allArgs, TimeSpan.FromSeconds(10), cancellationToken);
+        var result = await RunGitAsync(args, cancellationToken);
         return result.Started && result.ExitCode == 0
             ? NullIfEmpty(result.StandardOutput.Trim())
             : null;
@@ -557,7 +592,8 @@ internal sealed class OperatorContextStore
                 Name: GetString(item, "name") ?? "unknown",
                 Location: GetString(item, "location"),
                 ProvisioningState: GetString(item, "provisioningState"),
-                Tags: ParseAzureTags(item)))
+                Tags: ParseAzureTags(item, out var tagsTruncated),
+                TagsTruncated: tagsTruncated))
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -574,27 +610,31 @@ internal sealed class OperatorContextStore
                 Type: GetString(item, "type") ?? "unknown",
                 Location: GetString(item, "location"),
                 ResourceGroup: GetString(item, "resourceGroup"),
-                Tags: ParseAzureTags(item)))
+                Tags: ParseAzureTags(item, out var tagsTruncated),
+                TagsTruncated: tagsTruncated))
             .OrderBy(item => item.ResourceGroup, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    private static SortedDictionary<string, string> ParseAzureTags(JsonElement item)
+    private static SortedDictionary<string, string> ParseAzureTags(JsonElement item, out bool truncated)
     {
+        truncated = false;
         var tags = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!item.TryGetProperty("tags", out var tagElement) || tagElement.ValueKind != JsonValueKind.Object)
         {
             return tags;
         }
 
-        foreach (var property in tagElement.EnumerateObject().Take(MaxTags))
+        var properties = tagElement.EnumerateObject().ToArray();
+        truncated = properties.Length > MaxTags;
+        foreach (var property in properties.Take(MaxTags))
         {
             var value = property.Value.ValueKind == JsonValueKind.String
                 ? property.Value.GetString() ?? string.Empty
                 : property.Value.ToString();
-            tags[Truncate(property.Name, 128)] = SensitiveName.IsMatch(property.Name) || SensitiveValue.IsMatch(value)
+            tags[Truncate(property.Name, 128)] = IsSensitiveName(property.Name) || SensitiveValue.IsMatch(value)
                 ? "<redacted>"
                 : Truncate(value, 256);
         }
@@ -604,22 +644,32 @@ internal sealed class OperatorContextStore
     private static OperatorChangeSet BuildChanges(AzureSnapshot? prior, AzureSnapshot current)
     {
         if (prior is null || prior.Status != "ready" || current.Status != "ready"
-            || prior.ResourceGroupsTruncated || current.ResourceGroupsTruncated)
+            || prior.ResourceGroupsTruncated || current.ResourceGroupsTruncated
+            // A subscription or tenant switch between syncs would masquerade as mass
+            // adds/removes; require the same non-null identity on both sides.
+            || prior.SubscriptionId is null || prior.TenantId is null
+            || !string.Equals(prior.SubscriptionId, current.SubscriptionId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(prior.TenantId, current.TenantId, StringComparison.OrdinalIgnoreCase)
+            // Items whose tag maps were truncated cannot prove "unchanged".
+            || prior.ResourceGroups.Any(group => group.TagsTruncated)
+            || current.ResourceGroups.Any(group => group.TagsTruncated))
         {
             return OperatorChangeSet.NotComparable;
         }
 
         var priorGroups = prior.ResourceGroups.ToDictionary(group => group.Name, StringComparer.OrdinalIgnoreCase);
         var currentGroups = current.ResourceGroups.ToDictionary(group => group.Name, StringComparer.OrdinalIgnoreCase);
-        var groupsAdded = currentGroups.Keys.Except(priorGroups.Keys, StringComparer.OrdinalIgnoreCase).Order().ToArray();
-        var groupsRemoved = priorGroups.Keys.Except(currentGroups.Keys, StringComparer.OrdinalIgnoreCase).Order().ToArray();
+        var groupsAdded = currentGroups.Keys.Except(priorGroups.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        var groupsRemoved = priorGroups.Keys.Except(currentGroups.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
         var groupsChanged = currentGroups.Keys.Intersect(priorGroups.Keys, StringComparer.OrdinalIgnoreCase)
             .Where(key => !ResourceGroupEquals(currentGroups[key], priorGroups[key]))
-            .Order()
+            .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var resourcesComparable = !prior.ResourcesTruncated && !current.ResourcesTruncated
-            && prior.ResourcesIncluded && current.ResourcesIncluded;
+            && prior.ResourcesIncluded && current.ResourcesIncluded
+            && !prior.Resources.Any(resource => resource.TagsTruncated)
+            && !current.Resources.Any(resource => resource.TagsTruncated);
         var resourcesAdded = Array.Empty<string>();
         var resourcesRemoved = Array.Empty<string>();
         var resourcesChanged = Array.Empty<string>();
@@ -627,11 +677,11 @@ internal sealed class OperatorContextStore
         {
             var oldResources = prior.Resources.ToDictionary(ResourceKey, StringComparer.OrdinalIgnoreCase);
             var newResources = current.Resources.ToDictionary(ResourceKey, StringComparer.OrdinalIgnoreCase);
-            resourcesAdded = newResources.Keys.Except(oldResources.Keys, StringComparer.OrdinalIgnoreCase).Order().ToArray();
-            resourcesRemoved = oldResources.Keys.Except(newResources.Keys, StringComparer.OrdinalIgnoreCase).Order().ToArray();
+            resourcesAdded = newResources.Keys.Except(oldResources.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+            resourcesRemoved = oldResources.Keys.Except(newResources.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
             resourcesChanged = newResources.Keys.Intersect(oldResources.Keys, StringComparer.OrdinalIgnoreCase)
                 .Where(key => !ResourceEquals(newResources[key], oldResources[key]))
-                .Order()
+                .Order(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
 
@@ -703,8 +753,19 @@ internal sealed class OperatorContextStore
         {
             throw new ArgumentException($"{fieldName} must be at most {maxLength} printable characters.");
         }
+        if (SensitiveValue.IsMatch(candidate))
+        {
+            throw new ArgumentException($"{fieldName} looks credential-like; store secret values in Key Vault, not the operator profile.");
+        }
         return candidate;
     }
+
+    private static bool ProfilesEquivalent(OperatorProfile left, OperatorProfile right) =>
+        string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal)
+        && string.Equals(left.PreferredAzureLocation, right.PreferredAzureLocation, StringComparison.Ordinal)
+        && string.Equals(left.NamingPrefix, right.NamingPrefix, StringComparison.Ordinal)
+        && TagsEqual(left.DefaultTags, right.DefaultTags)
+        && left.AssistantSurfaces.SequenceEqual(right.AssistantSurfaces, StringComparer.Ordinal);
 
     private static string? UpdateLocation(string? current, string? candidate)
     {
@@ -780,7 +841,7 @@ internal sealed class OperatorContextStore
             {
                 throw new ArgumentException($"Tag '{key}' must be at most 256 printable characters.");
             }
-            if (SensitiveName.IsMatch(key) || SensitiveValue.IsMatch(value))
+            if (IsSensitiveName(key) || SensitiveValue.IsMatch(value))
             {
                 throw new ArgumentException($"Tag '{key}' looks credential-like; store secret values in Key Vault, not the operator profile.");
             }
@@ -816,6 +877,13 @@ internal sealed class OperatorContextStore
     private static bool IsCliAvailable(IReadOnlyDictionary<string, bool> availability, string command) =>
         availability.TryGetValue(command, out var available) && available;
 
+    /// <summary>
+    /// Matches punctuation-delimited credential-like names and their camelCase forms
+    /// (clientSecret, sasToken, secretValue) by inserting a separator at case boundaries.
+    /// </summary>
+    private static bool IsSensitiveName(string name) =>
+        SensitiveName.IsMatch(name) || SensitiveName.IsMatch(CamelCaseBoundary.Replace(name, "-"));
+
     private async Task<FileStream> AcquireLockAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(OperatorDirectory);
@@ -835,16 +903,14 @@ internal sealed class OperatorContextStore
         throw new IOException("Timed out waiting for the HELIOS operator-context lock.");
     }
 
-    private static async Task WriteJsonAtomicallyAsync<T>(string path, T value, CancellationToken cancellationToken)
+    /// <summary>Writes the serialized value atomically and returns the exact bytes written.</summary>
+    private static async Task<byte[]> WriteJsonAtomicallyAsync<T>(string path, T value, CancellationToken cancellationToken)
     {
+        var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, JsonOptions) + Environment.NewLine);
         var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            await File.WriteAllTextAsync(
-                temporaryPath,
-                JsonSerializer.Serialize(value, JsonOptions) + Environment.NewLine,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                cancellationToken);
+            await File.WriteAllBytesAsync(temporaryPath, payload, cancellationToken);
             File.Move(temporaryPath, path, overwrite: true);
         }
         finally
@@ -854,6 +920,7 @@ internal sealed class OperatorContextStore
                 File.Delete(temporaryPath);
             }
         }
+        return payload;
     }
 
     private async Task AppendJournalLineAsync(OperatorJournalEntry entry, CancellationToken cancellationToken)
@@ -1066,10 +1133,10 @@ internal sealed record RepositorySnapshot(
     string? Repository,
     string? Branch,
     string? HeadSha,
-    bool IsDirty,
+    bool? IsDirty,
     bool IsMainBranch)
 {
-    internal static readonly RepositorySnapshot Empty = new("not-captured", null, null, null, false, false);
+    internal static readonly RepositorySnapshot Empty = new("not-captured", null, null, null, null, false);
 }
 
 internal sealed record AzureSnapshot(
@@ -1104,7 +1171,8 @@ internal sealed record AzureResourceGroupSnapshot(
     string Name,
     string? Location,
     string? ProvisioningState,
-    SortedDictionary<string, string> Tags);
+    SortedDictionary<string, string> Tags,
+    bool TagsTruncated = false);
 
 internal sealed record AzureResourceSnapshot(
     string? Id,
@@ -1112,7 +1180,8 @@ internal sealed record AzureResourceSnapshot(
     string Type,
     string? Location,
     string? ResourceGroup,
-    SortedDictionary<string, string> Tags);
+    SortedDictionary<string, string> Tags,
+    bool TagsTruncated = false);
 
 internal sealed record OperatorChangeSet(
     bool Comparable,
@@ -1135,6 +1204,11 @@ internal sealed record OperatorChangeSet(
         Array.Empty<string>(),
         Array.Empty<string>(),
         "No comparable prior Azure snapshot.");
+
+    internal static readonly OperatorChangeSet NotRequested = NotComparable with
+    {
+        Summary = "Azure inventory was not requested in this sync; the last ready inventory, if any, was carried forward.",
+    };
 }
 
 internal sealed record OperatorNextStep(
@@ -1150,6 +1224,7 @@ internal sealed record OperatorJournalEntry(
     string Event,
     string Surface,
     string? ContextSha256,
+    string? RepositoryBranch,
     string? RepositoryHead,
     string? AzureSubscriptionId,
     int? ResourceGroupCount,

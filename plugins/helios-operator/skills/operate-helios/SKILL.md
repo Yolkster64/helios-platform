@@ -30,7 +30,8 @@ instead of assuming one client-specific prefix.
 Call `helios_operator_profile_save` only for preferences the user states or confirms:
 display name, preferred Azure location, naming prefix, non-sensitive default tags, and
 assistant surfaces. Never infer account identifiers, identities, resource ownership, or
-credentials. The tool rejects credential-looking tag names and values.
+credentials. The tool rejects credential-looking names and values — including camelCase
+tag names such as `clientSecret` — and a save that changes nothing is a no-op.
 
 ## Route work deliberately
 
