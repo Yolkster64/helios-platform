@@ -19,7 +19,7 @@ skill and are stated once, here:
 | GitHub Actions / JSON / MSBuild config | `pipelines-config` | `actions-tooling.md`, `msbuild-and-config.md` | `.github/workflows/`, `config/aihub.json`, the csproj files |
 | Bicep / ARM / Terraform | `iac-azure` | `bicep-tooling.md`, `terraform-azurerm.md` | `infra/main.bicep`, `infra/terraform/`, `.github/workflows/helios-deploy.yml` |
 | C++ native spoke | `cpp-performance` | `build-and-packaging.md`, `rendering-gpu.md` | `src/ai/HELIOS.AIHub.Native/CMakeLists.txt`, `scripts/build/build-native.sh`, `src/ai/HELIOS.AIHub/Native/NativeMethods.cs` |
-| Python agents spoke | `python-agents` | `ml-and-rl.md` | `src/ai/python/` |
+| Python agents spoke | `python-agents` | `ml-and-rl.md`, `testing-and-libraries.md`, `parallelization-and-fleets.md` | `src/ai/python/` |
 | F# domain modeling | `fsharp-functional` | `analytics-patterns.md` | `src/ai/HELIOS.AIHub.Domain/` |
 | Cross-format wiring (workflows ↔ IaC ↔ config) | `automation-wiring` | `github-actions.md`, `bicep-arm.md`, `terraform.md`, `config-schemas.md`, `rest-curl.md` | `.github/workflows/`, `infra/`, `config/` |
 | Hub extension recipes (provider / CLI / MCP tool) | `api-creator` | already deep — none | `src/ai/HELIOS.AIHub*`, `src/mcp/HELIOS.Mcp/`, `config/aihub.json` |
@@ -28,11 +28,14 @@ skill and are stated once, here:
 | GitHub Copilot (coding agent / review / CLI) | `github-copilot` | `copilot-surfaces.md` | `.github/workflows/copilot-dispatch.yml`, `.github/copilot-instructions.md`, `docs/architecture/FORWARD_PLAN.md` (operating model; merged agent PRs #95–#97) |
 | ChatGPT / OpenAI Codex (cloud reviewer / CLI / API lane) | `openai-codex` | `codex-surfaces.md` | `config/aihub.json` (codex + openai-codex), `scripts/bootstrap/connect-all.ps1`, `docs/architecture/{CONNECTIONS_SETUP,REVIEW_LOOP}.md` |
 | GitHub auth & control plane (tokens / OIDC / rulesets / Projects v2 / wiki / Pages) | `github-control` | `auth-topology.md`, `control-plane.md` | `.github/workflows/{claude-foundry,copilot-dispatch,wiki-generator,helios-deploy}.yml`, `scripts/board-setup/`, `scripts/bootstrap/azure-oidc-setup.sh`, `docs/architecture/{CONNECTIONS_SETUP,GITHUB_ECOSYSTEM_DESIGN,REVIEW_LOOP}.md` |
+| Connectors (Linear / Slack; SharePoint pointer; ADO status) | `connector-integrations` | `linear-slack.md`, `sharepoint-devops.md` | `config/connectors.json`, `.github/workflows/{linear-sync,notify-slack}.yml`, `docs/architecture/CONNECTIONS_SETUP.md` |
 
 "Already deep": `automation-wiring` and `api-creator` carried real library
 knowledge before the reference packs were added, so they get no new reference
-files; `python-agents`, `fsharp-functional`, and `winui3-shell` were already strong
-and received one deepening pack each (ML/RL, analytics, XAML+rendering). `automation-wiring`'s five
+files; `fsharp-functional` and `winui3-shell` were already strong and received
+deepening packs (analytics, XAML+rendering); `python-agents` started with one pack
+(ML/RL) and now carries three (testing & libraries, and parallelization & fleets
+alongside it). `automation-wiring`'s five
 pre-existing references set the precedent for this layout.
 
 ## Ecosystem repos

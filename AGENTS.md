@@ -36,9 +36,9 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 ## Multi-LLM hub
 
 - `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `tandem` /
-  `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan`.
-  Providers and the task-routing table live in `config/aihub.json`; engine candidates are
-  advisory and never auto-execute.
+  `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan` /
+  `fleet-plan`. Providers and the task-routing table live in `config/aihub.json`; engine
+  candidates and fleet-plan chain suggestions are advisory and never auto-execute.
 - `helios-ai-api` (src/ai/HELIOS.AIHub.Api): `GET /healthz`; `/v1/status`,
   `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/engines`; `POST /v1/learning`,
   `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`, `/v1/compare`.
@@ -52,7 +52,8 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
   `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
   `helios_absorb_status_get`, `helios_fleet_status_get`, `helios_azure_inventory_get`,
-  `helios_foundry_agent_list`, `helios_foundry_agent_create`.
+  `helios_auth_status_get`, `helios_fleet_plan_get`, `helios_foundry_agent_list`,
+  `helios_foundry_agent_create`.
 - Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
 
 ## Architecture docs

@@ -109,6 +109,57 @@ Keeping a floor of warm local lanes matters more than it looks: the first lane o
 burst runner pays image pull plus toolchain setup, so a small always-on floor is what
 makes short tasks feel instant while long queues still get cloud width.
 
+## Tandem learning
+
+The fleet feeds the hub's learning store without ever steering it. One cycle:
+
+1. **Run and drain boards** — a fleet run (stub or real Hermes) works its pool
+   boards as usual; every task ends on the board as `done` or `blocked`.
+2. **Collect** — `python3 -m helios_agents fleet-collect --run-dir <runDir>
+   --outcomes .helios/learning/outcomes.jsonl` turns finished board tasks into
+   learning records tagged `source: "fleet-lane"` with provider `pool:<name>`
+   (`src/ai/python/helios_agents/fleet_learning.py`); a sidecar ledger
+   (`<outcomes>.fleet-collected.json`) keeps re-collection idempotent.
+3. **Summarize** — `python3 -m helios_agents fleet-summary` reports per-pool
+   tasks / blocked / block-rate over the fleet-lane records and correlates them
+   with the scaling decisions in `.helios/fleet/scale-log.jsonl` (a `vmss-burst`
+   entry credits every contributing pool).
+4. **Advise** — `helios-ai fleet-plan [--topology <path>] [--json]` scores each
+   pool's configured `providerChain`, per task type, against the order the hub's
+   learned routing would prefer — the same F#-linear + native-neural
+   `ChainReorderEngine` that routing uses — from **organic hub history only**.
+   Each row is `{pool, taskType, configuredChain, learnedChain, sampleCount,
+   engine (none|linear|neural)}`; the MCP twin is `helios_fleet_plan_get`.
+
+**One command**: `pwsh scripts/fleet/learn-fleet.ps1` runs the whole cycle —
+start (or attach with `-RunId`), seed synthetic tasks across every pool board
+through the lock-aware enqueue, drain, stop, collect, summarize, advisory
+plan — and writes `.helios/fleet/learning-report.json` (`{at, runId, seeded,
+drained, collected, summary, fleetPlan}`); missing collect/summary/plan ops
+degrade with a warning, never a failure.
+
+**CI lane**: `.github/workflows/fleet-learning.yml` (**Fleet Learning
+(informational)**) runs one stub cycle weekly (Mondays 04:41 UTC) and on
+dispatch, with a runner choice — `ubuntu-latest` by default, `self-hosted` for
+local-runner soak testing (pwsh + python3 assumed preinstalled). Informational
+by contract: never make it a required check.
+
+**Azure backend (opt-in)**: `deployLearningStorage=true` on `infra/main.bicep`
+provisions `infra/modules/learning-storage.bicep` — a storage account plus the
+`aihubOutcomes` table — and outputs the table endpoint to set as
+`AZURE_LEARNING_TABLE_ENDPOINT`, which enables `learning.mode=azure` (or
+`hybrid`). Off by default; the hub records to local JSONL
+(`.helios/learning/outcomes.jsonl`) regardless.
+
+**Honest boundaries.** Everything in this loop is advisory. Topology and
+provider chains are config (`config/fleet/fleet-topology.json`) and are never
+auto-mutated — `fleet-plan` / `helios_fleet_plan_get` only report. Fleet-lane
+records never steer provider chains: `ChainReorderEngine.OrganicOnly` filters
+the history the reorder engines see down to organic hub outcomes, so
+`pool:<name>` records — lane outcomes, not provider outcomes — cannot influence
+routing. And a green stub cycle proves the *wiring* (boards, claims,
+terminations, collection contract), never model quality or routing improvement.
+
 ## Cross-pool coordination
 
 Pools are peers and **never call each other directly** — the same hub-and-spoke rule the
@@ -226,7 +277,7 @@ seed boards promptly or raise `HERMES_KANBAN_MAX_IDLE_POLLS`.
 
 ## Parallelism model
 
-Three independent throttles, tuned separately:
+Four independent throttles, tuned separately:
 
 | Layer | Knob | Where |
 |---|---|---|

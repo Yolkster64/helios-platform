@@ -16,6 +16,17 @@ any browser). It never prompts for a key and never stores a secret; check the
 result any time with `pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly
 -ProbeAuth` (informational auth column, exit code unchanged).
 
+When a lane is *broken* rather than not-yet-logged-in,
+`pwsh scripts/bootstrap/auth-doctor.ps1` is the automatic diagnose/repair entry
+point: report-only by default (it probes every lane, mutates nothing, exits 0),
+and `-Apply` adds non-interactive repair only — whatever needs a human comes back
+as an exact owner-action command. Its connector lanes (linear, slack, sharepoint,
+azure-devops) are **verify-only** and never gate the exit code: their fixes are
+repository secrets or tenant consent, not logins. Connector knowledge and
+operations live in the `connector-integrations` skill
+(`.claude/skills/connector-integrations/`) and the `connector-steward` agent
+(`.claude/agents/connector-steward.md`).
+
 | Provider | What it unlocks | Command (what the lane runs) |
 |---|---|---|
 | GitHub (`gh`) | `gh-models` provider, `copilot` CLI (reuses the gh login), repo/Actions operations | `gh auth login --web` device-code (`scripts/bootstrap/connect-github.sh`) |

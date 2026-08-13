@@ -61,10 +61,19 @@ gates) + `scripts/github/apply-rulesets.ps1` (dry-run by default, idempotent by
 ruleset name), CODEOWNERS mapping the agent lanes, Dependabot policy
 (nuget/actions/pip/docker, weekly, grouped), PR + issue templates, the real status
 dashboard + Pages publication pair (`status-dashboard.yml` / `pages-dashboard.yml`),
-and label-gated auto-merge (`auto-merge.yml`, `automerge` label). **Remaining owner
+and label-gated auto-merge (`auto-merge.yml`, `automerge` label).
+**Also landed, in-repo (auth & connector automation)**:
+`scripts/bootstrap/auth-doctor.ps1` (report-only by default; `-Apply` adds
+non-interactive repair only; the linear/slack/sharepoint/azure-devops connector
+lanes are verify-only and never gate the exit code), the `auth-broker` and
+`github-operator` agents, the MCP `helios_auth_status_get` tool (diagnose-only),
+and the connector knowledge home (`connector-integrations` skill +
+`connector-steward` agent). **Remaining owner
 clicks**: run `apply-rulesets.ps1 -Apply`, enable Pages (Source: GitHub Actions),
 enable "Allow auto-merge" in repo settings — click paths in
-`CONNECTIONS_SETUP.md` § GitHub governance. Merge-queue evaluation stays deferred
+`CONNECTIONS_SETUP.md` § GitHub governance; the connector secrets and tenant
+admin consent below stay owner-only — the doctor reports them, it never performs
+them. Merge-queue evaluation stays deferred
 until the required checks prove stable. **Owner lane: Claude session; ruleset
 enablement is an owner click.**
 
@@ -73,8 +82,20 @@ enablement is an owner click.**
 over the learning store's outcome data (provider win-rates → routing suggestions
 surfaced in `/v1/insights`), never auto-applied — `adaptiveRouting` stays opt-in;
 training runs never auto-execute. Prereq: enough recorded outcomes (learning is now
-enabled record-only). **Owner lane: fleet + Python spoke, human approves any routing
-change.**
+enabled record-only).
+**Landed on this branch (fleet tandem learning)**: the fleet→hub learning loop —
+`helios_agents` `fleet-collect`/`fleet-summary` (board outcomes recorded with
+`source: "fleet-lane"`, provider `pool:<name>`), the one-command cycle
+`scripts/fleet/learn-fleet.ps1` → `.helios/fleet/learning-report.json`, and the
+informational weekly `fleet-learning.yml` lane (stub cycle proves wiring, not
+model quality) — plus the `helios-ai fleet-plan` / MCP `helios_fleet_plan_get`
+advisory (learned vs configured chain per pool × task type, scored on organic
+hub history only; fleet-lane records never steer provider chains) and the
+opt-in Azure learning backend (`deployLearningStorage` →
+`AZURE_LEARNING_TABLE_ENDPOINT`, off by default). Design write-up:
+`HERMES_FLEET_AND_XCORE.md` § Tandem learning. Owner-gated: the what-if +
+deploy that turns the Azure backend on. **Owner lane: fleet + Python spoke,
+human approves any routing change.**
 
 ### T11 — Purview/Fabric activation (design: `GOVERNANCE_PURVIEW_FABRIC.md`)
 Blocked on owner capacity decisions by design; the trigger is data volume/audience,
