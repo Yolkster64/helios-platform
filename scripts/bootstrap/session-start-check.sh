@@ -22,10 +22,15 @@ if ! command -v pwsh >/dev/null 2>&1; then
     exit 0
 fi
 
-report="$(timeout "${TIMEOUT_SECONDS}" pwsh -NoProfile "${REPO_ROOT}/scripts/bootstrap/connect-account.ps1" -Json 2>/dev/null)" || {
-    echo "HELIOS auth self-check: skipped (connect-account probe failed or timed out — run: pwsh scripts/bootstrap/connect-account.ps1)"
+# connect-account exits 2 BY CONTRACT when it finds an identity mismatch — and a
+# mismatch is precisely the state this hook exists to shout about, so a nonzero
+# exit must not discard the report. Skip only when no JSON came back at all
+# (timeout, crash, pwsh failure).
+report="$(timeout "${TIMEOUT_SECONDS}" pwsh -NoProfile "${REPO_ROOT}/scripts/bootstrap/connect-account.ps1" -Json 2>/dev/null)"
+if [ -z "${report}" ]; then
+    echo "HELIOS auth self-check: skipped (connect-account produced no report — run: pwsh scripts/bootstrap/connect-account.ps1)"
     exit 0
-}
+fi
 
 summary="$(printf '%s' "${report}" | python3 -c '
 import json, sys

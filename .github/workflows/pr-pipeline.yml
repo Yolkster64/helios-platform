@@ -181,7 +181,7 @@ jobs:
 
           evaluate_pr() {
             local pr="$1"
-            local pr_json state head_ref head_sha is_fork author is_draft has_automerge trust
+            local pr_json state head_ref head_sha head_repo author is_draft has_automerge trust
             local output status
 
             if ! pr_json="$(gh api "/repos/${REPO}/pulls/${pr}" 2>&1)"; then
@@ -191,7 +191,7 @@ jobs:
             state="$(printf '%s' "${pr_json}" | jq -r '.state // "unknown"')"
             head_ref="$(printf '%s' "${pr_json}" | jq -r '.head.ref // ""')"
             head_sha="$(printf '%s' "${pr_json}" | jq -r '.head.sha // ""')"
-            is_fork="$(printf '%s' "${pr_json}" | jq -r '.head.repo.fork // true')"
+            head_repo="$(printf '%s' "${pr_json}" | jq -r '.head.repo.full_name // ""')"
             author="$(printf '%s' "${pr_json}" | jq -r '.user.login // ""')"
             is_draft="$(printf '%s' "${pr_json}" | jq -r '.draft // false')"
             has_automerge="$(printf '%s' "${pr_json}" | jq -r 'if .auto_merge == null then "false" else "true" end')"
@@ -201,8 +201,12 @@ jobs:
               notice "skipped PR #${pr}: state is '${state}' - nothing to evaluate."
               return 0
             fi
-            if [ "${is_fork}" != "false" ]; then
-              notice "skipped PR #${pr}: head repo is a fork - the automatic lane never acts on fork PRs."
+            # Same-repo test by full_name, NOT .head.repo.fork: this repository is
+            # itself a GitHub fork, so the fork flag is true for every same-repo PR
+            # too and would make the whole automatic lane a silent no-op (verified
+            # live against PR #108 during review).
+            if [ "${head_repo}" != "${REPO}" ]; then
+              notice "skipped PR #${pr}: head repo '${head_repo}' is not ${REPO} - the automatic lane never acts on external PRs."
               return 0
             fi
             if [ -z "${head_sha}" ]; then

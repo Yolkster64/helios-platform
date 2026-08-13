@@ -2,7 +2,11 @@
 # Four ecosystems, all weekly, minor+patch grouped into one PR per ecosystem
 # (majors arrive as individual PRs for deliberate review). Every PR is labeled
 # "dependencies" and capped at 5 open PRs per ecosystem so the review loop
-# never drowns. NuGet resolves through central package management
+# never drowns. No target-branch key on purpose: main is already the default,
+# and per GitHub docs setting target-branch stops these settings (groups,
+# labels) applying to security-update PRs — which would also drop them out of
+# pr-pipeline.yml's dependabot trust patterns. NuGet resolves through
+# central package management
 # (Directory.Packages.props at the repo root).
 version: 2
 updates:
@@ -10,7 +14,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "main"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -26,7 +29,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "main"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -41,7 +43,6 @@ updates:
     directory: "/src/ai/python"
     schedule:
       interval: "weekly"
-    target-branch: "main"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -58,7 +59,6 @@ updates:
     directory: "/docker"
     schedule:
       interval: "weekly"
-    target-branch: "main"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"

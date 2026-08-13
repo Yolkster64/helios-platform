@@ -130,15 +130,41 @@ function Test-AzureAccountLane {
             -Detail 'az is not on PATH (scripts/bootstrap/cloud-shell-setup.sh installs it)'
     }
     # user.name and tenantId are identities, not secrets — pinning them is the point.
-    $probe = & $azCmd.Source account show --query '{upn:user.name, tenant:tenantId}' --output json 2>$null
+    $probe = & $azCmd.Source account show --query '{upn:user.name, tenant:tenantId, type:user.type}' --output json 2>$null
     if ($LASTEXITCODE -ne 0) {
         return New-LaneResult -Lane 'azure-account' -State 'needs-owner' -Method 'device-code' `
             -Detail 'az has no cached login at all — the tenant-scoped MFA login is the one step that cannot be automated (ENTERPRISE_AI_CONNECTIONS.md §1)' `
             -OwnerAction ('az login --tenant "{0}"' -f $ExpectedTenantId)
     }
     $who = ($probe -join '') | ConvertFrom-Json
-    $upnOk = [string]::Equals([string]$who.upn, $ExpectedAzureUpn, [StringComparison]::OrdinalIgnoreCase)
     $tenantOk = [string]::Equals([string]$who.tenant, $ExpectedTenantId, [StringComparison]::OrdinalIgnoreCase)
+
+    # Service-principal sessions are the DESIGNED steady state, not a mismatch:
+    # this same repo's setup-tenant.ps1 -OpsIdentity + auth-doctor -Apply path
+    # deliberately replaces the owner's MFA-bound user session with the
+    # helios-ops-automation workload identity. Telling the owner to destroy it
+    # would un-automate everything. Pin it against AZURE_CLIENT_ID when exported;
+    # accept-but-note when not. (user.name is the SP appId — an identifier.)
+    $isServicePrincipal = [string]::Equals([string]$who.type, 'servicePrincipal', [StringComparison]::OrdinalIgnoreCase)
+    if ($isServicePrincipal -and $tenantOk) {
+        $declaredAppId = [string]$env:AZURE_CLIENT_ID
+        if ($declaredAppId -and -not [string]::Equals([string]$who.upn, $declaredAppId, [StringComparison]::OrdinalIgnoreCase)) {
+            return New-LaneResult -Lane 'azure-account' -State 'mismatch' -Method 'service-principal' `
+                -Detail ("az session is service principal '{0}' but AZURE_CLIENT_ID declares '{1}' — a different workload identity is logged in" -f $who.upn, $declaredAppId) `
+                -OwnerAction 'az logout; pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # re-login from the declared AZURE_* env'
+        }
+        & $azCmd.Source account get-access-token --output none 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $pinNote = if ($declaredAppId) { 'matches AZURE_CLIENT_ID' } else { 'unpinned — export AZURE_CLIENT_ID to pin it' }
+            return New-LaneResult -Lane 'azure-account' -State 'ready' -Method 'workload-identity' `
+                -Detail ("az session is service principal {0} in tenant {1} ({2}) and a live token refresh succeeds — the designed MFA-free steady state (setup-tenant.ps1 -OpsIdentity)" -f $who.upn, $ExpectedTenantId, $pinNote)
+        }
+        return New-LaneResult -Lane 'azure-account' -State 'needs-owner' -Method 'workload-identity' `
+            -Detail ("az session is service principal {0} (tenant verified) but the token refresh fails — the certificate credential may be expired or revoked" -f $who.upn) `
+            -OwnerAction 'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive re-login from the AZURE_* env'
+    }
+
+    $upnOk = [string]::Equals([string]$who.upn, $ExpectedAzureUpn, [StringComparison]::OrdinalIgnoreCase)
     if (-not ($upnOk -and $tenantOk)) {
         # Wrong identity ALWAYS gates: acting as the wrong account is worse than
         # acting unauthenticated.

@@ -96,7 +96,13 @@ jobs:
           TASK_COUNT: ${{ github.event.inputs.task_count || '12' }}
         run: |
           $count = 12
-          if ($env:TASK_COUNT -match '^[1-9]\d*$') { $count = [int]$env:TASK_COUNT }
+          if ($env:TASK_COUNT -match '^[1-9]\d*$') {
+            $count = [int]$env:TASK_COUNT
+            # learn-fleet.ps1 binds -SeedSynthetic with ValidateRange(1,500); clamp
+            # so an oversized dispatch input degrades instead of red-failing at
+            # parameter binding.
+            if ($count -gt 500) { Write-Warning "TASK_COUNT $count exceeds the 1-500 seed range; seeding 500."; $count = 500 }
+          }
           else { Write-Warning "TASK_COUNT '$($env:TASK_COUNT)' is not a positive integer; seeding 12." }
           ./scripts/fleet/learn-fleet.ps1 -SeedSynthetic $count
 

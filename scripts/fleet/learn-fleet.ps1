@@ -109,9 +109,12 @@ $topology = Get-Content -Raw -Path $topologyPath | ConvertFrom-Json
 $seedPools = @(foreach ($pool in @(Get-OptionalProperty $topology 'pools' @())) {
     $lanes = @(Get-OptionalProperty $pool 'taskTypes' @())
     if ($lanes.Count -eq 0) { continue }
+    # Default arguments evaluate eagerly, so $pool.name inline here would throw
+    # under StrictMode for a nameless pool — resolve it defensively first.
+    $poolName = [string](Get-OptionalProperty $pool 'name' '?')
     [pscustomobject]@{
-        Pool  = [string](Get-OptionalProperty $pool 'name' '?')
-        Board = [string](Get-OptionalProperty (Get-OptionalProperty $pool 'hermesFleet') 'board' $pool.name)
+        Pool  = $poolName
+        Board = [string](Get-OptionalProperty (Get-OptionalProperty $pool 'hermesFleet') 'board' $poolName)
         Lanes = $lanes
     }
 })

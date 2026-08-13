@@ -8,7 +8,9 @@
 # fail-safe direction, and label removal already requires triage access).
 #
 # Hard exclusions, enforced in the run block:
-#   - PRs whose head repo is a fork are never acted on.
+#   - PRs whose head repo is not this repository (external/fork heads) are never
+#     acted on. Tested by full_name, because this repo is itself a fork and the
+#     head.repo.fork flag is true even for same-repo PRs.
 #   - Absorption-lane branches (absorb/*, absorb-*, absorption/*, absorption-* — in any
 #     path segment, e.g. copilot/absorption-*) are never auto-merged: committing
 #     absorbed upstream code is always a deliberate
@@ -56,7 +58,7 @@ jobs:
           # (branch names) out of the workflow template entirely.
           PR_JSON="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}")"
           HEAD_REF="$(printf '%s' "${PR_JSON}" | jq -r '.head.ref // ""')"
-          IS_FORK="$(printf '%s' "${PR_JSON}" | jq -r '.head.repo.fork // true')"
+          HEAD_REPO="$(printf '%s' "${PR_JSON}" | jq -r '.head.repo.full_name // ""')"
           PR_STATE="$(printf '%s' "${PR_JSON}" | jq -r '.state // "unknown"')"
 
           if [ "${PR_STATE}" != "open" ]; then
@@ -64,10 +66,13 @@ jobs:
             exit 0
           fi
 
-          # Guard: never act on fork PRs (their runs get a read-only token anyway;
-          # this keeps the run green and the policy explicit).
-          if [ "${IS_FORK}" != "false" ]; then
-            echo "::notice::Auto-merge gate: PR #${PR_NUMBER} comes from a fork - auto-merge is never managed for fork PRs."
+          # Guard: never act on external PRs — tested by full_name, NOT the
+          # .head.repo.fork flag: this repository is itself a GitHub fork, so that
+          # flag is true even for same-repo PRs and would silently disarm the whole
+          # label lane (their runs get a read-only token anyway; this keeps the run
+          # green and the policy explicit).
+          if [ "${HEAD_REPO}" != "${REPO}" ]; then
+            echo "::notice::Auto-merge gate: PR #${PR_NUMBER} head repo '${HEAD_REPO}' is not ${REPO} - auto-merge is never managed for external PRs."
             exit 0
           fi
 
