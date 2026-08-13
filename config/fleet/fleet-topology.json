@@ -38,7 +38,8 @@
       "taskTypes": ["code_generation", "code_refactoring", "test_creation"],
       "providerChain": ["codex", "openai", "azure-openai", "anthropic"],
       "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
-      "skills": ["csharp-orchestrator", "fsharp-functional", "python-agents", "api-creator"],
+      "skills": ["csharp-orchestrator", "fsharp-functional", "python-agents", "api-creator", "openai-codex", "github-copilot", "powershell-automation", "pipelines-config"],
+      "agents": ["codex-liaison"],
       "autoscaling": { "mode": "hybrid", "minLocalLanes": 2, "maxLocalLanes": 4, "maxBurstLanes": 5 }
     },
     {
@@ -53,8 +54,8 @@
       "taskTypes": ["infrastructure", "pipeline_authoring", "config_authoring"],
       "providerChain": ["anthropic", "openai", "azure-openai"],
       "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
-      "skills": ["automation-wiring", "iac-azure", "pipelines-config", "powershell-automation"],
-      "agents": ["workflow-author", "bicep-arm-author", "terraform-author", "config-schema-author", "keyvault-secrets-agent", "identity-access-agent"],
+      "skills": ["automation-wiring", "iac-azure", "pipelines-config", "powershell-automation", "github-control", "microsoft-ecosystem"],
+      "agents": ["workflow-author", "bicep-arm-author", "terraform-author", "config-schema-author", "keyvault-secrets-agent", "identity-access-agent", "rest-api-wirer", "cloudshell-bootstrapper", "m365-admin", "auth-broker", "github-operator"],
       "autoscaling": { "mode": "hybrid", "minLocalLanes": 1, "maxLocalLanes": 3, "maxBurstLanes": 6 }
     },
     {
@@ -70,7 +71,7 @@
       "providerChain": ["anthropic", "claude-cli", "openai"],
       "tools": ["Read", "Grep", "Glob", "Bash"],
       "skills": ["csharp-orchestrator", "automation-wiring"],
-      "agents": ["cpp-perf-reviewer", "winui3-reviewer"],
+      "agents": ["cpp-perf-reviewer", "winui3-reviewer", "ux-reviewer", "gui-perf-profiler"],
       "autoscaling": {
         "mode": "hybrid",
         "minLocalLanes": 1,
@@ -92,7 +93,7 @@
       "providerChain": ["anthropic", "openai", "codex"],
       "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
       "skills": ["cpp-performance", "winui3-shell", "csharp-orchestrator"],
-      "agents": ["cpp-perf-reviewer", "winui3-reviewer"],
+      "agents": ["cpp-perf-reviewer", "winui3-reviewer", "render-engineer", "design-miner", "theme-designer", "audio-engineer", "ui-designer", "gui-perf-profiler"],
       "autoscaling": {
         "mode": "local",
         "minLocalLanes": 1,

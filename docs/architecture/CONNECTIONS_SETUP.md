@@ -16,6 +16,17 @@ any browser). It never prompts for a key and never stores a secret; check the
 result any time with `pwsh scripts/bootstrap/setup-ai-clis.ps1 -VerifyOnly
 -ProbeAuth` (informational auth column, exit code unchanged).
 
+When a lane is *broken* rather than not-yet-logged-in,
+`pwsh scripts/bootstrap/auth-doctor.ps1` is the automatic diagnose/repair entry
+point: report-only by default (it probes every lane, mutates nothing, exits 0),
+and `-Apply` adds non-interactive repair only — whatever needs a human comes back
+as an exact owner-action command. Its connector lanes (linear, slack, sharepoint,
+azure-devops) are **verify-only** and never gate the exit code: their fixes are
+repository secrets or tenant consent, not logins. Connector knowledge and
+operations live in the `connector-integrations` skill
+(`.claude/skills/connector-integrations/`) and the `connector-steward` agent
+(`.claude/agents/connector-steward.md`).
+
 | Provider | What it unlocks | Command (what the lane runs) |
 |---|---|---|
 | GitHub (`gh`) | `gh-models` provider, `copilot` CLI (reuses the gh login), repo/Actions operations | `gh auth login --web` device-code (`scripts/bootstrap/connect-github.sh`) |
@@ -251,6 +262,42 @@ at run time from a workstation; it is a parameter, never a stored setting.
 `validate-board.ps1` and `add-epics-to-board.ps1` also fall back to the
 `GITHUB_TOKEN` environment variable (name only — the value is never stored or
 printed) and print a dry-run plan and exit 0 when it is absent.
+
+## GitHub governance (rulesets, Pages, auto-merge)
+
+The governance artifacts live in the repo — `.github/rulesets/main.json`,
+`.github/CODEOWNERS`, `.github/dependabot.yml`, and the PR/issue templates — and
+three owner clicks turn them on:
+
+1. **Apply the branch ruleset** — `pwsh scripts/github/apply-rulesets.ps1` first
+   (dry run: prints the exact `gh api` POST/PUT calls, changes nothing), then re-run
+   with `-Apply` under a `gh` login or PAT with the `admin:repo` scope. Idempotent:
+   it GETs existing rulesets and updates by name instead of duplicating; exits 2
+   with an explanation when `gh` or auth is missing. The check-name provenance and
+   exclusion rationale are in the script's header comment.
+2. **Enable GitHub Pages** — Settings → Pages → Source: **GitHub Actions**, so
+   `pages-dashboard.yml` can publish the status dashboard that
+   `status-dashboard.yml` collects from the real Actions API.
+3. **Enable "Allow auto-merge"** — Settings → General → Pull Requests, so
+   `auto-merge.yml` can arm merges.
+
+**Auto-merge label contract**: adding the **`automerge` label** is the arming
+decision. It is honored only when the sender has owner/write permission, and the
+absorption lane is excluded (absorption PRs never auto-merge). Arming never skips
+gates — the merge still waits for every required check in the `main` ruleset, and
+removing the label disarms.
+
+**Automatic lane**: `.github/workflows/pr-pipeline.yml` is the unattended
+counterpart to the label lane. For trusted authors only (the repo owner, the
+Copilot coding agent, and dependabot's grouped minor/patch updates) it readies the
+agent's draft PRs when all checks are green, and arms — or, on an already-clean
+PR, completes — a squash merge once review threads are resolved and every check on
+the head SHA passes (absorption branches always excluded). The same three owner
+clicks above are its prerequisites: the ruleset supplies the required checks it
+defers to, and "Allow auto-merge" lets it arm. To pause the automatic lane without
+touching the label lane, disable the workflow: Actions → **PR Pipeline** → "…" →
+Disable workflow (or `gh workflow disable pr-pipeline.yml`); re-enabling it
+resumes evaluation on the next PR event.
 
 ## Connection checklist
 

@@ -57,6 +57,18 @@ is the decision record those modules will implement.
    analytics (`src/ai/python`). The Fabric lane starts when data volume or audience
    outgrows those — that trigger, not enthusiasm, unlocks `deployFabric`.
 
+### Power BI layer (design pointer)
+
+The presentation layer over this Lakehouse — semantic-model shape for the outcome
+records, Direct Lake vs import for this data volume, report candidates, the honest
+licensing gates (F-SKU vs Pro/PPU), and embedding options riding
+`IDENTITY_ARCHITECTURE.md` — is designed in
+`.claude/skills/microsoft-ecosystem/references/fabric-and-powerbi.md`. It inherits
+this lane's gating unchanged: opt-in only, activated together with `deployFabric`
+when the same volume/audience trigger fires, and the free `/v1/insights` lane serves
+until then. Advisory (`source`-tagged) records stay a visible, separable slice in any
+semantic model — never blended into operational win-rates.
+
 ## Owner-action checklist (when this lane activates)
 
 - [ ] Provision Purview account (or confirm M365 Purview suffices — likely at

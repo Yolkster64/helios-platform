@@ -33,6 +33,18 @@ at the HELIOS MCP server; no repo goes live with a red default-branch check.
 - **Deploy**: `helios-deploy.yml` — OIDC (no stored cloud secrets), what-if on dispatch,
   deploy on main-merge touching `infra/**`, graceful skip when the `AZURE_CLIENT_ID`/
   `AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` federated credential isn't configured.
+  The all-echo `deploy.yml` (client-secret fake deploy) is deleted; `helios-deploy.yml`
+  is the only deploy lane.
+- **Status dashboards**: `status-dashboard.yml` collects **real** run metrics from the
+  Actions API (its fabricated-data predecessor is retired) and `pages-dashboard.yml`
+  publishes them as the GitHub Pages status dashboard. One owner click: Settings →
+  Pages → Source: **GitHub Actions**.
+- **Branch governance (in-repo now)**: `.github/rulesets/main.json` (PR required +
+  job-level required checks pinned to the truthful gates), `.github/CODEOWNERS`,
+  `.github/dependabot.yml`, and the PR/issue templates are committed;
+  `scripts/github/apply-rulesets.ps1` (dry-run by default, idempotent by ruleset name)
+  is the owner action that applies the rulesets. Label-gated auto-merge
+  (`auto-merge.yml`, `automerge` label) rides those same required checks.
 - **Known-red inventory**: pre-existing broken workflows are catalogued in
   ROADMAP_MULTI_LLM.md rather than papered over; nothing new may depend on them.
 
@@ -62,8 +74,15 @@ Auth via a GitHub App (not PAT). GPU/Windows classes get their own scale set wit
   (created from this PR's roadmap), status automation on PR merge, and the kanban fleet
   board handling task-level work (two layers: humans plan in Projects, agents execute in
   Hermes kanban).
-- **Wiki**: `wiki-generator.yml` already publishes from `docs/` — treat `docs/architecture/`
-  as the wiki source of truth; no hand-edited wiki pages.
+- **Wiki**: `wiki-generator.yml` publishes from `docs/` — treat `docs/architecture/`
+  as the wiki source of truth; no hand-edited wiki pages. **One-time prerequisite**:
+  the wiki's backing git repository does not exist until the first page is created by
+  hand in the GitHub UI (Wiki → "Create the first page"); until that materialization
+  click happens the generator has nowhere to push.
+- **Pages dashboard lane** (new): `status-dashboard.yml` (real Actions API metrics)
+  feeds `pages-dashboard.yml`, which publishes the status dashboard to GitHub Pages —
+  a separate publication lane from the wiki, gated on the owner enabling Pages once
+  (Settings → Pages → Source: GitHub Actions).
 
 ## Issue → Copilot coding agent workflow
 

@@ -40,3 +40,21 @@ Copilot schemas move quarterly.
 connection/schema endpoints and semantic labels, declarative agent manifest schema
 versions and capability objects, required Graph permissions with admin-consent
 gotchas, and the live-verified tenant facts this repo's artifacts were built against.
+
+`references/m365-copilot-tools.md` — the tools/plugins layer above it: API plugin
+manifests (v2.x) and the agent's `actions` array (with the identity-aware-ingress
+prerequisite for any HELIOS action), Agents Toolkit packaging/sideload/org-wide
+deployment, Teams/Outlook surfacing, Copilot Studio vs the manifest path, connector
+enablement + KQL scoping tools, and the M365 MCP read-only lane sessions use.
+
+`references/tenant-administration.md` — the tenant-admin layer: app-registration
+governance and consent tiers, Conditional Access as measured (AADSTS50078), security
+defaults vs CA, break-glass, the ops-automation access tiers (read/write/admin) that
+`scripts/bootstrap/setup-tenant.ps1` grants, M365 admin center surfaces, and Purview
+portal flows (labels, auto-labeling, DLP for Copilot).
+
+`references/fabric-and-powerbi.md` — the Power BI layer over the designed
+`helios-analytics` Lakehouse: semantic-model shape for the outcome records, Direct
+Lake vs import, report candidates, F-SKU vs Pro/PPU gates, and embedding — extending
+(never duplicating) `docs/architecture/GOVERNANCE_PURVIEW_FABRIC.md` and its opt-in
+trigger.

@@ -150,3 +150,4 @@ Each card: status dot (ThemeResource brush), latency + success-rate text via x:B
 
 - `references/xaml-authoring.md` — deep XAML authoring: x:Bind vs Binding traps, DataTemplates and list-control choice, ThemeResource lifetime, VisualStateManager, Hot Reload limits, XamlStyler/WinUI 3 Gallery, and the contract for requesting XAML from the hub's LLM agents.
 - `references/rendering-interop.md` — the C#↔C++ rendering seam: Win2D control choice, SwapChainPanel/ISwapChainPanelNative interop, Microsoft.UI.Composition, DispatcherQueue rules for render loops, the managed-vs-native-spoke decision, and frame-pacing/vsync pitfalls.
+- `references/interaction-and-motion.md` — Composition implicit/spring/expression patterns (pointer-parallax expression), custom radial-control input (PointerWheelChanged, keyboard parity, AutomationPeer), reduced-motion detection, hit-test transparency layering, and WPF→WinUI porting notes for the recovered docs/ui-xenoblade seeds.
