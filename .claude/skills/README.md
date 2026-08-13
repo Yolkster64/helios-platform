@@ -23,7 +23,7 @@ skill and are stated once, here:
 | F# domain modeling | `fsharp-functional` | `analytics-patterns.md` | `src/ai/HELIOS.AIHub.Domain/` |
 | Cross-format wiring (workflows ↔ IaC ↔ config) | `automation-wiring` | `github-actions.md`, `bicep-arm.md`, `terraform.md`, `config-schemas.md`, `rest-curl.md` | `.github/workflows/`, `infra/`, `config/` |
 | Hub extension recipes (provider / CLI / MCP tool) | `api-creator` | already deep — none | `src/ai/HELIOS.AIHub*`, `src/mcp/HELIOS.Mcp/`, `config/aihub.json` |
-| WinUI 3 desktop shell | `winui3-shell` | `xaml-authoring.md`, `rendering-interop.md` | `src/gui/`, `docs/architecture/GUI_THEME_ANALYSIS.md` |
+| WinUI 3 desktop shell | `winui3-shell` | `xaml-authoring.md`, `rendering-interop.md`, `interaction-and-motion.md`, `design-mining.md` | `src/gui/`, `docs/architecture/{GUI_THEME_ANALYSIS,GUI_UPGRADE_PLAN,INTERACTIVE_SHELL_EXPERIENCE}.md` |
 | Microsoft ecosystem (Entra / M365 Copilot / Purview / Fabric) | `microsoft-ecosystem` | `graph-and-copilot.md`, `m365-copilot-tools.md` | `integrations/m365/`, `docs/architecture/{IDENTITY_ARCHITECTURE,HYBRID_CLOUD_ARCHITECTURE,GOVERNANCE_PURVIEW_FABRIC}.md` |
 | GitHub Copilot (coding agent / review / CLI) | `github-copilot` | `copilot-surfaces.md` | `.github/workflows/copilot-dispatch.yml`, `.github/copilot-instructions.md`, `docs/architecture/FORWARD_PLAN.md` (operating model; merged agent PRs #95–#97) |
 | ChatGPT / OpenAI Codex (cloud reviewer / CLI / API lane) | `openai-codex` | `codex-surfaces.md` | `config/aihub.json` (codex + openai-codex), `scripts/bootstrap/connect-all.ps1`, `docs/architecture/{CONNECTIONS_SETUP,REVIEW_LOOP}.md` |

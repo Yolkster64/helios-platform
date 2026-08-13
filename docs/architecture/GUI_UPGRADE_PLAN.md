@@ -80,6 +80,20 @@ All of this lands as **one canonical `Tokens.xaml`** (Light/Dark/HighContrast
 dictionaries, semantic names, no literal colors anywhere else). Every other palette
 file gains a header comment pointing at Tokens.xaml as the authority.
 
+**Profile theme packs (upgraded).** The canonical `Tokens.xaml` above becomes the
+DEFAULT — the **Monado** pack (navy) — of a small set of named theme packs selectable
+per user profile: **Monado** (default; this section's decisions), **GitHub Dark** (the
+current live palette, `#0D1117` surfaces, preserved as an alternate rather than
+deleted), **Solar Light** (built from MonadoColorPalette's light set,
+`#F5F7FA`/`#FFFFFF`/`#D0D8E0`), and **High Contrast** (accessibility; every token maps
+to system colors). Each pack is a full Light/Dark/HighContrast token dictionary
+carrying the same semantic keys, so pages never know which pack is active; per-profile
+selection persists in local app settings. `theme-designer` owns pack authoring and
+per-pack contrast verification (measured, body text ≥ 4.5:1 on every surface token —
+never inherited from report docs), and the switch path must be live: the
+`ReadinessVisuals` stale-brush fix (P1) generalizes to all packs — no brush may
+survive a pack switch stale.
+
 ## 3. Upgrade phases
 
 Each phase is one reviewable PR. The shell compiles only on Windows
@@ -113,8 +127,11 @@ every GUI PR must say so honestly in its body.
   treatments to WinUI 3 Composition; evaluate recovered HLSL shaders as Win2D custom
   effects vs native-spoke work per `rendering-gpu.md`; theme settings page
   (from `MonadoBlade.GUI/Views/ThemeSettings.xaml`); wizard flow only if a real
-  setup scenario needs it. Owner: ui-designer + cpp lane, gates: winui3-reviewer,
-  cpp-perf-reviewer, gui-perf-profiler.
+  setup scenario needs it. Designs of record for this phase:
+  `DYNAMIC_BACKGROUND_ENGINE.md` (ambient scene — tiers, budgets, native spoke ABI)
+  and `INTERACTIVE_SHELL_EXPERIENCE.md` (interaction, motion, sound). Owner:
+  ui-designer + cpp lane, gates: winui3-reviewer, cpp-perf-reviewer,
+  gui-perf-profiler.
 
 ## 4. Adobe design-asset track (parallel to P1)
 
@@ -141,6 +158,9 @@ deliverables; responsive app UI itself stays in XAML, never authored as Adobe HT
 | `theme-designer` (new) | Owns Tokens.xaml and §2's decisions; runs the Adobe asset track; keeps every palette artifact pointed at the canonical tokens |
 | `ux-reviewer` (new) | Reviews flows and information architecture against the three-page model; accessibility (contrast, keyboard, narrator) with *measured* claims only |
 | `gui-perf-profiler` (new) | Owns frame-cost verification for Win2D/Composition work; ports MonadoBlade's FPS/frame-time widgets into a debug overlay when P3 lands |
+| `render-engineer` (new) | Owns the native rendering spoke — C++ particle/scene engine, HLSL/compute shaders, and the flat-C-ABI seam plus its C# stubs — per `DYNAMIC_BACKGROUND_ENGINE.md` (P6/BG4) |
+| `design-miner` (new) | Ports the ChatGPT-era corpus (§1 map) into the live shell — WPF→WinUI 3 translation per `.claude/skills/winui3-shell/references/design-mining.md`; token needs routed to `theme-designer` |
+| `audio-engineer` (new) | Owns the shell's audio/soundscape lane per `INTERACTIVE_SHELL_EXPERIENCE.md` (agent authored in parallel with this revision) |
 | `cloudshell-bootstrapper` (existing) | Setup lane: Windows dev-box readiness for `HELIOS.Shell.sln` builds |
 | `cpp-perf-reviewer` (existing) | Gate if P6 crosses into the native rendering spoke |
 

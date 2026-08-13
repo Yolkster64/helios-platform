@@ -135,3 +135,7 @@ Depth lives in `references/` (index: `.claude/skills/README.md`):
   spoke: device/queue/swapchain for a SwapChainPanel target, fence-based frame
   sync, the Win2D-vs-raw-D3D12 decision table, and the flat-C-ABI boundary rules
   mapped to concrete function examples.
+- `references/particle-systems.md` — CPU/GPU particle lanes for the dynamic
+  background engine (`docs/architecture/DYNAMIC_BACKGROUND_ENGINE.md`): SoA/AVX2
+  update loops, GPU-resident sim with indirect draw, memory/network contracts, and
+  the honest inventory of the recovered `docs/ui-xenoblade/Shaders/*.hlsl` fragments.
