@@ -1,0 +1,122 @@
+# Publishes the real workflow-health dashboard to GitHub Pages.
+#
+# Consumes the `dashboard` artifact produced by status-dashboard.yml (real Actions API
+# data, no hand-entered numbers) and deploys it together with the self-contained
+# .github/pages/index.html. Runs after each successful Status Dashboard run; a manual
+# dispatch reuses the newest successful run's artifact (also how index.html changes
+# reach Pages between hourly cycles).
+#
+# One-time owner setup: Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions". Until that is done, this workflow green-skips the deploy
+# with a ::notice:: instead of going red.
+name: Pages Dashboard
+
+on:
+  workflow_run:
+    workflows: ["Status Dashboard"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write    # create the Pages deployment
+  id-token: write # deploy-pages verifies the deployment origin via OIDC
+  actions: read   # download the dashboard artifact from another run
+
+concurrency:
+  group: pages-dashboard
+  cancel-in-progress: false # never cancel a half-finished Pages deployment
+
+jobs:
+  publish-pages:
+    name: Build and deploy Pages dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # workflow_run fires on every completion; only publish data from a successful
+    # dashboard run. Manual dispatch resolves its own source run below.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Checkout (static page source)
+        uses: actions/checkout@v4
+
+      - name: Resolve source run for dashboard.json
+        id: source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGERING_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "workflow_run" ]; then
+            RUN_ID="${TRIGGERING_RUN_ID}"
+          else
+            RUN_ID="$(gh api "/repos/${REPO}/actions/workflows/status-dashboard.yml/runs?status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty')"
+          fi
+          if [ -z "${RUN_ID}" ]; then
+            echo "found=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::No successful Status Dashboard run exists yet, so there is no real data to publish. Run the 'Status Dashboard' workflow first, then re-run this one."
+            exit 0
+          fi
+          # The artifact has 7-day retention; verify it still exists so an old
+          # dispatch green-skips instead of failing the download step.
+          LIVE="$(gh api "/repos/${REPO}/actions/runs/${RUN_ID}/artifacts?name=dashboard" \
+            --jq '[.artifacts[] | select(.expired == false)] | length')"
+          if [ "${LIVE}" -eq 0 ]; then
+            echo "found=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::The dashboard artifact from run ${RUN_ID} is missing or expired. Re-run the 'Status Dashboard' workflow to produce a fresh one."
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "run-id=${RUN_ID}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Download dashboard.json
+        if: steps.source.outputs.found == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: dashboard
+          path: dashboard-artifact
+          run-id: ${{ steps.source.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble static site
+        if: steps.source.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp .github/pages/index.html _site/index.html
+          cp dashboard-artifact/dashboard.json _site/dashboard.json
+          # Sanity: the artifact is the shape index.html renders.
+          jq -e '.generated_at and (.workflows | type == "array")' _site/dashboard.json > /dev/null
+
+      - name: Configure Pages
+        if: steps.source.outputs.found == 'true'
+        id: setup
+        # Fails when Pages is not enabled for the repo; the notice step below turns
+        # that into a green skip with the exact click-path instead of a red X.
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: steps.source.outputs.found == 'true' && steps.setup.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        if: steps.source.outputs.found == 'true' && steps.setup.outcome == 'success'
+        id: deploy
+        continue-on-error: true # same not-enabled failure mode as configure-pages
+        uses: actions/deploy-pages@v4
+
+      - name: Pages not enabled (green skip with instructions)
+        if: steps.source.outputs.found == 'true' && (steps.setup.outcome == 'failure' || steps.deploy.outcome == 'failure')
+        run: |
+          set -euo pipefail
+          echo "::notice::GitHub Pages is not enabled for this repository, so the dashboard was built but not deployed. One-time enable: Settings -> Pages -> Build and deployment -> Source: 'GitHub Actions'. Then re-run this workflow."

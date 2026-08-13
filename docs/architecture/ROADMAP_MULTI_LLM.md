@@ -50,7 +50,9 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 ## Known-red workflow inventory (pre-existing, not touched by PR1)
 | Workflow | Problem | Disposition |
 |---|---|---|
-| `deploy.yml` | All-echo fake deployment incl. fake "AI initialized" lines | Replace or delete in PR2 |
+| `deploy.yml` | All-echo fake deployment incl. fake "AI initialized" lines | **Deleted this tranche** (client-secret fake deploy); real deploys stay in `helios-deploy.yml` (OIDC) |
+| `status-dashboard.yml` | Was fabricated data (hardcoded run counts/success rates) | **Rewritten to real Actions API metrics this tranche**; published to Pages via the new `pages-dashboard.yml` lane |
+| `verify.yml` | Asserts nonexistent files (`COMPONENT_ANALYSIS.md`, `DELIVERY_MANIFEST.md`, …) on a 6-hour schedule | Keep non-required (never a ruleset check); fix or delete in PR2 |
 | `ai-code-review.yml` | Regex-only "AI review", canned comment (its comment-post 403 is fixed — workflow now declares `permissions`) | Replace with real `code_review` routing in PR2 |
 | `nuget.yml` | Builds/packs the broken core project, for net6/7 the csproj doesn't even target; can only go red | PR trigger removed and restores made explicit in PR1 (PR builds live in `dotnet-build.yml`); main/tag path stays red until the core compiles — PR2 |
 | `build-variant-test.yml` | Node.js variant matrix in a .NET-first repo; its `$GITHUB_OUTPUT` multi-line bug is fixed and a package.json guard skips the matrix cleanly | Delete or repurpose for real Node modules in PR2 |

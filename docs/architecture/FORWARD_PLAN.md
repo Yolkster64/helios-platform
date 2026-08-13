@@ -55,11 +55,18 @@ reviewing.**
 What actually exists vs what is scriptable, honestly: board custom fields + item
 wiring are real GraphQL (`scripts/board-setup/`, incl. `add-epics-to-board.ps1`);
 views/templates/automation are API-impossible and documented as manual click-paths.
-Next: rulesets for `main` (required checks pinned to the truthful gates), CODEOWNERS
-mapping the agent lanes, merge-queue evaluation once required checks stabilize,
-Dependabot/security-updates policy, and the wiki/Pages publication job from
-`GITHUB_ECOSYSTEM_DESIGN.md`. **Owner lane: Claude session; ruleset enablement is an
-owner click.**
+**Landed this tranche, in-repo**: `main` ruleset JSON
+(`.github/rulesets/main.json`, required checks pinned to the truthful job-level
+gates) + `scripts/github/apply-rulesets.ps1` (dry-run by default, idempotent by
+ruleset name), CODEOWNERS mapping the agent lanes, Dependabot policy
+(nuget/actions/pip/docker, weekly, grouped), PR + issue templates, the real status
+dashboard + Pages publication pair (`status-dashboard.yml` / `pages-dashboard.yml`),
+and label-gated auto-merge (`auto-merge.yml`, `automerge` label). **Remaining owner
+clicks**: run `apply-rulesets.ps1 -Apply`, enable Pages (Source: GitHub Actions),
+enable "Allow auto-merge" in repo settings — click paths in
+`CONNECTIONS_SETUP.md` § GitHub governance. Merge-queue evaluation stays deferred
+until the required checks prove stable. **Owner lane: Claude session; ruleset
+enablement is an owner click.**
 
 ### T10 — RL / learning experiments (advisory-first, per the E28 carve-out)
 `Yolkster64/rl` (NeMo-RL lineage) is the toolkit reference. Scope: offline experiments

@@ -252,6 +252,30 @@ at run time from a workstation; it is a parameter, never a stored setting.
 `GITHUB_TOKEN` environment variable (name only — the value is never stored or
 printed) and print a dry-run plan and exit 0 when it is absent.
 
+## GitHub governance (rulesets, Pages, auto-merge)
+
+The governance artifacts live in the repo — `.github/rulesets/main.json`,
+`.github/CODEOWNERS`, `.github/dependabot.yml`, and the PR/issue templates — and
+three owner clicks turn them on:
+
+1. **Apply the branch ruleset** — `pwsh scripts/github/apply-rulesets.ps1` first
+   (dry run: prints the exact `gh api` POST/PUT calls, changes nothing), then re-run
+   with `-Apply` under a `gh` login or PAT with the `admin:repo` scope. Idempotent:
+   it GETs existing rulesets and updates by name instead of duplicating; exits 2
+   with an explanation when `gh` or auth is missing. The check-name provenance and
+   exclusion rationale are in the script's header comment.
+2. **Enable GitHub Pages** — Settings → Pages → Source: **GitHub Actions**, so
+   `pages-dashboard.yml` can publish the status dashboard that
+   `status-dashboard.yml` collects from the real Actions API.
+3. **Enable "Allow auto-merge"** — Settings → General → Pull Requests, so
+   `auto-merge.yml` can arm merges.
+
+**Auto-merge label contract**: adding the **`automerge` label** is the arming
+decision. It is honored only when the sender has owner/write permission, and the
+absorption lane is excluded (absorption PRs never auto-merge). Arming never skips
+gates — the merge still waits for every required check in the `main` ruleset, and
+removing the label disarms.
+
 ## Connection checklist
 
 | Connection | Owner action required | Secret or setting | Verified by |
