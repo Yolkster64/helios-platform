@@ -34,6 +34,11 @@ public static class Program
         // DefaultAzureCredential resolves lazily at first use; missing credentials
         // are the Unauthenticated state, never a startup failure.
         builder.Services.AddSingleton(_ => new AzureResourceService());
+        // Auth-lane diagnosis (helios_auth_status_get): env names + one lazy
+        // DefaultAzureCredential token probe. Diagnose-only — missing tokens,
+        // credentials, or config are reported states, never a startup failure;
+        // repair belongs to scripts/bootstrap/auth-doctor.ps1.
+        builder.Services.AddSingleton(_ => new AuthStatusService());
         builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
