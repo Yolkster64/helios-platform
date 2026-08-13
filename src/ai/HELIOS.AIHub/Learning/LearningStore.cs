@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -78,16 +79,28 @@ public sealed class NullLearningStore : ILearningStore
 ///
 /// JSONL rather than a database because the file is greppable, diffable, trivially
 /// shipped to Azure later, and survives a crash mid-write with at most one bad line.
-/// Appends are serialized through a semaphore; concurrent fan-out writes are the norm.
+/// Appends are serialized through a semaphore within the process, and through an
+/// adjacent .lock file across processes: with learning on in the shipped config, the
+/// API host, the MCP server, and ad-hoc CLI invocations all append to the SAME file,
+/// so a process-local gate alone would let appends collide (sharing IOExceptions the
+/// callers swallow best-effort, or interleaved partial lines readers must skip —
+/// either way, silently lost outcomes).
 /// </summary>
 public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
 {
+    // ~10 bounded attempts with short jittered backoff: enough to ride out another
+    // process's append (microseconds long), small enough that a wedged lock file
+    // degrades to the usual best-effort IOException in well under two seconds.
+    private const int MaxAppendAttempts = 10;
+
     private readonly string _path;
+    private readonly string _lockPath;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     public LocalJsonlLearningStore(string path)
     {
         _path = path;
+        _lockPath = path + ".lock";
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory))
         {
@@ -97,12 +110,48 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
 
     public async Task RecordAsync(RoutingOutcome outcome, CancellationToken cancellationToken = default)
     {
-        var line = JsonSerializer.Serialize(outcome);
+        // The full line is materialized as one buffer up front so the append below is a
+        // single unbuffered write: a completed (or even torn-off) call can never leave a
+        // partial line for readers to skip.
+        var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(outcome) + Environment.NewLine);
         await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await File.AppendAllTextAsync(_path, line + Environment.NewLine, cancellationToken)
-                .ConfigureAwait(false);
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    // FileShare.None on the adjacent .lock file is the cross-process
+                    // mutex (advisory flock on Unix, mandatory sharing on Windows); the
+                    // loser's open throws IOException immediately and retries below.
+                    // The lock file is never deleted: deleting it would race a peer
+                    // opening the old inode, and two "exclusive" holders on different
+                    // inodes is no lock at all.
+                    using var interprocessLock = new FileStream(
+                        _lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    // The data file itself stays share-friendly (readers use
+                    // FileShare.ReadWrite in GetRecentAsync); bufferSize: 0 disables
+                    // FileStream buffering so the single WriteAsync is one OS append.
+                    var stream = new FileStream(
+                        _path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite,
+                        bufferSize: 0, FileOptions.Asynchronous);
+                    await using (stream.ConfigureAwait(false))
+                    {
+                        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+                    }
+                    return;
+                }
+                catch (IOException) when (attempt < MaxAppendAttempts)
+                {
+                    // Jittered so N processes contending for the lock spread out
+                    // instead of retrying in lockstep.
+                    await Task.Delay(Random.Shared.Next(5, 30) * attempt, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            // Final-attempt IOException propagates: callers already treat recording as
+            // best-effort (AIHub.RecordOutcomeAsync swallows IOException), preserving
+            // the never-crash-the-hub degradation contract.
         }
         finally
         {
