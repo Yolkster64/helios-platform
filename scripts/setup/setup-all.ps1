@@ -52,7 +52,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $toolResolver = Join-Path $repoRoot 'scripts' 'build' 'tool-resolver.ps1'
 if (-not (Test-Path -LiteralPath $toolResolver)) {
-    Write-Error "Missing shared tool resolver: $toolResolver"
+    # Not Write-Error: under ErrorActionPreference=Stop it throws and exits 1,
+    # making the intended exit 2 unreachable.
+    [Console]::Error.WriteLine("Missing shared tool resolver: $toolResolver")
     exit 2
 }
 . $toolResolver

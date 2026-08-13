@@ -112,12 +112,12 @@ function Invoke-PrUpdate {
 
 ## Overview
 
-This PR updates the HELIOS platform repository from branch `$branch`.
+This PR updates the HELIOS platform repository from branch ``$branch``.
 
 ## Generated Review Notes
 
 - This draft is generated from local git state for review prep.
-- `.github/PULL_REQUEST_BODY.md` is intentionally git-ignored.
+- ``.github/PULL_REQUEST_BODY.md`` is intentionally git-ignored.
 - Review and edit this body before publishing the pull request.
 
 ## Recent Commits
@@ -139,13 +139,14 @@ $changedFiles
 - [ ] Add exact commands and outcomes before opening the PR.
 "@
 
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $prBodyPath) | Out-Null
-    Set-Content -Path $prBodyPath -Value $content -Encoding utf8
-
     if ($DryRun) {
-        Write-Host 'Dry run complete. Generated .github/PULL_REQUEST_BODY.md'
+        # A dry run writes NOTHING — it shows what would be generated and where.
+        Write-Host "Dry run - would write .github/PULL_REQUEST_BODY.md with:"
+        Write-Host $content
     }
     else {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $prBodyPath) | Out-Null
+        Set-Content -Path $prBodyPath -Value $content -Encoding utf8
         Write-Host 'Generated .github/PULL_REQUEST_BODY.md'
     }
 }
