@@ -12,7 +12,12 @@ Implements the ingress design in docs/architecture/IDENTITY_ARCHITECTURE.md (§1
     ever created, so there is nothing to leak or rotate;
   * App ID URI (api://<appId> unless -IdentifierUri overrides) and
     api.requestedAccessTokenVersion = 2;
-  * one admin-consent-only delegated scope (AIHub.Access) via a Graph PATCH;
+  * one admin-consent-only delegated scope (AIHub.Access), MERGED into the app's
+    existing api.oauth2PermissionScopes via GET-then-PATCH: Graph treats a PATCH
+    of that collection as full replacement, so -Apply reads the current scopes
+    first, leaves the collection untouched when AIHub.Access already exists (no
+    PATCH at all), and otherwise PATCHes current-scopes + ours — existing scopes
+    on a reused registration are never wiped, disabled, or removed;
   * the service principal (enterprise app) for the registration;
   * optionally, a GitHub OIDC federated credential (-GitHubOidcSubject) so
     automation that must CALL the API authenticates with a short-lived token
@@ -152,20 +157,26 @@ $appRolesJson = ConvertTo-Json -Depth 4 @(
     }
 )
 
-$oauth2ScopeJson = ConvertTo-Json -Depth 5 ([ordered]@{
-        api = [ordered]@{
-            oauth2PermissionScopes = @(
-                [ordered]@{
-                    id                      = (Get-StableGuid -Seed 'scope:AIHub.Access').Guid
-                    value                   = 'AIHub.Access'
-                    type                    = 'Admin'
-                    adminConsentDisplayName = 'Access the HELIOS AI hub API'
-                    adminConsentDescription = 'Allows the app to call helios-ai-api /v1/* on behalf of the signed-in user.'
-                    isEnabled               = $true
-                }
-            )
-        }
-    })
+# The one delegated scope this script owns. Graph treats a PATCH of
+# api.oauth2PermissionScopes as FULL REPLACEMENT of the collection, so this scope is
+# never PATCHed alone: step 3 GETs the app's current scopes first and PATCHes
+# current + this one merged (or skips the PATCH entirely when the scope already
+# exists). Existing scopes are never disabled or removed.
+$aihubScope = [ordered]@{
+    id                      = (Get-StableGuid -Seed 'scope:AIHub.Access').Guid
+    value                   = 'AIHub.Access'
+    type                    = 'Admin'
+    adminConsentDisplayName = 'Access the HELIOS AI hub API'
+    adminConsentDescription = 'Allows the app to call helios-ai-api /v1/* on behalf of the signed-in user.'
+    isEnabled               = $true
+}
+
+function New-ScopePatchJson {
+    param([Parameter(Mandatory)][array]$Scopes)
+    ConvertTo-Json -Depth 5 ([ordered]@{
+            api = [ordered]@{ oauth2PermissionScopes = @($Scopes) }
+        })
+}
 
 # --- Print-or-execute plumbing -----------------------------------------------------
 function Format-AzCommand {
@@ -280,14 +291,54 @@ Invoke-PlannedAz -AzArgs @('ad', 'app', 'update', '--id', $appId,
 Invoke-PlannedAz -AzArgs @('ad', 'app', 'update', '--id', $appId,
     '--set', 'api.requestedAccessTokenVersion=2') | Out-Null
 
-# --- Step 3: delegated scope (Graph PATCH — az ad app has no scope subcommand) -----
+# --- Step 3: delegated scope (Graph GET + merged PATCH — az ad app has no scope
+# subcommand). Graph replaces the WHOLE api.oauth2PermissionScopes collection on
+# PATCH, so a payload holding only AIHub.Access would wipe every other delegated
+# scope a reused registration already carries. GET first; skip the PATCH when our
+# scope already exists; otherwise PATCH the read scopes plus ours.
 Write-Host ''
-Write-Host '== 3. Delegated scope AIHub.Access (admin consent only) =='
-Invoke-PlannedAz -JsonBody $oauth2ScopeJson -JsonLabel 'oauth2-scope.json' -AzArgs @(
-    'rest', '--method', 'PATCH',
-    '--url', "https://graph.microsoft.com/v1.0/applications(appId='$appId')",
+Write-Host '== 3. Delegated scope AIHub.Access (admin consent only; merged, never replaced) =='
+$appGraphUrl = "https://graph.microsoft.com/v1.0/applications(appId='$appId')"
+$scopeGetArgs = @('rest', '--method', 'GET',
+    '--url', $appGraphUrl,
+    '--query', 'api.oauth2PermissionScopes', '--output', 'json')
+$scopePatchArgs = @('rest', '--method', 'PATCH',
+    '--url', $appGraphUrl,
     '--headers', 'Content-Type=application/json',
-    '--body', '{jsonfile}') | Out-Null
+    '--body', '{jsonfile}')
+if (-not $Apply) {
+    Invoke-PlannedAz -AzArgs $scopeGetArgs | Out-Null
+    Write-Host '  -Apply runs the GET above first. If a scope with value AIHub.Access already'
+    Write-Host '  exists, the collection is left untouched (no PATCH at all). Otherwise it'
+    Write-Host '  PATCHes the scopes the GET returned PLUS ours — Graph replaces the whole'
+    Write-Host '  collection on PATCH, so the merge is what preserves existing scopes; none'
+    Write-Host '  are ever disabled or removed:'
+    $mergedShapeJson = New-ScopePatchJson -Scopes @(
+        '<every scope returned by the GET above, carried over unchanged>',
+        $aihubScope)
+    Invoke-PlannedAz -JsonBody $mergedShapeJson -JsonLabel 'oauth2-scope.json' -AzArgs $scopePatchArgs | Out-Null
+}
+else {
+    $currentScopesJson = Invoke-PlannedAz -AzArgs $scopeGetArgs
+    $currentScopes = @()
+    if ($currentScopesJson -and $currentScopesJson -ne 'null') {
+        $currentScopes = @(($currentScopesJson | ConvertFrom-Json) | Where-Object { $null -ne $_ })
+    }
+    $scopeAlreadyPresent = @($currentScopes | Where-Object {
+        $_.PSObject.Properties['value'] -and $_.value -eq 'AIHub.Access'
+    })
+    if ($scopeAlreadyPresent.Count -gt 0) {
+        Write-Host ('Delegated scope AIHub.Access already exists (id {0}) — leaving' -f $scopeAlreadyPresent[0].id)
+        Write-Host ('oauth2PermissionScopes untouched: no PATCH needed, and a PATCH would replace all {0} scope(s).' -f $currentScopes.Count)
+    }
+    else {
+        # Round-trip the scopes exactly as the GET returned them plus ours appended:
+        # replacing the collection with anything less would drop the omitted scopes.
+        $mergedJson = New-ScopePatchJson -Scopes (@($currentScopes) + @($aihubScope))
+        Invoke-PlannedAz -JsonBody $mergedJson -JsonLabel 'oauth2-scope.json' -AzArgs $scopePatchArgs | Out-Null
+        Write-Host ('Added AIHub.Access; {0} pre-existing scope(s) carried over unchanged.' -f $currentScopes.Count)
+    }
+}
 
 # --- Step 4: service principal (idempotent under -Apply) ---------------------------
 Write-Host ''

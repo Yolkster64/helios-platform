@@ -33,14 +33,20 @@ public interface IFoundryAgentAdministration
     /// <summary>Streams existing agents, newest pages first per service default.</summary>
     IAsyncEnumerable<FoundryAgentSummary> ListAgentsAsync(int pageSize, CancellationToken cancellationToken);
 
-    /// <summary>Creates exactly one agent. No retries — a retry could double-create.</summary>
+    /// <summary>
+    /// Creates exactly one agent. No retries anywhere — neither this wrapper nor the
+    /// Azure SDK's HTTP pipeline (whose default transient retries the production
+    /// implementation disables): a retried create whose first attempt committed
+    /// server-side but lost the response would double-create.
+    /// </summary>
     Task<FoundryAgentSummary> CreateAgentAsync(
         string model, string name, string instructions, string? description, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// SDK-backed seam: PersistentAgentsClient.Administration over the project endpoint
-/// with DefaultAzureCredential, exactly like <see cref="FoundryAgentProvider"/>.
+/// with DefaultAzureCredential, exactly like <see cref="FoundryAgentProvider"/> —
+/// except that the SDK pipeline's automatic retries are disabled (see the ctor).
 /// </summary>
 public sealed class FoundryAgentAdministration : IFoundryAgentAdministration
 {
@@ -48,7 +54,17 @@ public sealed class FoundryAgentAdministration : IFoundryAgentAdministration
 
     public FoundryAgentAdministration(string projectEndpoint)
     {
-        _administration = new PersistentAgentsClient(projectEndpoint, new DefaultAzureCredential()).Administration;
+        // Retries are disabled at the pipeline level: Azure.Core's default policy
+        // retries transient failures (408/429/5xx and dropped connections) up to three
+        // times, so a CreateAgentAsync whose request committed server-side but whose
+        // response was lost would be silently re-sent by the pipeline and
+        // double-create. MaxRetries = 0 extends the "exactly one create per call"
+        // guarantee to the whole HTTP stack. The client is shared, so listing gets no
+        // pipeline retries either — accepted: a failed list is read-only and the
+        // caller can simply invoke it again.
+        var options = new PersistentAgentsAdministrationClientOptions();
+        options.Retry.MaxRetries = 0;
+        _administration = new PersistentAgentsClient(projectEndpoint, new DefaultAzureCredential(), options).Administration;
     }
 
     public async IAsyncEnumerable<FoundryAgentSummary> ListAgentsAsync(
@@ -160,7 +176,9 @@ public sealed class FoundryAgentService
     /// <summary>
     /// Creates exactly one persistent agent. All parameters are validated and the
     /// configuration checked BEFORE any network call; the underlying seam performs a
-    /// single create with no retries, so a failure can never double-create.
+    /// single create with no retries — including the Azure SDK's HTTP pipeline, whose
+    /// automatic transient retries are disabled at client construction — so a failure
+    /// can never double-create.
     /// </summary>
     /// <exception cref="ArgumentException">A required parameter is missing or blank.</exception>
     /// <exception cref="InvalidOperationException">AZURE_FOUNDRY_PROJECT_ENDPOINT is unset.</exception>

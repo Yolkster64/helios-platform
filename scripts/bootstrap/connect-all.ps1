@@ -51,8 +51,15 @@ never logged in again.
                 launches an interactive claude session and never gates the exit code.
   openai-codex  codex login status (unknown-command tolerated on old builds) ->
                 codex login (ChatGPT-plan browser/device flow). OPENAI_API_KEY
-                short-circuits; the key covers BOTH the codex CLI agent and the
-                openai / openai-codex API providers in config/aihub.json.
+                short-circuits (checked by NAME): the key covers BOTH the codex CLI
+                agent and the openai / openai-codex API providers in
+                config/aihub.json — but the reverse is NOT true: a codex CLI login
+                covers only the CLI, because the hub's ProviderFactory resolves
+                those API providers exclusively from OPENAI_API_KEY (or the
+                openai-api-key Key Vault secret). So, same honesty rule as the
+                github lane: codex-logged-in with no OPENAI_API_KEY reports
+                needs-attention (exit 2) with the export/Key Vault hint — the lane
+                is ready only when OPENAI_API_KEY is set.
   visual-studio informational row only: Visual Studio and VS Code sign in through
                 their own Entra + GitHub dialogs, riding the azure-entra and github
                 lanes. Nothing is ever launched.
@@ -306,9 +313,9 @@ $lanes = @(
     [pscustomobject]@{
         Name        = 'openai-codex'
         Interactive = $true
-        Covers      = 'codex CLI agent AND the openai / openai-codex API providers in config/aihub.json (both ride OPENAI_API_KEY)'
-        LoginLabel  = 'codex login (ChatGPT-plan browser/device flow)'
-        FixHint     = 'codex login   # ChatGPT-plan flow; or set OPENAI_API_KEY (Key Vault: openai-api-key)'
+        Covers      = 'codex CLI agent (codex login or OPENAI_API_KEY); openai / openai-codex API providers (OPENAI_API_KEY or Key Vault openai-api-key ONLY — a codex login does not cover them)'
+        LoginLabel  = 'codex login (ChatGPT-plan browser/device flow; covers the CLI only)'
+        FixHint     = 'set OPENAI_API_KEY (Key Vault: openai-api-key) for the API providers; codex login   # ChatGPT-plan flow, CLI only'
         Verify      = {
             if ($env:OPENAI_API_KEY) {
                 # Name-only presence check; value never read or echoed.
@@ -320,7 +327,14 @@ $lanes = @(
             }
             $probe = Invoke-Probe -Executable $codex.Source -Arguments @('login', 'status')
             if ($probe.ExitCode -eq 0) {
-                New-LaneState -Kind ok -Detail 'codex login status: logged in (CLI covered; the openai/openai-codex API providers still need OPENAI_API_KEY)'
+                # Same honesty rule as the github lane: the codex CLI's keyring login
+                # is real, but the hub's ProviderFactory resolves the openai and
+                # openai-codex API providers exclusively from OPENAI_API_KEY (or the
+                # openai-api-key Key Vault secret) — a CLI login cannot stand in for
+                # the key, so reporting ready here would let the script exit 0 while
+                # the API providers stay unconfigured. Presence is checked by NAME
+                # only; the value is never read, printed, or exported.
+                New-LaneState -Kind blocked -Detail ('codex login status: logged in — the codex CLI itself is authenticated — but OPENAI_API_KEY is not set, and the openai/openai-codex API providers read only that env var (or Key Vault) — export OPENAI_API_KEY in THIS shell (pwsh: $env:OPENAI_API_KEY = ''<key>'' | bash: export OPENAI_API_KEY=<key>), or store the key as the openai-api-key Key Vault secret config/aihub.json references')
             }
             elseif (($probe.Output -join ' ') -match '(?i)(unknown|unrecognized|unexpected)\s+(sub)?(command|argument)') {
                 # Old builds predate `codex login status`; tolerated — reported, not failed.

@@ -8,22 +8,30 @@
 
       1. resolves the ProjectV2 by owner login + project number, including its
          single-select fields and their options
-      2. pages through the project's existing items (100/page) TO COMPLETION to
-         learn what is already on the board; if the inventory cannot be completed
-         (100-page runaway ceiling hit with more pages remaining) it aborts with
-         exit 1 before any mutation - an incomplete presence check would let step 5
-         overwrite fields on items that were already on the board
+      2. pages through the project's existing items (100/page) TO COMPLETION -
+         including each item's current Status/Priority single-select values - to
+         learn what is already on the board and which of those items still lack a
+         stamp; if the inventory cannot be completed (100-page runaway ceiling hit
+         with more pages remaining) it aborts with exit 1 before any mutation - an
+         incomplete presence check would let step 5 overwrite fields on items that
+         were already on the board
       3. resolves the issue node IDs for the epic issue range with one aliased query
          against the repository (missing issue numbers are tolerated and reported)
       4. adds each epic that is not already on the board via addProjectV2ItemById
-      5. stamps Status and Priority on the NEWLY ADDED items via
-         updateProjectV2ItemFieldValue - only where those single-select fields and the
-         requested options actually exist on the project (otherwise it reports the skip)
+      5. stamps Status and Priority via updateProjectV2ItemFieldValue - on the NEWLY
+         ADDED items, and (as a REPAIR) on items already on the board whose Status or
+         Priority is EMPTY: a previous run may have added the item and then failed the
+         field mutation, and without the repair that stamp could never be applied. A
+         field that already has ANY value is never touched. Both stamping paths apply
+         only where those single-select fields and the requested options actually
+         exist on the project (otherwise it reports the skip)
 
-    Idempotent: items already on the board are detected up front and skipped, and
-    addProjectV2ItemById itself returns the existing item id when the content is already
-    present, so re-runs never duplicate. Items that were already on the board are left
-    untouched (their Status/Priority is not overwritten), so a re-run is a no-op.
+    Idempotent: items already on the board are detected up front and never re-added,
+    and addProjectV2ItemById itself returns the existing item id when the content is
+    already present, so re-runs never duplicate. Existing field VALUES are never
+    overwritten - on already-on-board items only EMPTY Status/Priority fields are
+    stamped, which lets a re-run finish the stamping a partially failed earlier run
+    left behind; once every epic is on the board and stamped, a re-run is a no-op.
 
     Degrades gracefully without credentials: if no token is available (-GitHubToken empty
     and the GITHUB_TOKEN environment variable unset), it prints exactly which GraphQL
@@ -45,20 +53,25 @@
 .PARAMETER LastIssue
     Last epic issue number, inclusive (default 53)
 .PARAMETER StatusValue
-    Status single-select option to stamp on newly added items (default 'Todo')
+    Status single-select option to stamp on newly added items and on already-on-board
+    items whose Status is empty (default 'Todo')
 .PARAMETER PriorityValue
-    Priority single-select option to stamp on newly added items (default 'High')
+    Priority single-select option to stamp on newly added items and on already-on-board
+    items whose Priority is empty (default 'High')
 .PARAMETER DryRun
-    Perform the read-only queries and print the per-issue plan, but run NO mutations
+    Perform the read-only queries and print the per-issue plan - planned adds and
+    planned empty-field repairs are printed distinctly - but run NO mutations
 .NOTES
     Exit codes (the contract):
-      0 = every existing epic is on the board and field stamping succeeded where the
-          fields exist; also -DryRun and the no-token dry-run
+      0 = every existing epic is on the board and field stamping (including
+          empty-field repairs) succeeded where the fields exist; also -DryRun and
+          the no-token dry-run
       1 = fatal: auth failure, project or repository not resolvable, or the
           existing-item inventory could not be completed (paging ceiling hit) -
           nothing is mutated in that case
       2 = partial: some issue numbers in the range do not exist, or some add/update
-          mutations failed (details in the summary)
+          mutations failed - on newly added items or as empty-field repairs on
+          already-on-board items (details in the summary)
 .EXAMPLE
     ./add-epics-to-board.ps1 -DryRun
 .EXAMPLE
@@ -127,6 +140,11 @@ query ($login: String!, $projectNum: Int!) {
 }
 '@
 
+# fieldValues rides along so the repair pass can see which already-on-board items
+# still lack a Status/Priority stamp. first: 100 needs no paging of its own - a
+# ProjectV2 is capped at 50 custom fields, so one page always holds every value; the
+# inline fragment keeps only single-select values (other field types come back as
+# empty objects and are ignored).
 $itemsPageQuery = @'
 query ($login: String!, $projectNum: Int!, $cursor: String) {
   repositoryOwner(login: $login) {
@@ -140,6 +158,14 @@ query ($login: String!, $projectNum: Int!, $cursor: String) {
             content {
               ... on Issue { id number }
               ... on PullRequest { id number }
+            }
+            fieldValues(first: 100) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2FieldCommon { name } }
+                }
+              }
             }
           }
         }
@@ -278,12 +304,15 @@ if (-not $hasToken) {
     Write-Host ("Would POST these GraphQL operations to {0}:" -f $graphQlEndpoint)
     Write-Host ("  1. query    repositoryOwner(login: '{0}') -> projectV2(number: {1})" -f $OrganizationName, $ProjectNumber)
     Write-Host '              -> id, title, fields(first: 100) incl. single-select options'
-    Write-Host '  2. query    projectV2 items (paged, 100/page) -> item id + content (Issue/PR) id and number'
+    Write-Host '  2. query    projectV2 items (paged, 100/page) -> item id + content (Issue/PR) id'
+    Write-Host '              and number + current Status/Priority single-select values'
     Write-Host ("  3. query    repository(owner: '{0}', name: '{1}')" -f $RepositoryOwner, $RepositoryName)
     Write-Host ("              -> issue node ids for issues #{0}..#{1} (one aliased query)" -f $FirstIssue, $LastIssue)
     Write-Host '  4. mutation addProjectV2ItemById for each epic not already on the board'
     Write-Host '              (idempotent: adding an existing item returns the existing item id)'
-    Write-Host '  5. mutation updateProjectV2ItemFieldValue on newly added items only:'
+    Write-Host '  5. mutation updateProjectV2ItemFieldValue on newly added items, plus repair'
+    Write-Host '              stamping of EMPTY fields on items already on the board (a field'
+    Write-Host '              holding any existing value is never overwritten):'
     Write-Host ("              Status -> '{0}', Priority -> '{1}' (only where those single-select" -f $StatusValue, $PriorityValue)
     Write-Host '              fields and options exist on the project)'
     Write-Host ''
@@ -318,14 +347,15 @@ if ($null -eq $project) {
 $projectId = $project.id
 $fieldNodes = @($project.fields.nodes | Where-Object { $null -ne $_ })
 
-# Existing items: content node id -> project item id, paged to COMPLETION. The
-# presence check must be exhaustive: addProjectV2ItemById returns the EXISTING
-# item when the content is already on the board, so an epic missed by an
-# incomplete inventory would be "re-added" and then have its Status/Priority
-# overwritten by the field stamping below - violating the documented promise
-# that items already on the board are left untouched. $maxItemPages is a
-# runaway guard, not a sampling cap: hitting it (or pageInfo still reporting
-# more) aborts BEFORE any mutation.
+# Existing items: content node id -> item id + current single-select field values,
+# paged to COMPLETION. The presence check must be exhaustive: addProjectV2ItemById
+# returns the EXISTING item when the content is already on the board, so an epic
+# missed by an incomplete inventory would be "re-added" and then have its
+# Status/Priority overwritten by the field stamping below - violating the
+# documented promise that existing field values are never overwritten. The field
+# values feed the repair pass (stamp only what is EMPTY on already-on-board
+# items). $maxItemPages is a runaway guard, not a sampling cap: hitting it (or
+# pageInfo still reporting more) aborts BEFORE any mutation.
 $existingItems = @{}
 $cursor = $null
 $itemsTotal = 0
@@ -349,7 +379,23 @@ for ($page = 1; $page -le $maxItemPages; $page++) {
         if ($null -eq $node) { continue }
         $content = if ($node.PSObject.Properties['content']) { $node.content } else { $null }
         if ($null -ne $content -and $content.PSObject.Properties['id'] -and $content.id) {
-            $existingItems[[string]$content.id] = [string]$node.id
+            # Single-select values by field name. Non-single-select values arrive as
+            # empty objects (no 'field'/'name' properties) - probe before reading,
+            # both for them and for StrictMode.
+            $fieldValues = @{}
+            if ($node.PSObject.Properties['fieldValues'] -and $null -ne $node.fieldValues) {
+                foreach ($value in @($node.fieldValues.nodes)) {
+                    if ($null -eq $value) { continue }
+                    if (-not ($value.PSObject.Properties['field'] -and $null -ne $value.field)) { continue }
+                    if (-not ($value.field.PSObject.Properties['name'] -and $value.field.name)) { continue }
+                    if (-not ($value.PSObject.Properties['name'] -and $value.name)) { continue }
+                    $fieldValues[[string]$value.field.name] = [string]$value.name
+                }
+            }
+            $existingItems[[string]$content.id] = [pscustomobject]@{
+                ItemId      = [string]$node.id
+                FieldValues = $fieldValues
+            }
         }
     }
     if (-not $itemsConn.pageInfo.hasNextPage) {
@@ -399,11 +445,13 @@ for ($n = $FirstIssue; $n -le $LastIssue; $n++) {
         continue
     }
     $contentId = [string]$issue.id
+    $existing = if ($existingItems.ContainsKey($contentId)) { $existingItems[$contentId] } else { $null }
     $plan.Add([pscustomobject]@{
-        Number    = $n
-        Title     = [string]$issue.title
-        ContentId = $contentId
-        ItemId    = if ($existingItems.ContainsKey($contentId)) { $existingItems[$contentId] } else { $null }
+        Number         = $n
+        Title          = [string]$issue.title
+        ContentId      = $contentId
+        ItemId         = if ($null -ne $existing) { $existing.ItemId } else { $null }
+        ExistingFields = if ($null -ne $existing) { $existing.FieldValues } else { $null }
     })
 }
 $toAdd = @($plan | Where-Object { $null -eq $_.ItemId })
@@ -411,6 +459,25 @@ $alreadyPresent = @($plan | Where-Object { $null -ne $_.ItemId })
 
 $statusTarget = Resolve-SingleSelectOption -FieldNodes $fieldNodes -FieldName 'Status' -OptionName $StatusValue
 $priorityTarget = Resolve-SingleSelectOption -FieldNodes $fieldNodes -FieldName 'Priority' -OptionName $PriorityValue
+$fieldPairs = @(
+    @{ Name = 'Status'; Target = $statusTarget },
+    @{ Name = 'Priority'; Target = $priorityTarget })
+
+# Repair plan: items already on the board whose Status/Priority is EMPTY get the
+# missing field(s) stamped - this heals a previous run whose add succeeded but whose
+# field mutation failed (the item is then "already on board" forever and would
+# otherwise never receive the stamp). A field that already holds ANY value is never
+# listed here, so existing values are never overwritten.
+$repairs = @(foreach ($entry in $alreadyPresent) {
+    $missing = @($fieldPairs | Where-Object {
+        $_.Target.found -and -not $entry.ExistingFields.ContainsKey($_.Name)
+    })
+    if ($missing.Count -gt 0) {
+        [pscustomobject]@{ Entry = $entry; Pairs = $missing }
+    }
+})
+$repairByNumber = @{}
+foreach ($repair in $repairs) { $repairByNumber[$repair.Entry.Number] = $repair }
 
 Write-Host '============================================================'
 Write-Host (" ADD EPICS TO BOARD{0}" -f $(if ($DryRun) { ' - PLAN (dry-run, no mutations)' } else { '' }))
@@ -421,7 +488,14 @@ Write-Host ("Board:    {0} existing item(s)" -f $itemsTotal)
 Write-Host ''
 foreach ($entry in $plan) {
     if ($null -ne $entry.ItemId) {
-        Write-Host ("  skip  #{0}  {1}  (already on board: {2})" -f $entry.Number, $entry.Title, $entry.ItemId)
+        if ($repairByNumber.ContainsKey($entry.Number)) {
+            $missingNames = @($repairByNumber[$entry.Number].Pairs | ForEach-Object { $_.Name }) -join ', '
+            Write-Host ("  repair #{0}  {1}  (already on board: {2}; empty field(s) to stamp: {3})" -f `
+                $entry.Number, $entry.Title, $entry.ItemId, $missingNames)
+        }
+        else {
+            Write-Host ("  skip  #{0}  {1}  (already on board: {2}; existing field values untouched)" -f $entry.Number, $entry.Title, $entry.ItemId)
+        }
     }
     else {
         Write-Host ("  add   #{0}  {1}" -f $entry.Number, $entry.Title)
@@ -431,7 +505,7 @@ foreach ($n in $notFound) {
     Write-Host ("  warn  #{0}  issue not found in {1}/{2}" -f $n, $RepositoryOwner, $RepositoryName) -ForegroundColor Yellow
 }
 Write-Host ''
-Write-Host 'Field stamping for newly added items:'
+Write-Host 'Field stamping (newly added items; already-on-board items only where the field is EMPTY):'
 foreach ($pair in @(
         @{ Name = 'Status'; Value = $StatusValue; Target = $statusTarget },
         @{ Name = 'Priority'; Value = $PriorityValue; Target = $priorityTarget })) {
@@ -443,7 +517,8 @@ foreach ($pair in @(
     }
 }
 Write-Host ''
-Write-Host ("Plan: {0} to add, {1} already on board, {2} not found." -f $toAdd.Count, $alreadyPresent.Count, $notFound.Count)
+Write-Host ("Plan: {0} to add, {1} already on board ({2} with empty field(s) to repair), {3} not found." -f `
+    $toAdd.Count, $alreadyPresent.Count, $repairs.Count, $notFound.Count)
 
 if ($DryRun) {
     Write-Host 'DRY RUN - no mutations were executed.' -ForegroundColor Yellow
@@ -457,6 +532,8 @@ $addFailed = 0
 $fieldUpdated = 0
 $fieldFailed = 0
 $fieldSkipped = 0
+$repairUpdated = 0
+$repairFailed = 0
 
 foreach ($entry in $toAdd) {
     try {
@@ -476,9 +553,7 @@ foreach ($entry in $toAdd) {
     }
     Start-Sleep -Milliseconds 250   # be gentle with the mutation secondary rate limit
 
-    foreach ($pair in @(
-            @{ Name = 'Status'; Target = $statusTarget },
-            @{ Name = 'Priority'; Target = $priorityTarget })) {
+    foreach ($pair in $fieldPairs) {
         if (-not $pair.Target.found) {
             $fieldSkipped++
             continue
@@ -500,16 +575,42 @@ foreach ($entry in $toAdd) {
     }
 }
 
+# Repair pass: stamp ONLY the empty Status/Priority field(s) on items that were
+# already on the board ($repairs was computed from the exhaustive inventory above).
+# Fields holding any existing value were never added to $repairs, so nothing here
+# can overwrite a value a human (or an earlier run) already set.
+foreach ($repair in $repairs) {
+    foreach ($pair in $repair.Pairs) {
+        try {
+            Invoke-GitHubGraphQL -Query $updateFieldMutation -Variables @{
+                projectId = $projectId
+                itemId    = $repair.Entry.ItemId
+                fieldId   = $pair.Target.fieldId
+                optionId  = $pair.Target.optionId
+            } | Out-Null
+            $repairUpdated++
+            Write-Host ("  repaired #{0}: {1} stamped (was empty)" -f $repair.Entry.Number, $pair.Name)
+        }
+        catch {
+            $repairFailed++
+            Write-Host ("  FAILED to repair {0} on #{1}: {2}" -f $pair.Name, $repair.Entry.Number, $_) -ForegroundColor Red
+        }
+        Start-Sleep -Milliseconds 250
+    }
+}
+
 Write-Host ''
 Write-Host 'Summary:'
 Write-Host ("  added:            {0}" -f $added)
-Write-Host ("  already on board: {0} (left untouched)" -f $alreadyPresent.Count)
+Write-Host ("  already on board: {0} (existing field values never overwritten)" -f $alreadyPresent.Count)
 Write-Host ("  add failures:     {0}" -f $addFailed) -ForegroundColor $(if ($addFailed -gt 0) { 'Red' } else { 'Green' })
 Write-Host ("  issues not found: {0}{1}" -f $notFound.Count, $(if ($notFound.Count -gt 0) { ' (#' + ($notFound -join ', #') + ')' } else { '' })) `
     -ForegroundColor $(if ($notFound.Count -gt 0) { 'Yellow' } else { 'Green' })
 Write-Host ("  field updates:    {0} succeeded, {1} failed, {2} skipped (field/option missing)" -f $fieldUpdated, $fieldFailed, $fieldSkipped)
+Write-Host ("  field repairs:    {0} stamped, {1} failed (empty Status/Priority on already-on-board items)" -f $repairUpdated, $repairFailed) `
+    -ForegroundColor $(if ($repairFailed -gt 0) { 'Red' } else { 'Green' })
 
-if (($addFailed + $fieldFailed) -gt 0 -or $notFound.Count -gt 0) {
+if (($addFailed + $fieldFailed + $repairFailed) -gt 0 -or $notFound.Count -gt 0) {
     Write-Host 'PARTIAL: some operations did not complete (see summary above).' -ForegroundColor Yellow
     exit 2
 }

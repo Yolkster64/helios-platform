@@ -15,7 +15,9 @@ namespace HELIOS.Mcp;
 /// Unconfigured state, and response shaping so all of that is testable without MCP
 /// plumbing. helios_foundry_agent_list is a pure read that degrades to a hint when
 /// AZURE_FOUNDRY_PROJECT_ENDPOINT is unset; helios_foundry_agent_create is the tool
-/// surface's one explicit mutation — exactly one create per call, never a retry.
+/// surface's one explicit mutation — exactly one create per call, never a retry
+/// (the Azure SDK pipeline's automatic transient retries are disabled too, so the
+/// guarantee holds even when a committed create loses its response).
 /// </summary>
 [McpServerToolType]
 public static class HeliosFoundryTools
@@ -71,7 +73,7 @@ public static class HeliosFoundryTools
     }
 
     [McpServerTool(Name = "helios_foundry_agent_create", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = true)]
-    [Description("Create ONE persistent agent on the configured Azure AI Foundry project and return its id/name/model as JSON. Explicit mutation: parameters are validated before any network call, exactly one create is issued, and nothing is retried or executed. Requires AZURE_FOUNDRY_PROJECT_ENDPOINT.")]
+    [Description("Create ONE persistent agent on the configured Azure AI Foundry project and return its id/name/model as JSON. Explicit mutation: parameters are validated before any network call, exactly one create is issued, and nothing is retried or executed — the no-retry guarantee includes the Azure SDK's HTTP pipeline, whose automatic transient retries are disabled, so a create can never be double-issued. Requires AZURE_FOUNDRY_PROJECT_ENDPOINT.")]
     public static async Task<string> CreateFoundryAgent(
         FoundryAgentService foundry,
         [Description("Display name for the new agent.")] string name,
@@ -100,7 +102,7 @@ public static class HeliosFoundryTools
                 $"Foundry agent create failed: {ex.Message} — verify the model deployment name exists on the " +
                 "project and that DefaultAzureCredential has Azure AI User access (e.g. run 'az login'). " +
                 "Check helios_foundry_agent_list before retrying: the create is not retried automatically " +
-                "precisely so a transient failure cannot double-create.");
+                "(not even by the Azure SDK pipeline) precisely so a transient failure cannot double-create.");
         }
 
         return JsonSerializer.Serialize(new
