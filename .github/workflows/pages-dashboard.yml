@@ -109,14 +109,16 @@ jobs:
         with:
           path: _site
 
+      # No continue-on-error here: once configure-pages has succeeded, Pages is
+      # enabled, so a deploy failure is a real publish error that must go red —
+      # masking it would leave the dashboard silently stale.
       - name: Deploy to GitHub Pages
         if: steps.source.outputs.found == 'true' && steps.setup.outcome == 'success'
         id: deploy
-        continue-on-error: true # same not-enabled failure mode as configure-pages
         uses: actions/deploy-pages@v4
 
       - name: Pages not enabled (green skip with instructions)
-        if: steps.source.outputs.found == 'true' && (steps.setup.outcome == 'failure' || steps.deploy.outcome == 'failure')
+        if: steps.source.outputs.found == 'true' && steps.setup.outcome == 'failure'
         run: |
           set -euo pipefail
           echo "::notice::GitHub Pages is not enabled for this repository, so the dashboard was built but not deployed. One-time enable: Settings -> Pages -> Build and deployment -> Source: 'GitHub Actions'. Then re-run this workflow."
