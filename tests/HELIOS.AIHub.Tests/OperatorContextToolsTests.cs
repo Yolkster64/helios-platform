@@ -901,6 +901,31 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_BranchSwitchAtSameCommit_IsNeverPresentedAsReady()
+    {
+        // Two branches can point at one commit, so HEAD equality alone cannot prove an
+        // uninterleaved capture: a task-branch -> main switch mid-capture must not keep
+        // stale Branch/IsMainBranch evidence that suppresses the task-branch safeguard.
+        // The single switch heals through the one in-capture retry, which then records
+        // the settled state — main — and its safeguard fires.
+        var switchedRunner = new FakeCommandRunner { BranchMovesOnce = true };
+        var switchedStore = CreateStore(switchedRunner);
+        var healed = await switchedStore.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("ready", healed.Repository.Status);
+        Assert.Equal("main", healed.Repository.Branch);
+        Assert.True(healed.Repository.IsMainBranch);
+        Assert.Contains(healed.NextSteps, step => step.Id == "create-task-branch");
+
+        // A branch that keeps changing cannot be captured consistently: the snapshot is
+        // downgraded to git-partial and carries the existing retry step.
+        var tornRunner = new FakeCommandRunner { BranchKeepsMoving = true };
+        var tornStore = CreateStore(tornRunner);
+        var torn = await tornStore.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-partial", torn.Repository.Status);
+        Assert.Contains(torn.NextSteps, step => step.Id == "retry-repository-capture");
+    }
+
+    [Fact]
     public async Task ContextSync_AzStartFailure_IsClassifiedCliUnavailable()
     {
         // az resolved on PATH but the process failed to START (vanished or
@@ -980,11 +1005,11 @@ public sealed class OperatorContextToolsTests : IDisposable
     [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
-        // Sync holds the lock across up to two capture attempts of five git commands
-        // each (initial rev-parse, branch, remote, status, confirming rev-parse) and all
-        // three Azure reads; the waiter budget is derived from the same constants so
-        // they cannot drift apart.
-        var worstCaseHold = 10 * OperatorContextStore.GitCommandTimeout
+        // Sync holds the lock across up to two capture attempts of six git commands
+        // each (initial rev-parse, branch, remote, status, confirming rev-parse and
+        // branch) and all three Azure reads; the waiter budget is derived from the same
+        // constants so they cannot drift apart.
+        var worstCaseHold = 12 * OperatorContextStore.GitCommandTimeout
             + OperatorContextStore.AzureAccountTimeout
             + OperatorContextStore.AzureGroupListTimeout
             + OperatorContextStore.AzureResourceListTimeout;
@@ -995,9 +1020,10 @@ public sealed class OperatorContextToolsTests : IDisposable
     [Fact]
     public void CreateStartInfo_ScriptShimPath_IsNeverWrappedInCmd()
     {
-        // Shims are refused in RunAsync before this method runs; even one that slipped
-        // through must launch directly (and fail to start), never via a cmd.exe /c line
-        // whose metacharacter rules ArgumentList quoting cannot express.
+        // Shim launches are argument-hardened in RunAsync; the start info itself is
+        // always a direct launch (CreateProcess spawns the interpreter for a batch
+        // file), never an explicit cmd.exe /c line whose metacharacter rules
+        // ArgumentList quoting cannot express.
         var info = SystemCommandRunner.CreateStartInfo(
             "az",
             new[] { "account", "show" },
@@ -1009,23 +1035,35 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
-    public void ScriptShims_AreRefusedBeforeLaunch()
+    public void ScriptShims_RunWithCleanArguments_AndRefuseMetacharacterArguments()
     {
-        // ArgumentList performs CreateProcess quoting, not cmd.exe metacharacter
-        // escaping: a legitimate variable argument (e.g. a repo root containing an
-        // unspaced '&') could split a cmd.exe /c line and run something unintended.
-        // Shims are refused with the same Started=false shape as a missing command, so
-        // captures map them onto the git-unavailable / cli-unavailable recovery steps.
-        var cmdRefusal = SystemCommandRunner.RefuseIfScriptShim("git", @"C:\Tools\git.cmd");
-        Assert.NotNull(cmdRefusal);
-        Assert.False(cmdRefusal!.Started);
-        Assert.Contains("batch shim", cmdRefusal.StandardError, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(".exe", cmdRefusal.StandardError, StringComparison.OrdinalIgnoreCase);
-        Assert.NotNull(SystemCommandRunner.RefuseIfScriptShim("az", @"C:\Tools\AZ.BAT"));
+        // The standard Azure CLI install on Windows ships ONLY az.cmd, so shims must
+        // stay launchable when every argument is clean.
+        Assert.Null(SystemCommandRunner.RefuseIfScriptShim(
+            "az", new[] { "account", "show", "--only-show-errors", "--output", "json" }, @"C:\Tools\az.cmd"));
 
-        // Real executables and unresolved (non-Windows) commands launch normally.
-        Assert.Null(SystemCommandRunner.RefuseIfScriptShim("az", @"C:\Tools\az.exe"));
-        Assert.Null(SystemCommandRunner.RefuseIfScriptShim("git", null));
+        // ArgumentList performs CreateProcess quoting, not cmd.exe metacharacter
+        // escaping, and CreateProcess spawns cmd.exe for a batch file: an argument
+        // containing '&' could split the command. The refusal names the argument by
+        // index and character class but never echoes its value (it may embed path
+        // fragments the caller considers private).
+        var hostileRoot = @"C:\repos\a&calc";
+        var refused = SystemCommandRunner.RefuseIfScriptShim(
+            "git", new[] { "-C", hostileRoot, "rev-parse", "HEAD" }, @"C:\Tools\git.cmd");
+        Assert.NotNull(refused);
+        Assert.False(refused!.Started);
+        Assert.Contains("argument 1", refused.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("metacharacter", refused.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(hostileRoot, refused.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(SystemCommandRunner.RefuseIfScriptShim(
+            "az", new[] { "group", "list", "--query", "a\r\nb" }, @"C:\Tools\AZ.BAT"));
+
+        // Direct .exe launches (and unresolved non-Windows commands) are unrestricted:
+        // CreateProcess quoting is sound without the cmd.exe hop.
+        Assert.Null(SystemCommandRunner.RefuseIfScriptShim(
+            "git", new[] { "-C", hostileRoot, "rev-parse", "HEAD" }, @"C:\Tools\git.exe"));
+        Assert.Null(SystemCommandRunner.RefuseIfScriptShim(
+            "git", new[] { "-C", hostileRoot, "rev-parse", "HEAD" }, null));
     }
 
     [Fact]
@@ -1078,6 +1116,12 @@ public sealed class OperatorContextToolsTests : IDisposable
         // Every rev-parse returns a fresh sha — models a HEAD that never settles.
         internal bool HeadKeepsMoving { get; set; }
         private int _revParseCalls;
+        // First branch query returns BranchName, every later one "main" — models a
+        // same-commit branch switch mid-capture that the one in-capture retry heals.
+        internal bool BranchMovesOnce { get; set; }
+        // Every branch query returns a fresh name — models a switch that never settles.
+        internal bool BranchKeepsMoving { get; set; }
+        private int _branchCalls;
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
         internal string BranchName { get; set; } = "integration/claude-code-operator-plugin";
@@ -1126,7 +1170,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             {
                 ["branch", "--show-current"] => GitBranchFails
                     ? new CommandResult(true, 129, string.Empty, "error: unknown option")
-                    : Success(DetachedHead ? string.Empty : BranchName + "\n"),
+                    : Success(BranchOutput()),
                 ["rev-parse", "HEAD"] => GitRevParseFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: not a git repository")
                     : Success(RevParseOutput()),
@@ -1136,6 +1180,24 @@ public sealed class OperatorContextToolsTests : IDisposable
                     : Success(GitStatusDirty ? " M src/some-file.cs\n" : string.Empty),
                 _ => new CommandResult(true, 1, string.Empty, "unexpected git command"),
             };
+        }
+
+        private string BranchOutput()
+        {
+            var call = _branchCalls++;
+            if (DetachedHead)
+            {
+                return string.Empty;
+            }
+            if (BranchKeepsMoving)
+            {
+                return $"branch-{call}\n";
+            }
+            if (BranchMovesOnce && call > 0)
+            {
+                return "main\n";
+            }
+            return BranchName + "\n";
         }
 
         private string RevParseOutput()

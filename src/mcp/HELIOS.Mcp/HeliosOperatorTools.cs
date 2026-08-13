@@ -122,13 +122,13 @@ internal sealed class OperatorContextStore
     internal static readonly TimeSpan AzureAccountTimeout = TimeSpan.FromSeconds(20);
     internal static readonly TimeSpan AzureGroupListTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AzureResourceListTimeout = TimeSpan.FromSeconds(45);
-    // A healthy lock holder can legitimately run five git commands per capture attempt
-    // (initial rev-parse, branch, remote, status, confirming rev-parse) and two attempts
-    // when a torn capture retries, plus all three Azure reads while holding the lock, so
-    // the waiter budget is derived from those same timeouts (plus margin) rather than a
-    // magic number that could silently drift.
+    // A healthy lock holder can legitimately run six git commands per capture attempt
+    // (initial rev-parse, branch, remote, status, confirming rev-parse and branch) and
+    // two attempts when a torn capture retries, plus all three Azure reads while holding
+    // the lock, so the waiter budget is derived from those same timeouts (plus margin)
+    // rather than a magic number that could silently drift.
     internal static readonly TimeSpan LockWaitBudget =
-        10 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
+        12 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
         + TimeSpan.FromSeconds(15);
     private static readonly Regex SafeSurface = new("^[a-z0-9][a-z0-9-]{0,47}$", RegexOptions.CultureInvariant);
     private static readonly Regex SafeLocation = new("^[a-z0-9][a-z0-9-]{1,49}$", RegexOptions.CultureInvariant);
@@ -678,16 +678,26 @@ internal sealed class OperatorContextStore
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
         var statusCaptured = status.Started && status.ExitCode == 0;
 
-        // TOCTOU guard: HEAD was read first and branch/worktree state after, so a commit
-        // or branch switch in between would blend old-HEAD and new-worktree evidence in
-        // one snapshot. Re-read HEAD after the FINAL query — a mismatch (or a failed
+        // TOCTOU guard: HEAD and branch were read first and worktree state after, so a
+        // commit or branch switch in between would blend stale and fresh evidence in one
+        // snapshot. Re-read BOTH after the FINAL query: HEAD equality alone is not
+        // enough, because two branches can point at the same commit — a switch from a
+        // task branch to main mid-capture would otherwise keep stale Branch/IsMainBranch
+        // values and suppress the task-branch safeguard. Any mismatch (or a failed
         // confirmation) marks the capture torn so the caller retries or downgrades it.
-        var confirmation = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
-        var torn = !confirmation.Started || confirmation.ExitCode != 0
+        var headConfirmation = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
+        var branchConfirmation = await RunGitAsync(new[] { "branch", "--show-current" }, cancellationToken);
+        var torn = !headConfirmation.Started || headConfirmation.ExitCode != 0
             || !string.Equals(
-                NullIfEmpty(confirmation.StandardOutput.Trim()),
+                NullIfEmpty(headConfirmation.StandardOutput.Trim()),
                 headSha,
-                StringComparison.Ordinal);
+                StringComparison.Ordinal)
+            || (branchCaptured
+                && (!branchConfirmation.Started || branchConfirmation.ExitCode != 0
+                    || !string.Equals(
+                        branchConfirmation.StandardOutput.Trim(),
+                        branchResult.StandardOutput.Trim(),
+                        StringComparison.Ordinal)));
 
         var snapshot = new RepositorySnapshot(
             // HEAD alone is not complete repository evidence: a failed branch or
@@ -747,11 +757,11 @@ internal sealed class OperatorContextStore
             cancellationToken);
         if (!accountResult.Started)
         {
-            // The az process never ran (binary vanished after the PATH probe, refused
-            // script shim): that is the same recovery class as az missing from PATH —
-            // install the CLI or open Cloud Shell — not an inventory retry, which would
-            // fail identically. The login/subscription classification below only applies
-            // to a command that actually ran.
+            // The az process never ran (binary vanished after the PATH probe, or the
+            // launch was refused): that is the same recovery class as az missing from
+            // PATH — install the CLI or open Cloud Shell — not an inventory retry, which
+            // would fail identically. The login/subscription classification below only
+            // applies to a command that actually ran.
             return AzureSnapshot.Failed("cli-unavailable", SanitizeError(accountResult.StandardError))
                 with { CapturedAtUtc = capturedAtUtc };
         }
@@ -1413,7 +1423,7 @@ internal sealed class OperatorContextStore
     /// <summary>
     /// Resolves a command name to the full path of the file that PATH (and PATHEXT on
     /// Windows) discovery would find, including its real extension — so callers can see
-    /// that "az" is actually az.cmd and refuse the shim launch (see
+    /// that "az" is actually az.cmd and harden the shim launch (see
     /// SystemCommandRunner.RefuseIfScriptShim). Returns null when absent.
     /// </summary>
     internal static string? ResolveCommandPath(string command)
@@ -1531,7 +1541,7 @@ internal sealed class SystemCommandRunner : ICommandRunner
         var resolvedWindowsPath = OperatingSystem.IsWindows()
             ? OperatorContextStore.ResolveCommandPath(fileName)
             : null;
-        if (RefuseIfScriptShim(fileName, resolvedWindowsPath) is { } shimRefusal)
+        if (RefuseIfScriptShim(fileName, arguments, resolvedWindowsPath) is { } shimRefusal)
         {
             return shimRefusal;
         }
@@ -1579,41 +1589,63 @@ internal sealed class SystemCommandRunner : ICommandRunner
         }
     }
 
+    // The characters cmd.exe reinterprets on its command line, plus line breaks; see
+    // RefuseIfScriptShim. CreateProcess quoting cannot neutralize any of them once a
+    // batch interpreter is involved.
+    private static readonly char[] CmdMetacharacters = { '&', '|', '<', '>', '^', '%', '!', '"', '\r', '\n' };
+
     /// <summary>
-    /// PATH/PATHEXT discovery on Windows can resolve a command like "az" to a batch shim
-    /// (az.cmd). Launching one requires cmd.exe, and cmd.exe REINTERPRETS the command
-    /// line: ProcessStartInfo.ArgumentList performs CreateProcess quoting, not cmd.exe
-    /// metacharacter escaping, so a legitimate variable argument — e.g. a repo root
-    /// containing an unspaced '&amp;' flowing into "git -C &lt;root&gt;" — could split the
-    /// /c command and execute something unintended. Every launch in this file passes
-    /// variable arguments (git -C &lt;root&gt;, az --subscription &lt;id&gt;), so script
-    /// shims are refused outright with a Started=false result — the same shape the
-    /// capture paths already map to git-unavailable / cli-unavailable recovery steps —
-    /// rather than hand-building cmd.exe escaping. Returns null when the launch is safe.
+    /// PATH/PATHEXT discovery on Windows can resolve a command to a batch shim — and for
+    /// az that is the ONLY form the standard Windows install ships (there is no az.exe),
+    /// so shims must stay launchable. The risk is that CreateProcess runs a batch file
+    /// by silently spawning cmd.exe, and cmd.exe REINTERPRETS the command line:
+    /// ProcessStartInfo.ArgumentList performs CreateProcess quoting, not cmd.exe
+    /// metacharacter escaping, so a variable argument — e.g. a repo root containing an
+    /// unspaced '&amp;' flowing into "git -C &lt;root&gt;" — could split the command and
+    /// execute something unintended. A shim launch is therefore refused (Started=false,
+    /// the shape the capture paths already map to git-unavailable / cli-unavailable
+    /// recovery steps) only when ANY argument carries a cmd.exe metacharacter or line
+    /// break. The fixed literal arguments authored in this file contain none of the
+    /// scanned characters, so a hit always identifies a variable argument. Direct .exe
+    /// launches are unrestricted — CreateProcess quoting is sound without the cmd.exe
+    /// hop. Returns null when the launch is safe.
     /// </summary>
-    internal static CommandResult? RefuseIfScriptShim(string fileName, string? resolvedWindowsPath)
+    internal static CommandResult? RefuseIfScriptShim(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string? resolvedWindowsPath)
     {
-        if (resolvedWindowsPath is null
-            || (!resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
-                && !resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)))
+        var isScriptShim = resolvedWindowsPath is not null
+            && (resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+                || resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase));
+        if (!isScriptShim)
         {
             return null;
         }
-        return new CommandResult(
-            false,
-            -1,
-            string.Empty,
-            $"'{fileName}' resolves to the batch shim '{resolvedWindowsPath}', which cmd.exe would reinterpret; point PATH at the command's real executable (.exe) instead.");
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            if (arguments[index].IndexOfAny(CmdMetacharacters) >= 0)
+            {
+                // Never echo the argument value: it can embed path fragments the caller
+                // considers private. The index plus the character class is enough to act.
+                return new CommandResult(
+                    false,
+                    -1,
+                    string.Empty,
+                    $"'{fileName}' resolves to the batch shim '{resolvedWindowsPath}', and argument {index} contains a cmd.exe metacharacter (& | < > ^ % ! \") or line break that CreateProcess quoting cannot make safe through a shim; remove the character or point PATH at the command's real executable (.exe).");
+            }
+        }
+        return null;
     }
 
     /// <summary>
-    /// Builds the launch configuration. Script shims (.cmd/.bat) never reach this method
-    /// — <see cref="RefuseIfScriptShim"/> rejects them in RunAsync — so the resolved
-    /// path always launches directly with shell execution disabled; a shim that slipped
-    /// through would simply fail to start (CreateProcess cannot run batch files), never
-    /// run through cmd.exe. Arguments always go through ArgumentList (never string
-    /// concatenation). resolvedWindowsPath is null on non-Windows platforms, which keeps
-    /// their behavior unchanged.
+    /// Builds the launch configuration. The resolved path always launches directly with
+    /// shell execution disabled — never via an explicit cmd.exe /d /c line. For a script
+    /// shim (.cmd/.bat) CreateProcess spawns the interpreter itself, which is exactly why
+    /// <see cref="RefuseIfScriptShim"/> has already rejected any shim invocation whose
+    /// arguments carry cmd.exe metacharacters before this method runs. Arguments always
+    /// go through ArgumentList (never string concatenation). resolvedWindowsPath is null
+    /// on non-Windows platforms, which keeps their behavior unchanged.
     /// </summary>
     internal static ProcessStartInfo CreateStartInfo(
         string fileName,
