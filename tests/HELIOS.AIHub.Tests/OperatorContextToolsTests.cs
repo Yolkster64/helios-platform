@@ -879,6 +879,45 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_HeadMovingMidCapture_IsNeverPresentedAsReady()
+    {
+        // A commit landing between the initial rev-parse and the later branch/status
+        // queries must not blend old-HEAD and new-worktree evidence into a ready
+        // snapshot. A single race heals through the one in-capture retry, which then
+        // records the settled (new) HEAD.
+        var healedRunner = new FakeCommandRunner { HeadMovesOnce = true };
+        var healedStore = CreateStore(healedRunner);
+        var healed = await healedStore.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("ready", healed.Repository.Status);
+        Assert.Equal("fedcba9876543210", healed.Repository.HeadSha);
+
+        // A HEAD that keeps moving can never be captured consistently: the snapshot is
+        // downgraded to git-partial and carries the existing retry step.
+        var tornRunner = new FakeCommandRunner { HeadKeepsMoving = true };
+        var tornStore = CreateStore(tornRunner);
+        var torn = await tornStore.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-partial", torn.Repository.Status);
+        Assert.Contains(torn.NextSteps, step => step.Id == "retry-repository-capture");
+    }
+
+    [Fact]
+    public async Task ContextSync_AzStartFailure_IsClassifiedCliUnavailable()
+    {
+        // az resolved on PATH but the process failed to START (vanished or
+        // non-executable binary): that is the same recovery class as az missing
+        // entirely — install the CLI or open Cloud Shell — not an inventory retry,
+        // which would fail identically.
+        var runner = new FakeCommandRunner { AzureStartFails = true };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("cli-unavailable", snapshot.AzureCaptureFailure?.Status);
+        Assert.Contains(snapshot.NextSteps, step => step.Id == "open-cloud-shell");
+        Assert.DoesNotContain(snapshot.NextSteps, step => step.Id == "retry-azure-inventory");
+    }
+
+    [Fact]
     public async Task CredentialLookingSurfaceLabels_AreRejected_WithoutEchoingTheValue()
     {
         // Lowercase letters/digits/hyphens alone would let an sk-style label through.
@@ -941,9 +980,11 @@ public sealed class OperatorContextToolsTests : IDisposable
     [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
-        // Sync holds the lock across four git commands and all three Azure reads; the
-        // waiter budget is derived from the same constants so they cannot drift apart.
-        var worstCaseHold = 4 * OperatorContextStore.GitCommandTimeout
+        // Sync holds the lock across up to two capture attempts of five git commands
+        // each (initial rev-parse, branch, remote, status, confirming rev-parse) and all
+        // three Azure reads; the waiter budget is derived from the same constants so
+        // they cannot drift apart.
+        var worstCaseHold = 10 * OperatorContextStore.GitCommandTimeout
             + OperatorContextStore.AzureAccountTimeout
             + OperatorContextStore.AzureGroupListTimeout
             + OperatorContextStore.AzureResourceListTimeout;
@@ -952,16 +993,39 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
-    public void CreateStartInfo_WindowsBatchShim_LaunchesViaCmd()
+    public void CreateStartInfo_ScriptShimPath_IsNeverWrappedInCmd()
     {
+        // Shims are refused in RunAsync before this method runs; even one that slipped
+        // through must launch directly (and fail to start), never via a cmd.exe /c line
+        // whose metacharacter rules ArgumentList quoting cannot express.
         var info = SystemCommandRunner.CreateStartInfo(
             "az",
             new[] { "account", "show" },
             @"C:\Tools\az.cmd");
 
-        Assert.EndsWith("cmd.exe", info.FileName, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(new[] { "/d", "/c", @"C:\Tools\az.cmd", "account", "show" }, info.ArgumentList);
+        Assert.Equal(@"C:\Tools\az.cmd", info.FileName);
+        Assert.Equal(new[] { "account", "show" }, info.ArgumentList);
         Assert.False(info.UseShellExecute);
+    }
+
+    [Fact]
+    public void ScriptShims_AreRefusedBeforeLaunch()
+    {
+        // ArgumentList performs CreateProcess quoting, not cmd.exe metacharacter
+        // escaping: a legitimate variable argument (e.g. a repo root containing an
+        // unspaced '&') could split a cmd.exe /c line and run something unintended.
+        // Shims are refused with the same Started=false shape as a missing command, so
+        // captures map them onto the git-unavailable / cli-unavailable recovery steps.
+        var cmdRefusal = SystemCommandRunner.RefuseIfScriptShim("git", @"C:\Tools\git.cmd");
+        Assert.NotNull(cmdRefusal);
+        Assert.False(cmdRefusal!.Started);
+        Assert.Contains("batch shim", cmdRefusal.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".exe", cmdRefusal.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(SystemCommandRunner.RefuseIfScriptShim("az", @"C:\Tools\AZ.BAT"));
+
+        // Real executables and unresolved (non-Windows) commands launch normally.
+        Assert.Null(SystemCommandRunner.RefuseIfScriptShim("az", @"C:\Tools\az.exe"));
+        Assert.Null(SystemCommandRunner.RefuseIfScriptShim("git", null));
     }
 
     [Fact]
@@ -1008,11 +1072,18 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal bool GitRevParseFails { get; set; }
         internal bool GitBranchFails { get; set; }
         internal bool GitStatusFails { get; set; }
+        // First rev-parse returns the old HEAD, every later one the new HEAD — models a
+        // single commit landing mid-capture that the one in-capture retry heals.
+        internal bool HeadMovesOnce { get; set; }
+        // Every rev-parse returns a fresh sha — models a HEAD that never settles.
+        internal bool HeadKeepsMoving { get; set; }
+        private int _revParseCalls;
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
         internal string BranchName { get; set; } = "integration/claude-code-operator-plugin";
         internal string RemoteUrl { get; set; } = "git@github.com:Yolkster64/helios-platform.git";
         internal bool AzureNotAuthenticated { get; set; }
+        internal bool AzureStartFails { get; set; }
         internal bool AzureGroupListFails { get; set; }
         internal bool AzureResourceListFails { get; set; }
         internal bool DuplicateResourceLeafNames { get; set; }
@@ -1058,13 +1129,27 @@ public sealed class OperatorContextToolsTests : IDisposable
                     : Success(DetachedHead ? string.Empty : BranchName + "\n"),
                 ["rev-parse", "HEAD"] => GitRevParseFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: not a git repository")
-                    : Success("0123456789abcdef\n"),
+                    : Success(RevParseOutput()),
                 ["remote", "get-url", "origin"] => Success(RemoteUrl + "\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: unable to read the index")
                     : Success(GitStatusDirty ? " M src/some-file.cs\n" : string.Empty),
                 _ => new CommandResult(true, 1, string.Empty, "unexpected git command"),
             };
+        }
+
+        private string RevParseOutput()
+        {
+            var call = _revParseCalls++;
+            if (HeadKeepsMoving)
+            {
+                return $"{call:x16}\n";
+            }
+            if (HeadMovesOnce && call > 0)
+            {
+                return "fedcba9876543210\n";
+            }
+            return "0123456789abcdef\n";
         }
 
         private string GroupTagsJson()
@@ -1084,6 +1169,12 @@ public sealed class OperatorContextToolsTests : IDisposable
 
         private CommandResult Azure(IReadOnlyList<string> arguments)
         {
+            if (AzureStartFails)
+            {
+                // The az process could not START (vanished binary, refused script shim):
+                // distinct from a command that ran and failed.
+                return CommandResult.NotStarted;
+            }
             if (arguments.Take(2).SequenceEqual(new[] { "account", "show" }))
             {
                 if (AzureNotAuthenticated)

@@ -122,11 +122,13 @@ internal sealed class OperatorContextStore
     internal static readonly TimeSpan AzureAccountTimeout = TimeSpan.FromSeconds(20);
     internal static readonly TimeSpan AzureGroupListTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AzureResourceListTimeout = TimeSpan.FromSeconds(45);
-    // A healthy lock holder can legitimately run four git commands plus all three Azure
-    // reads while holding the lock, so the waiter budget is derived from those same
-    // timeouts (plus margin) rather than a magic number that could silently drift.
+    // A healthy lock holder can legitimately run five git commands per capture attempt
+    // (initial rev-parse, branch, remote, status, confirming rev-parse) and two attempts
+    // when a torn capture retries, plus all three Azure reads while holding the lock, so
+    // the waiter budget is derived from those same timeouts (plus margin) rather than a
+    // magic number that could silently drift.
     internal static readonly TimeSpan LockWaitBudget =
-        4 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
+        10 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
         + TimeSpan.FromSeconds(15);
     private static readonly Regex SafeSurface = new("^[a-z0-9][a-z0-9-]{0,47}$", RegexOptions.CultureInvariant);
     private static readonly Regex SafeLocation = new("^[a-z0-9][a-z0-9-]{1,49}$", RegexOptions.CultureInvariant);
@@ -440,7 +442,7 @@ internal sealed class OperatorContextStore
             steps.Add(new OperatorNextStep(
                 "retry-repository-capture",
                 "Retry the repository capture",
-                "HEAD was captured, but a later git query (branch or worktree status) failed, so the saved context cannot prove which branch is active or whether the checkout is clean.",
+                "HEAD was captured, but a later git query (branch or worktree status) failed or the checkout changed mid-capture, so the saved context cannot prove which branch is active or whether the checkout is clean.",
                 "Check git branch --show-current and git status --short in the checkout, then re-run helios_operator_context_sync.",
                 "none"));
         }
@@ -623,18 +625,37 @@ internal sealed class OperatorContextStore
 
     private async Task<RepositorySnapshot> CaptureRepositoryAsync(CancellationToken cancellationToken)
     {
+        var (snapshot, torn) = await CaptureRepositoryOnceAsync(cancellationToken);
+        if (!torn)
+        {
+            return snapshot;
+        }
+
+        // A commit or branch switch landed between the initial rev-parse and the later
+        // queries: one retry usually captures the settled state. If HEAD is still moving
+        // afterwards, the evidence is mixed and must never be presented as ready — it is
+        // downgraded to git-partial, which already carries the retry next step.
+        (snapshot, torn) = await CaptureRepositoryOnceAsync(cancellationToken);
+        return torn && snapshot.Status == "ready"
+            ? snapshot with { Status = "git-partial" }
+            : snapshot;
+    }
+
+    private async Task<(RepositorySnapshot Snapshot, bool Torn)> CaptureRepositoryOnceAsync(
+        CancellationToken cancellationToken)
+    {
         // Availability is derived from the injected runner (Started == false means the
         // command could not launch), never from a static PATH probe, so tests can fake it.
         var head = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
         if (!head.Started)
         {
-            return RepositorySnapshot.Empty with { Status = "git-unavailable" };
+            return (RepositorySnapshot.Empty with { Status = "git-unavailable" }, false);
         }
 
         var headSha = head.ExitCode == 0 ? NullIfEmpty(head.StandardOutput.Trim()) : null;
         if (headSha is null)
         {
-            return RepositorySnapshot.Empty with { Status = "not-a-git-checkout" };
+            return (RepositorySnapshot.Empty with { Status = "not-a-git-checkout" }, false);
         }
 
         var branchResult = await RunGitAsync(new[] { "branch", "--show-current" }, cancellationToken);
@@ -657,7 +678,18 @@ internal sealed class OperatorContextStore
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
         var statusCaptured = status.Started && status.ExitCode == 0;
 
-        return new RepositorySnapshot(
+        // TOCTOU guard: HEAD was read first and branch/worktree state after, so a commit
+        // or branch switch in between would blend old-HEAD and new-worktree evidence in
+        // one snapshot. Re-read HEAD after the FINAL query — a mismatch (or a failed
+        // confirmation) marks the capture torn so the caller retries or downgrades it.
+        var confirmation = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
+        var torn = !confirmation.Started || confirmation.ExitCode != 0
+            || !string.Equals(
+                NullIfEmpty(confirmation.StandardOutput.Trim()),
+                headSha,
+                StringComparison.Ordinal);
+
+        var snapshot = new RepositorySnapshot(
             // HEAD alone is not complete repository evidence: a failed branch or
             // worktree-status query downgrades the capture to git-partial so downstream
             // consumers surface the missing evidence instead of treating the snapshot as
@@ -675,6 +707,7 @@ internal sealed class OperatorContextStore
                 : null,
             IsMainBranch: isMainBranch,
             IsDetachedHead: isDetachedHead);
+        return (snapshot, torn);
     }
 
     private Task<CommandResult> RunGitAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
@@ -712,7 +745,17 @@ internal sealed class OperatorContextStore
             },
             AzureAccountTimeout,
             cancellationToken);
-        if (!accountResult.Started || accountResult.ExitCode != 0)
+        if (!accountResult.Started)
+        {
+            // The az process never ran (binary vanished after the PATH probe, refused
+            // script shim): that is the same recovery class as az missing from PATH —
+            // install the CLI or open Cloud Shell — not an inventory retry, which would
+            // fail identically. The login/subscription classification below only applies
+            // to a command that actually ran.
+            return AzureSnapshot.Failed("cli-unavailable", SanitizeError(accountResult.StandardError))
+                with { CapturedAtUtc = capturedAtUtc };
+        }
+        if (accountResult.ExitCode != 0)
         {
             var error = SanitizeError(accountResult.StandardError);
             var status = error.Contains("login", StringComparison.OrdinalIgnoreCase)
@@ -1370,7 +1413,8 @@ internal sealed class OperatorContextStore
     /// <summary>
     /// Resolves a command name to the full path of the file that PATH (and PATHEXT on
     /// Windows) discovery would find, including its real extension — so callers can see
-    /// that "az" is actually az.cmd and launch it accordingly. Returns null when absent.
+    /// that "az" is actually az.cmd and refuse the shim launch (see
+    /// SystemCommandRunner.RefuseIfScriptShim). Returns null when absent.
     /// </summary>
     internal static string? ResolveCommandPath(string command)
     {
@@ -1484,10 +1528,14 @@ internal sealed class SystemCommandRunner : ICommandRunner
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var startInfo = CreateStartInfo(
-            fileName,
-            arguments,
-            OperatingSystem.IsWindows() ? OperatorContextStore.ResolveCommandPath(fileName) : null);
+        var resolvedWindowsPath = OperatingSystem.IsWindows()
+            ? OperatorContextStore.ResolveCommandPath(fileName)
+            : null;
+        if (RefuseIfScriptShim(fileName, resolvedWindowsPath) is { } shimRefusal)
+        {
+            return shimRefusal;
+        }
+        var startInfo = CreateStartInfo(fileName, arguments, resolvedWindowsPath);
 
         Process? process;
         try
@@ -1532,13 +1580,40 @@ internal sealed class SystemCommandRunner : ICommandRunner
     }
 
     /// <summary>
-    /// Builds the launch configuration. On Windows, PATH/PATHEXT discovery can resolve a
-    /// command like "az" to a batch shim (az.cmd) that CreateProcess cannot start
-    /// directly with shell execution disabled, so batch shims are launched via
-    /// "cmd.exe /d /c &lt;resolved path&gt;". Arguments always go through ArgumentList
-    /// (never string concatenation); all HELIOS capture arguments are fixed literals —
-    /// no repository or Azure data flows into a command line. resolvedWindowsPath is
-    /// null on non-Windows platforms, which keeps their behavior unchanged.
+    /// PATH/PATHEXT discovery on Windows can resolve a command like "az" to a batch shim
+    /// (az.cmd). Launching one requires cmd.exe, and cmd.exe REINTERPRETS the command
+    /// line: ProcessStartInfo.ArgumentList performs CreateProcess quoting, not cmd.exe
+    /// metacharacter escaping, so a legitimate variable argument — e.g. a repo root
+    /// containing an unspaced '&amp;' flowing into "git -C &lt;root&gt;" — could split the
+    /// /c command and execute something unintended. Every launch in this file passes
+    /// variable arguments (git -C &lt;root&gt;, az --subscription &lt;id&gt;), so script
+    /// shims are refused outright with a Started=false result — the same shape the
+    /// capture paths already map to git-unavailable / cli-unavailable recovery steps —
+    /// rather than hand-building cmd.exe escaping. Returns null when the launch is safe.
+    /// </summary>
+    internal static CommandResult? RefuseIfScriptShim(string fileName, string? resolvedWindowsPath)
+    {
+        if (resolvedWindowsPath is null
+            || (!resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+                && !resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+        return new CommandResult(
+            false,
+            -1,
+            string.Empty,
+            $"'{fileName}' resolves to the batch shim '{resolvedWindowsPath}', which cmd.exe would reinterpret; point PATH at the command's real executable (.exe) instead.");
+    }
+
+    /// <summary>
+    /// Builds the launch configuration. Script shims (.cmd/.bat) never reach this method
+    /// — <see cref="RefuseIfScriptShim"/> rejects them in RunAsync — so the resolved
+    /// path always launches directly with shell execution disabled; a shim that slipped
+    /// through would simply fail to start (CreateProcess cannot run batch files), never
+    /// run through cmd.exe. Arguments always go through ArgumentList (never string
+    /// concatenation). resolvedWindowsPath is null on non-Windows platforms, which keeps
+    /// their behavior unchanged.
     /// </summary>
     internal static ProcessStartInfo CreateStartInfo(
         string fileName,
@@ -1547,24 +1622,12 @@ internal sealed class SystemCommandRunner : ICommandRunner
     {
         var startInfo = new ProcessStartInfo
         {
+            FileName = resolvedWindowsPath ?? fileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        if (resolvedWindowsPath is not null
-            && (resolvedWindowsPath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
-                || resolvedWindowsPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)))
-        {
-            startInfo.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
-            startInfo.ArgumentList.Add("/d");
-            startInfo.ArgumentList.Add("/c");
-            startInfo.ArgumentList.Add(resolvedWindowsPath);
-        }
-        else
-        {
-            startInfo.FileName = resolvedWindowsPath ?? fileName;
-        }
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
