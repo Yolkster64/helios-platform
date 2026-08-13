@@ -40,3 +40,9 @@ Copilot schemas move quarterly.
 connection/schema endpoints and semantic labels, declarative agent manifest schema
 versions and capability objects, required Graph permissions with admin-consent
 gotchas, and the live-verified tenant facts this repo's artifacts were built against.
+
+`references/m365-copilot-tools.md` — the tools/plugins layer above it: API plugin
+manifests (v2.x) and the agent's `actions` array (with the identity-aware-ingress
+prerequisite for any HELIOS action), Agents Toolkit packaging/sideload/org-wide
+deployment, Teams/Outlook surfacing, Copilot Studio vs the manifest path, connector
+enablement + KQL scoping tools, and the M365 MCP read-only lane sessions use.
