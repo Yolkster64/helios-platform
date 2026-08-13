@@ -252,14 +252,79 @@ internal sealed class OperatorContextStore
         {
             // Idempotent contract: an effective no-op neither rewrites the profile nor
             // appends a journal entry, so repeated identical saves leave no extra trace.
+            // One exception keeps the audit promise honest: the save path below replaces
+            // profile.json atomically FIRST and appends the SHA-256 receipt SECOND, so a
+            // journal-append failure in that gap leaves a committed profile whose
+            // promised receipt was never written — and every retry of the same save
+            // lands here. Verify the newest profile receipt still matches the durable
+            // profile and append the missing receipt when it does not; if that append
+            // fails too, this save fails like any journal-append failure instead of
+            // reporting a silent no-op success.
+            await HealMissingProfileReceiptAsync();
             return current;
         }
 
         var profileBytes = await WriteJsonAtomicallyAsync(ProfilePath, next, cancellationToken);
         var profileDigest = Convert.ToHexString(SHA256.HashData(profileBytes)).ToLowerInvariant();
-        // The profile write is committed: complete the receipt even if the request is
-        // canceled now, so the durable profile can never exist without its journal entry.
-        await AppendJournalLineAsync(
+        await AppendProfileReceiptAsync(profileDigest);
+        return next;
+    }
+
+    /// <summary>
+    /// Closes the atomic-replace-then-append gap for the durable profile: when the last
+    /// profile receipt in the journal is missing or does not match the profile bytes on
+    /// disk, the missing receipt is appended through the same helper the save path uses.
+    /// Hashes exactly the bytes on disk so `sha256sum profile.json` matches the receipt,
+    /// the same contract the save path guarantees.
+    /// </summary>
+    private async Task HealMissingProfileReceiptAsync()
+    {
+        if (!File.Exists(ProfilePath))
+        {
+            // Nothing durable to receipt: a fresh no-op save writes neither file.
+            return;
+        }
+
+        var profileDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(ProfilePath))).ToLowerInvariant();
+        if (string.Equals(GetLatestProfileReceiptSha256(), profileDigest, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        await AppendProfileReceiptAsync(profileDigest);
+    }
+
+    private string? GetLatestProfileReceiptSha256()
+    {
+        if (!File.Exists(JournalPath))
+        {
+            return null;
+        }
+
+        var lines = File.ReadAllLines(JournalPath);
+        for (var index = lines.Length - 1; index >= 0; index--)
+        {
+            if (string.IsNullOrWhiteSpace(lines[index]))
+            {
+                continue;
+            }
+            try
+            {
+                var entry = JsonSerializer.Deserialize<OperatorJournalEntry>(lines[index], JsonLineOptions);
+                if (entry?.ProfileSha256 is { } sha256)
+                {
+                    return sha256;
+                }
+            }
+            catch (JsonException)
+            {
+                // A torn or corrupt line cannot prove a receipt; keep scanning older ones.
+            }
+        }
+        return null;
+    }
+
+    private Task AppendProfileReceiptAsync(string profileDigest) =>
+        AppendJournalLineAsync(
             new OperatorJournalEntry(
                 SchemaVersion: 1,
                 CapturedAtUtc: _clock(),
@@ -274,9 +339,10 @@ internal sealed class OperatorContextStore
                 ResourceGroupCount: null,
                 ResourceCount: null,
                 ChangeSummary: null),
+            // The profile write is already committed whenever a receipt is appended, so
+            // the receipt must complete even if the request is canceled now — the
+            // durable profile can never be left without its journal entry on purpose.
             CancellationToken.None);
-        return next;
-    }
 
     internal OperatorContextSnapshot? GetLatestContext()
     {

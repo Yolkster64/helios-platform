@@ -652,6 +652,39 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveProfile_JournalAppendFailure_IsHealedByTheNextNoOpSave()
+    {
+        var store = CreateStore(new FakeCommandRunner());
+
+        // Force the journal append to fail AFTER the atomic profile replacement by
+        // occupying the journal path with a directory: the save reports failure, but
+        // the profile IS committed — with its promised SHA-256 receipt missing.
+        Directory.CreateDirectory(store.OperatorDirectory);
+        Directory.CreateDirectory(store.JournalPath);
+        var failure = await Record.ExceptionAsync(() =>
+            store.SaveProfileAsync("John", null, null, null, null, CancellationToken.None));
+        Assert.True(failure is IOException or UnauthorizedAccessException);
+        Assert.True(File.Exists(store.ProfilePath));
+
+        // With the journal healthy again, retrying the same save lands on the no-op
+        // path, which must append the missing receipt instead of silently succeeding —
+        // otherwise the durable profile could never be audited against the journal.
+        Directory.Delete(store.JournalPath);
+        var repaired = await store.SaveProfileAsync("John", null, null, null, null, CancellationToken.None);
+
+        Assert.Equal("John", repaired.DisplayName);
+        var receiptLine = Assert.Single(File.ReadLines(store.JournalPath));
+        using var receipt = JsonDocument.Parse(receiptLine);
+        var recordedSha = receipt.RootElement.GetProperty("profileSha256").GetString();
+        var diskSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(store.ProfilePath))).ToLowerInvariant();
+        Assert.Equal(diskSha, recordedSha);
+
+        // Once the receipt matches, further identical saves heal nothing more.
+        await store.SaveProfileAsync("John", null, null, null, null, CancellationToken.None);
+        Assert.Single(File.ReadLines(store.JournalPath));
+    }
+
+    [Fact]
     public async Task SasUrls_AreDetectedAsCredentialValues_InProfileAndAzureTags()
     {
         var sasUrl = "https://acct.blob.core.windows.net/backup?sv=2024-01-01&sp=r&sig=AbCdEf1234567890abcd%2B%2F";
