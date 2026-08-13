@@ -391,26 +391,35 @@ if (-not $dotnet) {
 else {
     Push-Location $repoRoot
     try {
-        $planOutput = @(& $dotnet.Source run --project 'src/ai/HELIOS.AIHub.Cli' -c Release -- `
-                fleet-plan --json 2>&1 | ForEach-Object { $_.ToString() })
+        # stdout only: the CLI writes its advisory banner to stderr, and merging it
+        # in (2>&1) puts human text AFTER the JSON, which ConvertFrom-Json rejects
+        # as trailing content (found by the first live end-to-end cycle). --no-build
+        # keeps build chatter out of stdout too; both the CI lane and the local
+        # cycle build the solution before this script runs, and a missing build
+        # simply lands in the nonzero-exit soft degrade below.
+        $planOutput = @(& $dotnet.Source run --project 'src/ai/HELIOS.AIHub.Cli' -c Release --no-build -- `
+                fleet-plan --json 2>$null | ForEach-Object { $_.ToString() })
         $planExit = $LASTEXITCODE
     }
     finally { Pop-Location }
     if ($planExit -ne 0) {
-        Write-Host ("NOTICE: 'fleet-plan --json' unavailable (exit $planExit; the hub CLI command " +
-            'lands in a parallel change) - fleetPlan: null. The plan is advisory only.')
+        Write-Host ("NOTICE: 'fleet-plan --json' unavailable (exit $planExit; needs a prior " +
+            "'dotnet build HELIOS.sln -c Release') - fleetPlan: null. The plan is advisory only.")
     }
     else {
-        # dotnet run can prefix build chatter before the app's JSON; parse from
-        # the first brace and keep null (with a notice) when that still fails.
-        $planText = (@($planOutput) -join "`n")
-        $brace = $planText.IndexOf('{')
-        if ($brace -ge 0) {
-            try { $fleetPlan = $planText.Substring($brace) | ConvertFrom-Json }
+        # fleet-plan --json emits a top-level ARRAY of rows; be tolerant of any
+        # residual preamble by joining from the first line that opens JSON.
+        $openerIndex = -1
+        for ($i = 0; $i -lt $planOutput.Count; $i++) {
+            if ($planOutput[$i] -match '^\s*[\[{]') { $openerIndex = $i; break }
+        }
+        if ($openerIndex -ge 0) {
+            $planText = (@($planOutput[$openerIndex..($planOutput.Count - 1)]) -join "`n")
+            try { $fleetPlan = $planText | ConvertFrom-Json }
             catch { Write-Host 'NOTICE: fleet-plan output was not parseable JSON - fleetPlan: null.' }
         }
         else {
-            Write-Host 'NOTICE: fleet-plan emitted no JSON object - fleetPlan: null.'
+            Write-Host 'NOTICE: fleet-plan emitted no JSON - fleetPlan: null.'
         }
         if ($null -ne $fleetPlan) { Write-Host 'Advisory fleet plan captured (never auto-executed).' }
     }
