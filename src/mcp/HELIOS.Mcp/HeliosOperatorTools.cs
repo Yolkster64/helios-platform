@@ -429,6 +429,22 @@ internal sealed class OperatorContextStore
                 "none"));
         }
 
+        // A partial capture (HEAD present, but the branch or worktree-status query
+        // failed) hides exactly the evidence the safeguards below key on: a missing
+        // branch suppresses the task-branch step and a null IsDirty suppresses diff
+        // review. Surface the gap explicitly — and independently of the chain below,
+        // which must still fire on whatever evidence WAS captured (e.g. a main-branch
+        // checkout whose status query failed still needs the task-branch step).
+        if (repository.Status == "git-partial")
+        {
+            steps.Add(new OperatorNextStep(
+                "retry-repository-capture",
+                "Retry the repository capture",
+                "HEAD was captured, but a later git query (branch or worktree status) failed, so the saved context cannot prove which branch is active or whether the checkout is clean.",
+                "Check git branch --show-current and git status --short in the checkout, then re-run helios_operator_context_sync.",
+                "none"));
+        }
+
         // A failed repository capture leaves branch flags and IsDirty empty, so none of
         // the branch/diff proposals below can fire; without an explicit recovery step the
         // operator would continue with no branch, HEAD, or worktree evidence at all.
@@ -622,12 +638,13 @@ internal sealed class OperatorContextStore
         }
 
         var branchResult = await RunGitAsync(new[] { "branch", "--show-current" }, cancellationToken);
-        var branch = branchResult.Started && branchResult.ExitCode == 0
+        var branchCaptured = branchResult.Started && branchResult.ExitCode == 0;
+        var branch = branchCaptured
             ? NullIfEmpty(branchResult.StandardOutput.Trim())
             : null;
         // Detached HEAD is a successful branch query with empty output — distinct from a
         // failed query, and it needs its own task-branch safeguard downstream.
-        var isDetachedHead = branchResult.Started && branchResult.ExitCode == 0 && branch is null;
+        var isDetachedHead = branchCaptured && branch is null;
         var isMainBranch = string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase);
         // Branch metadata flows into context.json, the journal, and tool output, so a
         // credential-looking branch name (e.g. incident/sk-...) gets the same keyed
@@ -638,16 +655,22 @@ internal sealed class OperatorContextStore
         }
         var remote = await RunGitValueAsync(new[] { "remote", "get-url", "origin" }, cancellationToken);
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
+        var statusCaptured = status.Started && status.ExitCode == 0;
 
         return new RepositorySnapshot(
-            Status: "ready",
+            // HEAD alone is not complete repository evidence: a failed branch or
+            // worktree-status query downgrades the capture to git-partial so downstream
+            // consumers surface the missing evidence instead of treating the snapshot as
+            // ready. The remote query is deliberately excluded — a checkout without an
+            // origin remote fails that query too, and it feeds no safeguard.
+            Status: branchCaptured && statusCaptured ? "ready" : "git-partial",
             // owner/repo segments are user-chosen identifiers: fingerprint them like
             // branch names when they embed a credential-looking value.
             Repository: SanitizeIdentifier(NormalizeRepositoryName(remote)),
             Branch: branch,
             HeadSha: headSha,
             // null = status capture failed; never claim a clean checkout without evidence.
-            IsDirty: status.Started && status.ExitCode == 0
+            IsDirty: statusCaptured
                 ? !string.IsNullOrWhiteSpace(status.StandardOutput)
                 : null,
             IsMainBranch: isMainBranch,

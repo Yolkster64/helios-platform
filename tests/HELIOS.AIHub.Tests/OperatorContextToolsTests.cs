@@ -302,7 +302,8 @@ public sealed class OperatorContextToolsTests : IDisposable
 
         var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
 
-        Assert.Equal("ready", snapshot.Repository.Status);
+        // A failed status query downgrades the capture: never "ready" without evidence.
+        Assert.Equal("git-partial", snapshot.Repository.Status);
         Assert.Null(snapshot.Repository.IsDirty);
     }
 
@@ -850,6 +851,34 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_PartialGitCapture_IsNotReady_AndGetsRecoveryStep()
+    {
+        // Branch query fails after rev-parse succeeded: the capture must not claim
+        // ready, and the missing branch evidence gets an explicit retry step.
+        var runner = new FakeCommandRunner { GitBranchFails = true };
+        var store = CreateStore(runner);
+        var branchless = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-partial", branchless.Repository.Status);
+        Assert.Null(branchless.Repository.Branch);
+        Assert.False(branchless.Repository.IsDetachedHead);
+        Assert.Contains(branchless.NextSteps, step => step.Id == "retry-repository-capture");
+        // The read-time tool surfaces the same recovery step from the stored context.
+        Assert.Contains(store.GetCurrentNextSteps(), step => step.Id == "retry-repository-capture");
+
+        // Status query fails on a main-branch checkout: the retry step surfaces the
+        // missing worktree evidence WITHOUT suppressing the task-branch safeguard.
+        runner.GitBranchFails = false;
+        runner.GitStatusFails = true;
+        runner.BranchName = "main";
+        var statusless = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-partial", statusless.Repository.Status);
+        Assert.Null(statusless.Repository.IsDirty);
+        Assert.True(statusless.Repository.IsMainBranch);
+        Assert.Contains(statusless.NextSteps, step => step.Id == "retry-repository-capture");
+        Assert.Contains(statusless.NextSteps, step => step.Id == "create-task-branch");
+    }
+
+    [Fact]
     public async Task CredentialLookingSurfaceLabels_AreRejected_WithoutEchoingTheValue()
     {
         // Lowercase letters/digits/hyphens alone would let an sk-style label through.
@@ -977,6 +1006,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal int SnapshotVersion { get; set; } = 1;
         internal bool GitAvailable { get; set; } = true;
         internal bool GitRevParseFails { get; set; }
+        internal bool GitBranchFails { get; set; }
         internal bool GitStatusFails { get; set; }
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
@@ -1023,8 +1053,9 @@ public sealed class OperatorContextToolsTests : IDisposable
             var command = arguments.Skip(2).ToArray();
             return command switch
             {
-                ["branch", "--show-current"] => Success(
-                    DetachedHead ? string.Empty : BranchName + "\n"),
+                ["branch", "--show-current"] => GitBranchFails
+                    ? new CommandResult(true, 129, string.Empty, "error: unknown option")
+                    : Success(DetachedHead ? string.Empty : BranchName + "\n"),
                 ["rev-parse", "HEAD"] => GitRevParseFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: not a git repository")
                     : Success("0123456789abcdef\n"),
