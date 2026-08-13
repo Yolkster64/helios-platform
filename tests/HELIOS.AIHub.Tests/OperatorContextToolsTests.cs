@@ -649,6 +649,106 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task SasUrls_AreDetectedAsCredentialValues_InProfileAndAzureTags()
+    {
+        var sasUrl = "https://acct.blob.core.windows.net/backup?sv=2024-01-01&sp=r&sig=AbCdEf1234567890abcd%2B%2F";
+        var store = CreateStore(new FakeCommandRunner());
+
+        // Profile fields and profile tags reject SAS-bearing values outright.
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveProfileAsync(
+            null, null, null, $"{{\"downloadUrl\":\"{sasUrl}\"}}", null, CancellationToken.None));
+
+        // Azure tags with an innocuous NAME but a SAS value get the fingerprint.
+        var runner = new FakeCommandRunner
+        {
+            GroupTagsJsonOverride = "{\"downloadUrl\":\"" + sasUrl + "\"}",
+        };
+        var tagStore = CreateStore(runner);
+        var snapshot = await tagStore.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.ResourceGroups[0].Tags["downloadUrl"]);
+        Assert.DoesNotContain("sig=AbCdEf", File.ReadAllText(tagStore.ContextPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ContextSync_CredentialLookingResourceIdentifiers_AreFingerprinted()
+    {
+        var runner = new FakeCommandRunner { CredentialResourceName = true };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+
+        var resource = snapshot.Azure.Resources.Single();
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", resource.Name);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", resource.Id);
+        Assert.DoesNotContain(
+            FakeCommandRunner.CredentialLike,
+            File.ReadAllText(store.ContextPath),
+            StringComparison.OrdinalIgnoreCase);
+
+        // Fingerprinted identifiers stay deterministic under one salt: no false deltas.
+        var second = await store.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.True(second.Changes.ResourcesComparable);
+        Assert.Empty(second.Changes.ResourcesAdded);
+        Assert.Empty(second.Changes.ResourcesChanged);
+    }
+
+    [Fact]
+    public async Task ContextSync_CarriedResources_AreDroppedAcrossSaltRegeneration()
+    {
+        var runner = new FakeCommandRunner();
+        var storeBefore = CreateStore(runner);
+        await storeBefore.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+
+        // Salt regenerates (partial restore); a groups-only sync must NOT blend the
+        // old-salt resource fingerprints into a snapshot stamped with the new salt.
+        File.Delete(Path.Combine(storeBefore.OperatorDirectory, "tag-salt.bin"));
+        var storeAfter = CreateStore(runner);
+        var groupsOnly = await storeAfter.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.False(groupsOnly.Azure.ResourcesIncluded);
+        Assert.Empty(groupsOnly.Azure.Resources);
+
+        // The next resource-inclusive sync therefore reports resources not comparable
+        // instead of every redacted tag changing at once.
+        var next = await storeAfter.SyncAsync("claude-code", includeAzure: true, includeResources: true, CancellationToken.None);
+        Assert.False(next.Changes.ResourcesComparable);
+    }
+
+    [Fact]
+    public async Task ContextSync_RecasedTagKey_IsNotReportedAsChange()
+    {
+        var runner = new FakeCommandRunner { GroupTagsJsonOverride = "{\"Project\":\"helios\"}" };
+        var store = CreateStore(runner);
+        await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        // Same tag, re-cased key: the prior snapshot was rehydrated from disk with a
+        // case-sensitive dictionary comparer, so only explicit-comparer comparison
+        // keeps this from surfacing as a change.
+        runner.GroupTagsJsonOverride = "{\"project\":\"helios\"}";
+        var second = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.True(second.Changes.Comparable);
+        Assert.Empty(second.Changes.ResourceGroupsChanged);
+    }
+
+    [Fact]
+    public async Task Reads_UseSharedAccess_AndWritesSucceedWithOpenReaders()
+    {
+        var store = CreateStore(new FakeCommandRunner());
+        await store.SyncAsync("claude-code", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        // Hold an open reader (with the same sharing our reads use) across a replace:
+        // the second sync's atomic rename must succeed and readers must still work.
+        using (new FileStream(store.ContextPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            var second = await store.SyncAsync("codex", includeAzure: false, includeResources: false, CancellationToken.None);
+            Assert.Equal("codex", second.Surface);
+            Assert.Equal("codex", store.GetLatestContext()!.Surface);
+        }
+    }
+
+    [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
         // Sync holds the lock across four git commands and all three Azure reads; the
@@ -723,6 +823,8 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal bool AzureGroupListFails { get; set; }
         internal bool AzureResourceListFails { get; set; }
         internal bool DuplicateResourceLeafNames { get; set; }
+        internal bool CredentialResourceName { get; set; }
+        internal string? GroupTagsJsonOverride { get; set; }
         internal string SubscriptionId { get; set; } = "sub-1";
         internal string SubscriptionState { get; set; } = "Enabled";
         internal string CredentialValue { get; set; } = CredentialLike;
@@ -767,6 +869,10 @@ public sealed class OperatorContextToolsTests : IDisposable
 
         private string GroupTagsJson()
         {
+            if (GroupTagsJsonOverride is not null)
+            {
+                return GroupTagsJsonOverride;
+            }
             if (LongGroupTagName)
             {
                 return "{\"" + new string('n', 200) + "\":\"v\"}";
@@ -801,6 +907,14 @@ public sealed class OperatorContextToolsTests : IDisposable
                 if (AzureResourceListFails)
                 {
                     return new CommandResult(true, 1, string.Empty, "The resource listing request timed out.");
+                }
+                if (CredentialResourceName)
+                {
+                    return Success(
+                        "[{\"id\":\"/subscriptions/sub-1/resourceGroups/rg-core/providers/Microsoft.KeyVault/vaults/"
+                        + CredentialLike
+                        + "\",\"name\":\"" + CredentialLike
+                        + "\",\"type\":\"Microsoft.KeyVault/vaults\",\"location\":\"southcentralus\",\"resourceGroup\":\"rg-core\",\"tags\":{}}]");
                 }
                 if (DuplicateResourceLeafNames)
                 {

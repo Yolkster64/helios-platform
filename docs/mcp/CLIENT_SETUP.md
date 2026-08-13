@@ -12,7 +12,7 @@ client, so Claude Code, GitHub Copilot, Codex CLI, and Cursor all drive the same
 with the same routing table. This is the cross-LLM fabric: each assistant can delegate to
 whichever model is best for the task.
 
-Prereqs: .NET 8 SDK; provider keys in the environment (see `.env.template`). Build once
+Prereqs: .NET 10 SDK; provider keys in the environment (see `.env.template`). Build once
 with `dotnet build HELIOS.sln -c Release`.
 
 ## Claude Code

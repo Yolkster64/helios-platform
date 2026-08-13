@@ -60,7 +60,7 @@ material and are never an execution source.
 
 ## Install and verify
 
-Prerequisites: Claude Code and .NET 8. Start from the HELIOS repository root.
+Prerequisites: Claude Code and the .NET 10 SDK. Start from the HELIOS repository root.
 
 ```bash
 dotnet build HELIOS.sln -c Release

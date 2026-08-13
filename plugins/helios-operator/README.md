@@ -12,7 +12,7 @@ already registers. The plugin deliberately bundles no second MCP server: a bundl
 would launch a duplicate `dotnet run` of the same project inside the checkout, exposing
 every `helios_*` tool twice and racing two Release builds over the same output.
 
-Prerequisites: Claude Code and the .NET 8 SDK. Start Claude Code from the root of a HELIOS
+Prerequisites: Claude Code and the .NET 10 SDK. Start Claude Code from the root of a HELIOS
 checkout.
 
 ## Test the branch directly

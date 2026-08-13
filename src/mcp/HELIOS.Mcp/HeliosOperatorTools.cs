@@ -138,7 +138,7 @@ internal sealed class OperatorContextStore
         "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
         RegexOptions.CultureInvariant);
     private static readonly Regex SensitiveValue = new(
-        "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
+        "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|sig=[a-z0-9%+/]{12,}|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -210,7 +210,7 @@ internal sealed class OperatorContextStore
             return OperatorProfile.Default;
         }
 
-        var profile = JsonSerializer.Deserialize<OperatorProfile>(File.ReadAllText(ProfilePath), JsonOptions)
+        var profile = JsonSerializer.Deserialize<OperatorProfile>(ReadAllTextShared(ProfilePath), JsonOptions)
             ?? throw new InvalidDataException("The HELIOS operator profile deserialized to null.");
         return NormalizeLoadedProfile(profile);
     }
@@ -278,7 +278,7 @@ internal sealed class OperatorContextStore
             return null;
         }
 
-        return JsonSerializer.Deserialize<OperatorContextSnapshot>(File.ReadAllText(ContextPath), JsonOptions)
+        return JsonSerializer.Deserialize<OperatorContextSnapshot>(ReadAllTextShared(ContextPath), JsonOptions)
             ?? throw new InvalidDataException("The HELIOS operator context deserialized to null.");
     }
 
@@ -418,9 +418,9 @@ internal sealed class OperatorContextStore
         {
             steps.Add(new OperatorNextStep(
                 "install-dotnet",
-                "Install the .NET 8 SDK",
-                "The shared HELIOS MCP/CLI surface runs on .NET 8.",
-                "Install .NET 8, then run dotnet build HELIOS.sln -c Release.",
+                "Install the .NET 10 SDK",
+                "The shared HELIOS MCP/CLI surface runs on .NET 10.",
+                "Install the .NET 10 SDK, then run dotnet build HELIOS.sln -c Release.",
                 "none"));
         }
 
@@ -764,6 +764,14 @@ internal sealed class OperatorContextStore
         return $"<redacted:{Convert.ToHexString(digest.AsSpan(0, 6)).ToLowerInvariant()}>";
     }
 
+    /// <summary>
+    /// Resource names/IDs never pass tag redaction, but they are user-chosen strings
+    /// that can embed a credential-looking value; fingerprint them like tag values.
+    /// The fingerprint is deterministic under one salt, so delta keys stay stable.
+    /// </summary>
+    private string? SanitizeIdentifier(string? value) =>
+        value is not null && SensitiveValue.IsMatch(value) ? RedactValue(value) : value;
+
     private string GetTagSaltId() =>
         Convert.ToHexString(SHA256.HashData(GetOrCreateTagSalt()).AsSpan(0, 4)).ToLowerInvariant();
 
@@ -800,7 +808,7 @@ internal sealed class OperatorContextStore
         truncated = items.Length > MaxResourceGroups;
         return items.Take(MaxResourceGroups)
             .Select(item => new AzureResourceGroupSnapshot(
-                Name: GetString(item, "name") ?? "unknown",
+                Name: SanitizeIdentifier(GetString(item, "name")) ?? "unknown",
                 Location: GetString(item, "location"),
                 ProvisioningState: GetString(item, "provisioningState"),
                 Tags: ParseAzureTags(item, out var tagsTruncated),
@@ -816,11 +824,11 @@ internal sealed class OperatorContextStore
         truncated = items.Length > MaxResources;
         return items.Take(MaxResources)
             .Select(item => new AzureResourceSnapshot(
-                Id: GetString(item, "id"),
-                Name: GetString(item, "name") ?? "unknown",
+                Id: SanitizeIdentifier(GetString(item, "id")),
+                Name: SanitizeIdentifier(GetString(item, "name")) ?? "unknown",
                 Type: GetString(item, "type") ?? "unknown",
                 Location: GetString(item, "location"),
-                ResourceGroup: GetString(item, "resourceGroup"),
+                ResourceGroup: SanitizeIdentifier(GetString(item, "resourceGroup")),
                 Tags: ParseAzureTags(item, out var tagsTruncated),
                 TagsTruncated: tagsTruncated))
             .OrderBy(item => item.ResourceGroup, StringComparer.OrdinalIgnoreCase)
@@ -868,7 +876,12 @@ internal sealed class OperatorContextStore
             || priorReady is not { ResourcesIncluded: true }
             || priorReady.SubscriptionId is null || priorReady.TenantId is null
             || !string.Equals(priorReady.SubscriptionId, fresh.SubscriptionId, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(priorReady.TenantId, fresh.TenantId, StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(priorReady.TenantId, fresh.TenantId, StringComparison.OrdinalIgnoreCase)
+            // Carried resources keep fingerprints minted under the PRIOR salt; blending
+            // them into a snapshot stamped with a new TagSaltId would make the next
+            // resource sync report every redacted tag as changed. Drop them instead.
+            || priorReady.TagSaltId is null
+            || !string.Equals(priorReady.TagSaltId, fresh.TagSaltId, StringComparison.OrdinalIgnoreCase))
         {
             return fresh;
         }
@@ -979,10 +992,46 @@ internal sealed class OperatorContextStore
 
     private static bool TagsEqual(
         IReadOnlyDictionary<string, string> left,
-        IReadOnlyDictionary<string, string> right) =>
-        left.Count == right.Count
-        && left.All(pair => right.TryGetValue(pair.Key, out var value)
-            && string.Equals(pair.Value, value, StringComparison.Ordinal));
+        IReadOnlyDictionary<string, string> right)
+    {
+        // Never rely on a dictionary's own comparer: snapshots rehydrated from JSON get
+        // the default case-SENSITIVE comparer while fresh captures use OrdinalIgnoreCase,
+        // so a re-cased tag key would read as a change. Compare keys explicitly.
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+        foreach (var (key, value) in left)
+        {
+            if (!TryGetTagIgnoreCase(right, key, out var other)
+                || !string.Equals(value, other, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool TryGetTagIgnoreCase(
+        IReadOnlyDictionary<string, string> tags,
+        string key,
+        out string value)
+    {
+        if (tags.TryGetValue(key, out value!))
+        {
+            return true;
+        }
+        foreach (var (candidate, candidateValue) in tags)
+        {
+            if (string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = candidateValue;
+                return true;
+            }
+        }
+        value = string.Empty;
+        return false;
+    }
 
     private static OperatorProfile NormalizeLoadedProfile(OperatorProfile profile)
     {
@@ -1173,6 +1222,19 @@ internal sealed class OperatorContextStore
         }
     }
 
+    /// <summary>
+    /// Reads with delete/write sharing so a lock-free read-only tool never blocks the
+    /// writer's atomic rename on Windows (plain ReadAllText holds a handle without
+    /// FileShare.Delete, which can fail the replace with a sharing violation).
+    /// </summary>
+    private static string ReadAllTextShared(string path)
+    {
+        using var stream = new FileStream(
+            path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
     /// <summary>Writes the serialized value atomically and returns the exact bytes written.</summary>
     private static async Task<byte[]> WriteJsonAtomicallyAsync<T>(string path, T value, CancellationToken cancellationToken)
     {
@@ -1181,7 +1243,21 @@ internal sealed class OperatorContextStore
         try
         {
             await File.WriteAllBytesAsync(temporaryPath, payload, cancellationToken);
-            File.Move(temporaryPath, path, overwrite: true);
+            // Readers cooperate via ReadAllTextShared, but an external reader (editor,
+            // cat) without delete sharing can still fail the rename on Windows; a short
+            // bounded retry rides that out without giving up the temp+rename atomicity.
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    File.Move(temporaryPath, path, overwrite: true);
+                    break;
+                }
+                catch (IOException) when (attempt < 5)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
         }
         finally
         {
