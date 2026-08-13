@@ -1,0 +1,115 @@
+# Fleet Learning (informational)
+#
+# Exercises the stub fleet wiring END TO END - start-fleet bring-up from
+# config/fleet/fleet-topology.json, lock-aware synthetic seeding across all
+# four pool boards (both kanban_complete and kanban_block paths), drain via
+# fleet-status, stop-fleet teardown - plus the tandem-learning collection
+# (helios_agents fleet-collect / fleet-summary) and the advisory hub CLI
+# fleet-plan, all through scripts/fleet/learn-fleet.ps1.
+#
+# Honest boundary: this lane is ADVISORY ONLY. The stub workers do no model
+# work, so a green run proves the WIRING (boards, claims, terminations,
+# collection contract), never model quality or routing improvement. The
+# fleet-plan output is advisory and never auto-executes. Never make this a
+# required check.
+#
+# Runner option: ubuntu-latest works out of the box (pwsh, python3, and the
+# .NET SDK setup below are all it needs - the Python spoke is dependency-free
+# and nothing here touches the network or needs a secret). The self-hosted
+# choice exists for local-runner soak testing and assumes pwsh + python3 are
+# preinstalled on the runner.
+name: Fleet Learning (informational)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_count:
+        description: 'Synthetic tasks to seed across the four pool boards'
+        type: string
+        required: false
+        default: '12'
+      runner:
+        description: 'Runner (self-hosted assumes pwsh + python3 preinstalled)'
+        type: choice
+        options:
+          - ubuntu-latest
+          - self-hosted
+        default: ubuntu-latest
+  schedule:
+    # Weekly wiring exercise at a quiet hour (Mondays 04:41 UTC, off the :00
+    # load spike). Cron is always UTC; on a schedule run the inputs above are
+    # empty, so the fallbacks below apply (ubuntu-latest, 12 tasks).
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-learning
+  # Queue, don't cancel: a cancelled cycle would leave a half-exercised run
+  # and a misleading partial learning report.
+  cancel-in-progress: false
+
+jobs:
+  learn:
+    name: One tandem learning cycle (stub fleet)
+    # Empty on schedule runs -> falls back to ubuntu-latest.
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same SDK mechanism as dotnet-build.yml; global.json pins the resolved
+      # SDK to the 10.0 LTS line.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # The native library only feeds the hub's neural/similarity paths, which
+      # this lane does not gate on: the runtime degrades gracefully when the
+      # .so is absent, so a failed native build must not redden the wiring
+      # exercise (dotnet-build.yml is where a native break goes red).
+      - name: Build native library (C++ spoke, optional here)
+        continue-on-error: true
+        run: ./scripts/build/build-native.sh
+
+      # Builds the hub CLI so learn-fleet's advisory `fleet-plan --json` call
+      # does not pay a cold in-step build; the command itself soft-degrades
+      # inside the script while it lands in a parallel change.
+      - name: Build solution
+        run: dotnet build HELIOS.sln -c Release
+
+      # Env indirection on purpose: the input value never enters the script
+      # text - the pwsh block only reads $env:TASK_COUNT and validates it.
+      - name: Run one tandem learning cycle
+        shell: pwsh
+        env:
+          TASK_COUNT: ${{ github.event.inputs.task_count || '12' }}
+        run: |
+          $count = 12
+          if ($env:TASK_COUNT -match '^[1-9]\d*$') { $count = [int]$env:TASK_COUNT }
+          else { Write-Warning "TASK_COUNT '$($env:TASK_COUNT)' is not a positive integer; seeding 12." }
+          ./scripts/fleet/learn-fleet.ps1 -SeedSynthetic $count
+
+      # if: always() - a red cycle should still surface its partial report and
+      # outcomes for debugging. outcomes.jsonl is absent until the parallel
+      # fleet-collect op lands, hence warn (not error) on missing files.
+      - name: Upload learning report and outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-learning
+          path: |
+            .helios/fleet/learning-report.json
+            .helios/learning/outcomes.jsonl
+          if-no-files-found: warn
+          retention-days: 14

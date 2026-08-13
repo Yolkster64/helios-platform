@@ -54,3 +54,6 @@ param deployFleetVmss = false
 // param fleetPool = 'cloud-burst'       // exported as HELIOS_FLEET_POOL on cloud lanes
 // param fleetRepoUrl = 'https://github.com/Yolkster64/helios-platform'
 // param fleetRepoRef = 'main'
+
+// Learning-store Azure backend — deliberately OFF: local JSONL stays the learning lane; enabling creates the storage account + aihubOutcomes table whose endpoint backs AZURE_LEARNING_TABLE_ENDPOINT.
+param deployLearningStorage = false
