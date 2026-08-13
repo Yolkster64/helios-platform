@@ -42,7 +42,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
 
       - name: Scan Code Snippets
         id: scan
@@ -215,6 +214,13 @@ jobs:
           }
           EOF
 
+      - name: Upload Published Registry
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-registry
+          path: .registry/
+          retention-days: 7
+
       - name: Update Registry Index
         run: |
           git config --global user.email "helios-registry@platform.local"
@@ -235,18 +241,21 @@ jobs:
     name: Validate Registry Integrity
     runs-on: ubuntu-latest
     needs: publish-registry
-    if: always()
+    if: needs.publish-registry.result == 'success'
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Download Published Registry
+        uses: actions/download-artifact@v4
+        with:
+          name: published-registry
+          path: registry-verify
 
       - name: Verify Registry Files
         run: |
           echo "Verifying registry integrity..."
           
-          if [ -d ".registry" ]; then
+          if [ -d "registry-verify" ]; then
             echo "✓ Registry directory exists"
-            find .registry -type f | while read file; do
+            find registry-verify -type f | while read file; do
               echo "  - $file"
             done
           else
@@ -256,8 +265,8 @@ jobs:
 
       - name: Validate Registry Metadata
         run: |
-          if [ -f ".registry/registry-metadata.json" ]; then
-            jq . .registry/registry-metadata.json > /dev/null 2>&1
+          if [ -f "registry-verify/registry-metadata.json" ]; then
+            jq . registry-verify/registry-metadata.json > /dev/null 2>&1
             if [ $? -eq 0 ]; then
               echo "✓ Registry metadata is valid JSON"
             else
