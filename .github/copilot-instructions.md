@@ -51,6 +51,7 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
   `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
   `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
+  `helios_absorb_status_get`, `helios_fleet_status_get`,
   `helios_operator_profile_get`, `helios_operator_profile_save`,
   `helios_operator_context_sync`, `helios_operator_next_steps_get`.
 - Shared operator state is local, inspectable, and gitignored under `.helios/operator/`.

@@ -4,7 +4,8 @@ One tool surface for every agent. The HELIOS MCP server (stdio) exposes the mult
 (`helios_ai_ask`, `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`,
 `helios_ai_status`, `helios_providers_list`, `helios_optimal_provider_get`,
 `helios_task_routing_get`, `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
-`helios_infra_validate`, `helios_foundry_agent_list`, `helios_foundry_agent_create`,
+`helios_infra_validate`, `helios_absorb_status_get`, `helios_fleet_status_get`,
+`helios_foundry_agent_list`, `helios_foundry_agent_create`,
 `helios_operator_profile_get`, `helios_operator_profile_save`,
 `helios_operator_context_sync`, `helios_operator_next_steps_get`) to any MCP
 client, so Claude Code, GitHub Copilot, Codex CLI, and Cursor all drive the same providers
@@ -93,6 +94,8 @@ All tools are non-destructive. `helios_ai_*` call LLM providers (network, token 
 that separate implemented/runtime-available selections from candidates and never install
 or execute candidates;
 `helios_infra_validate` compiles `infra/main.bicep` locally with no subscription access;
+`helios_absorb_status_get` / `helios_fleet_status_get` are read-only local reads of the
+absorption watchlist and fleet run state;
 `helios_foundry_agent_list` is a read against the Azure AI Foundry project
 (DefaultAzureCredential) that reports `configured: false` with a fix hint when
 `AZURE_FOUNDRY_PROJECT_ENDPOINT` is unset instead of failing.
