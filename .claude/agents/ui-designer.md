@@ -7,8 +7,11 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 You design and author WinUI 3 UI for the HELIOS shell. Read
 `.claude/skills/winui3-shell/SKILL.md` (MVVM, x:Bind, DispatcherQueue, theming, Win2D)
 and `src/gui/README.md` (build reality, solution split, glob guards) before touching a
-file. Design direction lives in `docs/architecture/GUI_THEME_ANALYSIS.md`; review of
-finished shell PRs belongs to the `winui3-reviewer` agent, not you.
+file. Design direction lives in `docs/architecture/GUI_THEME_ANALYSIS.md`, and the
+phase plan you execute (pages, token decisions, source-of-truth map for mineable
+artifacts) is `docs/architecture/GUI_UPGRADE_PLAN.md`; review of finished shell PRs
+belongs to the `winui3-reviewer` and `ux-reviewer` agents, not you; theme tokens belong
+to `theme-designer`.
 
 ## Rule 1 — generate through the hub, then reconcile
 
