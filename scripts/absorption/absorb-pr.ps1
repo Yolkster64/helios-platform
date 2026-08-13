@@ -46,10 +46,16 @@ if (-not $AcceptCredentialExposure -and $env:HELIOS_ABSORB_ACCEPT_CREDENTIALS -n
         'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_MODELS_TOKEN',
         'AZURE_OPENAI_API_KEY', 'HELIOS_API_ACCESS_KEY', 'GH_TOKEN', 'GITHUB_TOKEN'
     ) | Where-Object { -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($_)) }
+    # gh resolves its config dir as GH_CONFIG_DIR > XDG_CONFIG_HOME/gh >
+    # %AppData%/GitHub CLI (Windows) > ~/.config/gh - check every candidate,
+    # not just the Unix default, or a Windows host with a logged-in gh slips through.
     $credentialStores = @(
+        $env:GH_CONFIG_DIR,
+        $(if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'gh' }),
+        $(if ($env:APPDATA) { Join-Path $env:APPDATA 'GitHub CLI' }),
         (Join-Path $HOME '.config' 'gh'),
         (Join-Path $HOME '.azure')
-    ) | Where-Object { Test-Path $_ }
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
     if ($credentialEnvNames.Count -gt 0 -or $credentialStores.Count -gt 0) {
         # Write-Host + explicit exit: under ErrorActionPreference=Stop a
         # Write-Error here would throw past the exit and yield code 1 instead
@@ -133,7 +139,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw ($out | Select-Object -Last 5 | Out-String) }
             # Same assert CI makes: the runtime degrades gracefully without the
             # library, which would let a broken native change score a green gate.
-            $so = Join-Path $worktree 'tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so'
+            $so = Join-Path $worktree 'tests/HELIOS.AIHub.Tests/bin/Release/net10.0/libhelios_aihub_native.so'
             if (-not (Test-Path -LiteralPath $so)) {
                 throw 'Native library did not reach test output (libhelios_aihub_native.so missing).'
             }

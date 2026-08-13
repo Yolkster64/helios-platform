@@ -12,7 +12,7 @@ action marked below.
 Tenant reachability and corpus existence were verified via authorized read-only
 Graph calls (no mutations):
 
-- `GET /me` → signed in as John More, `JMore@Heli0s.onmicrosoft.com`
+- `GET /me` → resolved the signed-in tenant admin account
   (tenant `Heli0s.onmicrosoft.com`).
 - SharePoint search for `HELIOS` → **49 documents**, including a governed
   documentation tree that is exactly the corpus worth indexing:

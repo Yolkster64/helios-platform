@@ -57,8 +57,8 @@ reviewed against the v1.8 reference (nothing we use is deprecated through 1.8).
 
 ## Live-verified tenant facts (2026-08-13, read-only)
 
-Recorded in `integrations/m365/README.md`: tenant `Heli0s.onmicrosoft.com`; signed-in
-user John More (`JMore@Heli0s.onmicrosoft.com`); SharePoint search for `HELIOS`
+Recorded in `integrations/m365/README.md`: tenant `Heli0s.onmicrosoft.com`, verified
+via the signed-in tenant admin account; SharePoint search for `HELIOS`
 returned 49 documents including `…sharepoint.com/Shared Documents/HELIOS/Governance/`
 and a personal `Helios/Governance/{Architecture,Deployment-Evidence,Integration-Fabric}`
 tree — the corpus the declarative agent grounds on today, before the connector exists.
