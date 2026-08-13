@@ -748,6 +748,40 @@ public sealed class OperatorContextToolsTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("git@github.com:Yolkster64/helios-platform.git", "Yolkster64/helios-platform")]
+    [InlineData("https://github.com/Yolkster64/helios-platform.git", "Yolkster64/helios-platform")]
+    [InlineData("ssh://git@github.com/Yolkster64/helios-platform.git", "Yolkster64/helios-platform")]
+    [InlineData("https://evilgithub.com/Yolkster64/helios-platform.git", "non-github-remote")]
+    [InlineData("https://github.com.evil.example/Yolkster64/helios-platform", "non-github-remote")]
+    [InlineData("git@evilgithub.com:Yolkster64/helios-platform.git", "non-github-remote")]
+    [InlineData("https://www.github.com/Yolkster64/helios-platform", "non-github-remote")]
+    [InlineData("https://gitlab.com/Yolkster64/helios-platform.git", "non-github-remote")]
+    public async Task ContextSync_RecordsOwnerRepo_OnlyForExactGitHubHost(string remoteUrl, string expected)
+    {
+        var runner = new FakeCommandRunner { RemoteUrl = remoteUrl };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+
+        Assert.Equal(expected, snapshot.Repository.Repository);
+    }
+
+    [Fact]
+    public async Task ContextSync_CredentialLookingSubscriptionName_IsFingerprinted()
+    {
+        var runner = new FakeCommandRunner { SubscriptionName = $"team {FakeCommandRunner.CredentialLike}" };
+        var store = CreateStore(runner);
+
+        var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.SubscriptionName);
+        Assert.DoesNotContain(
+            FakeCommandRunner.CredentialLike,
+            File.ReadAllText(store.ContextPath),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
@@ -819,6 +853,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
         internal string BranchName { get; set; } = "integration/claude-code-operator-plugin";
+        internal string RemoteUrl { get; set; } = "git@github.com:Yolkster64/helios-platform.git";
         internal bool AzureNotAuthenticated { get; set; }
         internal bool AzureGroupListFails { get; set; }
         internal bool AzureResourceListFails { get; set; }
@@ -827,6 +862,7 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal string? GroupTagsJsonOverride { get; set; }
         internal string SubscriptionId { get; set; } = "sub-1";
         internal string SubscriptionState { get; set; } = "Enabled";
+        internal string SubscriptionName { get; set; } = "HELIOS Dev";
         internal string CredentialValue { get; set; } = CredentialLike;
         internal int GroupTagCount { get; set; }
         internal bool LongGroupTagName { get; set; }
@@ -859,7 +895,7 @@ public sealed class OperatorContextToolsTests : IDisposable
                 ["branch", "--show-current"] => Success(
                     DetachedHead ? string.Empty : BranchName + "\n"),
                 ["rev-parse", "HEAD"] => Success("0123456789abcdef\n"),
-                ["remote", "get-url", "origin"] => Success("git@github.com:Yolkster64/helios-platform.git\n"),
+                ["remote", "get-url", "origin"] => Success(RemoteUrl + "\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: unable to read the index")
                     : Success(GitStatusDirty ? " M src/some-file.cs\n" : string.Empty),
@@ -890,7 +926,7 @@ public sealed class OperatorContextToolsTests : IDisposable
                 {
                     return new CommandResult(true, 1, string.Empty, "Please run 'az login' to setup account.");
                 }
-                return Success("{\"id\":\"" + SubscriptionId + "\",\"name\":\"HELIOS Dev\",\"tenantId\":\"tenant-1\",\"state\":\"" + SubscriptionState + "\"}");
+                return Success("{\"id\":\"" + SubscriptionId + "\",\"name\":\"" + SubscriptionName + "\",\"tenantId\":\"tenant-1\",\"state\":\"" + SubscriptionState + "\"}");
             }
             if (arguments.Take(2).SequenceEqual(new[] { "group", "list" }))
             {

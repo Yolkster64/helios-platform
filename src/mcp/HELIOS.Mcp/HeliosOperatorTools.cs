@@ -137,6 +137,11 @@ internal sealed class OperatorContextStore
     private static readonly Regex CredentialNameBoundary = new(
         "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
         RegexOptions.CultureInvariant);
+    // SCP-style git remote (git@github.com:owner/repo): the host segment between '@'
+    // and ':' must be exactly github.com — anchored so evilgithub.com can never match.
+    private static readonly Regex ScpStyleGitHubRemote = new(
+        "^[A-Za-z0-9._-]+@github\\.com:(?<path>[^:]+)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex SensitiveValue = new(
         "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|sig=[a-z0-9%+/]{12,}|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -674,7 +679,10 @@ internal sealed class OperatorContextStore
         using var accountDocument = JsonDocument.Parse(accountResult.StandardOutput);
         var account = accountDocument.RootElement;
         var subscriptionId = GetString(account, "id");
-        var subscriptionName = GetString(account, "name");
+        // The subscription display name is user-controlled text: give it the same
+        // fingerprint sanitization as resource/branch identifiers. This one local feeds
+        // every snapshot variant (ready, partial, group-list failure).
+        var subscriptionName = SanitizeIdentifier(GetString(account, "name"));
         var tenantId = GetString(account, "tenantId");
         var subscriptionState = GetString(account, "state");
 
@@ -1319,6 +1327,14 @@ internal sealed class OperatorContextStore
         return null;
     }
 
+    /// <summary>
+    /// Records owner/repo only when the remote's HOST is exactly github.com — a URL
+    /// parse for URL-style remotes, an anchored host segment for SCP-style ones. A
+    /// substring test would accept evilgithub.com or github.com.evil.example and record
+    /// misleading repository evidence. www.github.com is deliberately NOT accepted: git
+    /// remotes use the canonical host, and every accepted variant widens the spoof
+    /// surface of what this method exists to attest.
+    /// </summary>
     private static string? NormalizeRepositoryName(string? remote)
     {
         if (string.IsNullOrWhiteSpace(remote))
@@ -1326,18 +1342,32 @@ internal sealed class OperatorContextStore
             return null;
         }
         remote = remote.Trim().TrimEnd('/');
-        var marker = remote.IndexOf("github.com", StringComparison.OrdinalIgnoreCase);
-        if (marker < 0)
+
+        string path;
+        if (Uri.TryCreate(remote, UriKind.Absolute, out var uri) && uri.Authority.Length > 0)
         {
-            return "non-github-remote";
+            if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                return "non-github-remote";
+            }
+            path = uri.AbsolutePath;
+        }
+        else
+        {
+            var scp = ScpStyleGitHubRemote.Match(remote);
+            if (!scp.Success)
+            {
+                return "non-github-remote";
+            }
+            path = scp.Groups["path"].Value;
         }
 
-        var repository = remote[(marker + "github.com".Length)..].TrimStart(':', '/');
-        if (repository.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        path = path.Trim('/');
+        if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
         {
-            repository = repository[..^4];
+            path = path[..^4];
         }
-        var parts = repository.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return parts.Length == 2 ? $"{parts[0]}/{parts[1]}" : "non-github-remote";
     }
 
