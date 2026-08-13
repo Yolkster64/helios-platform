@@ -221,7 +221,7 @@ the `fleet-operator` agent; absorption seeding through `absorption-analyst`.
 | Knob | What it scales | Default | Where to change | Safety bound |
 |---|---|---|---|---|
 | `poolSize` (per pool) | Worker identities per Xcore pool | 9 per pool (36 total) | `config/fleet/fleet-topology.json` | Workspace mode (Cloud Shell/Codespaces) caps to `workspaceProfile.poolSize`, else half the declared size rounded up; an explicit `-PoolSize` is still capped |
-| `hermesFleet.maxConcurrentLanes` | Declared per-board lane cap in the fleet contract — consumed by real Hermes workers, **not enforced** by the local stub, start-fleet, or scale-fleet today | code 6 / infra 4 / review 9 / native 3 | `config/fleet/fleet-topology.json` | The enforced ceilings are `poolSize` (workers spawned) and `autoscaling.maxLocalLanes` (reconciler bound); treat this field as the quota the pool SHOULD honor once real Hermes workers read it |
+| `hermesFleet.maxConcurrentLanes` | Per-pool concurrency ceiling — **enforced**: start-fleet caps spawned workers at `min(poolSize, maxConcurrentLanes)` and scale-fleet caps the reconciler's local-lane bound by it | code 6 / infra 4 / review 9 / native 3 | `config/fleet/fleet-topology.json` | Together with `autoscaling.maxLocalLanes` this is the hard local ceiling; real Hermes workers additionally honor it as their per-board lane quota |
 | `autoscaling.minLocalLanes` / `maxLocalLanes` / `maxBurstLanes` | Warm floor / local ceiling / cloud ceiling per pool | defaults 1 / 4 / 5, per-pool overrides | `config/fleet/fleet-topology.json` (pool block merged over `defaults.autoscaling`) | Scale-up only when queue depth > `scaleUpQueueDepth` (3); scale-down only after `scaleDownIdleSeconds` (300) empty — a shrinking queue never scales down; `xcore-9-native` is `local`-mode on purpose (no burst) |
 | Reconciler cadence | How fast autoscaling policy is enforced | one pass per invocation; `-Watch` loops at 60s (`-IntervalSeconds`) | `scripts/fleet/scale-fleet.ps1` (cron or `-Watch`) | `-DryRun` prints the decision table touching nothing; kills are identity-verified (pid + recorded start time) |
 | VMSS burst gate | Whether cloud burst capacity exists at all | OFF | `infra/main.bicep`: `deployFleetVmss` (false) AND non-empty `vmssAdminPublicKey` ('') — a double gate | `infra/main.bicepparam` pins `deployFleetVmss = false`, so default redeploys create nothing; `what-if` before enabling |
@@ -235,12 +235,14 @@ the `fleet-operator` agent; absorption seeding through `absorption-analyst`.
 
 ## .NET version guidance (asked constantly, so pinned here)
 
-- **Today**: repo targets **net8.0** everywhere; net8.0 support ends **2026-11-10**.
-- **Current LTS**: **.NET 10** (Nov 2025). The net10.0 upgrade is roadmap PR6 — one PR,
-  all four projects together, plus `DOTNET_VERSION` bumps in workflows.
-- **.NET 11**: **preview only** (ships Nov 2026). Track features; never target in
-  committed code and never describe as GA. WinUI 3 work (GUI_THEME_ANALYSIS.md) should
-  land on .NET 10, not wait for 11.
+- **Today**: repo targets **net10.0** (the current LTS, Nov 2025) everywhere except
+  `src/gui`, which stays `net8.0-windows10.0.19041.0` until the pinned Windows App SDK
+  line documents net10 support. `global.json` pins SDK 10.0.400.
+- **The net8.0 → net10.0 retarget has landed** (roadmap PR6): all projects, package
+  pins, and `dotnet-version: 10.0.x` workflow bumps in one change-set.
+- **.NET 11**: **preview only** (ships Nov 2026). An allowed-to-fail `net11-preview`
+  job in `dotnet-build.yml` builds HELIOS.sln on the preview SDK for early warning;
+  never target net11 in committed code and never describe it as GA.
 
 ## Maintaining the table
 

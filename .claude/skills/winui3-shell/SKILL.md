@@ -145,3 +145,8 @@ Each card: status dot (ThemeResource brush), latency + success-rate text via x:B
 | XAML layout decisions, MVVM structure, navigation design | anthropic (Claude) or openai (GPT) | Structural reasoning across views/VMs |
 | XAML boilerplate: styles, templates, converter stubs | openai+codex | Mechanical markup generation |
 | Property/snippet completion in code-behind and VMs | copilot | Inline completion |
+
+## Reference material
+
+- `references/xaml-authoring.md` — deep XAML authoring: x:Bind vs Binding traps, DataTemplates and list-control choice, ThemeResource lifetime, VisualStateManager, Hot Reload limits, XamlStyler/WinUI 3 Gallery, and the contract for requesting XAML from the hub's LLM agents.
+- `references/rendering-interop.md` — the C#↔C++ rendering seam: Win2D control choice, SwapChainPanel/ISwapChainPanelNative interop, Microsoft.UI.Composition, DispatcherQueue rules for render loops, the managed-vs-native-spoke decision, and frame-pacing/vsync pitfalls.

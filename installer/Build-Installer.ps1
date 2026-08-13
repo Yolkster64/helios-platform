@@ -301,7 +301,7 @@ HELIOS-Platform-Setup.exe
 
 ## System Requirements
 - Windows 11 Pro or Enterprise
-- .NET 8 SDK
+- .NET 10 SDK
 - PowerShell 7.0+
 - Administrator privileges
 - 2 GB free disk space

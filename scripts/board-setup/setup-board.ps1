@@ -1,10 +1,22 @@
 <#
 .SYNOPSIS
-    Master board setup script - creates GitHub Project board with all components
+    Master board setup script - custom fields are REAL API provisioning; the other steps are local simulations
 .DESCRIPTION
-    Orchestrates complete board setup including custom fields, templates, automation, and views
+    Orchestrates the four board setup steps and is explicit about which are real:
+      * Custom Fields  (setup-custom-fields.ps1)      - REAL: GraphQL mutations against
+        api.github.com/graphql (plus a real token/project pre-flight in this script)
+      * Phase Templates (setup-templates.ps1)         - LOCAL SIMULATION: the ProjectV2
+        GraphQL API cannot create templates
+      * Automation Rules (setup-automation-rules.ps1) - LOCAL SIMULATION: the ProjectV2
+        GraphQL API cannot create built-in workflows
+      * Board Views (setup-views.ps1)                 - LOCAL SIMULATION: the ProjectV2
+        GraphQL API cannot create views
+    The simulated steps write local JSON (templates/, .automation/, .views/) and generate
+    manual click-path guides under logs/ - perform those steps in the GitHub UI.
+    Afterwards: validate the real parts with validate-board.ps1 (real GraphQL read) and
+    put the epic issues on the board with add-epics-to-board.ps1 (real GraphQL mutations).
 .PARAMETER GitHubToken
-    GitHub Personal Access Token
+    GitHub Personal Access Token (used for the real pre-flight and the Custom Fields step)
 .PARAMETER ProjectNumber
     Project number to create/configure
 .PARAMETER OrganizationName
@@ -35,8 +47,10 @@ param(
     [string]$BoardName = 'HELIOS Platform',
     
     [switch]$DryRun,
-    [string[]]$SkipSteps = @(),
-    [switch]$Verbose
+    [string[]]$SkipSteps = @()
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,7 +69,6 @@ $SkipSteps = @($SkipSteps -split ',' | ForEach-Object { $_.Trim() } | Where-Obje
     ForEach-Object {
         if ($stepAliases.ContainsKey($_.ToLowerInvariant())) { $stepAliases[$_.ToLowerInvariant()] } else { $_ }
     })
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
 $logFile = "logs/board-setup_$timestamp.log"
@@ -69,7 +82,7 @@ function Write-Log {
     $ts = Get-Date -Format 'HH:mm:ss'
     $entry = "[$ts] [$Level] $Message"
     Add-Content -Path $logFile -Value $entry
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
+    if ($VerbosePreference -eq 'Continue' -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
 }
 
 function Invoke-SetupStep {
@@ -104,7 +117,7 @@ function Invoke-SetupStep {
         }
         
         if ($DryRun) { $params['DryRun'] = $true }
-        if ($Verbose) { $params['Verbose'] = $true }
+        if ($VerbosePreference -eq 'Continue') { $params['Verbose'] = $true }
         
         # Execute script
         $result = & $ScriptPath @params
@@ -232,11 +245,18 @@ function Display-Summary {
         Write-Host "  $($step.name): $status"
     }
     
+    Write-Host "`nWhat was real vs simulated:" -ForegroundColor Yellow
+    Write-Host "  Custom Fields ran against the GitHub API. Phase Templates, Automation Rules,"
+    Write-Host "  and Board Views were LOCAL SIMULATIONS (the ProjectV2 GraphQL API cannot"
+    Write-Host "  create them) - configure those manually in the GitHub UI using the generated"
+    Write-Host "  guides under logs/."
+
     Write-Host "`nNext Steps:" -ForegroundColor Green
-    Write-Host "  1. Verify board configuration in GitHub"
-    Write-Host "  2. Run validation script: .\validate-board.ps1"
-    Write-Host "  3. Review logs: logs/board-setup_$timestamp.log"
-    Write-Host "  4. Review report: logs/board-setup-report_$timestamp.json"
+    Write-Host "  1. Create views/templates/workflows manually in the GitHub UI (guides in logs/)"
+    Write-Host "  2. Run validation (real GraphQL read of fields + items): .\validate-board.ps1"
+    Write-Host "  3. Put the epics on the board (real GraphQL mutations): .\add-epics-to-board.ps1"
+    Write-Host "  4. Review logs: logs/board-setup_$timestamp.log"
+    Write-Host "  5. Review report: logs/board-setup-report_$timestamp.json"
     
     if ($DryRun) {
         Write-Host "`n⚠️  DRY RUN MODE - No changes were actually applied" -ForegroundColor Yellow

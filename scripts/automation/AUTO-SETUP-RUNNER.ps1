@@ -83,9 +83,9 @@ try {
 # Check 3: .NET SDK
 try {
     $dotnetVersion = dotnet --version
-    $checks += @{ Name = ".NET 8+ installed"; Result = $dotnetVersion -match '8\.' }
+    $checks += @{ Name = ".NET 10+ installed"; Result = ([int]($dotnetVersion.Split('.')[0]) -ge 10) }
 } catch {
-    $checks += @{ Name = ".NET 8+ installed"; Result = $false }
+    $checks += @{ Name = ".NET 10+ installed"; Result = $false }
 }
 
 # Check 4: GitHub CLI

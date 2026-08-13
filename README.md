@@ -2,7 +2,7 @@
 
 HELIOS is an active Windows-platform and multi-LLM integration project owned at
 [`Yolkster64/helios-platform`](https://github.com/Yolkster64/helios-platform). The
-currently buildable cross-platform slice combines a .NET 8 AI hub, F# policy logic, an
+currently buildable cross-platform slice combines a .NET 10 AI hub, F# policy logic, an
 optional C++ native accelerator, a dependency-free Python analytics/advisory spoke, REST,
 CLI, MCP, Docker, and review-only Azure infrastructure.
 

@@ -21,7 +21,7 @@
 # only when it exists (Condition="Exists(...)"), and the hub has managed
 # fallbacks, so every native step is best-effort (|| true) by design.
 # ---------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Optional native toolchain in one layer; a mirror hiccup or missing package
 # must never fail the image build — the native spoke is optional.
@@ -69,7 +69,7 @@ RUN dotnet publish src/ai/HELIOS.AIHub.Api/HELIOS.AIHub.Api.csproj \
 # the spoke directory as CWD; without it /v1/insights degrades to null) and
 # curl for the HEALTHCHECK. ca-certificates ships with the base image.
 # ---------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 curl \
@@ -90,7 +90,7 @@ COPY config/*.json /app/config/
 
 # Learning state (learning.localPath: .helios/learning/outcomes.jsonl, relative
 # to WORKDIR): pre-create it owned by the non-root `app` user (built into the
-# .NET 8 images) so a named volume mounted at /app/.helios inherits ownership.
+# .NET 10 images) so a named volume mounted at /app/.helios inherits ownership.
 RUN mkdir -p /app/.helios/learning && chown -R app:app /app/.helios
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:5170 \

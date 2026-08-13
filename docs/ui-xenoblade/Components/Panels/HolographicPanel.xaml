@@ -1,0 +1,40 @@
+<UserControl x:Class="HELIOS.WPF.Components.Panels.HolographicPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HELIOS.WPF.CustomControls"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="../../Theme/Colors.xaml"/>
+        <ResourceDictionary Source="../../Theme/Brushes.xaml"/>
+        <ResourceDictionary Source="../../Theme/Styles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <Grid>
+        <!-- Background with holographic effect -->
+        <Border Background="{StaticResource BackgroundTertiaryBrush}"
+                BorderBrush="{StaticResource MonadoCyanBrush}"
+                BorderThickness="2"
+                CornerRadius="8">
+            <Border.Effect>
+                <DropShadowEffect 
+                    Color="#00D4FF" 
+                    BlurRadius="15" 
+                    ShadowDepth="0" 
+                    Opacity="0.5"/>
+            </Border.Effect>
+        </Border>
+
+        <!-- Scan lines overlay -->
+        <Rectangle Fill="{StaticResource HolographicScanLinesBrush}" 
+                   IsHitTestVisible="False"
+                   Opacity="0.08"/>
+
+        <!-- Content -->
+        <ContentPresenter x:Name="ContentPresenter"
+                         ContentTemplate="{TemplateBinding ContentTemplate}"
+                         Content="{TemplateBinding Content}"
+                         Margin="16"/>
+    </Grid>
+</UserControl>

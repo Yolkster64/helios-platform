@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "8465091025183808006"
+      "templateHash": "13661461219070797126"
     }
   },
   "definitions": {
@@ -204,6 +204,34 @@
         "description": "Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created."
       }
     },
+    "deployAiSearchConnection": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy an Azure AI Search service, a CognitiveSearch project connection, and the account+project capability hosts that let Foundry agents use it as their vector store. OFF by default; ignored when aiServiceAccountResourceId is set."
+      }
+    },
+    "aiSearchServiceName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name for the Azure AI Search service (lowercase letters, digits, dashes; 2-60 chars). Empty string means a name is generated."
+      }
+    },
+    "aiSearchSkuName": {
+      "type": "string",
+      "defaultValue": "basic",
+      "metadata": {
+        "description": "SKU (pricing tier) for the Azure AI Search service."
+      }
+    },
+    "aiSearchConnectionName": {
+      "type": "string",
+      "defaultValue": "ai-search-connection",
+      "metadata": {
+        "description": "Name of the Foundry project connection agents reference for AI Search."
+      }
+    },
     "deployFleetVmss": {
       "type": "bool",
       "defaultValue": false,
@@ -295,6 +323,8 @@
     "effectiveKeyVaultName": "[if(empty(parameters('keyVaultName')), format('kv-helios-{0}', variables('uniqueSuffix')), parameters('keyVaultName'))]",
     "aiServiceExists": "[not(empty(parameters('aiServiceAccountResourceId')))]",
     "fleetVmssEnabled": "[and(parameters('deployFleetVmss'), not(equals(parameters('vmssAdminPublicKey'), '')))]",
+    "aiSearchEnabled": "[and(parameters('deployAiSearchConnection'), not(variables('aiServiceExists')))]",
+    "effectiveAiSearchName": "[if(empty(parameters('aiSearchServiceName')), format('srch-helios-{0}', variables('uniqueSuffix')), parameters('aiSearchServiceName'))]",
     "allModelDeployments": "[concat(createArray(createObject('name', parameters('modelName'), 'modelName', parameters('modelName'), 'format', parameters('modelFormat'), 'version', parameters('modelVersion'), 'skuName', parameters('modelSkuName'), 'capacity', parameters('modelCapacity'))), parameters('additionalModelDeployments'))]"
   },
   "resources": {
@@ -785,6 +815,229 @@
         }
       }
     },
+    "aiSearch": {
+      "condition": "[variables('aiSearchEnabled')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('ai-search-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "accountName": {
+            "value": "[reference('foundryAccount').outputs.accountName.value]"
+          },
+          "projectName": {
+            "value": "[reference('foundryProject').outputs.projectName.value]"
+          },
+          "searchServiceName": {
+            "value": "[variables('effectiveAiSearchName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "searchSkuName": {
+            "value": "[parameters('aiSearchSkuName')]"
+          },
+          "connectionName": {
+            "value": "[parameters('aiSearchConnectionName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "7191530199009581892"
+            }
+          },
+          "parameters": {
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing Foundry account."
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing Foundry project under the account."
+              }
+            },
+            "searchServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Globally unique Azure AI Search service name (lowercase letters, digits, dashes; 2-60 chars)."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the search service."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags applied to the search service."
+              }
+            },
+            "searchSkuName": {
+              "type": "string",
+              "defaultValue": "basic",
+              "metadata": {
+                "description": "Search service SKU (pricing tier). basic is the cheapest dedicated tier; free does not support managed-identity scenarios reliably."
+              }
+            },
+            "connectionName": {
+              "type": "string",
+              "defaultValue": "ai-search-connection",
+              "metadata": {
+                "description": "Name of the project connection that agents reference (3-33 chars: letter/digit then letters, digits, _ or -)."
+              }
+            }
+          },
+          "variables": {
+            "searchIndexDataContributorRoleId": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+            "searchServiceContributorRoleId": "7ca78c08-252a-4471-8644-bb5ff32d4ba0"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Search/searchServices",
+              "apiVersion": "2025-05-01",
+              "name": "[parameters('searchServiceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('searchSkuName')]"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "disableLocalAuth": true,
+                "partitionCount": 1,
+                "replicaCount": 1,
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), variables('searchIndexDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
+                "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), '2025-06-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
+                "principalId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), '2025-06-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), parameters('connectionName'))]",
+              "properties": {
+                "category": "CognitiveSearch",
+                "target": "[format('https://{0}.search.windows.net', parameters('searchServiceName'))]",
+                "authType": "AAD",
+                "isSharedToAll": false,
+                "metadata": {
+                  "ApiType": "Azure",
+                  "ResourceId": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+                  "location": "[reference(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2025-05-01', 'full').location]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/capabilityHosts",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}', parameters('accountName'), format('{0}-caphost', parameters('accountName')))]",
+              "properties": {
+                "capabilityHostKind": "Agents"
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects/capabilityHosts",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), format('{0}-caphost', parameters('projectName')))]",
+              "properties": {
+                "vectorStoreConnections": [
+                  "[parameters('connectionName')]"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/capabilityHosts', parameters('accountName'), format('{0}-caphost', parameters('accountName')))]",
+                "[extensionResourceId(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), variables('searchIndexDataContributorRoleId')))]",
+                "[extensionResourceId(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accountName'), parameters('projectName')), variables('searchServiceContributorRoleId')))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects/connections', parameters('accountName'), parameters('projectName'), parameters('connectionName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "searchServiceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
+            },
+            "searchServiceName": {
+              "type": "string",
+              "value": "[parameters('searchServiceName')]"
+            },
+            "searchEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.search.windows.net', parameters('searchServiceName'))]"
+            },
+            "searchPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2025-05-01', 'full').identity.principalId]"
+            },
+            "connectionId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects/connections', parameters('accountName'), parameters('projectName'), parameters('connectionName'))]"
+            },
+            "connectionName": {
+              "type": "string",
+              "value": "[parameters('connectionName')]"
+            },
+            "projectCapabilityHostId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects/capabilityHosts', parameters('accountName'), parameters('projectName'), format('{0}-caphost', parameters('projectName')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "foundryAccount",
+        "foundryProject"
+      ]
+    },
     "fleetVmss": {
       "condition": "[variables('fleetVmssEnabled')]",
       "type": "Microsoft.Resources/deployments",
@@ -1237,6 +1490,27 @@
         "description": "Names of all model deployments created on the account."
       },
       "value": "[if(variables('aiServiceExists'), createArray(), reference('foundryAccount').outputs.deploymentNames.value)]"
+    },
+    "aiSearchEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure AI Search endpoint wired to the Foundry project for agent vector storage (empty string when the AI Search connection is disabled)."
+      },
+      "value": "[if(variables('aiSearchEnabled'), reference('aiSearch').outputs.searchEndpoint.value, '')]"
+    },
+    "aiSearchConnectionName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Foundry project connection agents reference for AI Search (empty string when disabled)."
+      },
+      "value": "[if(variables('aiSearchEnabled'), reference('aiSearch').outputs.connectionName.value, '')]"
+    },
+    "aiSearchServiceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Azure AI Search service (empty string when disabled)."
+      },
+      "value": "[if(variables('aiSearchEnabled'), reference('aiSearch').outputs.searchServiceId.value, '')]"
     },
     "fleetVmssName": {
       "type": "string",

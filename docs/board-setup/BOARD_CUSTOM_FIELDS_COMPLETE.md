@@ -1205,7 +1205,7 @@ Example: JIRA:PROJ-1234
 | System | Format | Example | Purpose |
 |--------|--------|---------|---------|
 | **Jira** | JIRA:PROJECT-NUM | JIRA:HELIOS-456 | Jira sync |
-| **Linear** | LINEAR:KEY | LINEAR:HEL-123 | Linear tracking |
+| **Linear** | LINEAR:KEY | LINEAR:JOH-123 | Linear tracking |
 | **Azure DevOps** | ADO:PROJECT/NUM | ADO:Helios/789 | Azure sync |
 | **Notion** | NOTION:DB/ID | NOTION:abc123def456 | Notion link |
 | **Slack** | SLACK:CHANNEL/TS | SLACK:dev/1234567890.5678 | Slack thread |

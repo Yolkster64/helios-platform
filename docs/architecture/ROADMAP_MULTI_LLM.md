@@ -40,8 +40,10 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 - WindowsDeveloperConfig `cross-llm-shell` workload (az/gh/copilot/claude/codex/ollama).
 
 ## PR6 — Platform upgrades
-- net8.0 → **net10.0** across all projects + workflows (net8.0 EOL 2026-11-10;
-  .NET 11 remains preview — do not target).
+- ✅ net8.0 → **net10.0** across all projects + workflows — done (net8.0 EOL
+  2026-11-10). Allowed-to-fail `net11-preview` lane added to `dotnet-build.yml`;
+  `src/gui` stays `net8.0-windows…` until the pinned Windows App SDK documents net10
+  support. .NET 11 remains preview — do not target.
 - WinUI 3 shell per GUI_THEME_ANALYSIS.md; retire root WPF csproj; `winui3-reviewer`
   gate active.
 

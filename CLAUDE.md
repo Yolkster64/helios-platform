@@ -1,6 +1,6 @@
 # HELIOS Platform
 
-Enterprise Windows management platform. C#/.NET 8 + PowerShell 7, with a multi-LLM hub
+Enterprise Windows management platform. C#/.NET 10 + PowerShell 7, with a multi-LLM hub
 (`src/ai/`), an MCP server (`src/mcp/`), and Azure AI Foundry infrastructure (`infra/`).
 
 ## Build & test (what CI runs)
@@ -65,12 +65,15 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
   `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
   `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
-  `helios_absorb_status_get`, `helios_fleet_status_get`.
+  `helios_absorb_status_get`, `helios_fleet_status_get`, `helios_foundry_agent_list`,
+  `helios_foundry_agent_create`.
 - Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
 
 ## Architecture docs
 
 `docs/architecture/MULTI_LLM_INTEGRATION.md` (this design), `GITHUB_ECOSYSTEM_DESIGN.md`
 (runners/Projects/wiki/connectors), `HERMES_FLEET_AND_XCORE.md` (agent fleet),
-`GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
-known-red workflow inventory). Coding skills live in `.claude/skills/`.
+`GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `GUI_UPGRADE_PLAN.md` (shell completion:
+canonical tokens, pages, Adobe assets, agent roster), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
+known-red workflow inventory). Coding skills live in `.claude/skills/` (index and
+per-stack library references: `.claude/skills/README.md`).

@@ -1,16 +1,27 @@
 <#
 .SYNOPSIS
-    Creates 6 board views for HELIOS Platform
+    LOCAL SIMULATION - documents 6 board views; makes NO GitHub API calls
 .DESCRIPTION
-    Configures board views with filters, sorting, and grouping
+    What is real vs simulated: GitHub's ProjectV2 GraphQL API cannot create or configure
+    project views (there is no createProjectV2View mutation - views are readable but not
+    writable). That is a real API limitation, not a script shortcut, so this script never
+    touches the GitHub API. What it actually does, locally:
+      * validates the 6 view definitions
+      * writes them to .views/*.json
+      * generates logs/views-guide_<timestamp>.md - the manual click-path for creating
+        each view in the GitHub UI (Project -> "New view" -> configure filter/group/sort)
+    The views themselves must be created by hand in the GitHub UI using that guide.
+    Compare: setup-custom-fields.ps1 (real GraphQL mutations), validate-board.ps1 (real
+    GraphQL read), add-epics-to-board.ps1 (real GraphQL mutations).
 .PARAMETER GitHubToken
-    GitHub Personal Access Token
+    Accepted only for interface parity with the sibling scripts; NOT used - this script
+    makes no API calls
 .PARAMETER ProjectNumber
-    Project number
+    Project number (recorded in the report; no API call is made against it)
 .PARAMETER OrganizationName
-    Organization name
+    Organization name (recorded in the report; no API call is made against it)
 .PARAMETER DryRun
-    Preview mode
+    Preview mode (skips even the local .views/*.json writes)
 .PARAMETER Verbose
     Detailed output
 #>
@@ -25,12 +36,13 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$OrganizationName,
     
-    [switch]$DryRun,
-    [switch]$Verbose
+    [switch]$DryRun
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
 $ErrorActionPreference = 'Stop'
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
 $logFile = "logs/views-setup_$timestamp.log"
@@ -43,7 +55,7 @@ function Write-Log {
     $ts = Get-Date -Format 'HH:mm:ss'
     $entry = "[$ts] [$Level] $Message"
     Add-Content -Path $logFile -Value $entry
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
+    if ($VerbosePreference -eq 'Continue' -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
 }
 
 # 6 Board Views Definition
@@ -335,6 +347,7 @@ try {
     
     $report = @{
         timestamp = $timestamp
+        mode = 'local-simulation (ProjectV2 GraphQL API cannot create views; no API calls made)'
         projectNumber = $ProjectNumber
         organization = $OrganizationName
         totalViews = $views.Count
@@ -350,9 +363,12 @@ try {
     
     $report | ConvertTo-Json -Depth 10 | Set-Content -Path $reportFile
     
-    Write-Log '=== Board Views Setup Complete ===' 'SUCCESS'
-    Write-Log "Created: $($report.created), Failed: $($report.failed)" 'INFO'
-    
+    Write-Log '=== Board Views Setup Complete (LOCAL SIMULATION) ===' 'SUCCESS'
+    Write-Log "Saved locally: $($report.created), Failed: $($report.failed)" 'INFO'
+    Write-Host 'NOTE: local simulation only - no GitHub API calls were made.' -ForegroundColor Yellow
+    Write-Host '      The ProjectV2 GraphQL API cannot create views; create them manually in the'
+    Write-Host "      GitHub UI using the click-path guide: logs/views-guide_$timestamp.md"
+
     $report | ConvertTo-Json -Depth 10
 }
 catch {
