@@ -1,5 +1,6 @@
 using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Learning;
 using HELIOS.AIHub.Native;
 using Xunit;
 
@@ -335,6 +336,82 @@ public class AIHubServiceTests
         AIHubService.HashedFrequencyVector(" ... !!! ", vector);
 
         Assert.All(vector, v => Assert.Equal(0f, v));
+    }
+
+    /// <summary>Two echo agents plus adaptive routing on, so injected history steers order.</summary>
+    private static AIHubOptions AdaptiveEchoOptions() => new()
+    {
+        CliAgents = new List<CliAgentOptions>
+        {
+            new() { Name = "alpha", Command = "echo", ArgsTemplate = "{prompt}", TimeoutSeconds = 10 },
+            new() { Name = "beta", Command = "echo", ArgsTemplate = "{prompt}", TimeoutSeconds = 10 },
+        },
+        Routing = new RoutingOptions
+        {
+            TaskRouting = new Dictionary<string, List<string>>
+            {
+                ["echo_task"] = new() { "alpha", "beta" },
+            },
+        },
+        Learning = new LearningOptions { Enabled = true, AdaptiveRouting = true, HistoryWindow = 200 },
+    };
+
+    /// <summary>
+    /// 6 alpha failures + 5 beta successes: both over the linear confidence threshold
+    /// (5 attempts) yet under the neural learner's 12-sample minimum, so the learned
+    /// order is deterministic with or without the native library.
+    /// </summary>
+    private static List<RoutingOutcome> HistoryFavoringBeta(string? source)
+    {
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 6; i++)
+        {
+            history.Add(FakeLearningStore.Outcome("echo_task", "alpha", success: false, source));
+        }
+        for (var i = 0; i < 5; i++)
+        {
+            history.Add(FakeLearningStore.Outcome("echo_task", "beta", success: true, source));
+        }
+        return history;
+    }
+
+    [Fact]
+    public async Task TandemAsync_AdaptiveRouting_LearnsFromOrganicHistory()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Control for the fleet-lane test below: the same signal UNTAGGED must reorder,
+        // proving the exclusion assertion is not vacuously green.
+        var store = new FakeLearningStore(HistoryFavoringBeta(source: null));
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: store);
+
+        var tandem = await hub.TandemAsync("echo_task", "ping");
+
+        Assert.NotNull(tandem.Winner);
+        Assert.Equal("beta", tandem.Winner!.Provider);
+    }
+
+    [Fact]
+    public async Task TandemAsync_AdaptiveRouting_IgnoresFleetLaneRecords()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Identical signal tagged source=fleet-lane: lane outcomes are not provider
+        // outcomes and must never steer chains, so the configured order (alpha first)
+        // decides the winner.
+        var store = new FakeLearningStore(HistoryFavoringBeta(source: "fleet-lane"));
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: store);
+
+        var tandem = await hub.TandemAsync("echo_task", "ping");
+
+        Assert.NotNull(tandem.Winner);
+        Assert.Equal("alpha", tandem.Winner!.Provider);
     }
 
     [Fact]

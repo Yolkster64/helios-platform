@@ -1,6 +1,7 @@
 using System.Text;
 using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Fleet;
 using HELIOS.AIHub.Learning;
 using HELIOS.AIHub.Native;
 using HELIOS.AIHub.Providers;
@@ -22,7 +23,7 @@ public sealed class AIHubService
     private readonly FallbackChain _fallback = new();
     private readonly AIHubOptions _options;
     private readonly ILearningStore _learning;
-    private readonly NeuralRoutingLearner _neuralLearner = new();
+    private readonly ChainReorderEngine _reorderEngine = new();
     private readonly ModelCatalog? _catalog;
 
     public AIHubService(
@@ -74,6 +75,15 @@ public sealed class AIHubService
 
     /// <summary>Where routing outcomes are recorded; useful for reporting and tests.</summary>
     public ILearningStore Learning => _learning;
+
+    /// <summary>
+    /// Advisory fleet planner sharing this hub's learning store, configured history
+    /// window, and the exact reorder engine <see cref="RouteAsync"/> uses — so
+    /// fleet-plan reports the order the hub would really route, not an approximation.
+    /// It reads and reports only; it never mutates topology, config, or routing state.
+    /// </summary>
+    public FleetPlanService CreateFleetPlanner() =>
+        new(_learning, _options.Learning.HistoryWindow, _reorderEngine);
 
     private static ILearningStore CreateLearningStore(LearningOptions options)
     {
@@ -217,24 +227,16 @@ public sealed class AIHubService
             var history = await _learning
                 .GetRecentAsync(taskType, window, cancellationToken)
                 .ConfigureAwait(false);
-            // Advisory records (Source != null: absorption benchmarks, fork digests)
-            // inform insights only — routing must learn exclusively from the hub's own
-            // provider outcomes.
-            history = history.Where(h => h.Source is null).ToList();
-            if (history.Count == 0)
+            // Advisory records (Source != null: absorption benchmarks, fork digests,
+            // fleet-lane outcomes) inform insights only — routing must learn exclusively
+            // from the hub's own provider outcomes.
+            var organic = ChainReorderEngine.OrganicOnly(history);
+            if (organic.Count == 0)
             {
                 return configuredChain;
             }
 
-            var reordered = _neuralLearner.Reorder(taskType, configuredChain, history)
-                ?? RoutingPolicyInterop.ReorderChain(
-                    taskType,
-                    configuredChain.ToArray(),
-                    history.Select(h => h.Provider).ToArray(),
-                    history.Select(h => h.Success).ToArray(),
-                    history.Select(h => h.LatencyMs).ToArray(),
-                    history.Select(h => h.CostUsd).ToArray(),
-                    history.Select(h => h.Quality ?? double.NaN).ToArray());
+            var (reordered, _) = _reorderEngine.Reorder(taskType, configuredChain, organic);
 
             return reordered.Where(_byProvider.ContainsKey).ToList() is { Count: > 0 } valid
                 ? valid

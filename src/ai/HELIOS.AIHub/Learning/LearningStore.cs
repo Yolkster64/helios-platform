@@ -38,10 +38,12 @@ public sealed record RoutingOutcome
 
     /// <summary>
     /// Provenance for ADVISORY outcomes ingested from outside the hub — e.g.
-    /// "absorption-benchmark" or "fork-observation". Null means a live provider
-    /// outcome recorded by the hub itself. Advisory records inform /v1/insights
-    /// narratives; adaptive routing excludes them so external signals can never
-    /// steer the provider chains directly.
+    /// "absorption-benchmark", "fork-observation", or "fleet-lane" (lane outcomes from
+    /// the fleet collector, whose provider values are lane names like
+    /// "pool:xcore-9-code", not providers). Null means a live provider outcome recorded
+    /// by the hub itself. Advisory records inform /v1/insights narratives; adaptive
+    /// routing and fleet-plan exclude every source-tagged record so external signals
+    /// can never steer the provider chains directly.
     /// </summary>
     [JsonPropertyName("source")]
     public string? Source { get; init; }
