@@ -119,7 +119,8 @@ npx @modelcontextprotocol/inspector -- dotnet run --project src/mcp/HELIOS.Mcp -
 **Expected**: the inspector lists the `helios_*` tools (`helios_ai_status`,
 `helios_providers_list`, `helios_task_routing_get`, `helios_engine_catalog_get`,
 `helios_engine_mix_recommend`, `helios_infra_validate`, `helios_absorb_status_get`,
-`helios_fleet_status_get`, the operator-context tools `helios_operator_profile_get`/
+`helios_fleet_status_get`, `helios_foundry_agent_list`, `helios_foundry_agent_create`,
+the operator-context tools `helios_operator_profile_get`/
 `profile_save`/`context_sync`/`next_steps_get`, plus the provider-calling
 `helios_ai_ask`/`route`/`tandem`/`compare`). Calling `helios_ai_status` returns the same
 readiness data as the CLI.
