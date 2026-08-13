@@ -67,7 +67,13 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
   `helios_absorb_status_get`, `helios_fleet_status_get`, `helios_azure_inventory_get`,
   `helios_auth_status_get`, `helios_fleet_plan_get`, `helios_foundry_agent_list`,
-  `helios_foundry_agent_create`.
+  `helios_foundry_agent_create`,
+  `helios_operator_profile_get`, `helios_operator_profile_save`,
+  `helios_operator_context_sync`, `helios_operator_next_steps_get`.
+- Claude Code plugin (`plugins/helios-operator`, cataloged by
+  `.claude-plugin/marketplace.json`): the `operate-helios` skill, `fabric-operator`
+  subagent, and the same MCP server. Durable, sanitized handoff state is local and
+  inspectable under the gitignored `.helios/operator/` directory.
 - Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
 
 ## Architecture docs
@@ -76,5 +82,6 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 (runners/Projects/wiki/connectors), `HERMES_FLEET_AND_XCORE.md` (agent fleet),
 `GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `GUI_UPGRADE_PLAN.md` (shell completion:
 canonical tokens, pages, Adobe assets, agent roster), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
-known-red workflow inventory). Coding skills live in `.claude/skills/` (index and
+known-red workflow inventory), `CLAUDE_CODE_OPERATOR_PLUGIN.md` (Claude plugin and shared
+operator context). Coding skills live in `.claude/skills/` (index and
 per-stack library references: `.claude/skills/README.md`).

@@ -30,5 +30,16 @@
       "Bash(az group delete*)",
       "Bash(az resource delete*)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "helios-platform": {
+      "source": {
+        "source": "github",
+        "repo": "Yolkster64/helios-platform"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "helios-operator@helios-platform": true
   }
 }

@@ -2,6 +2,20 @@
 
 Complete information about the plugin system, development, and ecosystem.
 
+## Claude Code operator plugin
+
+The implemented, validated plugin in this repository is
+[`plugins/helios-operator`](helios-operator/README.md). It packages the `operate-helios`
+skill and the `fabric-operator` agent for Claude Code — deliberately no MCP server: the
+HELIOS MCP tools come from the repo-level `.mcp.json` (`helios` server), which every
+HELIOS checkout already registers, so the tools are available only when Claude Code runs
+inside a HELIOS checkout. Its catalog is `.claude-plugin/marketplace.json`; its design
+and safety boundary are documented in
+`docs/architecture/CLAUDE_CODE_OPERATOR_PLUGIN.md`.
+
+The material below describes the legacy in-process plugin concept and is not evidence that
+those runtime classes, commands, or registry endpoints currently exist.
+
 ---
 
 ## 🔌 Plugin Overview

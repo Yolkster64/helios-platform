@@ -3,7 +3,9 @@
     "helios": {
       "command": "dotnet",
       "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
-      "env": {}
+      "env": {
+        "HELIOS_REPO_ROOT": "."
+      }
     }
   }
 }

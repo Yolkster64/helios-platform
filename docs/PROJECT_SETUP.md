@@ -120,7 +120,9 @@ thing to run after a build. Which model suits which task:
     "helios": {
       "command": "dotnet",
       "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
-      "env": {}
+      "env": {
+        "HELIOS_REPO_ROOT": "."
+      }
     }
   }
 }
@@ -130,7 +132,10 @@ Exposed tools: `helios_ai_ask`, `helios_ai_route`, `helios_ai_tandem`,
 `helios_ai_compare`, `helios_ai_status`, `helios_providers_list`,
 `helios_optimal_provider_get`, `helios_task_routing_get`,
 `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
-`helios_infra_validate`.
+`helios_infra_validate`, `helios_absorb_status_get`, `helios_fleet_status_get`,
+`helios_foundry_agent_list`, `helios_foundry_agent_create`,
+`helios_operator_profile_get`, `helios_operator_profile_save`,
+`helios_operator_context_sync`, `helios_operator_next_steps_get`.
 
 ## Fleet quickstart
 
