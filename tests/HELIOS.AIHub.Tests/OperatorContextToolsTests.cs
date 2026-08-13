@@ -266,6 +266,71 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_FailedAzureCapture_PreservesReadyBaseline()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var first = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        Assert.Equal("ready", first.Azure.Status);
+        Assert.Null(first.AzureCaptureFailure);
+
+        // An Azure-REQUESTED sync whose capture fails must not destroy the baseline.
+        runner.AzureNotAuthenticated = true;
+        var failed = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Equal("ready", failed.Azure.Status);
+        Assert.Equal(first.Azure.ResourceGroups.Count, failed.Azure.ResourceGroups.Count);
+        Assert.Equal("not-authenticated", failed.AzureCaptureFailure?.Status);
+        Assert.False(failed.Changes.Comparable);
+        // The failure still drives the next-step suggestion.
+        Assert.Contains(failed.NextSteps, step => step.Id == "azure-sign-in");
+
+        // The next successful capture compares against the preserved baseline.
+        runner.AzureNotAuthenticated = false;
+        runner.SnapshotVersion = 2;
+        var recovered = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.Null(recovered.AzureCaptureFailure);
+        Assert.True(recovered.Changes.Comparable);
+        Assert.Contains("rg-ai", recovered.Changes.ResourceGroupsAdded);
+    }
+
+    [Fact]
+    public async Task ContextSync_CaptureRunsUnderTheCrossProcessLock()
+    {
+        var runner = new FakeCommandRunner();
+        var store = CreateStore(runner);
+        var lockPath = Path.Combine(store.OperatorDirectory, ".write.lock");
+        var observedHeldLock = 0;
+        runner.OnCommand = () =>
+        {
+            // Every capture command must run while the store holds the exclusive lock,
+            // so an attempt to take it here has to fail.
+            Assert.Throws<IOException>(() => new FileStream(
+                lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+            observedHeldLock++;
+        };
+
+        await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.True(observedHeldLock > 0);
+    }
+
+    [Fact]
+    public async Task ContextSync_TruncatedTagName_FlagsItemNonComparable()
+    {
+        var runner = new FakeCommandRunner { LongGroupTagName = true };
+        var store = CreateStore(runner);
+
+        var first = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+        var second = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
+
+        Assert.True(first.Azure.ResourceGroups[0].TagsTruncated);
+        Assert.Equal(128, first.Azure.ResourceGroups[0].Tags.Keys.Single().Length);
+        Assert.False(second.Changes.Comparable);
+    }
+
+    [Fact]
     public async Task ContextSync_JournalReceipt_MatchesContextFileBytesAndRecordsBranch()
     {
         var store = CreateStore(new FakeCommandRunner());
@@ -311,8 +376,11 @@ public sealed class OperatorContextToolsTests : IDisposable
         internal int SnapshotVersion { get; set; } = 1;
         internal bool GitAvailable { get; set; } = true;
         internal bool GitStatusFails { get; set; }
+        internal bool AzureNotAuthenticated { get; set; }
         internal string SubscriptionId { get; set; } = "sub-1";
         internal int GroupTagCount { get; set; }
+        internal bool LongGroupTagName { get; set; }
+        internal Action? OnCommand { get; set; }
 
         public Task<CommandResult> RunAsync(
             string fileName,
@@ -321,6 +389,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            OnCommand?.Invoke();
             if (fileName == "git")
             {
                 return Task.FromResult(GitAvailable ? Git(arguments) : CommandResult.NotStarted);
@@ -347,14 +416,25 @@ public sealed class OperatorContextToolsTests : IDisposable
             };
         }
 
-        private string GroupTagsJson() => GroupTagCount > 0
-            ? "{" + string.Join(',', Enumerable.Range(0, GroupTagCount).Select(i => $"\"tag{i:D2}\":\"v\"")) + "}"
-            : "{\"api-key\":\"" + CredentialLike + "\",\"clientSecret\":\"rotate-me\",\"project\":\"helios\"}";
+        private string GroupTagsJson()
+        {
+            if (LongGroupTagName)
+            {
+                return "{\"" + new string('n', 200) + "\":\"v\"}";
+            }
+            return GroupTagCount > 0
+                ? "{" + string.Join(',', Enumerable.Range(0, GroupTagCount).Select(i => $"\"tag{i:D2}\":\"v\"")) + "}"
+                : "{\"api-key\":\"" + CredentialLike + "\",\"clientSecret\":\"rotate-me\",\"project\":\"helios\"}";
+        }
 
         private CommandResult Azure(IReadOnlyList<string> arguments)
         {
             if (arguments.Take(2).SequenceEqual(new[] { "account", "show" }))
             {
+                if (AzureNotAuthenticated)
+                {
+                    return new CommandResult(true, 1, string.Empty, "Please run 'az login' to setup account.");
+                }
                 return Success("{\"id\":\"" + SubscriptionId + "\",\"name\":\"HELIOS Dev\",\"tenantId\":\"tenant-1\",\"state\":\"Enabled\"}");
             }
             if (arguments.Take(2).SequenceEqual(new[] { "group", "list" }))

@@ -67,7 +67,7 @@ public static class HeliosOperatorTools
     }
 
     [McpServerTool(Name = "helios_operator_context_sync", ReadOnly = false, Idempotent = false, OpenWorld = true)]
-    [Description("Capture the shared HELIOS repo/CLI context and append a sanitized journal receipt. Optionally reads the authenticated Azure CLI subscription, resource groups, resources, locations, and tags, then records a delta from the prior snapshot; a sync without Azure carries the last ready inventory forward unchanged so the comparison baseline survives. It never applies, deletes, or changes Azure resources and never stores tokens or raw CLI output.")]
+    [Description("Capture the shared HELIOS repo/CLI context and append a sanitized journal receipt. Optionally reads the authenticated Azure CLI subscription, resource groups, resources, locations, and tags, then records a delta from the prior snapshot; a sync without Azure, or whose Azure capture fails, carries the last ready inventory forward unchanged (the failure is reported in azureCaptureFailure) so the comparison baseline survives. It never applies, deletes, or changes Azure resources and never stores tokens or raw CLI output.")]
     public static async Task<string> SyncContext(
         [Description("Calling surface label: claude-code, codex, chatgpt, copilot, github-cli, azure-cli, hermes, xcore, or manual.")] string surface = "manual",
         [Description("Read the current Azure CLI account and resource groups. Requires an existing az login or Cloud Shell session.")] bool includeAzure = false,
@@ -282,24 +282,30 @@ internal sealed class OperatorContextStore
             throw new ArgumentException("includeResources requires includeAzure=true.");
         }
 
+        // Hold the cross-process lock across capture, compare, and write: if capture ran
+        // before the lock, a slower process could acquire the lock last and overwrite a
+        // newer context with older evidence, reporting reversed deltas.
+        await using var fileLock = await AcquireLockAsync(cancellationToken);
         var cli = _cliDetector();
         var repository = await CaptureRepositoryAsync(cancellationToken);
         var capturedAzure = includeAzure
             ? await CaptureAzureAsync(includeResources, cli, cancellationToken)
             : null;
 
-        Directory.CreateDirectory(OperatorDirectory);
-        await using var fileLock = await AcquireLockAsync(cancellationToken);
         var prior = GetLatestContext();
         var profile = GetProfile();
-        // A repo-only sync must not destroy the last ready Azure inventory: carry it
-        // forward so the next Azure-enabled sync still has a comparable baseline.
-        var azure = capturedAzure
-            ?? (prior?.Azure is { Status: "ready" } baseline ? baseline : AzureSnapshot.NotRequested);
+        // The stored Azure field is the durable comparison baseline: only a fresh ready
+        // capture replaces it. A repo-only sync or a failed capture (error,
+        // not-authenticated, cli-unavailable, partial) carries the last ready inventory
+        // forward; a failed capture is surfaced separately via AzureCaptureFailure.
+        var priorReadyBaseline = prior?.Azure is { Status: "ready" } baseline ? baseline : null;
+        var azure = capturedAzure is { Status: "ready" }
+            ? capturedAzure
+            : priorReadyBaseline ?? capturedAzure ?? AzureSnapshot.NotRequested;
         var changes = capturedAzure is null
             ? OperatorChangeSet.NotRequested
-            : BuildChanges(prior?.Azure, capturedAzure);
-        var nextSteps = BuildNextSteps(profile, repository, azure, cli);
+            : BuildChanges(priorReadyBaseline, capturedAzure);
+        var nextSteps = BuildNextSteps(profile, repository, capturedAzure ?? azure, cli);
 
         var snapshot = new OperatorContextSnapshot(
             SchemaVersion: 1,
@@ -309,6 +315,7 @@ internal sealed class OperatorContextStore
             Profile: profile,
             CliAvailability: cli,
             Azure: azure,
+            AzureCaptureFailure: capturedAzure is null or { Status: "ready" } ? null : capturedAzure,
             Changes: changes,
             NextSteps: nextSteps);
 
@@ -634,6 +641,10 @@ internal sealed class OperatorContextStore
             var value = property.Value.ValueKind == JsonValueKind.String
                 ? property.Value.GetString() ?? string.Empty
                 : property.Value.ToString();
+            // A cut-off name or value can no longer prove "unchanged" (and two long names
+            // sharing a prefix would collapse into one entry), so flag it like the
+            // tag-count truncation above.
+            truncated |= property.Name.Length > 128 || value.Length > 256;
             tags[Truncate(property.Name, 128)] = IsSensitiveName(property.Name) || SensitiveValue.IsMatch(value)
                 ? "<redacted>"
                 : Truncate(value, 256);
@@ -888,16 +899,18 @@ internal sealed class OperatorContextStore
     {
         Directory.CreateDirectory(OperatorDirectory);
         var lockPath = Path.Combine(OperatorDirectory, ".write.lock");
-        for (var attempt = 0; attempt < 80; attempt++)
+        // Sync holds this lock across its git/Azure capture, so a waiter may legitimately
+        // queue for tens of seconds; the OS releases the handle if the holder dies.
+        for (var attempt = 0; attempt < 600; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             }
-            catch (IOException) when (attempt < 79)
+            catch (IOException) when (attempt < 599)
             {
-                await Task.Delay(50, cancellationToken);
+                await Task.Delay(100, cancellationToken);
             }
         }
         throw new IOException("Timed out waiting for the HELIOS operator-context lock.");
@@ -1126,7 +1139,10 @@ internal sealed record OperatorContextSnapshot(
     IReadOnlyDictionary<string, bool> CliAvailability,
     AzureSnapshot Azure,
     OperatorChangeSet Changes,
-    IReadOnlyList<OperatorNextStep> NextSteps);
+    IReadOnlyList<OperatorNextStep> NextSteps,
+    // Non-null only when an Azure capture was requested but did not return ready; the
+    // Azure field then still holds the carried-forward last ready baseline.
+    AzureSnapshot? AzureCaptureFailure = null);
 
 internal sealed record RepositorySnapshot(
     string Status,
