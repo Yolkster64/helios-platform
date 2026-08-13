@@ -926,6 +926,29 @@ public sealed class OperatorContextToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ContextSync_WorktreeChangingMidCapture_IsNeverPresentedAsReady()
+    {
+        // A file modified after the initial status query but before the confirmations
+        // finish must not persist a ready snapshot whose stale IsDirty=false suppresses
+        // the review-local-diff safeguard. The single change heals through the one
+        // in-capture retry, which records the SETTLED (dirty) worktree and its step.
+        var dirtiedRunner = new FakeCommandRunner { StatusMovesOnce = true };
+        var dirtiedStore = CreateStore(dirtiedRunner);
+        var healed = await dirtiedStore.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("ready", healed.Repository.Status);
+        Assert.True(healed.Repository.IsDirty);
+        Assert.Contains(healed.NextSteps, step => step.Id == "review-local-diff");
+
+        // A worktree that keeps changing cannot be captured consistently: the snapshot
+        // is downgraded to git-partial and carries the existing retry step.
+        var tornRunner2 = new FakeCommandRunner { StatusKeepsMoving = true };
+        var tornStore2 = CreateStore(tornRunner2);
+        var torn2 = await tornStore2.SyncAsync("manual", includeAzure: false, includeResources: false, CancellationToken.None);
+        Assert.Equal("git-partial", torn2.Repository.Status);
+        Assert.Contains(torn2.NextSteps, step => step.Id == "retry-repository-capture");
+    }
+
+    [Fact]
     public async Task ContextSync_AzStartFailure_IsClassifiedCliUnavailable()
     {
         // az resolved on PATH but the process failed to START (vanished or
@@ -1005,11 +1028,11 @@ public sealed class OperatorContextToolsTests : IDisposable
     [Fact]
     public void LockWaitBudget_CoversWorstCaseCaptureWindow()
     {
-        // Sync holds the lock across up to two capture attempts of six git commands
-        // each (initial rev-parse, branch, remote, status, confirming rev-parse and
-        // branch) and all three Azure reads; the waiter budget is derived from the same
-        // constants so they cannot drift apart.
-        var worstCaseHold = 12 * OperatorContextStore.GitCommandTimeout
+        // Sync holds the lock across up to two capture attempts of seven git commands
+        // each (initial rev-parse, branch, remote, status, confirming rev-parse,
+        // branch, and status) and all three Azure reads; the waiter budget is derived
+        // from the same constants so they cannot drift apart.
+        var worstCaseHold = 14 * OperatorContextStore.GitCommandTimeout
             + OperatorContextStore.AzureAccountTimeout
             + OperatorContextStore.AzureGroupListTimeout
             + OperatorContextStore.AzureResourceListTimeout;
@@ -1137,6 +1160,12 @@ public sealed class OperatorContextToolsTests : IDisposable
         // Every branch query returns a fresh name — models a switch that never settles.
         internal bool BranchKeepsMoving { get; set; }
         private int _branchCalls;
+        // First status query reports a clean worktree, every later one the same dirty
+        // entry — models a file edit landing mid-capture that the one retry heals.
+        internal bool StatusMovesOnce { get; set; }
+        // Every status query reports a different entry — a worktree that never settles.
+        internal bool StatusKeepsMoving { get; set; }
+        private int _statusCalls;
         internal bool GitStatusDirty { get; set; }
         internal bool DetachedHead { get; set; }
         internal string BranchName { get; set; } = "integration/claude-code-operator-plugin";
@@ -1192,9 +1221,23 @@ public sealed class OperatorContextToolsTests : IDisposable
                 ["remote", "get-url", "origin"] => Success(RemoteUrl + "\n"),
                 ["status", "--porcelain=v1"] => GitStatusFails
                     ? new CommandResult(true, 128, string.Empty, "fatal: unable to read the index")
-                    : Success(GitStatusDirty ? " M src/some-file.cs\n" : string.Empty),
+                    : Success(StatusOutput()),
                 _ => new CommandResult(true, 1, string.Empty, "unexpected git command"),
             };
+        }
+
+        private string StatusOutput()
+        {
+            var call = _statusCalls++;
+            if (StatusKeepsMoving)
+            {
+                return $" M src/file-{call}.cs\n";
+            }
+            if (StatusMovesOnce && call > 0)
+            {
+                return " M src/appeared-mid-capture.cs\n";
+            }
+            return GitStatusDirty ? " M src/some-file.cs\n" : string.Empty;
         }
 
         private string BranchOutput()

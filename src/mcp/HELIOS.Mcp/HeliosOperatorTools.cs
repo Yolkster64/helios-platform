@@ -122,13 +122,13 @@ internal sealed class OperatorContextStore
     internal static readonly TimeSpan AzureAccountTimeout = TimeSpan.FromSeconds(20);
     internal static readonly TimeSpan AzureGroupListTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan AzureResourceListTimeout = TimeSpan.FromSeconds(45);
-    // A healthy lock holder can legitimately run six git commands per capture attempt
-    // (initial rev-parse, branch, remote, status, confirming rev-parse and branch) and
-    // two attempts when a torn capture retries, plus all three Azure reads while holding
-    // the lock, so the waiter budget is derived from those same timeouts (plus margin)
-    // rather than a magic number that could silently drift.
+    // A healthy lock holder can legitimately run seven git commands per capture attempt
+    // (initial rev-parse, branch, remote, status, confirming rev-parse, branch, and
+    // status) and two attempts when a torn capture retries, plus all three Azure reads
+    // while holding the lock, so the waiter budget is derived from those same timeouts
+    // (plus margin) rather than a magic number that could silently drift.
     internal static readonly TimeSpan LockWaitBudget =
-        12 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
+        14 * GitCommandTimeout + AzureAccountTimeout + AzureGroupListTimeout + AzureResourceListTimeout
         + TimeSpan.FromSeconds(15);
     private static readonly Regex SafeSurface = new("^[a-z0-9][a-z0-9-]{0,47}$", RegexOptions.CultureInvariant);
     private static readonly Regex SafeLocation = new("^[a-z0-9][a-z0-9-]{1,49}$", RegexOptions.CultureInvariant);
@@ -678,15 +678,18 @@ internal sealed class OperatorContextStore
         var status = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
         var statusCaptured = status.Started && status.ExitCode == 0;
 
-        // TOCTOU guard: HEAD and branch were read first and worktree state after, so a
-        // commit or branch switch in between would blend stale and fresh evidence in one
-        // snapshot. Re-read BOTH after the FINAL query: HEAD equality alone is not
-        // enough, because two branches can point at the same commit — a switch from a
-        // task branch to main mid-capture would otherwise keep stale Branch/IsMainBranch
-        // values and suppress the task-branch safeguard. Any mismatch (or a failed
-        // confirmation) marks the capture torn so the caller retries or downgrades it.
+        // TOCTOU guard: HEAD, branch, and worktree status were all read before the
+        // capture finished, so a commit, branch switch, or file edit in between would
+        // blend stale and fresh evidence in one snapshot. Re-sample ALL THREE after the
+        // FINAL query: HEAD equality alone is not enough (two branches can point at the
+        // same commit), and an unchanged HEAD+branch says nothing about a file modified
+        // after the initial status query — a stale IsDirty=false would suppress the
+        // review-local-diff safeguard on a checkout that is dirty at capture completion.
+        // Any mismatch (or a failed confirmation) marks the capture torn so the caller
+        // retries or downgrades it.
         var headConfirmation = await RunGitAsync(new[] { "rev-parse", "HEAD" }, cancellationToken);
         var branchConfirmation = await RunGitAsync(new[] { "branch", "--show-current" }, cancellationToken);
+        var statusConfirmation = await RunGitAsync(new[] { "status", "--porcelain=v1" }, cancellationToken);
         var torn = !headConfirmation.Started || headConfirmation.ExitCode != 0
             || !string.Equals(
                 NullIfEmpty(headConfirmation.StandardOutput.Trim()),
@@ -697,6 +700,12 @@ internal sealed class OperatorContextStore
                     || !string.Equals(
                         branchConfirmation.StandardOutput.Trim(),
                         branchResult.StandardOutput.Trim(),
+                        StringComparison.Ordinal)))
+            || (statusCaptured
+                && (!statusConfirmation.Started || statusConfirmation.ExitCode != 0
+                    || !string.Equals(
+                        statusConfirmation.StandardOutput.Trim(),
+                        status.StandardOutput.Trim(),
                         StringComparison.Ordinal)));
 
         var snapshot = new RepositorySnapshot(
