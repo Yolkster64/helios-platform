@@ -58,29 +58,29 @@ jobs:
       - name: Check Azure OIDC configuration
         id: oidc
         env:
-          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           else
             echo 'configured=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Claude Foundry skipped: set AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID as repository variables after configuring GitHub OIDC.'
+            echo '::notice::Claude Foundry skipped: configure AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID as repository variables (legacy identifier secrets are also accepted). No client secret is used.'
           fi
 
       - name: Azure login with GitHub OIDC
         if: steps.oidc.outputs.configured == 'true'
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve Foundry resource
         if: steps.oidc.outputs.configured == 'true'
         env:
-          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
+          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE || secrets.ANTHROPIC_FOUNDRY_RESOURCE }}
         run: |
           resource="$CONFIGURED_RESOURCE"
           if [ -z "$resource" ]; then
@@ -134,13 +134,13 @@ jobs:
       - name: Azure login with GitHub OIDC
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve Foundry resource
         env:
-          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
+          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE || secrets.ANTHROPIC_FOUNDRY_RESOURCE }}
         run: |
           resource="$CONFIGURED_RESOURCE"
           if [ -z "$resource" ]; then
@@ -191,13 +191,13 @@ jobs:
       - name: Azure login with GitHub OIDC
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve Foundry resource
         env:
-          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
+          CONFIGURED_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE || secrets.ANTHROPIC_FOUNDRY_RESOURCE }}
         run: |
           resource="$CONFIGURED_RESOURCE"
           if [ -z "$resource" ]; then
