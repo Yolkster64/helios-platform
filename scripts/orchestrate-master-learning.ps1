@@ -75,7 +75,6 @@ function Start-LearningOrchestration {
                 learning_confidence = 0.875
                 manual_interventions = 3
                 auto_fixes = 87
-                successful_auto_fixes = 87
                 issues_resolved_count = 45
                 issues_created_count = 42
                 system_stability = 0.9977

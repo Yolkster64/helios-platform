@@ -39,7 +39,7 @@ class FeedbackLoop {
             predictions = 1247
             correctPredictions = 1175
             incorrectPredictions = 72
-            accuracy = [Math]::Round(($1175 / $1247) * 100, 2)
+            accuracy = [Math]::Round((1175 / 1247) * 100, 2)
             confidence = 0.942
         }
         

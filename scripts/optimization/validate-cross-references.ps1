@@ -120,7 +120,7 @@ function Check-FileImports {
         $content = Get-Content $psFile.FullName -Raw -ErrorAction SilentlyContinue
         
         # Find dot sourcing: . .\path\file.ps1
-        $importPattern = '^\s*\.\s+["\']?([^"\']+)["\']?$'
+        $importPattern = '^\s*\.\s+["'']?([^"'']+)["'']?$'
         $matches = [regex]::Matches($content, $importPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
         
         foreach ($match in $matches) {

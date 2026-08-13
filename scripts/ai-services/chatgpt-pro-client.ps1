@@ -206,6 +206,7 @@ class ChatGPTProClient {
                 $delay = [Math]::Min($delay * $this.RetryPolicy.BackoffMultiplier, $this.RetryPolicy.MaxBackoffDelay)
             }
         }
+        throw "Max retries exceeded"
     }
     
     [PSCustomObject]MakeHttpRequest([hashtable]$RequestBody) {
@@ -292,15 +293,15 @@ class ChatGPTProClient {
     }
     
     [double]CalculateCost([PSCustomObject]$Usage) {
-        $config = $this.Config.services.'chatgpt-pro'
-        $inputCost = ($Usage.prompt_tokens / 1000) * $config.costPerThousandTokens.input
-        $outputCost = ($Usage.completion_tokens / 1000) * $config.costPerThousandTokens.output
+        $svcConfig = $this.Config.services.'chatgpt-pro'
+        $inputCost = ($Usage.prompt_tokens / 1000) * $svcConfig.costPerThousandTokens.input
+        $outputCost = ($Usage.completion_tokens / 1000) * $svcConfig.costPerThousandTokens.output
         return $inputCost + $outputCost
     }
     
     [double]CalculateCostFromTokens([int]$TokenCount) {
-        $config = $this.Config.services.'chatgpt-pro'
-        return ($TokenCount / 1000) * $config.costPerThousandTokens.input
+        $svcConfig = $this.Config.services.'chatgpt-pro'
+        return ($TokenCount / 1000) * $svcConfig.costPerThousandTokens.input
     }
     
     [PSCustomObject]GetStatistics() {

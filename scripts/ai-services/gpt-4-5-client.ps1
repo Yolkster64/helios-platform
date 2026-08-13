@@ -461,6 +461,7 @@ Review:
                 $delay = [Math]::Min($delay * $this.RetryPolicy.BackoffMultiplier, $this.RetryPolicy.MaxBackoffDelay)
             }
         }
+        throw "Max retries exceeded"
     }
     
     [PSCustomObject]MakeHttpRequest([hashtable]$RequestBody) {
@@ -487,9 +488,9 @@ Review:
     }
     
     [double]CalculateCost([PSCustomObject]$Usage) {
-        $config = $this.Config.services.'gpt-4-5'
-        $inputCost = ($Usage.prompt_tokens / 1000) * $config.costPerThousandTokens.input
-        $outputCost = ($Usage.completion_tokens / 1000) * $config.costPerThousandTokens.output
+        $svcConfig = $this.Config.services.'gpt-4-5'
+        $inputCost = ($Usage.prompt_tokens / 1000) * $svcConfig.costPerThousandTokens.input
+        $outputCost = ($Usage.completion_tokens / 1000) * $svcConfig.costPerThousandTokens.output
         return $inputCost + $outputCost
     }
     

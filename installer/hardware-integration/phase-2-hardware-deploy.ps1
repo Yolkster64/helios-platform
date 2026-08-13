@@ -59,11 +59,11 @@ $phaseConfig = @{
 
 class DeploymentLogger {
     [string] $LogPath
-    [List[object]] $Logs
+    [System.Collections.Generic.List[object]] $Logs
     
     DeploymentLogger([string]$logPath) {
         $this.LogPath = $logPath
-        $this.Logs = [List[object]]::new()
+        $this.Logs = [System.Collections.Generic.List[object]]::new()
         
         # Ensure log directory exists
         $dir = Split-Path -Parent $logPath

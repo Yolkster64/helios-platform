@@ -65,9 +65,9 @@ function Log-SyncAction {
     }
     
     if ($Status -eq "ERROR") {
-        $syncErrors += "$Action: $Details"
+        $syncErrors += "${Action}: $Details"
     } elseif ($Status -eq "WARN") {
-        $syncWarnings += "$Action: $Details"
+        $syncWarnings += "${Action}: $Details"
     }
 }
 

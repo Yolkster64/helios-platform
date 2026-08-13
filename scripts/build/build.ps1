@@ -483,12 +483,12 @@ param(
     [string]\$InstallPath = "$env:ProgramFiles\HELIOS.Platform"
 )
 
-Write-Host @"
+Write-Host @'
 ╔════════════════════════════════════════════════════════════════╗
 ║         HELIOS Platform v1.0.0 - Installation Wizard          ║
 ║              Enterprise Windows Optimization                   ║
 ╚════════════════════════════════════════════════════════════════╝
-"@ -ForegroundColor Cyan
+'@ -ForegroundColor Cyan
 
 Write-Host "Installation Path: \$InstallPath"
 \$confirm = Read-Host "Is this correct? (Y/N)"
@@ -509,7 +509,7 @@ if (\$envPath -notlike "*\$InstallPath*") {
     [Environment]::SetEnvironmentVariable("PATH", "\$envPath;\$InstallPath", [EnvironmentVariableTarget]::User)
 }
 
-Write-Host @"
+Write-Host @'
 ╔════════════════════════════════════════════════════════════════╗
 ║ ✓ HELIOS Platform v1.0.0 installed successfully               ║
 ║ ✓ Installation Path: \$InstallPath                              ║
@@ -520,7 +520,7 @@ Write-Host @"
 ║  2. Run: HELIOS.Platform.exe                                  ║
 ║  3. Select deployment tier (Standard, Professional, Enterprise)║
 ╚════════════════════════════════════════════════════════════════╝
-"@ -ForegroundColor Green
+'@ -ForegroundColor Green
 "@
 
     Set-Content -Path "$setupPath\Install.ps1" -Value $psInstallerContent

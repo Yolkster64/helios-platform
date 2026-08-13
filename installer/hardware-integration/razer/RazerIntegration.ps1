@@ -125,10 +125,10 @@ class RazerIntegration {
             
             # Query USB devices for Razer VID (0x1532)
             $razerVID = "1532"
-            $devices = Get-WmiObject Win32_PnPDevice | Where-Object { $_.DeviceID -match $razerVID }
+            $pnpDevices = Get-WmiObject Win32_PnPDevice | Where-Object { $_.DeviceID -match $razerVID }
             
             $deviceCount = 0
-            foreach ($device in $devices) {
+            foreach ($device in $pnpDevices) {
                 if ($device.Name -match "(Razer|Synapse)" -or $device.DeviceID -match $razerVID) {
                     $deviceType = $this.ClassifyRazerDevice($device.Name)
                     
@@ -429,7 +429,7 @@ class RazerIntegration {
     }
     
     [string] GetGameProfile([string]$gameName) {
-        $gameProfiles = @{
+        $profileMap = @{
             'valorant' = 'Reactive'
             'csgo' = 'Reactive'
             'minecraft' = 'Breathing Blue'
@@ -438,9 +438,9 @@ class RazerIntegration {
             'overwatch' = 'Rainbow'
         }
         
-        foreach ($game in $gameProfiles.Keys) {
+        foreach ($game in $profileMap.Keys) {
             if ($gameName -match [regex]::Escape($game)) {
-                return $gameProfiles[$game]
+                return $profileMap[$game]
             }
         }
         

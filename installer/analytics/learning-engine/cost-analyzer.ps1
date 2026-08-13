@@ -38,7 +38,7 @@ class CostAnalyzer {
     [void] AnalyzeModelCosts() {
         Write-Host "Analyzing AI model costs..." -ForegroundColor Cyan
         
-        $modelCosts = @{
+        $modelCostData = @{
             "GPT-4" = @{
                 inputTokensUsed = 125000
                 outputTokensUsed = 45000
@@ -77,17 +77,17 @@ class CostAnalyzer {
             }
         }
         
-        $this.ModelCosts = $modelCosts
-        $totalModelCost = ($modelCosts.Values | Measure-Object -Property totalCost -Sum).Sum
+        $this.ModelCosts = $modelCostData
+        $totalModelCost = ($modelCostData.Values | Measure-Object -Property totalCost -Sum).Sum
         
-        Write-Host "✓ Analyzed costs for $($modelCosts.Count) AI models" -ForegroundColor Green
-        Write-Host "  Total model cost (30 days): \$$('{0:F2}' -f $totalModelCost)" -ForegroundColor Gray
+        Write-Host "✓ Analyzed costs for $($modelCostData.Count) AI models" -ForegroundColor Green
+        Write-Host "  Total model cost (30 days): `$$('{0:F2}' -f $totalModelCost)" -ForegroundColor Gray
     }
     
     [void] AnalyzeOperationCosts() {
         Write-Host "Analyzing operational costs..." -ForegroundColor Cyan
         
-        $operationCosts = @{
+        $operationCostData = @{
             "DataIngestion" = @{
                 gbProcessed = 4500
                 costPerGb = 0.0234
@@ -126,11 +126,11 @@ class CostAnalyzer {
             }
         }
         
-        $this.OperationCosts = $operationCosts
-        $totalOpCost = ($operationCosts.Values | Measure-Object -Property totalCost -Sum).Sum
+        $this.OperationCosts = $operationCostData
+        $totalOpCost = ($operationCostData.Values | Measure-Object -Property totalCost -Sum).Sum
         
         Write-Host "✓ Analyzed operational cost breakdown" -ForegroundColor Green
-        Write-Host "  Total operational cost (30 days): \$$('{0:F2}' -f $totalOpCost)" -ForegroundColor Gray
+        Write-Host "  Total operational cost (30 days): `$$('{0:F2}' -f $totalOpCost)" -ForegroundColor Gray
     }
     
     [void] CalculateTotalCostBreakdown() {
@@ -230,14 +230,14 @@ class CostAnalyzer {
         Write-Host "`n=== COST ANALYSIS REPORT ===" -ForegroundColor Yellow
         
         Write-Host "`nCost Breakdown (30-day period):" -ForegroundColor Cyan
-        Write-Host "  AI Models: \$$('{0:F2}' -f $this.CostBreakdown.AIModels.total) ($($this.CostBreakdown.AIModels.percentage)%)" -ForegroundColor White
-        Write-Host "  Operations: \$$('{0:F2}' -f $this.CostBreakdown.Operations.total) ($($this.CostBreakdown.Operations.percentage)%)" -ForegroundColor White
-        Write-Host "  TOTAL: \$$('{0:F2}' -f $this.CostBreakdown.Total)" -ForegroundColor Cyan
+        Write-Host "  AI Models: `$$('{0:F2}' -f $this.CostBreakdown.AIModels.total) ($($this.CostBreakdown.AIModels.percentage)%)" -ForegroundColor White
+        Write-Host "  Operations: `$$('{0:F2}' -f $this.CostBreakdown.Operations.total) ($($this.CostBreakdown.Operations.percentage)%)" -ForegroundColor White
+        Write-Host "  TOTAL: `$$('{0:F2}' -f $this.CostBreakdown.Total)" -ForegroundColor Cyan
         
         Write-Host "`nDaily/Monthly Projections:" -ForegroundColor Cyan
-        Write-Host "  Daily Average: \$$('{0:F2}' -f $this.CostBreakdown.DailyAverage)" -ForegroundColor White
-        Write-Host "  Monthly Projection: \$$('{0:F2}' -f $this.CostBreakdown.MonthlyProjection)" -ForegroundColor White
-        Write-Host "  Annual Projection: \$$('{0:F2}' -f ($this.CostBreakdown.Total * 12))" -ForegroundColor White
+        Write-Host "  Daily Average: `$$('{0:F2}' -f $this.CostBreakdown.DailyAverage)" -ForegroundColor White
+        Write-Host "  Monthly Projection: `$$('{0:F2}' -f $this.CostBreakdown.MonthlyProjection)" -ForegroundColor White
+        Write-Host "  Annual Projection: `$$('{0:F2}' -f ($this.CostBreakdown.Total * 12))" -ForegroundColor White
         
         Write-Host "`nTop Optimization Opportunities:" -ForegroundColor Cyan
         $this.OptimizationOpportunities | Sort-Object potentialSavings -Descending | Select-Object -First 3 | ForEach-Object {
