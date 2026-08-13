@@ -50,6 +50,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+$toolResolver = Join-Path $repoRoot 'scripts' 'build' 'tool-resolver.ps1'
+if (-not (Test-Path -LiteralPath $toolResolver)) {
+    Write-Error "Missing shared tool resolver: $toolResolver"
+    exit 2
+}
+. $toolResolver
 
 # Child scripts run in their own process so their `exit`, StrictMode, and preference
 # settings stay isolated, and their exit codes come back clean.
@@ -124,20 +130,25 @@ try { $toolchain = ($step.Output -join "`n") | ConvertFrom-Json } catch { Write-
 if ($toolchain) {
     $missingRequired = @($toolchain.required | Where-Object { -not $_.Found })
     $optionalFound = @($toolchain.optional | Where-Object { $_.Found })
+    $pathAdditions = @(if ($toolchain.PSObject.Properties['effectivePathAdditions']) { $toolchain.effectivePathAdditions })
+    $resolvedTools = if ($toolchain.PSObject.Properties['resolvedTools']) { $toolchain.resolvedTools } else { $null }
     $detail = if ($missingRequired.Count -eq 0) {
         "all required tools present; optional: $($optionalFound.Count)/$(@($toolchain.optional).Count)"
     }
     else {
         'missing required: ' + (($missingRequired | ForEach-Object Tool) -join ', ')
     }
+    if ($pathAdditions.Count -gt 0) {
+        $detail += '; repo-local PATH additions: ' + ($pathAdditions -join ', ')
+    }
     # verify-readiness treats bicep and az as individually optional, but CI's
     # infra gate needs at least ONE Bicep compiler (standalone bicep, or az —
     # which fetches bicep itself on first `az bicep` use). Neither present
     # means the infra validation this repo runs everywhere cannot run here.
     $toolchainReady = [bool]$toolchain.ready
-    $bicepPath = (Get-Command bicep -CommandType Application -ErrorAction SilentlyContinue) -or
-        (Get-Command az -CommandType Application -ErrorAction SilentlyContinue)
-    if ($toolchainReady -and -not $bicepPath) {
+    $bicepResolved = if ($resolvedTools -and $resolvedTools.PSObject.Properties['bicep']) { [string]$resolvedTools.bicep } else { '' }
+    $azResolved = if ($resolvedTools -and $resolvedTools.PSObject.Properties['az']) { [string]$resolvedTools.az } else { '' }
+    if ($toolchainReady -and [string]::IsNullOrWhiteSpace($bicepResolved) -and [string]::IsNullOrWhiteSpace($azResolved)) {
         $toolchainReady = $false
         $detail += '; no Bicep compiler (need bicep or az for infra/main.bicep validation)'
     }
@@ -146,11 +157,14 @@ if ($toolchain) {
     # ready while the advertised `dotnet build HELIOS.sln` cannot run.
     # Require at least one SDK with major version >= 8.
     if ($toolchainReady) {
-        $dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue |
-            Select-Object -First 1
+        $dotnetPath = if ($resolvedTools -and $resolvedTools.PSObject.Properties['dotnet']) { [string]$resolvedTools.dotnet } else { '' }
+        if ([string]::IsNullOrWhiteSpace($dotnetPath)) {
+            $dotnetResolution = Resolve-HeliosTool -Name 'dotnet' -RepoRoot $repoRoot
+            if ($dotnetResolution.Found) { $dotnetPath = $dotnetResolution.Path }
+        }
         $sdkOk = $false
-        if ($dotnetCommand) {
-            foreach ($line in @(& $dotnetCommand.Source --list-sdks 2>$null)) {
+        if (-not [string]::IsNullOrWhiteSpace($dotnetPath)) {
+            foreach ($line in @(& $dotnetPath --list-sdks 2>$null)) {
                 if ("$line" -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) { $sdkOk = $true; break }
             }
         }
@@ -166,10 +180,9 @@ if ($toolchain) {
     if ($toolchainReady) {
         $pythonOk = $false
         foreach ($candidate in @('python3', 'python')) {
-            $py = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            if ($py) {
-                & $py.Source -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>$null
+            $pyResolution = Resolve-HeliosTool -Name $candidate -RepoRoot $repoRoot
+            if ($pyResolution.Found) {
+                & $pyResolution.Path -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>$null
                 if ($LASTEXITCODE -eq 0) { $pythonOk = $true; break }
             }
         }
@@ -192,8 +205,10 @@ Write-Section ''
 Write-Section '-- b. Auth state (verify-only; nothing is mutated) --'
 # Application only: the probes below launch $command.Source as an external
 # executable, which a profile alias or function shadowing gh/az can never back.
-$ghCommand = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-$azCommand = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+$ghResolution = Resolve-HeliosTool -Name 'gh' -RepoRoot $repoRoot
+$ghExe = if ($ghResolution.Found) { $ghResolution.Path } else { $null }
+$azResolution = Resolve-HeliosTool -Name 'az' -RepoRoot $repoRoot
+$azExe = if ($azResolution.Found) { $azResolution.Path } else { $null }
 
 function Invoke-GhAuthStatus {
     # --active restricts the check to the account later gh commands actually
@@ -214,8 +229,8 @@ if ($bashCommand) {
     $step = Invoke-Step -Executable $bashCommand.Source -Arguments @(($githubConnect -replace '\\', '/'), '--verify-only')
     $githubDetail = Get-FirstLine $step.Output
 }
-elseif ($ghCommand) {
-    $step = Invoke-GhAuthStatus -GhExe $ghCommand.Source
+elseif ($ghExe) {
+    $step = Invoke-GhAuthStatus -GhExe $ghExe
     $githubDetail = if ($step.ExitCode -eq 0) { 'GitHub: authenticated (gh auth status; bash unavailable for connect-github.sh).' }
     else { 'GitHub: not authenticated (gh auth status).' }
 }
@@ -229,8 +244,8 @@ else {
 # line from `gh auth status`. Tokens whose scopes are not listed at all (some
 # PAT shapes) stay ready but say the scope could not be verified.
 $githubReady = ($step.ExitCode -eq 0)
-if ($githubReady -and $ghCommand) {
-    $authView = Invoke-GhAuthStatus -GhExe $ghCommand.Source
+if ($githubReady -and $ghExe) {
+    $authView = Invoke-GhAuthStatus -GhExe $ghExe
     $scopeLine = @($authView.Output |
             Where-Object { "$_" -match 'Token scopes:' } | Select-Object -First 1)
     if ($scopeLine.Count -gt 0) {
@@ -251,12 +266,12 @@ Write-ChildOutput $step.Output
 # read-only `az account show` probe, then to the Azure PowerShell twin.
 $azureConnect = Join-Path $repoRoot 'scripts' 'bootstrap' 'connect-azure.sh'
 $azureConnectPs = Join-Path $repoRoot 'scripts' 'bootstrap' 'connect-azure.ps1'
-if ($bashCommand -and $azCommand) {
+if ($bashCommand -and $azExe) {
     $step = Invoke-Step -Executable $bashCommand.Source -Arguments @(($azureConnect -replace '\\', '/'), '--verify-only')
     $azureDetail = Get-FirstLine $step.Output
 }
-elseif ($azCommand) {
-    $step = Invoke-Step -Executable $azCommand.Source -Arguments @('account', 'show', '--output', 'none')
+elseif ($azExe) {
+    $step = Invoke-Step -Executable $azExe -Arguments @('account', 'show', '--output', 'none')
     $azureDetail = if ($step.ExitCode -eq 0) { 'Azure: authenticated (az account show; bash unavailable for connect-azure.sh).' }
     else { 'Azure: not authenticated (az account show).' }
     $step.Output = @($azureDetail)

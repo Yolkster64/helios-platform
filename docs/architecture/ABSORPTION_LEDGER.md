@@ -186,7 +186,8 @@ tooling.
 - PRs: #136 #138 (readiness verify — **ported**: `scripts/build/verify-readiness.ps1`,
   required/optional split, human table + `-Json`), #137 (python compile checker —
   **ported**: `compileall` gate in `python-spoke.yml` before pytest), #130 (repo-local
-  tool resolver), #139 #133 #131 #135 (build-graph refinements)
+  tool resolver — **ported**: `scripts/build/tool-resolver.ps1` + readiness/setup-all
+  reporting), #139 #133 #131 #135 (build-graph refinements)
 - Extracts: required/optional split, resolver precedence, native-interop smoke
 - Risks: build-graph itself is upstream-specific; port ideas only
 
@@ -512,17 +513,20 @@ across both.
   and this epic (E16 lists #121/#122/#127/#128 from its side)
 - Risks: very large PRs; absorb shapes, never the parallel implementation
 
-## E40 — helios.sh developer helper family (`build-ci`) — open
+## E40 — helios.sh developer helper family (`build-ci`) — tranche-1
 
 A helios.sh helper family: PR-body generation, pruning (and ignoring) generated
 artifacts, a shared repo-local tool resolver surfaced in build/readiness reports,
 and a verify command with `--include-readiness`. Overlaps E14's ported
 verify-readiness.ps1 — absorb only what that script lacks.
 
-- PRs: #123 (helios.sh PR-body generator), #124 (prune-generated script + ignore
-  generated artifacts), #130 (repo-local tool resolver — candidacy stays tracked
-  under E14; cross-linked here), #131 (`--include-readiness` + helios.sh verify
-  command)
+- PRs: #123 (helios.sh PR-body generator — **ported** as
+  `scripts/dev/helios.ps1 pr-update` + `.github/PULL_REQUEST_BODY.md` ignore), #124
+  (prune-generated script + ignore generated artifacts — **ported** as
+  `scripts/dev/helios.ps1 prune-generated` + generated artifact ignores), #130
+  (repo-local tool resolver — **ported** under E14; cross-linked here), #131
+  (`--include-readiness` + helios.sh verify command — **ported** as
+  `scripts/dev/helios.ps1 verify --include-readiness`)
 - Extracts: PR-body generator, prune-generated hygiene, verify behaviors
   verify-readiness.ps1 lacks
 - Risks: bash-vs-PS7 split — repo convention wraps the C# CLI in PS7; port
