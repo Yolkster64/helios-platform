@@ -9,8 +9,9 @@
 #
 # Hard exclusions, enforced in the run block:
 #   - PRs whose head repo is a fork are never acted on.
-#   - Absorption-lane branches (absorb/*, absorb-*, absorption/*, absorption-*) are
-#     never auto-merged: committing absorbed upstream code is always a deliberate
+#   - Absorption-lane branches (absorb/*, absorb-*, absorption/*, absorption-* — in any
+#     path segment, e.g. copilot/absorption-*) are never auto-merged: committing
+#     absorbed upstream code is always a deliberate
 #     human action (docs/architecture/ABSORPTION_PIPELINE.md, "Boundaries: No auto-merge").
 #
 # Known limitation: a merge performed by GITHUB_TOKEN-armed auto-merge does not trigger
@@ -73,7 +74,7 @@ jobs:
           # Guard: the absorption lane is explicitly excluded from any auto-merge
           # (docs/architecture/ABSORPTION_PIPELINE.md, "Boundaries").
           case "${HEAD_REF}" in
-            absorb/*|absorb-*|absorption/*|absorption-*)
+            absorb/*|absorb-*|absorption/*|absorption-*|*/absorb/*|*/absorb-*|*/absorption/*|*/absorption-*)
               echo "::notice::Auto-merge gate: head branch '${HEAD_REF}' is in the absorption lane - absorbed upstream code always merges through deliberate human review, never auto-merge."
               exit 0
               ;;
