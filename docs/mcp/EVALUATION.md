@@ -1,9 +1,10 @@
 # HELIOS MCP Server — Evaluation
 
-Eleven read-only, single-answer questions for evaluating whether an LLM can drive the
+Twelve read-only, single-answer questions for evaluating whether an LLM can drive the
 HELIOS MCP server (per the MCP builder evaluation methodology). Every question is
 answerable using only non-destructive tools (`helios_ai_status`, `helios_providers_list`,
-`helios_task_routing_get`, `helios_infra_validate`, `helios_foundry_agent_list`) against
+`helios_task_routing_get`, `helios_infra_validate`, `helios_foundry_agent_list`,
+`helios_azure_inventory_get`) against
 a fresh checkout with **no provider keys configured**, so answers are stable. Verify answers after config changes —
 they are tied to `config/aihub.json`.
 
@@ -55,6 +56,10 @@ and string-compare the final answer.
   <qa_pair>
     <question>According to helios_foundry_agent_list, which environment variable must be set before Foundry agents can be listed?</question>
     <answer>AZURE_FOUNDRY_PROJECT_ENDPOINT</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>With no Azure credentials configured, what CLI command does the helios_azure_inventory_get hint tell you to run to authenticate?</question>
+    <answer>az login</answer>
   </qa_pair>
 </evaluation>
 ```

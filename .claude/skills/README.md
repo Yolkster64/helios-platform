@@ -14,7 +14,7 @@ skill and are stated once, here:
 
 | Stack | Skill | Reference files | Ground truth in this repo |
 |---|---|---|---|
-| C# / .NET 8 (hub, CLI, API, MCP) | `csharp-orchestrator` | `nuget-packages.md`, `provider-sdks.md`, `testing.md` | `src/ai/HELIOS.AIHub/Providers/`, the `src/ai`/`src/mcp` csproj files, `tests/HELIOS.AIHub.Tests/` |
+| C# / .NET 8 (hub, CLI, API, MCP) | `csharp-orchestrator` | `nuget-packages.md`, `provider-sdks.md`, `azure-management-sdk.md`, `testing.md` | `src/ai/HELIOS.AIHub/Providers/`, the `src/ai`/`src/mcp` csproj files, `tests/HELIOS.AIHub.Tests/` |
 | PowerShell 7 automation | `powershell-automation` | `modules.md`, `script-patterns.md` | `.github/workflows/{code-checks,ci-validation,quality}.yml`, `.github/ps1-parse-baseline.txt`, `scripts/bootstrap/`, `scripts/fleet/stop-fleet.ps1` |
 | GitHub Actions / JSON / MSBuild config | `pipelines-config` | `actions-tooling.md`, `msbuild-and-config.md` | `.github/workflows/`, `config/aihub.json`, the csproj files |
 | Bicep / ARM / Terraform | `iac-azure` | `bicep-tooling.md`, `terraform-azurerm.md` | `infra/main.bicep`, `infra/terraform/`, `.github/workflows/helios-deploy.yml` |

@@ -69,6 +69,10 @@ Depth lives in `references/` — every claim there cites the repo file that grou
 - `references/provider-sdks.md` — working API knowledge per SDK behind
   `src/ai/HELIOS.AIHub/Providers/`: the `IChatClient` seam, Azure deployment-vs-model and
   credential-chain traps, Anthropic/Ollama/Foundry-Agents/KeyVault/Tables/MCP surfaces.
+- `references/azure-management-sdk.md` — the Azure management-plane lane
+  (`Azure.ResourceManager.*`): ArmClient/resource-identifier/LRO patterns, the verified
+  deployment what-if shape, management-vs-data-plane split, stable-only version
+  discipline, and the consume-from-NuGet-verify-from-fork rule.
 - `references/testing.md` — test idioms: hand-rolled fakes over Moq,
   `WebApplicationFactory`, shipped-config drift tests, keyless determinism, TimeProvider
   injection.

@@ -30,6 +30,10 @@ public static class Program
         // AZURE_FOUNDRY_PROJECT_ENDPOINT; unset is the standard Unconfigured
         // state, never a startup failure.
         builder.Services.AddSingleton(_ => new FoundryAgentService());
+        // Azure management-plane inventory (helios_azure_inventory_get):
+        // DefaultAzureCredential resolves lazily at first use; missing credentials
+        // are the Unauthenticated state, never a startup failure.
+        builder.Services.AddSingleton(_ => new AzureResourceService());
         builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
