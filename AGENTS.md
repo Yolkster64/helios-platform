@@ -1,6 +1,6 @@
 # HELIOS Platform
 
-Enterprise Windows management platform. C#/.NET 8 + PowerShell 7, with a multi-LLM hub
+Enterprise Windows management platform. C#/.NET 10 + PowerShell 7, with a multi-LLM hub
 (`src/ai/`), an MCP server (`src/mcp/`), and Azure AI Foundry infrastructure (`infra/`).
 
 ## Build & test (what CI runs)

@@ -7,7 +7,7 @@
 ## 🚀 Getting Started as a Developer
 
 ### Prerequisites
-- .NET 8.0 SDK or later
+- .NET 10.0 SDK or later (`global.json` pins 10.0.400)
 - Visual Studio 2022, VS Code, or JetBrains Rider
 - Git
 - Understanding of C# async/await patterns

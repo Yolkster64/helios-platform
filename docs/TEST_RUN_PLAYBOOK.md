@@ -307,4 +307,4 @@ contribution rules: [`src/gui/README.md`](../src/gui/README.md).
 | Fleet local | none | pwsh + python3 | any (stub); Hermes CLI optional |
 | Absorption benchmark | none | Git + network to github.com | any |
 | Infra validation | none | bicep/az; terraform | any |
-| GUI shell | none | .NET 8 + Windows App SDK runtime | **Windows** |
+| GUI shell | none | .NET 10 SDK (global.json) + .NET 8 desktop runtime (shell TFM) + Windows App SDK runtime | **Windows** |

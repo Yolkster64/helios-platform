@@ -235,12 +235,14 @@ the `fleet-operator` agent; absorption seeding through `absorption-analyst`.
 
 ## .NET version guidance (asked constantly, so pinned here)
 
-- **Today**: repo targets **net8.0** everywhere; net8.0 support ends **2026-11-10**.
-- **Current LTS**: **.NET 10** (Nov 2025). The net10.0 upgrade is roadmap PR6 — one PR,
-  all four projects together, plus `DOTNET_VERSION` bumps in workflows.
-- **.NET 11**: **preview only** (ships Nov 2026). Track features; never target in
-  committed code and never describe as GA. WinUI 3 work (GUI_THEME_ANALYSIS.md) should
-  land on .NET 10, not wait for 11.
+- **Today**: repo targets **net10.0** (the current LTS, Nov 2025) everywhere except
+  `src/gui`, which stays `net8.0-windows10.0.19041.0` until the pinned Windows App SDK
+  line documents net10 support. `global.json` pins SDK 10.0.400.
+- **The net8.0 → net10.0 retarget has landed** (roadmap PR6): all projects, package
+  pins, and `dotnet-version: 10.0.x` workflow bumps in one change-set.
+- **.NET 11**: **preview only** (ships Nov 2026). An allowed-to-fail `net11-preview`
+  job in `dotnet-build.yml` builds HELIOS.sln on the preview SDK for early warning;
+  never target net11 in committed code and never describe it as GA.
 
 ## Maintaining the table
 

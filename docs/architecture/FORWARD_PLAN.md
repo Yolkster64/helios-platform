@@ -18,9 +18,10 @@ advisory; nothing self-executes.
 
 ## Tranche sequence
 
-### T4 — .NET 10 platform (in flight on this branch)
-Retarget everything to net10.0 LTS (net8.0 EOL 2026-11-10), allowed-to-fail
-net11-preview CI lane, GA flip ~Nov 2026 as a reviewed TFM bump.
+### T4 — .NET 10 platform (landed on this branch)
+Retargeted to net10.0 LTS (net8.0 EOL 2026-11-10) with an allowed-to-fail
+net11-preview CI lane; `src/gui` follows once the pinned Windows App SDK documents
+net10 support. GA flip ~Nov 2026 as a reviewed TFM bump.
 Knowledge: `csharp-orchestrator/references/dotnet-10-and-11.md`. **Owner lane:
 Claude session.**
 

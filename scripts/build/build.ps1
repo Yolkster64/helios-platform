@@ -2,11 +2,11 @@
 # HELIOS Platform - Complete NuGet Build and Distribution Script
 # Purpose: Builds multi-framework NuGet package, creates executable, 
 #          generates installer, and produces demo applications
-# Supported Frameworks: .NET 6.0, 7.0, 8.0
+# Supported Frameworks: .NET 6.0, 7.0, 8.0, 10.0
 #=============================================================================
 
 param(
-    [ValidateSet('net6.0', 'net7.0', 'net8.0', 'all')]
+    [ValidateSet('net6.0', 'net7.0', 'net8.0', 'net10.0', 'all')]
     [string]$Framework = 'all',
     
     [ValidateSet('Debug', 'Release')]
@@ -176,7 +176,7 @@ function Create-StandaloneExecutable {
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
@@ -372,7 +372,7 @@ class Program
         
         dotnet publish "$exePath\HELIOS.Platform.Exe.csproj" `
             -c $Configuration `
-            -f net8.0 `
+            -f net10.0 `
             -r win-x64 `
             --self-contained `
             -p:PublishSingleFile=true `

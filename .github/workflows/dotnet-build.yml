@@ -50,7 +50,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -84,7 +84,7 @@ jobs:
       # Fail loudly here instead.
       - name: Assert native library reached test output
         id: native_smoke
-        run: test -f tests/HELIOS.AIHub.Tests/bin/Release/net8.0/libhelios_aihub_native.so
+        run: test -f tests/HELIOS.AIHub.Tests/bin/Release/net10.0/libhelios_aihub_native.so
 
       - name: Test
         id: test
@@ -213,7 +213,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Build core (known broken, never fails the job)
         run: |
@@ -223,4 +223,41 @@ jobs:
           else
             errors=$(grep -c " error " core-build.log || true)
             echo "## Legacy core build: still broken (~${errors} errors) — informational only" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # INFORMATIONAL ONLY — .NET 11 preview validation lane (dotnet-10-and-11.md).
+  # Builds HELIOS.sln against the .NET 11 preview SDK so breakage surfaces early,
+  # ahead of the GA flip. Allowed to fail: continue-on-error keeps it out of the
+  # required-checks path, and nothing may ever `needs:` this job. Never gate
+  # required CI on a preview SDK.
+  net11-preview:
+    name: .NET 11 preview build (informational, allowed to fail)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 11 (preview)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
+      # global.json pins the required lanes to the 10.0 LTS SDK; this preview
+      # lane deliberately unpins so the 11 preview SDK resolves.
+      - name: Unpin SDK for the preview lane
+        run: rm -f global.json
+
+      - name: Restore
+        run: dotnet restore HELIOS.sln
+
+      - name: Build (net10.0 TFMs on the .NET 11 preview SDK)
+        run: |
+          dotnet build HELIOS.sln -c Release --no-restore 2>&1 | tee net11-build.log
+          if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+            echo "## .NET 11 preview build: PASSED (informational)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## .NET 11 preview build: FAILED (informational — does not gate)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
