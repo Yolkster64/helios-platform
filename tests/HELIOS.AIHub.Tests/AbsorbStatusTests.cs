@@ -223,8 +223,14 @@ public sealed class AbsorbStatusTests : IDisposable
             StringComparison.OrdinalIgnoreCase)
             ? "Release"
             : "Debug";
+        // The CLI and this test project are built together by HELIOS.sln at the same
+        // TFM, so derive it from our own output directory instead of hardcoding one -
+        // a hardcoded TFM survives locally on stale bin output and only fails on CI's
+        // clean checkout.
+        var targetFramework = new DirectoryInfo(
+            AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Name;
         var dllPath = new[] { preferred, preferred == "Release" ? "Debug" : "Release" }
-            .Select(configuration => Path.Combine(binRoot, configuration, "net8.0", "helios-ai.dll"))
+            .Select(configuration => Path.Combine(binRoot, configuration, targetFramework, "helios-ai.dll"))
             .FirstOrDefault(File.Exists);
         Assert.False(
             dllPath is null,
