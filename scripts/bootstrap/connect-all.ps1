@@ -184,7 +184,7 @@ $lanes = @(
                     New-LaneState -Kind ok -Detail 'gh authenticated against github.com (active account) and GITHUB_MODELS_TOKEN/GITHUB_TOKEN is set (names checked only) — gh CLI, GitHub Models provider, copilot CLI, and Copilot surfaces are covered'
                 }
                 else {
-                    New-LaneState -Kind blocked -Detail ('gh is authenticated, but neither GITHUB_MODELS_TOKEN nor GITHUB_TOKEN is set, and the GitHub Models provider reads only those env vars (or Key Vault) — export one in THIS shell yourself, e.g. pwsh: $env:GITHUB_MODELS_TOKEN = (gh auth token) | bash: export GITHUB_MODELS_TOKEN="$(gh auth token)" (a child script cannot export it for you)')
+                    New-LaneState -Kind blocked -Detail ('gh is authenticated, but neither GITHUB_MODELS_TOKEN nor GITHUB_TOKEN is set, and the GitHub Models provider reads only those env vars (or Key Vault) — export one in THIS shell yourself, e.g. pwsh: $env:GITHUB_MODELS_TOKEN = (gh auth token) | bash: export GITHUB_MODELS_TOKEN=$(gh auth token) (a child script cannot export it for you)')
                 }
             }
             else {
