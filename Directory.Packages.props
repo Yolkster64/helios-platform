@@ -9,6 +9,11 @@
     <PackageVersion Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageVersion Include="Azure.Data.Tables" Version="12.11.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <PackageVersion Include="Azure.ResourceManager" Version="1.14.0" />
+    <!-- Pinned ahead for the deployment what-if lane (ArmDeploymentResource.WhatIfAsync);
+         not referenced by any csproj yet — see
+         .claude/skills/csharp-orchestrator/references/azure-management-sdk.md. -->
+    <PackageVersion Include="Azure.ResourceManager.Resources" Version="1.11.2" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.10.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <!-- The F# SDK injects FSharp.Core implicitly; under central package

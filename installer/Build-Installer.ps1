@@ -42,7 +42,7 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # ============================================================================
-; CONFIGURATION
+# CONFIGURATION
 # ============================================================================
 
 $BuildConfig = @{

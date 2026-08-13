@@ -40,7 +40,7 @@ $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
 # ============================================================================
-; CONFIGURATION
+# CONFIGURATION
 # ============================================================================
 
 $UninstallConfig = @{
@@ -69,7 +69,7 @@ $UninstallStatus = @{
 }
 
 # ============================================================================
-; UTILITY FUNCTIONS
+# UTILITY FUNCTIONS
 # ============================================================================
 
 function Write-UninstallLog {
@@ -302,7 +302,7 @@ Support: https://docs.helios.solutions
 }
 
 # ============================================================================
-; MAIN UNINSTALLATION PROCESS
+# MAIN UNINSTALLATION PROCESS
 # ============================================================================
 
 function Invoke-Uninstallation {

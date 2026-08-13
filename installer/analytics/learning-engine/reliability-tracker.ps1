@@ -133,7 +133,7 @@ class ReliabilityTracker {
     [void] TrackIncidents() {
         Write-Host "Tracking incidents..." -ForegroundColor Cyan
         
-        $incidents = @(
+        $incidentList = @(
             @{
                 id = "INC-001"
                 component = "WebInterface"
@@ -186,8 +186,8 @@ class ReliabilityTracker {
             }
         )
         
-        $this.Incidents = $incidents
-        Write-Host "✓ Tracked $($incidents.Count) incidents in $($this.WindowDays)-day window" -ForegroundColor Green
+        $this.Incidents = $incidentList
+        Write-Host "✓ Tracked $($incidentList.Count) incidents in $($this.WindowDays)-day window" -ForegroundColor Green
     }
     
     [void] CalculateSLACompliance() {

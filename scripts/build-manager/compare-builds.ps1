@@ -337,11 +337,11 @@ function Export-ComparisonHtml {
                 <strong>$($shared.Count)</strong>
             </div>
             <div class="summary-item">
-                <span>Unique to $V1Name:</span>
+                <span>Unique to ${V1Name}:</span>
                 <strong>$(@($Var1.Components | Where-Object { $_ -notin $Var2.Components }).Count)</strong>
             </div>
             <div class="summary-item">
-                <span>Unique to $V2Name:</span>
+                <span>Unique to ${V2Name}:</span>
                 <strong>$(@($Var2.Components | Where-Object { $_ -notin $Var1.Components }).Count)</strong>
             </div>
         </div>
@@ -457,8 +457,8 @@ $($allComponents | ForEach-Object {
 ### Summary
 
 - **Shared Components:** $($shared.Count)
-- **Unique to $V1Name:** $(@($Var1.Components | Where-Object { $_ -notin $Var2.Components }).Count)
-- **Unique to $V2Name:** $(@($Var2.Components | Where-Object { $_ -notin $Var1.Components }).Count)
+- **Unique to ${V1Name}:** $(@($Var1.Components | Where-Object { $_ -notin $Var2.Components }).Count)
+- **Unique to ${V2Name}:** $(@($Var2.Components | Where-Object { $_ -notin $Var1.Components }).Count)
 - **Total Unique:** $($unique1.Count + $unique2.Count)
 
 ---

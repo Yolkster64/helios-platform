@@ -17,6 +17,7 @@ in the working tree (Central Package Management is a pending candidate; see
 | `Anthropic.SDK` | 5.10.0 | Claude via its native Messages API (`Providers/AnthropicAgent.cs`) |
 | `Azure.AI.Agents.Persistent` | 1.1.0 | Foundry Agent Service: agents/threads/runs (`Providers/FoundryAgentProvider.cs`) |
 | `Azure.Identity` | 1.21.0 | `DefaultAzureCredential` for Azure OpenAI, Foundry, Key Vault, Tables |
+| `Azure.ResourceManager` | 1.14.0 | Management-plane inventory reads: `ArmClient`, generic resources (`Providers/AzureResourceService.cs`; see `azure-management-sdk.md`) |
 | `Azure.Security.KeyVault.Secrets` | 4.10.0 | Secret fallback after env vars (`Configuration/SecretResolver.cs`) |
 | `Azure.Data.Tables` | 12.11.0 | Shared learning store (`Learning/AzureTableLearningStore.cs`) |
 | `OllamaSharp` | 5.4.30 | Local models; `OllamaApiClient` implements `IChatClient` directly |

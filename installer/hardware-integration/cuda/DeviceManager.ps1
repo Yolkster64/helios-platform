@@ -82,9 +82,9 @@ class CudaDeviceManager {
                             IsHealthy = $true
                             LastUpdated = Get-Date
                         }
-                        $this.WorkloadQueues[$id] = [List[WorkloadTask]]::new()
+                        $this.WorkloadQueues[$id] = [System.Collections.Generic.List[WorkloadTask]]::new()
                         $deviceCount++
-                        $this.Logger.LogSuccess("Discovered device $id: $name")
+                        $this.Logger.LogSuccess("Discovered device ${id}: $name")
                     }
                 }
             }
@@ -164,11 +164,11 @@ class CudaDeviceManager {
     }
     
     [int] SelectRoundRobin() {
-        $devices = @($this.Devices.Keys | Sort-Object)
-        if ($devices.Count -eq 0) { return -1 }
+        $deviceIds = @($this.Devices.Keys | Sort-Object)
+        if ($deviceIds.Count -eq 0) { return -1 }
         
-        $idx = (Get-Random -Minimum 0 -Maximum $devices.Count)
-        return $devices[$idx]
+        $idx = (Get-Random -Minimum 0 -Maximum $deviceIds.Count)
+        return $deviceIds[$idx]
     }
     
     [int] SelectLeastLoaded() {

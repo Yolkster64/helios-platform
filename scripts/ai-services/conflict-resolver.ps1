@@ -289,7 +289,7 @@ class ConflictResolver {
         }
         
         return @{
-            Recommendation = "Multiple valid approaches. Choose based on requirements:",
+            Recommendation = "Multiple valid approaches. Choose based on requirements:"
             Alternatives = $alternatives
             ComparisonMetrics = @{
                 Complexity = ($alternatives | Measure-Object -Property ComplexityScore -Average).Average

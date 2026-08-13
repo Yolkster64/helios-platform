@@ -61,7 +61,7 @@ class ComplianceMonitor {
     }
     
     [array]GetDLPViolations([int]$DaysBack = 7) {
-        $violations = @(
+        $dlpViolations = @(
             @{
                 ViolationId = "DLP-2024-001"
                 Policy = "Financial Data Protection"
@@ -91,7 +91,7 @@ class ComplianceMonitor {
             }
         )
         
-        return $violations
+        return $dlpViolations
     }
     
     [array]GetAuditTrail([int]$Days = 30) {

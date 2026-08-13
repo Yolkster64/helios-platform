@@ -103,6 +103,16 @@ helios-platform/scripts/cloud-orchestration/
 - **automated-remediation.ps1** - Auto-fix for common issues
 - **predictive-analytics.ps1** - ML-based predictions
 
+### 6. Evidence Proof (evidence-proof/)
+
+**End-to-end SharePoint deployment-evidence pipeline proof**
+
+- **Invoke-SharePointEvidenceProof.ps1** - One-command proof of the
+  `Helios/Governance/Deployment-Evidence` pipeline: folder operations, both
+  upload transports (direct PUT and upload session), SHA-256 round-trip, and
+  checksums manifest publication, with explicit HTTP 407 proxy diagnostics.
+  See `evidence-proof/README.md`.
+
 ## Configuration Files
 
 ### cloud-orchestration-config.json

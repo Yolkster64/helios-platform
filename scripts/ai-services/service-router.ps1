@@ -261,8 +261,9 @@ class ServiceRouter {
                 return $this.CreateConsensus($successfulResults, $TaskType)
             }
         }
+        return $null
     }
-    
+
     [PSCustomObject]CreateConsensus([array]$Results, [string]$TaskType) {
         $this.LogDebug("Creating consensus from $($Results.Count) results")
         

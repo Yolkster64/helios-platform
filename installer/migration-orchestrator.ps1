@@ -11,25 +11,25 @@
 # ============================================================================
 
 class MigrationOrchestrator {
-    [MigrationContext] $Context
-    [BackupManager] $BackupManager
-    [ConflictResolver] $ConflictResolver
-    [ValidationEngine] $Validator
-    [VersionUpgradeManager] $UpgradeManager
-    [DataTransformer] $Transformer
-    [MigrationProgressTracker] $ProgressTracker
+    $Context
+    $BackupManager
+    $ConflictResolver
+    $Validator
+    $UpgradeManager
+    $Transformer
+    $ProgressTracker
     [bool] $DryRun
     [string] $BackupPath
 
     MigrationOrchestrator([string]$name, [string]$from, [string]$to) {
-        $this.Context = [MigrationContext]::new($name, $from, $to)
+        $this.Context = New-Object MigrationContext -ArgumentList $name, $from, $to
         $logPath = "C:\HELIOS\logs\migration_$($this.Context.Id).log"
-        $this.ProgressTracker = [MigrationProgressTracker]::new($logPath)
-        $this.BackupManager = [BackupManager]::new("C:\HELIOS\backups", 30)
-        $this.ConflictResolver = [ConflictResolver]::new("merge")
-        $this.Validator = [ValidationEngine]::new([ValidationLevel]::Standard)
-        $this.UpgradeManager = [VersionUpgradeManager]::new($logPath)
-        $this.Transformer = [DataTransformer]::new(100)
+        $this.ProgressTracker = New-Object MigrationProgressTracker -ArgumentList $logPath
+        $this.BackupManager = New-Object BackupManager -ArgumentList "C:\HELIOS\backups", 30
+        $this.ConflictResolver = New-Object ConflictResolver -ArgumentList "merge"
+        $this.Validator = New-Object ValidationEngine -ArgumentList 'Standard'
+        $this.UpgradeManager = New-Object VersionUpgradeManager -ArgumentList $logPath
+        $this.Transformer = New-Object DataTransformer -ArgumentList 100
         $this.DryRun = $false
     }
 
@@ -75,7 +75,7 @@ class MigrationOrchestrator {
         }
 
         $startTime = Get-Date
-        $this.Context.State = [MigrationState]::InProgress
+        $this.Context.State = 'InProgress'
         $this.Context.StartTime = $startTime
 
         try {
@@ -96,9 +96,9 @@ class MigrationOrchestrator {
             # STEP 2: Create backup
             Write-Host "Step 2: Creating backup..." -ForegroundColor Cyan
             if (-not $this.DryRun) {
-                $backupPath = $this.CreateBackup($data)
-                $this.BackupPath = $backupPath
-                $migrationResult.BackupPath = $backupPath
+                $createdBackupPath = $this.CreateBackup($data)
+                $this.BackupPath = $createdBackupPath
+                $migrationResult.BackupPath = $createdBackupPath
             }
 
             $migrationResult.Steps += @{
@@ -174,7 +174,7 @@ class MigrationOrchestrator {
 
             # STEP 7: Finalize migration
             Write-Host "Step 7: Finalizing migration..." -ForegroundColor Cyan
-            $this.Context.State = [MigrationState]::Completed
+            $this.Context.State = 'Completed'
             $this.Context.ProcessedItems = 1
             $this.Context.FailedItems = 0
             $migrationResult.Success = $true
@@ -184,7 +184,7 @@ class MigrationOrchestrator {
         }
         catch {
             Write-Error "Migration failed: $_"
-            $this.Context.State = [MigrationState]::Failed
+            $this.Context.State = 'Failed'
             $migrationResult.Success = $false
             $migrationResult.Error = $_.Exception.Message
 
@@ -209,11 +209,11 @@ class MigrationOrchestrator {
         $tempDataPath = [System.IO.Path]::GetTempFileName()
         $data | ConvertTo-Json | Set-Content -Path $tempDataPath -Force
 
-        $backupPath = $this.BackupManager.CreateBackup($tempDataPath, $backupName)
+        $createdBackupPath = $this.BackupManager.CreateBackup($tempDataPath, $backupName)
         Remove-Item $tempDataPath -Force
 
-        $this.ProgressTracker.Log($this.Context.Id, "Backup created at: $backupPath")
-        return $backupPath
+        $this.ProgressTracker.Log($this.Context.Id, "Backup created at: $createdBackupPath")
+        return $createdBackupPath
     }
 
     [void] RollbackMigration() {
@@ -223,7 +223,7 @@ class MigrationOrchestrator {
             }
 
             $this.BackupManager.RestoreBackup($this.BackupPath, "C:\HELIOS\rollback")
-            $this.Context.State = [MigrationState]::RolledBack
+            $this.Context.State = 'RolledBack'
 
             Write-Host "Migration rolled back successfully" -ForegroundColor Green
             $this.ProgressTracker.Log($this.Context.Id, "Rollback completed")
@@ -258,20 +258,20 @@ class MigrationOrchestrator {
 
 class BulkMigrationExecutor {
     [MigrationOrchestrator] $Orchestrator
-    [DistributedMigrationExecutor] $DistributedExecutor
+    $DistributedExecutor
     [bool] $UseParallelExecution
-    [MigrationProgressTracker] $ProgressTracker
+    $ProgressTracker
 
     BulkMigrationExecutor([MigrationOrchestrator]$orchestrator) {
         $this.Orchestrator = $orchestrator
         $logPath = "C:\HELIOS\logs\bulk_migration_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        $this.ProgressTracker = [MigrationProgressTracker]::new($logPath)
+        $this.ProgressTracker = New-Object MigrationProgressTracker -ArgumentList $logPath
         $this.UseParallelExecution = $false
     }
 
     [void] EnableParallelExecution([int]$workers = 4) {
         $logPath = "C:\HELIOS\logs\distributed_migration.log"
-        $this.DistributedExecutor = [DistributedMigrationExecutor]::new(
+        $this.DistributedExecutor = New-Object DistributedMigrationExecutor -ArgumentList @(
             $workers,
             $logPath,
             $this.Orchestrator.Transformer
@@ -304,7 +304,7 @@ class BulkMigrationExecutor {
             else {
                 Write-Host "Executing bulk migration in sequential mode..." -ForegroundColor Cyan
                 
-                foreach ($i = 0; $i -lt $records.Count; $i++) {
+                for ($i = 0; $i -lt $records.Count; $i++) {
                     try {
                         $transformed = $this.Orchestrator.Transformer.TransformRecord($records[$i])
                         $bulkResult.SuccessfulRecords++

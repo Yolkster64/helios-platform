@@ -33,7 +33,7 @@ function Get-SubmoduleStatus {
                 $statuses += $status
             }
             catch {
-                Write-Warning "Failed to read $statusFile: $_"
+                Write-Warning "Failed to read ${statusFile}: $_"
             }
         }
         else {

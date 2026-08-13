@@ -7,7 +7,10 @@ Hub-and-spoke rule: Python is a spoke — every Python process is launched by th
 
 ## Project layout: uv everywhere
 
-`uv` manages everything; never invoke `pip` or bare `python` in scripts or CI.
+`uv` manages standalone agent projects; never invoke `pip`. One bare-`python3` exception:
+the dependency-free spoke (`src/ai/python`) is deliberately runnable with no environment
+at all — CI (`python3 -m pytest tests`, CLAUDE.md) and `PythonInsightsSpoke` invoke it
+bare (see `references/testing-and-libraries.md`).
 
 ```toml
 # pyproject.toml
@@ -135,3 +138,11 @@ uv resolves and caches the environment on first run. Use this for agents under ~
   lane (Yolkster64/RL fork, `outcomes.jsonl` as dataset seed, and the E28/ltrain
   never-auto-execute rule). Read it before touching `analysis.py`, `textwork.py`,
   the `[ml]` extra, or anything RL-adjacent.
+- `references/testing-and-libraries.md` — testing idioms as practiced (dependency-free
+  pytest, tmp_path board/run fabrication, subprocess round-trips, the C#-source
+  `JsonPropertyName` contract test, determinism rules) and the dependency policy:
+  stdlib-only core, the `[ml]`/`dev` extras, deliberate absences, when a new dep is OK.
+- `references/parallelization-and-fleets.md` — `PythonInsightsSpoke`'s four-process cap,
+  why the spoke never fans out itself (no asyncio/multiprocessing in it — verified),
+  the worker-lane claim/lease protocol, the throttle layers, the learn-fleet tandem
+  cycle, and an honest multi-modal readiness statement (declared today: nothing).

@@ -21,6 +21,8 @@ parallel, and finishes with the unified readiness inventory
 | `connect-azure.sh` | `az login --use-device-code` (URL + one-time code, works from any browser on any device). Detects Cloud Shell's implicit login and skips. `--subscription <id>` selects a subscription. |
 | `connect-azure.ps1` | Azure PowerShell twin: `Connect-AzAccount -UseDeviceAuthentication`, same Cloud Shell detection and `-Subscription` selection, for shells where Az cmdlets are the native tool. |
 | `connect-all.ps1` | One command, every interactive login lane, **verify-first**: skips providers already authenticated, then runs the device-code / no-browser flows for the rest — `gh` (device-code), `az` (device-code; Cloud Shell implicit login skipped), `ant` (`ant auth login --no-browser`, per the CLI authentication docs); codex stays env-var-driven (`OPENAI_API_KEY`). Humans only — CI/fleet use OIDC/WIF/managed identity. Lanes table: `docs/architecture/CONNECTIONS_SETUP.md` § One-command login. |
+| `connect-account.ps1` | **Identity-pinning** sibling of the auth doctor: verifies each surface is authenticated *as the intended account* (Azure/M365 → `JMore@Heli0s.onmicrosoft.com`, GitHub → `Yolkster64` — overridable parameters), reports the key-custody and workload-identity bridge lanes, and gates hard (exit 2) on any identity MISMATCH even in report mode. `-Apply` delegates non-interactive repair to `auth-doctor.ps1`; `-Json` one report object. |
+| `auth-doctor.ps1` | Report-first authentication doctor for the `gh` / `az` / `openai-codex` / `claude` / `copilot` lanes plus verify-only connector lanes (`linear`, `slack`, `sharepoint`, `azure-devops` — wiring reports that never gate the exit code); `-Apply` adds automatic **non-interactive** repair (az service principal / managed identity only), `-Json` one machine-readable report object. MFA/device-code fixes are only ever *printed* as exact owner-action commands. |
 | `load-env-from-keyvault.sh` | **Source it** after Azure login. Pulls `openai-api-key`, `anthropic-api-key`, `github-models-token` from the Key Vault at `AZURE_KEY_VAULT_URI` (provisioned by `infra/main.bicep`) into the matching env vars from `config/aihub.json`. |
 | `azure-up.sh` | End-to-end cloud bring-up: device-code login → resource group → `infra/main.bicep` deployment (with your objectId for the RBAC grants) → writes endpoint wiring to `.helios/azure.env` and points `AIHUB_CONFIG` at the cloud profile. |
 | `azure-up.ps1` | Azure PowerShell twin of `azure-up.sh` (`New-AzResourceGroupDeployment`); writes `.helios/azure.env.ps1` for dot-sourcing. |
@@ -69,6 +71,40 @@ prints per-CLI headless-auth guidance — `ANTHROPIC_API_KEY` / `claude setup-to
 `az login --use-device-code` (skipped advice in pre-authed Cloud Shell) — but never
 runs a login flow itself. Exit 0 = all present, 2 = something missing (npm absent when
 installs are needed is a clear error).
+
+## Auth doctor: `auth-doctor.ps1`
+
+The automatic-repair sibling of `setup-ai-clis.ps1 -ProbeAuth`: diagnoses every auth
+lane — `gh`, `az`, `openai-codex`, `claude` (env-var name read from
+`config/aihub.json` `providers.anthropic.apiKeyEnv`, never hardcoded), `copilot`
+(rides the gh lane), plus four verify-only connector lanes that never gate the exit
+code: `linear` (LINEAR_API_KEY — `linear-sync.yml` skips green without the repo
+secret), `slack` (SLACK_WEBHOOK_URL — `notify-slack.yml` likewise; SLACK_BOT_TOKEN is
+reported honestly as declared-but-unconsumed), `sharepoint` (owner-gated admin
+consent, no headless probe), and `azure-devops` (informational — no ADO org is
+configured in this repo today) — and, only with `-Apply`, repairs what can be repaired
+**without a human**: `az login --service-principal` from `AZURE_CLIENT_ID` /
+`AZURE_TENANT_ID` plus `AZURE_CLIENT_SECRET` or `AZURE_CLIENT_CERTIFICATE_PATH`
+(values flow env → argv, never through a logged string), or `az login --identity`
+when a managed-identity endpoint is present (or `-UseManagedIdentity`).
+Automatic-first, interactive-last: CI OIDC (reported — `azure/login` owns it) →
+env token / service principal → managed identity → device-code, which is only ever
+*printed* as the lane's `ownerAction`; `-Apply` never falls back to anything
+interactive. The az lane probes past `az account show` with a live token refresh,
+so the cached-profile-but-`AADSTS50078` (MFA expired) state measured in
+`docs/architecture/ENTERPRISE_AI_CONNECTIONS.md` is caught and reported with the
+exact tenant-scoped re-login command. Env vars are checked by NAME only and raw
+CLI auth output is never echoed.
+
+```powershell
+pwsh scripts/bootstrap/auth-doctor.ps1          # report-only: mutates nothing, exit 0
+pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # + automatic non-interactive repair
+pwsh scripts/bootstrap/auth-doctor.ps1 -Json    # one machine-readable report object
+```
+
+Exit 0 = report-only run, or `-Apply` with every lane ready/repaired (unavailable =
+tool missing — reported, never gates); 2 = `-Apply` left at least one lane
+needs-owner; 1 = internal failure.
 
 ## One-command readiness: `scripts/setup/setup-all.ps1`
 

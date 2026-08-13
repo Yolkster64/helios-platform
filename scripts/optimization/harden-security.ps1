@@ -68,9 +68,9 @@ function Log-SecurityCheck {
     }
     
     if ($Status -eq "FAIL") {
-        $securityIssues += "$Check: $Details"
+        $securityIssues += "${Check}: $Details"
     } elseif ($Status -eq "WARN") {
-        $securityWarnings += "$Check: $Details"
+        $securityWarnings += "${Check}: $Details"
     }
 }
 
