@@ -72,8 +72,12 @@ jobs:
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           else
             echo 'configured=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Claude Foundry skipped: configure AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID as repository variables (legacy identifier secrets are also accepted). No client secret is used.'
+            echo '::error::Claude Foundry manual review requires AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID repository variables (legacy identifier secrets are also accepted).'
           fi
+
+      - name: Fail early when OIDC is not configured
+        if: steps.guard.outputs.run == 'true' && steps.oidc.outputs.configured != 'true'
+        run: exit 1
 
       - name: Azure login with GitHub OIDC
         if: steps.guard.outputs.run == 'true' && steps.oidc.outputs.configured == 'true'

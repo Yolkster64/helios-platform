@@ -20,6 +20,13 @@ env:
 jobs:
   owner-comment-review:
     name: Owner @claude review
+    # Job-level gate: the job must not even start (and hold its write/OIDC
+    # permissions) for non-owner or non-PR comments. The step guard below
+    # repeats the same conditions for auditability (defense in depth).
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.actor == github.repository_owner &&
+      contains(github.event.comment.body, '@claude')
     runs-on: ubuntu-latest
     permissions:
       contents: read
