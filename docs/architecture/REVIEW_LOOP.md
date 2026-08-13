@@ -85,6 +85,37 @@ implementation patches enter this loop as **drafts**
 (`claude-foundry.yml:303-308`) — marking one ready is the human decision that
 starts wave 1.
 
+## Automated pipeline
+
+`.github/workflows/pr-pipeline.yml` mechanizes the stopping rule for a fixed
+trusted author set — the repo owner, the Copilot coding agent (PR author login
+`Copilot`, verified on PRs #95–#97), and dependabot's grouped minor/patch
+update branches:
+
+- **Auto-ready**: the Copilot agent's draft PRs (its PRs open as drafts by
+  design) are marked ready once every check run on the head SHA has completed
+  green. Drafts by humans — including the owner's and claude-foundry
+  implementation drafts — are never auto-readied: a human draft means
+  not-ready by intent.
+- **Auto-enable merge**: for non-draft trusted PRs, it arms native squash
+  auto-merge only when `reviewDecision` is not `CHANGES_REQUESTED`, there are
+  **zero unresolved review threads** (unresolved threads = outstanding
+  findings — rule 2 of the stopping rule, mechanized), and every check run on
+  the head is green. When GitHub refuses to arm because the PR is already
+  clean, the run completes the squash merge directly; the `main` ruleset's
+  required checks are enforced server-side on that call either way.
+
+What stays manual: **resolving or refuting review threads is the steward's
+judgment** — the pipeline only reads `isResolved`, so bot findings still get
+fixed or refuted-with-evidence exactly as above; the `automerge` label lane
+(`auto-merge.yml`) remains the manual override for anything outside the
+trusted set; and absorption-lane branches (`absorb*`/`absorption*` in any
+path segment, including the agent's `copilot/absorption-*`) are always
+excluded per `ABSORPTION_PIPELINE.md:50`. Event gap worth knowing: resolving
+a thread and the completion of Actions-created check suites emit no
+re-evaluation event — when a converged PR sits unarmed, nudge it with
+`workflow_dispatch` (`pr_number`) or the next push/review event.
+
 ## External-push reconciliation
 
 Other actors push to loop branches: `@codex address that feedback` has Codex

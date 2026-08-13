@@ -1,0 +1,367 @@
+# PR Pipeline — the AUTOMATIC review -> test -> ready -> merge lane.
+#
+# Composition, not replacement:
+#   - auto-merge.yml is the LABEL lane: a human with write/admin adds the 'automerge'
+#     label to arm auto-merge on any session-stewarded PR. That stays the manual override.
+#   - copilot-dispatch.yml requests the Copilot review on every non-draft PR.
+#   - THIS workflow is the automatic lane: for a small trusted author set it readies
+#     Copilot's draft PRs when their checks are green, and arms (or, on an already-clean
+#     PR, completes) a squash merge once the review loop's stopping rule holds
+#     mechanically (docs/architecture/REVIEW_LOOP.md).
+#
+# Trust model — a PR is evaluated ONLY when its author is exactly one of:
+#   - the repository owner (session-stewarded PRs);
+#   - the Copilot coding agent — REST PR-author login 'Copilot' (type Bot), verified
+#     against PRs #95-#97 on 2026-08-13; the same actor is 'copilot-swe-agent' in
+#     GraphQL, so the REST spelling 'copilot-swe-agent[bot]' is accepted too;
+#   - dependabot[bot], and then only for the grouped update branches that
+#     .github/dependabot.yml's minor/patch groups produce (nuget-minor-patch,
+#     pip-minor-patch). Majors arrive as individual PRs (no group slug in the branch)
+#     and skip; docker updates are ungrouped and skip; the 'actions-all' group is
+#     deliberately NOT trusted here because its config does not restrict update-types,
+#     so it can carry majors — those merge via review or the label lane.
+# Everything else (any other human or bot, and every fork PR) skips with a green notice.
+#
+# Absorption carve-out (docs/architecture/ABSORPTION_PIPELINE.md, "Boundaries"):
+# absorbed upstream code always merges through deliberate human review. Guarded branch
+# patterns cover absorb/absorption prefixes in ANY path segment — the Copilot agent's
+# real absorption PRs (#95-#97) live on copilot/absorption-* branches, which the four
+# literal prefixes alone would miss.
+#
+# Draft policy: only the Copilot coding agent's drafts are auto-readied (its PRs open
+# as drafts by design), and only after every check run on the head SHA has completed
+# success/neutral/skipped. Drafts by humans — including the owner and claude-foundry
+# implementation drafts — are NEVER auto-readied: a human draft means not-ready by
+# intent, and marking it ready is the decision that starts review wave 1.
+#
+# Honest limitations (known and accepted):
+#   - Thread resolution is the findings proxy. Bot comment-only reviews (Copilot,
+#     Codex) do not set reviewDecision, so the real gate is "zero unresolved review
+#     threads". Stale bot threads must be resolved (or refuted) by the steward —
+#     that IS the existing REVIEW_LOOP protocol, mechanized, not bypassed. A trusted
+#     PR with no reviews at all passes this gate trivially; the review requests
+#     themselves come from copilot-dispatch.yml and Codex's cloud-side connection.
+#   - check_suite:completed does NOT fire for check suites created by GitHub Actions
+#     (GitHub's recursion protection), i.e. not for this repo's own CI. It only covers
+#     non-Actions apps. Resolving a review thread emits no workflow event either. So
+#     after the last thread is resolved and checks finish, re-evaluation rides on the
+#     next push/review event — or nudge manually: workflow_dispatch with pr_number.
+#   - Actions performed with GITHUB_TOKEN do not trigger other workflows: a PR readied
+#     here does not fire ready_for_review (so copilot-dispatch will not auto-request
+#     the Copilot review for it; Codex, webhook-based, still sees it), and a merge
+#     performed or armed with GITHUB_TOKEN does not fire on:push workflows
+#     (wiki-generator, dashboards) for the merge commit.
+#   - GitHub refuses to ARM auto-merge on a PR that is already mergeable ("clean
+#     status"). Because this lane arms only after verifying every gate — trusted
+#     author, no fork, no absorption branch, not draft, no CHANGES_REQUESTED, zero
+#     unresolved threads, all checks green — a clean-status refusal means the stopping
+#     rule fully holds, and the run completes the squash merge directly. The main
+#     ruleset's required checks are still enforced server-side on that merge call;
+#     nothing can merge red.
+#
+# Injection posture (same model as auto-merge.yml): every PR fact — head ref, author,
+# fork flag, draft state, review threads, check runs — is fetched server-side by PR
+# NUMBER via gh api. No attacker-controlled event context is interpolated into the
+# script; the only event data used are numeric PR numbers and github.ref.
+name: PR Pipeline
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, dismissed]
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to evaluate"
+        required: true
+        type: string
+
+permissions:
+  contents: write      # arming/performing the squash merge
+  pull-requests: write # gh pr ready, enabling auto-merge
+  checks: read         # listing check runs on the head SHA
+
+# Only the newest evaluation of a PR matters; superseded ones carry stale facts.
+concurrency:
+  group: pr-pipeline-${{ github.event.number || github.event.check_suite.pull_requests[0].number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    name: PR pipeline evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # check_suite events with no same-repo PR attached (fork PRs are omitted from that
+    # payload by GitHub, and branch suites have none) have nothing to evaluate.
+    if: github.event_name != 'check_suite' || github.event.check_suite.pull_requests[0].number != null
+    steps:
+      - name: Evaluate review, checks, and merge state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          EVENT_NAME: ${{ github.event_name }}
+          # Numeric-only event data. pull_request payloads carry a top-level number;
+          # pull_request_review does not, so its PR number is derived from github.ref
+          # (refs/pull/<n>/merge); check_suite carries an array of same-repo PR numbers.
+          EVENT_PR_NUMBER: ${{ github.event.number }}
+          REF: ${{ github.ref }}
+          CHECK_SUITE_PR_NUMBERS: ${{ github.event_name == 'check_suite' && toJSON(github.event.check_suite.pull_requests.*.number) || '[]' }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          # Must equal this job's `name:` — the evaluation excludes its own check run
+          # when deciding whether "all checks" have completed.
+          SELF_CHECK_NAME: "PR pipeline evaluation"
+        run: |
+          set -euo pipefail
+
+          notice() { echo "::notice::PR pipeline: $*"; }
+
+          GQL_OWNER="${REPO%%/*}"
+          GQL_NAME="${REPO#*/}"
+          THREADS_QUERY='query($owner: String!, $name: String!, $number: Int!, $after: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                reviewDecision
+                reviewThreads(first: 100, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { isResolved }
+                }
+              }
+            }
+          }'
+
+          # ---- Check-run state on a head SHA (excluding this workflow's own run). ----
+          # Sets CHECKS_TOTAL / CHECKS_PENDING / CHECKS_BAD. success|neutral|skipped
+          # pass (the repo's skip-lanes are green by design); failure|timed_out|
+          # cancelled|action_required|stale are bad. The required-check LIST is not
+          # hardcoded anywhere here — the ruleset stays the single source of required
+          # truth, and this gate is strictly wider (every reported check must be green).
+          check_state() {
+            local sha="$1" runs counts
+            runs="$(gh api --paginate "/repos/${REPO}/commits/${sha}/check-runs?per_page=100")"
+            counts="$(printf '%s' "${runs}" | jq -rs --arg self "${SELF_CHECK_NAME}" '
+              [ .[].check_runs[]? | select(.name != $self) ] as $r
+              | [ ($r | length),
+                  ([ $r[] | select(.status != "completed") ] | length),
+                  ([ $r[] | select(.status == "completed"
+                      and ((.conclusion // "") as $c
+                           | (["success", "neutral", "skipped"] | index($c)) | not)) ] | length)
+                ] | join(" ")')"
+            CHECKS_TOTAL="${counts%% *}"
+            counts="${counts#* }"
+            CHECKS_PENDING="${counts%% *}"
+            CHECKS_BAD="${counts##* }"
+          }
+
+          # ---- Review state via GraphQL: reviewDecision + unresolved thread count. ----
+          # Paged to completion so PRs with >100 threads (PR #94 territory) are counted
+          # truthfully. Sets REVIEW_DECISION / UNRESOLVED.
+          review_state() {
+            local pr="$1" after="" page has_next page_unresolved
+            REVIEW_DECISION=""
+            UNRESOLVED=0
+            while :; do
+              if [ -n "${after}" ]; then
+                page="$(gh api graphql -f query="${THREADS_QUERY}" -f owner="${GQL_OWNER}" -f name="${GQL_NAME}" -F number="${pr}" -f after="${after}")"
+              else
+                page="$(gh api graphql -f query="${THREADS_QUERY}" -f owner="${GQL_OWNER}" -f name="${GQL_NAME}" -F number="${pr}")"
+              fi
+              REVIEW_DECISION="$(printf '%s' "${page}" | jq -r '.data.repository.pullRequest.reviewDecision // ""')"
+              page_unresolved="$(printf '%s' "${page}" | jq -r '[.data.repository.pullRequest.reviewThreads.nodes[]? | select(.isResolved | not)] | length')"
+              UNRESOLVED=$(( UNRESOLVED + page_unresolved ))
+              has_next="$(printf '%s' "${page}" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage // false')"
+              [ "${has_next}" = "true" ] || break
+              after="$(printf '%s' "${page}" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor // ""')"
+              [ -n "${after}" ] || break
+            done
+          }
+
+          evaluate_pr() {
+            local pr="$1"
+            local pr_json state head_ref head_sha is_fork author is_draft has_automerge trust
+            local output status
+
+            if ! pr_json="$(gh api "/repos/${REPO}/pulls/${pr}" 2>&1)"; then
+              notice "PR #${pr} could not be fetched - nothing to evaluate. (${pr_json})"
+              return 0
+            fi
+            state="$(printf '%s' "${pr_json}" | jq -r '.state // "unknown"')"
+            head_ref="$(printf '%s' "${pr_json}" | jq -r '.head.ref // ""')"
+            head_sha="$(printf '%s' "${pr_json}" | jq -r '.head.sha // ""')"
+            is_fork="$(printf '%s' "${pr_json}" | jq -r '.head.repo.fork // true')"
+            author="$(printf '%s' "${pr_json}" | jq -r '.user.login // ""')"
+            is_draft="$(printf '%s' "${pr_json}" | jq -r '.draft // false')"
+            has_automerge="$(printf '%s' "${pr_json}" | jq -r 'if .auto_merge == null then "false" else "true" end')"
+
+            # ---- Hard skip guards: each one is a green notice, never a red X. ----
+            if [ "${state}" != "open" ]; then
+              notice "skipped PR #${pr}: state is '${state}' - nothing to evaluate."
+              return 0
+            fi
+            if [ "${is_fork}" != "false" ]; then
+              notice "skipped PR #${pr}: head repo is a fork - the automatic lane never acts on fork PRs."
+              return 0
+            fi
+            if [ -z "${head_sha}" ]; then
+              notice "skipped PR #${pr}: no head SHA reported - cannot evaluate checks."
+              return 0
+            fi
+            # Absorption lane: also match absorb/absorption in later path segments —
+            # the Copilot agent's absorption PRs (#95-#97) use copilot/absorption-*.
+            case "${head_ref}" in
+              absorb/*|absorb-*|absorption/*|absorption-*|*/absorb/*|*/absorb-*|*/absorption/*|*/absorption-*)
+                notice "skipped PR #${pr}: head branch '${head_ref}' is in the absorption lane - absorbed upstream code merges only through deliberate human review (ABSORPTION_PIPELINE.md), never automatically."
+                return 0
+                ;;
+            esac
+
+            # ---- Trust gate: exact author allowlist. ----
+            trust=""
+            if [ "${author}" = "${REPO_OWNER}" ]; then
+              trust="owner"
+            elif [ "${author}" = "Copilot" ] || [ "${author}" = "copilot-swe-agent[bot]" ]; then
+              trust="copilot"
+            elif [ "${author}" = "dependabot[bot]" ]; then
+              case "${head_ref}" in
+                dependabot/*nuget-minor-patch-*|dependabot/*pip-minor-patch-*)
+                  trust="dependabot"
+                  ;;
+                *)
+                  notice "skipped PR #${pr}: dependabot branch '${head_ref}' is not a grouped minor/patch update (nuget-minor-patch / pip-minor-patch) - majors, docker, and the actions-all group stay on manual review or the automerge label lane."
+                  return 0
+                  ;;
+              esac
+            else
+              notice "skipped PR #${pr}: author '${author}' is not in the trusted set (repo owner, Copilot coding agent, dependabot grouped minor/patch) - the automatic lane does not act on it."
+              return 0
+            fi
+
+            # ---- Auto-ready: Copilot drafts only, and only on fully green checks. ----
+            if [ "${is_draft}" = "true" ]; then
+              if [ "${trust}" != "copilot" ]; then
+                notice "skipped PR #${pr}: draft by '${author}' - human drafts mean not-ready by intent and are never auto-readied; marking ready stays the steward's decision."
+                return 0
+              fi
+              check_state "${head_sha}"
+              if [ "${CHECKS_TOTAL}" -eq 0 ]; then
+                notice "PR #${pr} (Copilot draft): no check runs reported on the head SHA yet - not auto-readying."
+                return 0
+              fi
+              if [ "${CHECKS_PENDING}" -gt 0 ]; then
+                notice "PR #${pr} (Copilot draft): ${CHECKS_PENDING} of ${CHECKS_TOTAL} check(s) still running - not auto-readying yet."
+                return 0
+              fi
+              if [ "${CHECKS_BAD}" -gt 0 ]; then
+                notice "PR #${pr} (Copilot draft): ${CHECKS_BAD} check(s) concluded red - not auto-readying; the agent (or steward) must fix them first."
+                return 0
+              fi
+              gh pr ready --repo "${REPO}" "${pr}"
+              notice "readied PR #${pr}: Copilot draft with all ${CHECKS_TOTAL} checks green. Reviews come next; merge is evaluated on later review events or a manual dispatch (readying with GITHUB_TOKEN fires no ready_for_review workflows)."
+              return 0
+            fi
+
+            # ---- Review-state gate: the stopping rule, mechanized. ----
+            review_state "${pr}"
+            if [ "${REVIEW_DECISION}" = "CHANGES_REQUESTED" ]; then
+              notice "skipped PR #${pr}: reviewDecision is CHANGES_REQUESTED - address the requested changes first."
+              return 0
+            fi
+            if [ "${UNRESOLVED}" -gt 0 ]; then
+              notice "skipped PR #${pr}: ${UNRESOLVED} unresolved review thread(s) = outstanding findings (REVIEW_LOOP stopping rule). Fix or refute-with-evidence and resolve them; then re-evaluate (push, review event, or workflow_dispatch)."
+              return 0
+            fi
+
+            # ---- Check-state gate: every reported check on the head must be green. ----
+            check_state "${head_sha}"
+            if [ "${CHECKS_TOTAL}" -eq 0 ]; then
+              notice "skipped PR #${pr}: no check runs reported on the head SHA yet - not arming auto-merge before CI reports."
+              return 0
+            fi
+            if [ "${CHECKS_PENDING}" -gt 0 ]; then
+              notice "skipped PR #${pr}: ${CHECKS_PENDING} of ${CHECKS_TOTAL} check(s) still running - re-evaluated on the next event."
+              return 0
+            fi
+            if [ "${CHECKS_BAD}" -gt 0 ]; then
+              notice "skipped PR #${pr}: ${CHECKS_BAD} check(s) concluded red on the head SHA - an agent-authored PR never merges over a red check."
+              return 0
+            fi
+
+            if [ "${has_automerge}" = "true" ]; then
+              notice "PR #${pr}: auto-merge is already armed - nothing to do."
+              return 0
+            fi
+
+            # ---- Arm auto-merge; on an already-clean PR, complete the merge. ----
+            set +e
+            output="$(gh pr merge --auto --squash --repo "${REPO}" "${pr}" 2>&1)"
+            status=$?
+            set -e
+            if [ "${status}" -eq 0 ]; then
+              notice "enabled auto-merge (squash) on PR #${pr} (${trust} lane): zero unresolved threads, ${CHECKS_TOTAL} checks green. The main ruleset's required checks still gate the merge itself."
+            elif printf '%s\n' "${output}" | grep -qiE 'auto[ -]?merge is not allowed|not allowed for this repository'; then
+              notice "the repository setting 'Allow auto-merge' is disabled, so the automatic lane cannot arm merges. One-time enable: Settings -> General -> Pull Requests -> check 'Allow auto-merge'."
+            elif printf '%s\n' "${output}" | grep -qi 'clean status'; then
+              # GitHub refuses to arm auto-merge on an already-mergeable PR. Every
+              # stopping-rule gate above just passed, so completing the squash merge
+              # is the lane's designed outcome; the ruleset is still enforced
+              # server-side on this call and rejects it if anything regressed.
+              set +e
+              output="$(gh pr merge --squash --repo "${REPO}" "${pr}" 2>&1)"
+              status=$?
+              set -e
+              if [ "${status}" -eq 0 ]; then
+                notice "merged PR #${pr} (squash, ${trust} lane): PR was already clean when evaluated - stopping rule held (zero unresolved threads, ${CHECKS_TOTAL} checks green)."
+              else
+                printf '%s\n' "${output}"
+                notice "PR #${pr}: direct merge was declined (likely a race with a new push or a server-side rule) - leaving it for the next evaluation."
+              fi
+            else
+              printf '%s\n' "${output}"
+              exit 1
+            fi
+          }
+
+          # ---- Resolve candidate PR numbers from the event (digits only). ----
+          CANDIDATES=""
+          case "${EVENT_NAME}" in
+            workflow_dispatch)
+              case "${DISPATCH_PR_NUMBER}" in
+                ''|*[!0-9]*)
+                  echo "::error::PR pipeline: pr_number input must be a positive integer."
+                  exit 1
+                  ;;
+              esac
+              CANDIDATES="${DISPATCH_PR_NUMBER}"
+              ;;
+            check_suite)
+              CANDIDATES="$(printf '%s' "${CHECK_SUITE_PR_NUMBERS}" | jq -r '.[]? | select(type == "number")')"
+              ;;
+            pull_request_review)
+              case "${REF}" in
+                refs/pull/*/merge)
+                  CANDIDATES="${REF#refs/pull/}"
+                  CANDIDATES="${CANDIDATES%%/*}"
+                  ;;
+              esac
+              ;;
+            *)
+              CANDIDATES="${EVENT_PR_NUMBER}"
+              ;;
+          esac
+
+          if [ -z "${CANDIDATES}" ]; then
+            notice "no pull request is associated with this ${EVENT_NAME} event - nothing to evaluate."
+            exit 0
+          fi
+
+          while IFS= read -r PR_NUMBER; do
+            case "${PR_NUMBER}" in
+              ''|*[!0-9]*) continue ;;
+            esac
+            evaluate_pr "${PR_NUMBER}"
+          done <<EOF
+          ${CANDIDATES}
+          EOF

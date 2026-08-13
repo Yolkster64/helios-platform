@@ -276,6 +276,18 @@ absorption lane is excluded (absorption PRs never auto-merge). Arming never skip
 gates — the merge still waits for every required check in the `main` ruleset, and
 removing the label disarms.
 
+**Automatic lane**: `.github/workflows/pr-pipeline.yml` is the unattended
+counterpart to the label lane. For trusted authors only (the repo owner, the
+Copilot coding agent, and dependabot's grouped minor/patch updates) it readies the
+agent's draft PRs when all checks are green, and arms — or, on an already-clean
+PR, completes — a squash merge once review threads are resolved and every check on
+the head SHA passes (absorption branches always excluded). The same three owner
+clicks above are its prerequisites: the ruleset supplies the required checks it
+defers to, and "Allow auto-merge" lets it arm. To pause the automatic lane without
+touching the label lane, disable the workflow: Actions → **PR Pipeline** → "…" →
+Disable workflow (or `gh workflow disable pr-pipeline.yml`); re-enabling it
+resumes evaluation on the next PR event.
+
 ## Connection checklist
 
 | Connection | Owner action required | Secret or setting | Verified by |
