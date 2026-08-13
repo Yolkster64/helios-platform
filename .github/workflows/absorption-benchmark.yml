@@ -41,7 +41,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -61,6 +61,10 @@ jobs:
         # a candidate that breaks the subprocess contract score a green gate.
         env:
           HELIOS_REQUIRE_PYTHON_SPOKE: 1
+          # Explicit opt-in for the script's credential guard: this runner is
+          # keyless by design (contents: read, no secrets), so executing the
+          # candidate's build code here exposes nothing.
+          HELIOS_ABSORB_ACCEPT_CREDENTIALS: 1
         run: |
           $skip = [bool]::Parse('${{ inputs.skip_tests }}')
           $params = @{ PrNumber = ${{ inputs.pr_number }} }

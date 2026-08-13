@@ -91,9 +91,9 @@ class DriverManager {
             $this.Logger.LogInfo("Scanning system for hardware devices...")
             
             # Scan using WMI
-            $devices = Get-WmiObject Win32_PnPDevice | Where-Object { $_.Name -match "(NVIDIA|AMD|Intel|Realtek|Creative|Qualcomm)" }
+            $pnpDevices = Get-WmiObject Win32_PnPDevice | Where-Object { $_.Name -match "(NVIDIA|AMD|Intel|Realtek|Creative|Qualcomm)" }
             
-            foreach ($device in $devices) {
+            foreach ($device in $pnpDevices) {
                 $category = $this.CategorizeDevice($device.Name)
                 if ($category) {
                     $hwDevice = [HardwareDevice]@{

@@ -27,6 +27,16 @@ param tags = {
   workload: 'ai-hub'
 }
 
+// AI Search connection + agent capability host — deliberately OFF so the live
+// rg-helios-ai stack redeploys unchanged. Enabling deploys an Azure AI Search service
+// (keyless: local auth disabled), an AAD project connection, RBAC for the project's
+// managed identity, and the account+project capability hosts agents read their vector
+// store from. One capability host per scope; if one already exists this 409s.
+param deployAiSearchConnection = false
+// param aiSearchServiceName = ''                       // '' = srch-helios-<suffix>
+// param aiSearchSkuName = 'basic'
+// param aiSearchConnectionName = 'ai-search-connection'
+
 // Fleet burst VMSS (infra/README.md, "Fleet burst capacity (VMSS)") — deliberately
 // OFF so the live rg-helios-ai stack redeploys unchanged. To enable, set
 // deployFleetVmss = true AND pass an SSH public key (both gates must open; a public
@@ -44,3 +54,6 @@ param deployFleetVmss = false
 // param fleetPool = 'cloud-burst'       // exported as HELIOS_FLEET_POOL on cloud lanes
 // param fleetRepoUrl = 'https://github.com/Yolkster64/helios-platform'
 // param fleetRepoRef = 'main'
+
+// Learning-store Azure backend — deliberately OFF: local JSONL stays the learning lane; enabling creates the storage account + aihubOutcomes table whose endpoint backs AZURE_LEARNING_TABLE_ENDPOINT.
+param deployLearningStorage = false

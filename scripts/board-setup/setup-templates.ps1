@@ -1,16 +1,25 @@
 <#
 .SYNOPSIS
-    Creates 8 phase templates for HELIOS Platform board
+    LOCAL SIMULATION - documents 8 phase templates; makes NO GitHub API calls
 .DESCRIPTION
-    Sets up comprehensive phase templates with fields, defaults, and acceptance criteria
+    What is real vs simulated: GitHub's ProjectV2 GraphQL API cannot create project item
+    templates (or "phase templates" of any kind) - a real API limitation, not a script
+    shortcut - so this script never touches the GitHub API. What it actually does, locally:
+      * writes the 8 phase template definitions to templates/*.json
+      * generates logs/template-documentation_<timestamp>.md - the reference for applying
+        each phase's fields, acceptance criteria, and success metrics by hand (in the
+        GitHub UI or via issue forms/draft items)
+    Compare: setup-custom-fields.ps1 (real GraphQL mutations), validate-board.ps1 (real
+    GraphQL read), add-epics-to-board.ps1 (real GraphQL mutations).
 .PARAMETER GitHubToken
-    GitHub Personal Access Token
+    Accepted only for interface parity with the sibling scripts; NOT used - this script
+    makes no API calls
 .PARAMETER ProjectNumber
-    Project number to configure
+    Project number (recorded for reference; no API call is made against it)
 .PARAMETER OrganizationName
-    Organization name
+    Organization name (recorded for reference; no API call is made against it)
 .PARAMETER DryRun
-    Preview mode
+    Preview mode (skips even the local templates/*.json writes)
 .PARAMETER Verbose
     Detailed output
 #>
@@ -25,12 +34,13 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$OrganizationName,
     
-    [switch]$DryRun,
-    [switch]$Verbose
+    [switch]$DryRun
+    # No explicit -Verbose switch: the [Parameter()] attributes make this an advanced
+    # script, so the common -Verbose parameter already exists (an explicit one would
+    # collide and make the script impossible to invoke).
 )
 
 $ErrorActionPreference = 'Stop'
-$VerbosePreference = if ($Verbose) { 'Continue' } else { 'SilentlyContinue' }
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
 $logFile = "logs/templates-setup_$timestamp.log"
@@ -43,7 +53,7 @@ function Write-Log {
     $ts = Get-Date -Format 'HH:mm:ss'
     $entry = "[$ts] [$Level] $Message"
     Add-Content -Path $logFile -Value $entry
-    if ($Verbose -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
+    if ($VerbosePreference -eq 'Continue' -or $Level -eq 'ERROR' -or $Level -eq 'SUCCESS') { Write-Host $entry }
 }
 
 # 8 Phase Templates Definition
@@ -291,7 +301,8 @@ function Create-Template {
         return @{ name = $Template.name; status = 'dry-run' }
     }
     
-    # In real implementation, would save template to version control
+    # Local simulation: the ProjectV2 API cannot create templates, so the definition is
+    # saved to the repo working tree for the operator to apply manually.
     $templatePath = "templates/phase_$($Template.phase.Replace(' ', '_')).json"
     
     $templateObj = @{
@@ -337,6 +348,7 @@ try {
     
     $report = @{
         timestamp = $timestamp
+        mode = 'local-simulation (ProjectV2 GraphQL API cannot create templates; no API calls made)'
         totalTemplates = $templates.Count
         created = ($createdTemplates | Where-Object { $_.status -eq 'created' }).Count
         failed = ($createdTemplates | Where-Object { $_.status -eq 'failed' }).Count
@@ -345,9 +357,12 @@ try {
     
     $report | ConvertTo-Json -Depth 10 | Set-Content -Path $reportFile
     
-    Write-Log '=== Phase Templates Setup Complete ===' 'SUCCESS'
-    Write-Log "Created: $($report.created), Failed: $($report.failed)" 'INFO'
-    
+    Write-Log '=== Phase Templates Setup Complete (LOCAL SIMULATION) ===' 'SUCCESS'
+    Write-Log "Saved locally: $($report.created), Failed: $($report.failed)" 'INFO'
+    Write-Host 'NOTE: local simulation only - no GitHub API calls were made.' -ForegroundColor Yellow
+    Write-Host '      The ProjectV2 GraphQL API cannot create templates; apply the phases manually'
+    Write-Host "      using the generated reference: logs/template-documentation_$timestamp.md"
+
     $report | ConvertTo-Json -Depth 10
 }
 catch {

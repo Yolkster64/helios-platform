@@ -51,8 +51,28 @@ or C++/WinRT, in-proc assembly, subprocess/gRPC respectively) and never talk to 
 
 ## .NET version policy
 
-Repo targets **net8.0** (EOL 2026-11-10). Current LTS is **.NET 10**; **.NET 11 is
-preview only** (ships Nov 2026) — never claim .NET 11 GA or target it in committed code.
-The net10.0 upgrade is a scheduled roadmap PR; keep new code free of net8-only
-assumptions (prefer `TimeProvider` over `DateTime.UtcNow` for testability, `LibraryImport`
-over `DllImport`).
+Platform target is **net10.0** (current LTS; net8.0 hit EOL 2026-11-10). **.NET 11 is
+preview only** (ships Nov 2026) — never claim .NET 11 GA or use C# 15 preview features
+in committed code; an allowed-to-fail CI lane builds against the 11-preview SDK and the
+GA flip is a reviewed TFM bump. Full upgrade knowledge (what C# 14/.NET 10 changes to
+actually use here, what the 11 lane watches, the retarget checklist):
+`references/dotnet-10-and-11.md`. Prefer `TimeProvider` over `DateTime.UtcNow` for
+testability, `LibraryImport` over `DllImport`.
+
+## Reference material
+
+Depth lives in `references/` — every claim there cites the repo file that grounds it:
+
+- `references/nuget-packages.md` — per-csproj package inventory with exact pins, upgrade
+  pitfalls (the Azure.AI.OpenAI 2.x rewrite trap, Mvc.Testing TFM matching), and the
+  deliberately-absent list (Polly, System.CommandLine, OTel) with adoption criteria.
+- `references/provider-sdks.md` — working API knowledge per SDK behind
+  `src/ai/HELIOS.AIHub/Providers/`: the `IChatClient` seam, Azure deployment-vs-model and
+  credential-chain traps, Anthropic/Ollama/Foundry-Agents/KeyVault/Tables/MCP surfaces.
+- `references/azure-management-sdk.md` — the Azure management-plane lane
+  (`Azure.ResourceManager.*`): ArmClient/resource-identifier/LRO patterns, the verified
+  deployment what-if shape, management-vs-data-plane split, stable-only version
+  discipline, and the consume-from-NuGet-verify-from-fork rule.
+- `references/testing.md` — test idioms: hand-rolled fakes over Moq,
+  `WebApplicationFactory`, shipped-config drift tests, keyless determinism, TimeProvider
+  injection.

@@ -1,0 +1,10 @@
+# Issue-form chooser configuration. Blank issues are off: use a template, or
+# one of the links below for docs/planning questions.
+blank_issues_enabled: false
+contact_links:
+  - name: "HELIOS wiki (architecture docs)"
+    url: "https://github.com/Yolkster64/helios-platform/wiki"
+    about: "Published from docs/ by wiki-generator.yml - read before filing design questions."
+  - name: "HELIOS Platform project board"
+    url: "https://github.com/users/Yolkster64/projects/1"
+    about: "Epic-level tracking lives on the board; task-level work runs on the fleet kanban."

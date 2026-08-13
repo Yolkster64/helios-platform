@@ -40,7 +40,7 @@ class SynergyDetector {
             impact = @{
                 databaseLatency = "156ms → 89ms (43% improvement)"
                 throughput = "+2300 ops/sec"
-                cost = "-$1,245/month"
+                cost = "-`$1,245/month"
             }
             score = 89
             difficulty = "low"
@@ -70,7 +70,7 @@ class SynergyDetector {
         $this.SynergyScore["LoadBalancingOptimization"] = 76
     }
     
-    [void] AnalyzeResilient Patterns() {
+    [void] AnalyzeResilientPatterns() {
         Write-Host "Analyzing resilient patterns..." -ForegroundColor Cyan
         
         # Detect retry + fallback synergy
@@ -212,7 +212,7 @@ $detector = [SynergyDetector]::new($SynergyThreshold, $AnalysisScope)
 
 $detector.AnalyzeCaching()
 $detector.AnalyzeLoadBalancing()
-$detector.AnalyzeResilient Patterns()
+$detector.AnalyzeResilientPatterns()
 $detector.AnalyzeDataFlowSynergies()
 $detector.AnalyzeMonitoringSynergies()
 $detector.AnalyzeAIModelSynergies()

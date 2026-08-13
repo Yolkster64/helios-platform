@@ -115,7 +115,7 @@ class AzureMonitorClient {
     }
     
     [array]GetActiveAlerts() {
-        $alerts = @(
+        $activeAlerts = @(
             @{
                 AlertId = "ALR-001"
                 ResourceName = "vm-production-01"
@@ -134,7 +134,7 @@ class AzureMonitorClient {
             }
         )
         
-        return $alerts
+        return $activeAlerts
     }
     
     [hashtable]GetCostData([int]$DaysBack = 30) {

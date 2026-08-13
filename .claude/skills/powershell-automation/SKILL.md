@@ -40,6 +40,23 @@ if ($LASTEXITCODE -ne 0) { throw "AI routing failed" }
 
 ## CI
 
-`ci-validation.yml` syntax-checks every `.ps1` with `shell: pwsh` on ubuntu-latest
-(pwsh preinstalled — there is no actions/setup-powershell action). Keep scripts parseable
-by `[scriptblock]::Create` and clean under PSScriptAnalyzer Error severity.
+`ci-validation.yml` parses every `.ps1` with the real parser
+(`[System.Management.Automation.Language.Parser]::ParseFile`) on ubuntu-latest (pwsh
+preinstalled — there is no actions/setup-powershell action), gated against the legacy
+baseline `.github/ps1-parse-baseline.txt`: a parse error in any non-baseline file
+fails the job. PSScriptAnalyzer runs in `quality.yml` but is advisory-only
+(`continue-on-error`); Pester is pinned to 5.4.0 in `code-checks.yml`.
+
+## Reference material
+
+Depth lives in `references/` (index: `.claude/skills/README.md`):
+
+- `references/modules.md` — the Pester 5.4.0 pin and the v4-syntax trap, the
+  PSScriptAnalyzer advisory gap vs the enforced parser baseline, PSResourceGet vs
+  Install-Module, and Az module discipline (`connect-azure.ps1` /
+  `azure-oidc-setup.ps1`).
+- `references/script-patterns.md` — repo-proven idioms, mostly from
+  `scripts/bootstrap/setup-ai-clis.ps1`: the `$LASTEXITCODE` pipeline trap,
+  `Get-Command -CommandType Application`, the verify-only exit contract,
+  `[pscustomobject]` spec tables, environment detection, and the `-f` operator
+  precedence trap (`scripts/fleet/stop-fleet.ps1`).

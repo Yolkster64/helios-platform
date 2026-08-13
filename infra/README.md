@@ -22,6 +22,7 @@ re-express the same parameter surface on the modern Foundry account + project mo
 | `capabilityHostName` | N/A — agents use the project endpoint directly |
 | `aiSearchName`, `storageName`, key vault for hub | AI Search + BYO storage arrive in a follow-up PR; Key Vault here stores **provider API keys**, not hub config |
 | `PROJECT_CONNECTION_STRING` output | `projectEndpoint` output (`https://<account>.services.ai.azure.com/api/projects/<project>`) |
+| — (no legacy equivalent) | `deployLearningStorage` (default `false`) + `learningStorePrincipalId` — opt-in RBAC-only storage account + `aihubOutcomes` table for the AIHub learning store (`modules/learning-storage.bicep`); the `learningTableEndpoint` output feeds `AZURE_LEARNING_TABLE_ENDPOINT` for `learning.mode=azure`/hybrid |
 
 Other deliberate changes:
 
@@ -43,6 +44,7 @@ Other deliberate changes:
 - `modules/ai-foundry-project.bicep` — Foundry project (endpoint output)
 - `modules/keyvault.bicep` — RBAC Key Vault + conditional `anthropic-api-key` / `openai-api-key` / `github-models-token` secrets
 - `modules/fleet-vmss.bicep` — opt-in fleet burst VMSS + autoscale, OFF by default (see "Fleet burst capacity (VMSS)" below)
+- `modules/ai-search-connection.bicep` — opt-in Azure AI Search + project connection + agent capability hosts, OFF by default (see "AI Search connection (agents)" below)
 
 ## Three dialects
 
@@ -143,6 +145,32 @@ target for **fleet worker lanes** (the Hermes/Xcore pools). They scale on differ
 signals — queued workflow jobs vs board queue depth and CPU — and must not be
 conflated.
 
+## AI Search connection (agents)
+
+`modules/ai-search-connection.bicep` gives Foundry agents a bring-your-own vector
+store: an Azure AI Search service (`basic` tier by default, **local/API-key auth
+disabled** — identity-based access only), a `CognitiveSearch`-category `AAD` connection
+on the Foundry project, `Search Index Data Contributor` + `Search Service Contributor`
+role assignments for the project's system-assigned identity, and the account + project
+capability hosts (`capabilityHostKind: 'Agents'`, `vectorStoreConnections`) that make
+the Agent Service read it. No keys exist anywhere in the module, so none can be output.
+
+**OFF by default — the live `rg-helios-ai` stack redeploys unchanged.** Gated on
+`deployAiSearchConnection` (default `false`) and ignored when
+`aiServiceAccountResourceId` points at an existing account (there is no
+template-managed project to attach to). Two service-side constraints to know before
+enabling: each account/project allows exactly **one** capability host (a pre-existing
+one with a different name fails with 409), and capability hosts cannot be updated —
+delete and recreate to change them. Full BYO "standard agent setup" would additionally
+reference Cosmos DB (`threadStorageConnections`) and Storage (`storageConnections`)
+connections; this module wires the vector-store third.
+
+```bash
+az deployment group what-if -g rg-helios-ai \
+  --template-file infra/main.bicep --parameters infra/main.bicepparam \
+  --parameters deployAiSearchConnection=true
+```
+
 ## OIDC identity (GitHub Actions → Azure)
 
 `helios-deploy.yml` authenticates with **federated identity — no cloud credential is
@@ -209,7 +237,9 @@ Boundaries and operations:
 `aiServicesEndpoint`, `openAiEndpoint`, `projectEndpoint`, `projectId`, `keyVaultUri`,
 `modelDeploymentNames`, plus `fleetVmssName` / `fleetVmssPrincipalId` (both empty
 strings while the fleet VMSS is disabled — consumed by `scripts/fleet/scale-fleet.ps1`
-and by role assignments for cloud lanes respectively). Secrets are never output.
+and by role assignments for cloud lanes respectively) and `aiSearchEndpoint` /
+`aiSearchConnectionName` / `aiSearchServiceId` (empty strings while the AI Search
+connection is disabled). Secrets are never output.
 Wire the endpoints into the AIHub via
 `.env` (see `.env.template`: `AZURE_OPENAI_ENDPOINT`, `AZURE_FOUNDRY_PROJECT_ENDPOINT`,
 `AZURE_KEY_VAULT_URI`).

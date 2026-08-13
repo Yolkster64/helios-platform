@@ -1,226 +1,118 @@
+# Real workflow-health dashboard.
+#
+# Replaces the former hardcoded version, which published invented success rates and
+# 2024 timestamps for workflows that do not exist and committed them to the repo with
+# contents:write. This version computes everything from the Actions REST API at run
+# time, writes NOTHING to the repo, and publishes a single `dashboard.json` artifact.
+# pages-dashboard.yml consumes that artifact (via workflow_run) and deploys it to
+# GitHub Pages together with .github/pages/index.html.
 name: Status Dashboard
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
+    - cron: '23 * * * *' # hourly, off the :00 load spike; cron is always UTC
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/status-dashboard.yml'
 
+# Read-only by design: actions:read to query run history, contents:read baseline.
+# The old contents:write is deliberately gone — this workflow never commits.
 permissions:
-  contents: write
-  checks: read
-  pull-requests: read
+  contents: read
+  actions: read
+
+concurrency:
+  group: status-dashboard
+  # Queue instead of cancel: a cancelled run would fire workflow_run with
+  # conclusion != success and Pages would (correctly) skip that cycle.
+  cancel-in-progress: false
 
 jobs:
-  collect-status:
-    name: Collect Workflow Status
+  collect-real-status:
+    name: Collect real workflow status
     runs-on: ubuntu-latest
-    outputs:
-      status_report: ${{ steps.report.outputs.report }}
+    timeout-minutes: 5
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Fetch Workflow Runs
-        id: workflows
+      # No checkout: everything comes from the REST API via the preinstalled gh CLI.
+      - name: Fetch workflows and recent runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          echo "Fetching workflow status..."
-          
-          # Create status report
-          cat > status-report.json << 'EOF'
-          {
-            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
-            "workflows": [
-              {
-                "name": "Multi-Repo Sync",
-                "status": "✓ Passing",
-                "last_run": "2024-01-15T10:30:00Z",
-                "runs": 156,
-                "success_rate": 98.7
-              },
-              {
-                "name": "Component Version Check",
-                "status": "✓ Passing",
-                "last_run": "2024-01-15T10:15:00Z",
-                "runs": 234,
-                "success_rate": 99.1
-              },
-              {
-                "name": "Build All Modules",
-                "status": "✓ Passing",
-                "last_run": "2024-01-15T09:45:00Z",
-                "runs": 567,
-                "success_rate": 96.5
-              },
-              {
-                "name": "Build Variant Tests",
-                "status": "✓ Passing",
-                "last_run": "2024-01-15T09:20:00Z",
-                "runs": 345,
-                "success_rate": 97.8
-              },
-              {
-                "name": "Code Registry Update",
-                "status": "✓ Passing",
-                "last_run": "2024-01-15T08:00:00Z",
-                "runs": 89,
-                "success_rate": 99.0
+          set -euo pipefail
+          # One page each keeps runtime in seconds; the success-rate window is
+          # therefore "the 100 most recent runs across all workflows", stated as such.
+          gh api "/repos/${REPO}/actions/workflows?per_page=100" > workflows.json
+          gh api "/repos/${REPO}/actions/runs?per_page=100" > runs.json
+
+      - name: Compute per-workflow health (dashboard.json)
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Defensive jq: every field falls back (// null, // []) because in-progress
+          # runs have conclusion=null and brand-new workflows have no runs at all.
+          jq -n \
+            --slurpfile wfs workflows.json \
+            --slurpfile rs runs.json \
+            --arg generated_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --arg repo "${REPO}" \
+            '
+            ($wfs[0].workflows // []) as $workflows
+            | ($rs[0].workflow_runs // []) as $all
+            | {
+                generated_at: $generated_at,
+                repository: $repo,
+                runs_sampled: ($all | length),
+                source: "GitHub Actions REST API; success rate covers only the sampled window",
+                workflows:
+                  [ $workflows[]
+                    | . as $w
+                    | [ $all[] | select(.workflow_id == $w.id) ] as $mine
+                    | [ $mine[] | select(.status == "completed") ] as $done
+                    | [ $done[] | select(.conclusion == "success") ] as $ok
+                    | {
+                        name: ($w.name // "(unnamed)"),
+                        path: ($w.path // null),
+                        state: ($w.state // "unknown"),
+                        latest_status: ($mine[0].status // null),
+                        latest_conclusion: ($mine[0].conclusion // null),
+                        last_run_at: ($mine[0].run_started_at // $mine[0].created_at // null),
+                        runs_in_window: ($mine | length),
+                        completed_in_window: ($done | length),
+                        success_rate_pct:
+                          (if ($done | length) > 0
+                           then ((($ok | length) * 1000.0 / ($done | length)) | round / 10)
+                           else null end),
+                        html_url: ($w.html_url // null)
+                      }
+                  ] | sort_by(.name)
               }
-            ]
-          }
-          EOF
+            ' > dashboard.json
+          jq -e '.generated_at and (.workflows | type == "array")' dashboard.json > /dev/null
 
-      - name: Generate Status Report
-        id: report
+      - name: Write step summary
         run: |
-          REPORT=$(cat status-report.json)
-          echo "report=$REPORT" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          {
+            echo "## Workflow health (real data)"
+            echo ""
+            jq -r '"_Generated \(.generated_at) for `\(.repository)` from the \(.runs_sampled) most recent runs. Success rate covers only that window._"' dashboard.json
+            echo ""
+            jq -r '(.workflows | length) as $total
+                   | ([.workflows[] | select(.latest_conclusion == "success")] | length) as $green
+                   | "**\($green) of \($total)** workflows are green on their latest run."' dashboard.json
+            echo ""
+            echo "| Workflow | State | Latest | Success rate (window) | Completed/seen | Last run (UTC) |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '
+              .workflows[]
+              | "| \(.name | gsub("\\|"; "\\|")) | \(.state) | \(.latest_conclusion // .latest_status // "no recent runs") | \(if .success_rate_pct == null then "—" else "\(.success_rate_pct)%" end) | \(.completed_in_window)/\(.runs_in_window) | \(.last_run_at // "—") |"
+            ' dashboard.json
+          } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Upload Report
+      - name: Upload dashboard.json artifact
         uses: actions/upload-artifact@v4
         with:
-          name: status-report
-          path: status-report.json
-          retention-days: 90
-
-  generate-dashboard:
-    name: Generate Dashboard
-    runs-on: ubuntu-latest
-    needs: collect-status
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Create Dashboard Markdown
-        run: |
-          mkdir -p status
-          cat > status/dashboard.md << 'MDEOF'
-          # HELIOS Platform - CI/CD Status Dashboard
-          
-          ## 📊 Overall Platform Health
-          
-          | Metric | Value | Status |
-          |--------|-------|--------|
-          | Overall Health | 98.5% | ✓ Healthy |
-          | Total Workflow Runs | 1,391 | ✓ Tracked |
-          | Success Rate | 98.2% | ✓ Excellent |
-          | Active Workflows | 5 | ✓ Running |
-          
-          ## 🔄 Workflow Status
-          
-          ### Multi-Repo Sync
-          - **Status**: ✓ Passing
-          - **Last Run**: 2024-01-15 10:30 UTC
-          - **Success Rate**: 98.7%
-          - **Total Runs**: 156
-          - **Description**: Synchronizes all submodules to latest remote versions
-          
-          ### Component Version Check
-          - **Status**: ✓ Passing
-          - **Last Run**: 2024-01-15 10:15 UTC
-          - **Success Rate**: 99.1%
-          - **Total Runs**: 234
-          - **Description**: Validates component versioning and dependencies
-          
-          ### Build All Modules
-          - **Status**: ✓ Passing
-          - **Last Run**: 2024-01-15 09:45 UTC
-          - **Success Rate**: 96.5%
-          - **Total Runs**: 567
-          - **Description**: CI/CD build pipeline for all platform components
-          
-          ### Build Variant Tests
-          - **Status**: ✓ Passing
-          - **Last Run**: 2024-01-15 09:20 UTC
-          - **Success Rate**: 97.8%
-          - **Total Runs**: 345
-          - **Description**: Tests multiple build variants and platforms
-          
-          ### Code Registry Update
-          - **Status**: ✓ Passing
-          - **Last Run**: 2024-01-15 08:00 UTC
-          - **Success Rate**: 99.0%
-          - **Total Runs**: 89
-          - **Description**: Updates and compresses code snippet registry
-          
-          ## 📈 Performance Trends
-          
-          ### Success Rate Trend
-          ```
-          Week 1:  95.2% ▲
-          Week 2:  96.8% ▲
-          Week 3:  97.5% ▲
-          Week 4:  98.2% ▲ (Current)
-          ```
-          
-          ### Workflow Duration Trends
-          | Workflow | Avg Duration | Trend |
-          |----------|--------------|-------|
-          | Multi-Repo Sync | 2m 15s | ▼ -5% |
-          | Component Version Check | 1m 45s | ▼ -3% |
-          | Build All Modules | 8m 30s | ▲ +2% |
-          | Build Variant Tests | 15m 45s | ▼ -8% |
-          | Code Registry Update | 3m 20s | ▼ -12% |
-          
-          ## 🎯 Service Level Objectives (SLOs)
-          
-          - **Build Success Rate**: Target 99% (Current: 98.2%)
-          - **Build Latency**: Target <15 minutes (Current: 8m 30s)
-          - **Dashboard Uptime**: Target 99.9% (Current: 99.95%)
-          - **Workflow Availability**: Target 99.5% (Current: 98.5%)
-          
-          ## 🛠️ Recent Changes
-          
-          - **2024-01-15**: Optimized registry compression (-12% duration)
-          - **2024-01-14**: Added multi-platform variant testing
-          - **2024-01-13**: Improved component version validation
-          - **2024-01-12**: Enhanced submodule sync efficiency
-          
-          ## 📞 Support & Issues
-          
-          For issues or questions:
-          1. Check the [status dashboard](./dashboard.md)
-          2. Review recent workflow logs
-          3. Open an issue on GitHub
-          4. Contact the platform team
-          
-          ---
-          
-          Last Updated: 2024-01-15 10:35 UTC
-          Dashboard Version: 1.0
-          MDEOF
-
-      - name: Upload Dashboard
-        uses: actions/upload-artifact@v4
-        with:
-          name: status-dashboard
-          path: status/
-          retention-days: 365
-
-  report-generation:
-    name: Generate Comprehensive Report
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create Status Summary
-        run: |
-          echo "## HELIOS Platform - Status Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Generated**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Workflow Status" >> $GITHUB_STEP_SUMMARY
-          echo "| Workflow | Status | Last Run | Success Rate |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|----------|--------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Multi-Repo Sync | ✓ Passing | 10:30 UTC | 98.7% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Component Version Check | ✓ Passing | 10:15 UTC | 99.1% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build All Modules | ✓ Passing | 09:45 UTC | 96.5% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Variant Tests | ✓ Passing | 09:20 UTC | 97.8% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Registry Update | ✓ Passing | 08:00 UTC | 99.0% |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Platform Health" >> $GITHUB_STEP_SUMMARY
-          echo "- Overall: **Healthy** ✓" >> $GITHUB_STEP_SUMMARY
-          echo "- Success Rate: **98.2%**" >> $GITHUB_STEP_SUMMARY
-          echo "- Total Runs: **1,391**" >> $GITHUB_STEP_SUMMARY
+          name: dashboard
+          path: dashboard.json
+          retention-days: 7 # regenerated hourly; keep storage small
+          if-no-files-found: error

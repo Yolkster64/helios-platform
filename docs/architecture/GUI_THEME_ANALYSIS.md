@@ -8,10 +8,10 @@ recommendation. Design-only in this PR; implementation is roadmap PR6.
 | Asset | State | Verdict |
 |---|---|---|
 | `src/gui/MonadoBlade.GUI/` (~60 files, WPF, Xenoblade-themed) | **Orphaned** — no `.csproj` includes it; `AIHubWindow.cs` has a hardcoded 10-provider list with empty `SelectOptimalProvider`/`MonitorProviderHealth` stubs | Mine for design intent, not code |
-| `docs/ui-xenoblade/HELIOS.WPF.csproj` | Builds `net8.0-windows`, `Nullable=disable`, lives under `docs/` with a stray git object store | Do not adopt; quarantine in PR2 cleanup |
+| `docs/ui-xenoblade/HELIOS.WPF.csproj` | Builds `net10.0-windows` (retargeted with the platform), `Nullable=disable`, lives under `docs/` with a stray git object store | Do not adopt; quarantine in PR2 cleanup |
 | `docs/WinUI3-Design/Presentation/Pages/AIHubPage.xaml` | Design mockup of the AIHub dashboard | Direct input to the WinUI 3 page |
 | monado-blade `src/Tracks/D_UI_UX_Automation/` | Empty csproj — the "GUI repo" has no GUI | Confirms helios-platform is where the shell gets built |
-| Root `HELIOS.Platform.csproj` (`net8.0-windows`, `UseWPF`) | Compiles a recursive glob of the repo; not a real app | Retire as part of the core repair (PR2/PR6) |
+| Root `HELIOS.Platform.csproj` (`net10.0-windows`, `UseWPF`) | Compiles a recursive glob of the repo; not a real app | Retire as part of the core repair (PR2/PR6) |
 
 ## Recommendation: WinUI 3 shell, one project, three pages
 
@@ -20,8 +20,9 @@ recommendation. Design-only in this PR; implementation is roadmap PR6.
 `AppWindow` management, and the C++ interop path (C++/WinRT + Win2D) that the
 cpp-performance spoke needs for heavy rendering. WPF assets are treated as wireframes.
 
-**Project**: `src/gui/HELIOS.Shell/` (net8.0-windows + Windows App SDK; upgrade with the
-platform to net10.0 in PR6 — do not wait for .NET 11, which is preview only). MVVM via
+**Project**: `src/gui/HELIOS.Shell/` (net8.0-windows + Windows App SDK; the platform is
+on net10.0 — the shell follows once the pinned Windows App SDK line documents net10
+support. Do not wait for .NET 11, which is preview only). MVVM via
 CommunityToolkit.Mvvm; **no logic in the shell** — every view model binds to
 `HELIOS.AIHub` public APIs (`GetStatus()`, `GetMetrics()`, `RoutingTable`, `CompareAsync`).
 

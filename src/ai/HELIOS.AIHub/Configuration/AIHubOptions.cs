@@ -30,9 +30,31 @@ public sealed class AIHubOptions
 
     public static AIHubOptions Load(string path)
     {
-        using var stream = File.OpenRead(path);
-        return JsonSerializer.Deserialize<AIHubOptions>(stream, SerializerOptions)
-               ?? throw new InvalidDataException($"'{path}' deserialized to null.");
+        AIHubOptions options;
+        using (var stream = File.OpenRead(path))
+        {
+            options = JsonSerializer.Deserialize<AIHubOptions>(stream, SerializerOptions)
+                      ?? throw new InvalidDataException($"'{path}' deserialized to null.");
+        }
+        // A relative learning path must anchor to the config file's location, not the
+        // process working directory: with recording on by default, CWD-relative
+        // resolution would scatter .helios/ trees into whatever directory helios-ai
+        // happens to run from. In the known layout — the file lives in a directory
+        // literally named "config" (repo checkout and published artifacts both ship
+        // config/aihub.json) — the anchor is the CONFIG ROOT, one level above.
+        // Anywhere else (--config /tmp/aihub.json) the anchor is the file's own
+        // directory: stepping to the parent would target an unrelated directory
+        // (/tmp → /), typically unwritable, and the permission failure would then
+        // silently degrade recording to a NullLearningStore.
+        if (!Path.IsPathRooted(options.Learning.LocalPath))
+        {
+            var configDir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            var root = string.Equals(Path.GetFileName(configDir), "config", StringComparison.OrdinalIgnoreCase)
+                ? Directory.GetParent(configDir)?.FullName ?? configDir
+                : configDir;
+            options.Learning.LocalPath = Path.Combine(root, options.Learning.LocalPath);
+        }
+        return options;
     }
 
     /// <summary>

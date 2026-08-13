@@ -356,7 +356,7 @@ function Check-Performance {
     }
     
     $memory = Get-CimInstance -ClassName Win32_ComputerSystem
-    $memUsage = [math]::Round(((($memory.TotalPhysicalMemory - (Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory)) / $memory.TotalPhysicalMemory) * 100), 2)
+    $memUsage = [math]::Round(((($memory.TotalPhysicalMemory - (Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory)) / $memory.TotalPhysicalMemory) * 100, 2)
     
     if ($memUsage -lt 75) {
         Log-Result "Memory Usage" "PASS" "Current: ${memUsage}%" "Performance"

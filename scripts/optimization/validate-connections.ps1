@@ -64,7 +64,7 @@ function Log-Connection {
     }
     
     if (-not $Connected) {
-        $connectionIssues += "$System → $Connection: $Details"
+        $connectionIssues += "$System → ${Connection}: $Details"
     }
     
     return $Connected

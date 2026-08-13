@@ -77,5 +77,5 @@ if command -v dotnet >/dev/null 2>&1; then
   echo "Smoke: provider readiness under the cloud profile..."
   # shellcheck disable=SC1090
   source "$env_file"
-  dotnet run --project "$repo_root/src/ai/HELIOS.AIHub.Cli" --framework net8.0 -- status || true
+  dotnet run --project "$repo_root/src/ai/HELIOS.AIHub.Cli" --framework net10.0 -- status || true
 fi

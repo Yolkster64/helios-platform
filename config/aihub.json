@@ -1,9 +1,16 @@
 {
-  "$comment": "HELIOS multi-LLM hub configuration. No secrets live here — only the names of environment variables (Key Vault secret names as fallback). Task routing chains are ordered: first entry is primary, the rest are fallbacks.",
+  "$comment": "HELIOS multi-LLM hub configuration. No secrets live here \u2014 only the names of environment variables (Key Vault secret names as fallback). Task routing chains are ordered: first entry is primary, the rest are fallbacks.",
   "providers": {
     "openai": {
       "type": "openai",
       "model": "gpt-5-mini",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "apiKeySecretName": "openai-api-key"
+    },
+    "openai-codex": {
+      "$comment": "Alias onto the same OpenAI platform/key as 'openai' - the codegen-specialist lane for CI/containers where the codex CLI is absent. gpt-5.1-codex-max is the catalog's codegen specialist (config/model-catalog.json); it has not been live-smoked from this keyless environment - if a keyed run shows the model rejecting chat completions, swap to gpt-5.4 (FallbackChain advances past a failing provider either way).",
+      "type": "openai",
+      "model": "gpt-5.1-codex-max",
       "apiKeyEnv": "OPENAI_API_KEY",
       "apiKeySecretName": "openai-api-key"
     },
@@ -70,33 +77,99 @@
     }
   ],
   "routing": {
-    "defaultChain": ["azure-openai", "openai", "anthropic", "github-models", "ollama"],
+    "defaultChain": [
+      "azure-openai",
+      "openai",
+      "anthropic",
+      "github-models",
+      "ollama"
+    ],
     "taskRouting": {
-      "code_generation": ["codex", "openai", "azure-openai", "anthropic"],
-      "code_refactoring": ["codex", "anthropic", "openai"],
-      "test_creation": ["codex", "openai", "anthropic"],
-      "code_review": ["anthropic", "claude-cli", "openai"],
-      "long_context_analysis": ["anthropic", "claude-cli"],
-      "documentation_generation": ["anthropic", "openai", "github-models"],
-      "code_analysis": ["anthropic", "openai"],
-      "debugging": ["claude-cli", "codex", "openai"],
-      "security_analysis": ["anthropic", "openai"],
-      "architecture_design": ["anthropic", "openai"],
-      "enterprise_data": ["azure-foundry", "azure-openai"],
-      "inline_completion": ["copilot", "github-models"],
-      "agent_fleet_dispatch": ["hermes"],
-      "offline": ["ollama"],
-      "bulk_processing": ["github-models", "azure-openai", "ollama"],
-      "general_query": ["azure-openai", "openai", "github-models", "ollama"]
+      "code_generation": [
+        "codex",
+        "openai-codex",
+        "openai",
+        "azure-openai",
+        "anthropic"
+      ],
+      "code_refactoring": [
+        "codex",
+        "openai-codex",
+        "anthropic",
+        "openai"
+      ],
+      "test_creation": [
+        "codex",
+        "openai-codex",
+        "openai",
+        "anthropic"
+      ],
+      "code_review": [
+        "anthropic",
+        "claude-cli",
+        "openai"
+      ],
+      "long_context_analysis": [
+        "anthropic",
+        "claude-cli"
+      ],
+      "documentation_generation": [
+        "anthropic",
+        "openai",
+        "github-models"
+      ],
+      "code_analysis": [
+        "anthropic",
+        "openai"
+      ],
+      "debugging": [
+        "claude-cli",
+        "codex",
+        "openai-codex",
+        "openai"
+      ],
+      "security_analysis": [
+        "anthropic",
+        "openai"
+      ],
+      "architecture_design": [
+        "anthropic",
+        "openai"
+      ],
+      "enterprise_data": [
+        "azure-foundry",
+        "azure-openai"
+      ],
+      "inline_completion": [
+        "copilot",
+        "github-models"
+      ],
+      "agent_fleet_dispatch": [
+        "hermes"
+      ],
+      "offline": [
+        "ollama"
+      ],
+      "bulk_processing": [
+        "github-models",
+        "azure-openai",
+        "ollama"
+      ],
+      "general_query": [
+        "azure-openai",
+        "openai",
+        "github-models",
+        "ollama"
+      ]
     }
   },
   "learning": {
-    "$comment": "Off by default so routing never changes itself silently. mode: local (JSONL under .helios/) | azure (Table Storage) | hybrid (both; local is authoritative, Azure syncs best-effort). Reordering falls back to the configured chain whenever history is thin or unavailable.",
-    "enabled": false,
+    "$comment": "Record-only by default: outcomes append to localPath (gitignored .helios/) and surface via /v1/learning + /v1/insights, while routing chains stay exactly as configured. adaptiveRouting=true is the deliberate opt-in that lets recorded history reorder chains - off so routing never changes itself silently. Store failures degrade to a null store; the hub never blocks on learning.",
+    "enabled": true,
     "mode": "local",
     "localPath": ".helios/learning/outcomes.jsonl",
     "tableEndpointEnv": "AZURE_LEARNING_TABLE_ENDPOINT",
-    "adaptiveRouting": true,
+    "adaptiveRouting": false,
     "historyWindow": 200
   }
 }

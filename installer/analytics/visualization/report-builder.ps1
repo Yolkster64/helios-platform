@@ -83,26 +83,26 @@ Component Status Report:
 === COST ANALYSIS ===
 
 30-Day Cost Breakdown:
-  AI Models: \$5,879.50 (52.1%)
-  Operations: \$5,401.23 (47.9%)
-  TOTAL: \$11,280.73
+  AI Models: `$5,879.50 (52.1%)
+  Operations: `$5,401.23 (47.9%)
+  TOTAL: `$11,280.73
 
 Cost Trends:
-  Daily Average: \$376.03
-  Monthly Projection: \$11,280.73
-  Annual Projection: \$135,368.80
+  Daily Average: `$376.03
+  Monthly Projection: `$11,280.73
+  Annual Projection: `$135,368.80
 
 Top Cost Drivers:
-1. Llama-2-Large: \$879.18 (27.4% of AI costs)
-2. Data Processing: \$555.30 (10.3% of operational costs)
-3. Storage: \$2,875.00 (53.2% of operational costs)
+1. Llama-2-Large: `$879.18 (27.4% of AI costs)
+2. Data Processing: `$555.30 (10.3% of operational costs)
+3. Storage: `$2,875.00 (53.2% of operational costs)
 
 Optimization Opportunities:
-  • Switch GPT-4 calls to Gemini-Pro: \$2,500/month savings
-  • Archive old data to cold storage: \$2,100/month savings
-  • Increase cache size: \$1,200/month savings
+  • Switch GPT-4 calls to Gemini-Pro: `$2,500/month savings
+  • Archive old data to cold storage: `$2,100/month savings
+  • Increase cache size: `$1,200/month savings
   
-  TOTAL POTENTIAL SAVINGS: \$5,800/month (51.4% reduction)
+  TOTAL POTENTIAL SAVINGS: `$5,800/month (51.4% reduction)
 
 === RELIABILITY METRICS ===
 
@@ -132,7 +132,7 @@ Recent Incidents:
    - Root Cause: Missing indexes on frequently-joined tables
    - Impact: 34% of data operations affected
    - Resolution: Add composite indexes
-   - Estimated Savings: \$2,345/month
+   - Estimated Savings: `$2,345/month
 
 2. API Gateway Throughput (Severity: 78/100)
    - Root Cause: Connection pool exhaustion
@@ -186,7 +186,7 @@ Priority 3 (Medium-term):
   • System uptime will remain stable at 99.9%+
   • Error rate will reach 2.5% if memory issue not addressed
   • Throughput expected to improve to 15,000 ops/sec
-  • Cost optimization efforts will save ~\$4,200
+  • Cost optimization efforts will save ~`$4,200
 
 Resource Projections:
   • CPU usage: Stable at 40-45%

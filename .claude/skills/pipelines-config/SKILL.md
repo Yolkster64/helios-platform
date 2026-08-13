@@ -42,3 +42,16 @@ description: GitHub Actions YAML, JSON, and XML configuration hygiene for HELIOS
 | Reviewing workflow security (injection via `${{ }}`, pull_request_target) | `security_analysis` → Claude |
 | Generating a workflow from a description | `code_generation` → Codex/GPT |
 | Debugging a red check from logs | `debugging` → Claude CLI/Codex |
+
+## Reference material
+
+Generic GitHub Actions knowledge (action majors, triggers, permissions, OIDC, caching)
+lives in `.claude/skills/automation-wiring/references/` — the files here carry only the
+HELIOS-specific layer on top of it:
+
+- `references/actions-tooling.md` — pinning lessons from this repo (the trivy-action
+  broken-tag incident), the actionlint gap, the six concurrency patterns, NuGet cache
+  keying, and the composite-action extraction candidate.
+- `references/msbuild-and-config.md` — the csproj idioms that hold the build together
+  (InternalsVisibleTo, source-linked seams, conditional native payloads), nuget.config
+  source mapping, JSON options-binding conventions, and CPM status (Copilot PR #95).

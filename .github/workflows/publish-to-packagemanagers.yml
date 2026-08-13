@@ -57,45 +57,49 @@ jobs:
         # Copy executables
         Copy-Item "dist\executables\*.exe" "$chocoDir\tools\" -Force
         
-        # Create chocolateyinstall.ps1
+        # Create chocolateyinstall.ps1. The here-string body sits at the YAML block
+        # scalar's base indentation (8 spaces): YAML strips it, so the closing '@
+        # lands at column 1 of the actual script, as PowerShell requires. Lines at
+        # column 1 of the FILE would otherwise terminate the block scalar and make
+        # the whole workflow unparseable.
         $installScript = @'
-$ErrorActionPreference = 'Stop'
-$toolsDir = "$(Split-Path -Parent $MyInvocation.MyCommand.Definition)"
+        $ErrorActionPreference = 'Stop'
+        $toolsDir = "$(Split-Path -Parent $MyInvocation.MyCommand.Definition)"
 
-$packageArgs = @{
-  packageName = 'helios-platform'
-  softwareName = 'HELIOS Platform*'
-  url = 'https://github.com/HELIOS-Platform/helios-platform/releases/download/v{0}/HELIOS-Setup.exe'
-  url64bit = 'https://github.com/HELIOS-Platform/helios-platform/releases/download/v{0}/HELIOS-Setup.exe'
-  checksum = '{1}'
-  checksumType = 'sha256'
-  silentArgs = '/S'
-  validExitCodes = @(0)
-}
+        $packageArgs = @{
+          packageName = 'helios-platform'
+          softwareName = 'HELIOS Platform*'
+          url = 'https://github.com/HELIOS-Platform/helios-platform/releases/download/v{0}/HELIOS-Setup.exe'
+          url64bit = 'https://github.com/HELIOS-Platform/helios-platform/releases/download/v{0}/HELIOS-Setup.exe'
+          checksum = '{1}'
+          checksumType = 'sha256'
+          silentArgs = '/S'
+          validExitCodes = @(0)
+        }
 
-Install-ChocolateyPackage @packageArgs
-'@ -f '${{ steps.version.outputs.VERSION }}', (Get-FileHash "dist\executables\HELIOS-Setup.exe" -Algorithm SHA256).Hash
+        Install-ChocolateyPackage @packageArgs
+        '@ -f '${{ steps.version.outputs.VERSION }}', (Get-FileHash "dist\executables\HELIOS-Setup.exe" -Algorithm SHA256).Hash
         
         Set-Content -Path "$chocoDir\tools\chocolateyinstall.ps1" -Value $installScript
         
-        # Create nuspec
+        # Create nuspec (same YAML-indentation contract as the here-string above)
         $nuspec = @'
-<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata>
-    <id>helios-platform</id>
-    <version>{0}</version>
-    <title>HELIOS Platform</title>
-    <authors>HELIOS Platform Team</authors>
-    <owners>HELIOS Platform</owners>
-    <description>HELIOS Platform - A comprehensive NuGet executable product</description>
-    <projectUrl>https://github.com/HELIOS-Platform/helios-platform</projectUrl>
-    <licenseUrl>https://github.com/HELIOS-Platform/helios-platform/blob/main/LICENSE</licenseUrl>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <tags>nuget executable platform enterprise</tags>
-  </metadata>
-</package>
-'@ -f '${{ steps.version.outputs.VERSION }}'
+        <?xml version="1.0" encoding="utf-8"?>
+        <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+          <metadata>
+            <id>helios-platform</id>
+            <version>{0}</version>
+            <title>HELIOS Platform</title>
+            <authors>HELIOS Platform Team</authors>
+            <owners>HELIOS Platform</owners>
+            <description>HELIOS Platform - A comprehensive NuGet executable product</description>
+            <projectUrl>https://github.com/HELIOS-Platform/helios-platform</projectUrl>
+            <licenseUrl>https://github.com/HELIOS-Platform/helios-platform/blob/main/LICENSE</licenseUrl>
+            <requireLicenseAcceptance>false</requireLicenseAcceptance>
+            <tags>nuget executable platform enterprise</tags>
+          </metadata>
+        </package>
+        '@ -f '${{ steps.version.outputs.VERSION }}'
         
         Set-Content -Path "$chocoDir\HELIOS.Platform.nuspec" -Value $nuspec
         

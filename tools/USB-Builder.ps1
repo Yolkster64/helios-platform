@@ -168,7 +168,7 @@ $items = @(
     @{ Source = "$sourceBase\bin\Release\HELIOS.Platform.dll"; Dest = "HELIOS" },
     @{ Source = "$sourceBase\bin\Release\*.dll"; Dest = "HELIOS" },
     @{ Source = "$sourceBase\drivers\*"; Dest = "HELIOS\Drivers" },
-    @{ Source = "$sourceBase\documentation\*"; Dest = "HELIOS\Documentation" },
+    @{ Source = "$sourceBase\documentation\*"; Dest = "HELIOS\Documentation" }
 )
 
 foreach ($item in $items) {

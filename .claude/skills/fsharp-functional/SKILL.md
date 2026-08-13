@@ -123,3 +123,13 @@ type ProviderMetrics = { Name: string; LatencyMs: float; SuccessRate: float }
 | Mechanical C#↔F# conversions, record/DTO mirroring | openai+codex | High-volume mechanical translation |
 | Line-level completion inside modules | copilot | Inline completion |
 | Offline pipeline experiments | ollama | No network |
+
+## Reference material
+
+`references/analytics-patterns.md` — the domain as shipped in
+`src/ai/HELIOS.AIHub.Domain/` (five modules): the Mtoken-based pricing measures actually
+in `Pricing.fs`, the `Running`/`observe` fold-and-prequential-replay patterns in
+`LearnerFusion.fs`, every C# call site of the interop surface, FsCheck property
+candidates (FsCheck itself is not in the repo), and the E38 growth path (GitHub issue
+#51). The `ktoken` and FsCheck snippets above are teaching sketches — when they disagree
+with the reference file, the reference file mirrors the real code and wins.
