@@ -81,8 +81,9 @@ public sealed class OperatorContextToolsTests : IDisposable
     [Theory]
     [InlineData("clientSecret")]
     [InlineData("sasToken")]
+    [InlineData("SASToken")]
     [InlineData("secretValue")]
-    public async Task SaveProfile_RejectsCamelCaseCredentialTagNames(string tagName)
+    public async Task SaveProfile_RejectsCaseDelimitedCredentialTagNames(string tagName)
     {
         var store = CreateStore(new FakeCommandRunner());
 
@@ -180,14 +181,16 @@ public sealed class OperatorContextToolsTests : IDisposable
         Assert.All(File.ReadLines(store.JournalPath), line => Assert.Contains("contextSha256", line));
     }
 
-    [Fact]
-    public async Task ContextSync_RedactsCamelCaseCredentialAzureTags()
+    [Theory]
+    [InlineData("clientSecret")]
+    [InlineData("SASToken")]
+    public async Task ContextSync_RedactsCaseDelimitedCredentialAzureTags(string tagName)
     {
         var store = CreateStore(new FakeCommandRunner());
 
         var snapshot = await store.SyncAsync("claude-code", includeAzure: true, includeResources: false, CancellationToken.None);
 
-        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.ResourceGroups[0].Tags["clientSecret"]);
+        Assert.Matches("^<redacted:[0-9a-f]{12}>$", snapshot.Azure.ResourceGroups[0].Tags[tagName]);
     }
 
     [Fact]
@@ -606,7 +609,7 @@ public sealed class OperatorContextToolsTests : IDisposable
             }
             return GroupTagCount > 0
                 ? "{" + string.Join(',', Enumerable.Range(0, GroupTagCount).Select(i => $"\"tag{i:D2}\":\"v\"")) + "}"
-                : "{\"api-key\":\"" + CredentialValue + "\",\"clientSecret\":\"rotate-me\",\"project\":\"helios\"}";
+                : "{\"api-key\":\"" + CredentialValue + "\",\"clientSecret\":\"rotate-me\",\"SASToken\":\"arbitrary-value\",\"project\":\"helios\"}";
         }
 
         private CommandResult Azure(IReadOnlyList<string> arguments)

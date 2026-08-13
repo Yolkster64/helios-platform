@@ -134,8 +134,8 @@ internal sealed class OperatorContextStore
     private static readonly Regex SensitiveName = new(
         "(^|[-_.])(secret|password|passwd|token|credential|api[-_]?key|private[-_]?key)($|[-_.])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex CamelCaseBoundary = new(
-        "(?<=[a-z0-9])(?=[A-Z])",
+    private static readonly Regex CredentialNameBoundary = new(
+        "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
         RegexOptions.CultureInvariant);
     private static readonly Regex SensitiveValue = new(
         "(^|[^a-z0-9])(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|accountkey=|sharedaccesssignature=|eyj[a-z0-9_-]+\\.eyj[a-z0-9_-]+\\.)",
@@ -1054,11 +1054,12 @@ internal sealed class OperatorContextStore
         availability.TryGetValue(command, out var available) && available;
 
     /// <summary>
-    /// Matches punctuation-delimited credential-like names and their camelCase forms
-    /// (clientSecret, sasToken, secretValue) by inserting a separator at case boundaries.
+    /// Matches punctuation-delimited credential-like names, their camelCase forms, and
+    /// acronym-to-word transitions (clientSecret, sasToken, SASToken) by inserting a
+    /// separator at case boundaries.
     /// </summary>
     private static bool IsSensitiveName(string name) =>
-        SensitiveName.IsMatch(name) || SensitiveName.IsMatch(CamelCaseBoundary.Replace(name, "-"));
+        SensitiveName.IsMatch(name) || SensitiveName.IsMatch(CredentialNameBoundary.Replace(name, "-"));
 
     private async Task<FileStream> AcquireLockAsync(CancellationToken cancellationToken)
     {
