@@ -52,7 +52,7 @@ jobs:
           if [ ${#MODULE_DIRS[@]} -eq 0 ]; then
             MODULES='["__no_node_modules__"]'
             HAS_MODULES=false
-            echo "No Node.js modules with package.json were found; build matrix will be skipped."
+            echo "No Node.js modules with package.json were found; a no-op build entry will run."
           else
             MODULES=$(printf '%s\n' "${MODULE_DIRS[@]}" | jq -R . | jq -cs .)
             HAS_MODULES=true
@@ -68,7 +68,6 @@ jobs:
     name: Build ${{ matrix.module }}
     runs-on: ubuntu-latest
     needs: setup
-    if: needs.setup.outputs.has-modules == 'true'
     strategy:
       matrix:
         module: ${{ fromJson(needs.setup.outputs.modules) }}
@@ -84,6 +83,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ needs.setup.outputs.node-version }}
+
+      - name: No-op when no Node.js modules are present
+        if: matrix.module == '__no_node_modules__'
+        run: echo "No Node.js modules were detected, so this build entry is intentionally a no-op."
 
       - name: Setup NPM Build Cache
         if: github.event.inputs.clean_build != 'true' && hashFiles(format('{0}/package-lock.json', matrix.module)) != ''
@@ -107,6 +110,7 @@ jobs:
           echo "Clean build: ${{ github.event.inputs.clean_build }}"
 
       - name: Install Dependencies
+        if: matrix.module != '__no_node_modules__'
         run: |
           cd ${{ matrix.module }}
           if [ -f package-lock.json ]; then
@@ -116,6 +120,7 @@ jobs:
           fi
 
       - name: Lint Code
+        if: matrix.module != '__no_node_modules__'
         continue-on-error: true
         run: |
           cd ${{ matrix.module }}
@@ -126,6 +131,7 @@ jobs:
           fi
 
       - name: Build Module
+        if: matrix.module != '__no_node_modules__'
         run: |
           cd ${{ matrix.module }}
           if [ -f "package.json" ] && grep -q '"build"' package.json; then
@@ -135,6 +141,7 @@ jobs:
           fi
 
       - name: Run Tests
+        if: matrix.module != '__no_node_modules__'
         run: |
           cd ${{ matrix.module }}
           if [ -f "package.json" ] && grep -q '"test"' package.json; then
@@ -144,7 +151,7 @@ jobs:
           fi
 
       - name: Generate Coverage Report
-        if: always()
+        if: always() && matrix.module != '__no_node_modules__'
         run: |
           cd ${{ matrix.module }}
           if [ -d "coverage" ]; then
@@ -153,7 +160,7 @@ jobs:
           fi
 
       - name: Upload Build Artifacts
-        if: always()
+        if: always() && matrix.module != '__no_node_modules__'
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.module }}
@@ -164,7 +171,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Coverage Reports
-        if: always()
+        if: always() && matrix.module != '__no_node_modules__'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.module }}
@@ -213,7 +220,7 @@ jobs:
       - name: Check Build Status
         run: |
           if [ "${{ needs.setup.outputs.has-modules }}" != "true" ]; then
-            echo "✓ No Node.js modules were found, so the module build matrix was skipped"
+            echo "✓ No Node.js modules were found, so the no-op build entry completed"
             exit 0
           elif [ "${{ needs.build.result }}" == "success" ]; then
             echo "✓ All modules built successfully"
@@ -234,5 +241,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ${status} Build All Modules\n\n**Status**: ${{ needs.setup.outputs.has-modules != 'true' && 'skipped - no Node.js modules found' || needs.build.result }}\n\n[View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+              body: `## ${status} Build All Modules\n\n**Status**: ${{ needs.setup.outputs.has-modules != 'true' && 'success - no Node.js modules found (no-op build entry)' || needs.build.result }}\n\n[View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
             })

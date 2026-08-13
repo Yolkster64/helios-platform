@@ -95,7 +95,6 @@ jobs:
   ai-codex-suggestions:
     runs-on: ubuntu-latest
     name: Codex Suggestions
-    if: github.event.pull_request.draft == false
     
     steps:
       - uses: actions/checkout@v4
