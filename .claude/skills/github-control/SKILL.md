@@ -23,7 +23,7 @@ that owns rulesets/CODEOWNERS/merge-queue rollout is tranche T9 in
 
 | Need | Surface | Ground truth |
 |---|---|---|
-| Workflow acting on its own repo | Actions `GITHUB_TOKEN`, deny-all default + per-job opt-ins | `.github/workflows/claude-foundry.yml:24` |
+| Workflow acting on its own repo | Actions `GITHUB_TOKEN`, deny-all default + per-job opt-ins | `.github/workflows/claude-foundry.yml:22` |
 | Projects v2 (board fields/items) | **Classic PAT, `project` scope — the only thing that works** | `docs/architecture/CONNECTIONS_SETUP.md:248-250` |
 | Copilot coding-agent assignment when `GITHUB_TOKEN` is refused | Fine-grained PAT secret with `GITHUB_TOKEN` fallback | `.github/workflows/copilot-dispatch.yml:38` |
 | Workflow cascades, org-scale automation, ARC runners | GitHub App (none exists in this repo yet) | `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md:47,55` |
@@ -36,7 +36,7 @@ anti-pattern: `references/auth-topology.md`.
 ## Hard rules
 
 - **Every new workflow declares `permissions:`** — workflow-level `{}` plus
-  per-job opt-ins is the exemplar (`claude-foundry.yml:24`); seven legacy
+  per-job opt-ins is the exemplar (`claude-foundry.yml:22`); seven legacy
   workflows still have no block at all and are the backlog, not the pattern
   (list in `references/auth-topology.md`).
 - **No stored Azure client secret.** Deploy auth is OIDC with repo *variables*
@@ -52,7 +52,7 @@ anti-pattern: `references/auth-topology.md`.
 - **Auto-merge has a scope boundary**: session-stewarded PRs may use
   `gh pr merge --auto`; absorption-pipeline candidates never auto-merge
   (`docs/architecture/ABSORPTION_PIPELINE.md:50`); claude-foundry patches open
-  as drafts (`claude-foundry.yml:303-308`).
+  as drafts (`claude-foundry.yml:339-344`).
 - **Projects v2 honesty**: fields and items are real GraphQL; views, templates,
   and built-in workflows have **no API** — the board scripts document manual
   click paths instead of pretending (`scripts/board-setup/setup-views.ps1:3-11`).

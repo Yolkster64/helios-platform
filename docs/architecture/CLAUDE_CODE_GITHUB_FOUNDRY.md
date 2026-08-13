@@ -14,8 +14,9 @@ server. The integration adds two execution paths:
    read-oriented repository tooling.
 2. **Implement** — a manual owner dispatch lets Claude edit an isolated checkout. That
    Azure-authenticated job has a read-only GitHub token and cannot push. It emits a
-   patch artifact. A second job, which has no Azure OIDC permission, validates the patch,
-   pushes a dedicated `claude/foundry-<run-id>` branch, and opens a draft PR.
+   patch artifact. A second job with `contents: read` validates the patch, and a third
+   job with GitHub write permission but no Azure OIDC permission publishes a dedicated
+   `claude/foundry-<run-id>` branch and opens a draft PR.
 
 This means one job never possesses both Azure cloud authority and GitHub repository
 write authority.
@@ -80,9 +81,9 @@ models, write secrets, or assign RBAC.
 
 ## GitHub review workflow
 
-After `.github/workflows/claude-foundry.yml` is on `main`, the repository owner can add
-an `@claude` comment to a pull request. The action runs only when the actor is the
-repository owner.
+After `.github/workflows/claude-foundry-comment-review.yml` is on `main`, the repository
+owner can add an `@claude` comment to a pull request. The action runs only when the
+actor is the repository owner.
 
 The review lane uses:
 
@@ -97,15 +98,16 @@ The review lane uses:
 From the Actions UI, run **Claude Code on Microsoft Foundry** from `main`, choose
 `implement`, and provide the task.
 
-The first job can edit only its ephemeral checkout. It cannot push. The second job:
+The first job can edit only its ephemeral checkout. It cannot push. The validation
+and publish jobs then:
 
 1. downloads the patch artifact;
-2. applies it to current `main`;
+2. applies it to the same immutable base commit SHA captured before Claude edited;
 3. builds the native spoke;
 4. builds/tests .NET;
 5. compiles/tests Python;
 6. compiles the Bicep entrypoint;
-7. commits to a dedicated Claude branch; and
+7. publishes to a dedicated Claude branch; and
 8. opens a **draft** PR.
 
 No automatic merge or Azure infrastructure deployment occurs in this workflow.

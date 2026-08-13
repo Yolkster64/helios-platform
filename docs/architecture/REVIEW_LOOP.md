@@ -15,7 +15,7 @@ control-plane mechanics live in the `github-control` skill
 |---|---|---|---|
 | **Copilot code review** | Automatic on every PR `opened` / `ready_for_review` when not draft — the `request-review` job POSTs `copilot-pull-request-reviewer[bot]` to `requested_reviewers` | `copilot-dispatch.yml` (plus optional `COPILOT_DISPATCH_TOKEN` secret) | `.github/workflows/copilot-dispatch.yml:19-20,83-103` |
 | **Codex** | Cloud-side: reviews when a PR opens for review / a draft is marked ready, and on `@codex review`; `@codex address that feedback` has it push fixes | **Zero repo config** — the connection lives in Codex settings at chatgpt.com; Codex reads `AGENTS.md` | `docs/architecture/CONNECTIONS_SETUP.md:101-119,260` |
-| **Claude** | `@claude <ask>` PR comments, **owner-only** (`github.actor == github.repository_owner`); plus owner-dispatched review/implement lanes | `claude-foundry.yml` + Azure OIDC variables | `.github/workflows/claude-foundry.yml:40-44` |
+| **Claude** | `@claude <ask>` PR comments, **owner-only** (`github.actor == github.repository_owner`); plus owner-dispatched review/implement lanes | `claude-foundry-comment-review.yml` (comment lane) + `claude-foundry.yml` (dispatch lanes) + Azure OIDC variables | `.github/workflows/claude-foundry-comment-review.yml:26-29` |
 
 Notes that bite in practice:
 
@@ -82,7 +82,7 @@ Merge when **all three** hold:
 Scope boundaries from the control plane apply on top: absorption-pipeline
 candidates never auto-merge (`ABSORPTION_PIPELINE.md:50`), and claude-foundry
 implementation patches enter this loop as **drafts**
-(`claude-foundry.yml:303-308`) — marking one ready is the human decision that
+(`claude-foundry.yml:339-344`) — marking one ready is the human decision that
 starts wave 1.
 
 ## Automated pipeline
