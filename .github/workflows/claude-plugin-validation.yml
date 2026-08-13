@@ -5,6 +5,9 @@ on:
     paths:
       - '.claude-plugin/**'
       - '.claude/settings.json'
+      # validate_contract.py reads .mcp.json (MCP command, project args,
+      # HELIOS_REPO_ROOT), so a change to it must not skip the contract check.
+      - '.mcp.json'
       - 'plugins/helios-operator/**'
       - 'src/mcp/HELIOS.Mcp/**'
       - 'tests/HELIOS.AIHub.Tests/OperatorContextToolsTests.cs'
@@ -14,6 +17,7 @@ on:
     paths:
       - '.claude-plugin/**'
       - '.claude/settings.json'
+      - '.mcp.json'
       - 'plugins/helios-operator/**'
       - 'src/mcp/HELIOS.Mcp/**'
       - 'tests/HELIOS.AIHub.Tests/OperatorContextToolsTests.cs'
