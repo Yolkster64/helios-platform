@@ -129,6 +129,53 @@ public static class ApiEndpoints
             return Results.Ok(new InsightsResponse(taskType, true, null, summary, drift));
         });
 
+        api.MapGet("/metrics", async (AIHubService hub, int? limit, CancellationToken ct) =>
+        {
+            // Telemetry, not routing: the window deliberately INCLUDES source-tagged
+            // advisory records — the same records adaptive routing and fleet-plan
+            // exclude — because a dashboard should show everything the store recorded.
+            var window = await hub.Learning.GetRecentAllAsync(
+                Math.Clamp(limit ?? 200, 1, 500), ct);
+
+            var providers = window
+                .GroupBy(o => o.Provider, StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var outcomes = group.ToList();
+                    var successes = outcomes.Count(o => o.Success);
+                    return new ProviderMetricsResponse(
+                        group.Key,
+                        Attempts: outcomes.Count,
+                        Successes: successes,
+                        AdvisoryCount: outcomes.Count(o => o.Source is not null),
+                        SuccessRate: (double)successes / outcomes.Count,
+                        AverageLatencyMs: outcomes.Average(o => o.LatencyMs),
+                        TotalCostUsd: outcomes.Sum(o => o.CostUsd),
+                        AverageCostUsd: outcomes.Average(o => o.CostUsd),
+                        // Average(double?) ignores unrated outcomes and is null when
+                        // none are rated — never a fabricated 0.
+                        AverageQuality: outcomes.Average(o => o.Quality),
+                        // RoutingOutcome persists no token counts, so these cannot be
+                        // derived honestly — see ProviderMetricsResponse.
+                        TokensUsed: null,
+                        CostPerMillionTokens: null);
+                })
+                .OrderByDescending(p => p.Attempts)
+                .ThenBy(p => p.Provider, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var message = window.Count > 0
+                ? null
+                : hub.Learning is NullLearningStore
+                    ? "Learning is disabled (or its store failed to initialize), so no "
+                      + "outcomes are recorded; enable learning in config/aihub.json."
+                    : "No routing outcomes recorded yet: route traffic through the hub "
+                      + "or POST advisory outcomes to /v1/learning.";
+
+            return Results.Ok(new MetricsResponse(
+                DateTimeOffset.UtcNow, window.Count, providers, message));
+        });
+
         api.MapGet("/engines", async (
             PythonInsightsSpoke spoke,
             bool? cudaEnabled,

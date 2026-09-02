@@ -65,7 +65,7 @@ process itself does not change.
 
   | Role value | Grants | Endpoints |
   |---|---|---|
-  | `AIHub.Read` | Observe hub state; no provider spend | GET `/v1/status`, `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/engines` |
+  | `AIHub.Read` | Observe hub state; no provider spend | GET `/v1/status`, `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/metrics`, `/v1/engines` |
   | `AIHub.Invoke` | Orchestration — can spend provider quota/money | POST `/v1/ask`, `/v1/route`, `/v1/tandem`, `/v1/compare`, `/v1/engines/recommend` (recommend itself is offline/deterministic, but it shares the orchestration verb surface) |
   | `AIHub.Learning.Write` | Advisory outcome ingestion (provenance-required) | POST `/v1/learning` |
 

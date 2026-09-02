@@ -41,9 +41,10 @@ public sealed record RoutingOutcome
     /// "absorption-benchmark", "fork-observation", or "fleet-lane" (lane outcomes from
     /// the fleet collector, whose provider values are lane names like
     /// "pool:xcore-9-code", not providers). Null means a live provider outcome recorded
-    /// by the hub itself. Advisory records inform /v1/insights narratives; adaptive
-    /// routing and fleet-plan exclude every source-tagged record so external signals
-    /// can never steer the provider chains directly.
+    /// by the hub itself. Advisory records inform /v1/insights narratives and the
+    /// /v1/metrics telemetry aggregates; adaptive routing and fleet-plan exclude every
+    /// source-tagged record so external signals can never steer the provider chains
+    /// directly.
     /// </summary>
     [JsonPropertyName("source")]
     public string? Source { get; init; }
@@ -52,9 +53,10 @@ public sealed record RoutingOutcome
 /// <summary>
 /// Where routing outcomes are recorded and read back.
 ///
-/// Deliberately narrow: append one outcome, read recent ones for a task type. Anything
-/// richer belongs in a real analytics store, and keeping this small is what lets the
-/// local and Azure backends stay interchangeable.
+/// Deliberately narrow: append one outcome, read recent ones for a task type (what
+/// routing needs), or read recent ones across every task type (what /v1/metrics
+/// telemetry needs). Anything richer belongs in a real analytics store, and keeping
+/// this small is what lets the local and Azure backends stay interchangeable.
 /// </summary>
 public interface ILearningStore
 {
@@ -63,6 +65,15 @@ public interface ILearningStore
     /// <summary>Recent outcomes for a task type, newest first, capped by <paramref name="limit"/>.</summary>
     Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
         string taskType, int limit = 200, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recent outcomes across ALL task types, newest first, capped by
+    /// <paramref name="limit"/>. A display/telemetry read (per-provider aggregates for
+    /// /v1/metrics); routing decisions always read one task type via
+    /// <see cref="GetRecentAsync"/> so cross-task history can never steer a chain.
+    /// </summary>
+    Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Discards everything. The default, so learning is opt-in rather than surprising.</summary>
@@ -73,6 +84,10 @@ public sealed class NullLearningStore : ILearningStore
 
     public Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
         string taskType, int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
 }
 
@@ -161,8 +176,17 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
         }
     }
 
-    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
-        string taskType, int limit = 200, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
+        string taskType, int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadTailAsync(taskType, limit, cancellationToken);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadTailAsync(taskType: null, limit, cancellationToken);
+
+    /// <summary>Null <paramref name="taskType"/> means every task type (telemetry reads).</summary>
+    private async Task<IReadOnlyList<RoutingOutcome>> ReadTailAsync(
+        string? taskType, int limit, CancellationToken cancellationToken)
     {
         if (!File.Exists(_path))
         {
@@ -176,7 +200,7 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
         // form of the task type, quotes included, can only appear in matching records
         // or — rarely — inside another string field, which the exact check below drops).
         var window = new Queue<RoutingOutcome>(limit);
-        var taskTypeToken = JsonSerializer.Serialize(taskType);
+        var taskTypeToken = taskType is null ? null : JsonSerializer.Serialize(taskType);
         await Task.Yield();
         // FileShare.ReadWrite: File.ReadLines holds a read-only share for the whole
         // enumeration, which on Windows blocks a concurrent append — and the appender
@@ -186,7 +210,8 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
         while (reader.ReadLine() is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(line) || !line.Contains(taskTypeToken, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(line)
+                || (taskTypeToken is not null && !line.Contains(taskTypeToken, StringComparison.Ordinal)))
             {
                 continue;
             }
@@ -199,7 +224,7 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
             {
                 continue; // A torn line from a crash must not poison the whole history.
             }
-            if (outcome is not null && outcome.TaskType == taskType)
+            if (outcome is not null && (taskType is null || outcome.TaskType == taskType))
             {
                 if (window.Count == limit)
                 {

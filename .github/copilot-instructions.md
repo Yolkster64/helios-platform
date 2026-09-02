@@ -40,10 +40,11 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   Providers and the task-routing table live in `config/aihub.json`; engine candidates are
   advisory and never auto-execute.
 - `helios-ai-api` (src/ai/HELIOS.AIHub.Api): `GET /healthz`; `/v1/status`,
-  `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/engines`; `POST /v1/learning`,
-  `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`, `/v1/compare`.
-  `/v1/*` is loopback-only unless a caller sends `HELIOS_API_ACCESS_KEY` as
-  `X-HELIOS-Api-Key`; hosted use still needs identity-aware ingress.
+  `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/metrics`, `/v1/engines`;
+  `POST /v1/learning`, `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`,
+  `/v1/compare`. `/v1/*` is loopback-only unless a caller sends
+  `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; hosted use still needs
+  identity-aware ingress.
 - Python spoke (src/ai/python, `helios-agents`): outcome analytics, text grouping, and
   truthful engine catalog/recommendation operations behind `PythonInsightsSpoke`'s
   four-process cap. Prototype/concept candidates never auto-execute.

@@ -76,6 +76,46 @@ public sealed record InsightsResponse(
     JsonElement? Summary,
     JsonElement? Drift);
 
+/// <summary>
+/// Per-provider telemetry over the recent learning window (the dashboard seam —
+/// GUI_UPGRADE_PLAN P2). <c>WindowSize</c> is the number of outcomes actually
+/// aggregated, which can be smaller than the requested limit. Providers are ordered by
+/// attempts descending, then name, so the busiest lane renders first and the order is
+/// deterministic. A null <c>Message</c> means data was aggregated; an empty window
+/// explains itself through <c>Message</c> instead of a non-200 status — like
+/// /v1/insights, absence of telemetry is a state, not a failure.
+/// </summary>
+public sealed record MetricsResponse(
+    DateTimeOffset GeneratedUtc,
+    int WindowSize,
+    IReadOnlyList<ProviderMetricsResponse> Providers,
+    string? Message);
+
+/// <summary>
+/// Aggregates for one provider. Like /v1/insights (and unlike adaptive routing and
+/// fleet-plan, which exclude every source-tagged record), the window deliberately
+/// INCLUDES advisory outcomes — this is telemetry display, not routing input — and
+/// <c>AdvisoryCount</c> says how many of <c>Attempts</c> carry a source tag.
+/// <c>AverageQuality</c> averages only rated outcomes and is null when none are rated.
+/// <c>TokensUsed</c> and <c>CostPerMillionTokens</c> are always null today:
+/// <see cref="HELIOS.AIHub.Learning.RoutingOutcome"/> does not persist token counts, so
+/// neither value can be derived honestly. They stay in the contract, explicitly null,
+/// so dashboard cards keep a stable shape if token capture lands later; cost is instead
+/// reported as recorded — <c>TotalCostUsd</c> and per-call <c>AverageCostUsd</c>.
+/// </summary>
+public sealed record ProviderMetricsResponse(
+    string Provider,
+    int Attempts,
+    int Successes,
+    int AdvisoryCount,
+    double SuccessRate,
+    double AverageLatencyMs,
+    double TotalCostUsd,
+    double AverageCostUsd,
+    double? AverageQuality,
+    long? TokensUsed,
+    double? CostPerMillionTokens);
+
 public sealed record EngineRecommendationRequest(
     bool CudaEnabled = false,
     string? SecurityProfile = "balanced",

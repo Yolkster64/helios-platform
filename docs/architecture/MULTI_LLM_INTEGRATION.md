@@ -152,6 +152,7 @@ one door with shared circuit-breaker and learning state:
 | `/v1/learning?taskType=&limit=` | GET | Recent routing outcomes, newest first |
 | `/v1/learning` | POST | Provenance-required advisory outcome ingestion; never provider-routing training data |
 | `/v1/insights?taskType=&limit=` | GET | Python-spoke analytics (per-provider stats + drift) over recorded outcomes |
+| `/v1/metrics?limit=` | GET | Per-provider dashboard telemetry (latency, success rate, recorded cost) across ALL task types; advisory records included — display, never routing input |
 | `/v1/engines?cudaEnabled=&includeCandidates=` | GET | Implemented engine catalog with runtime snapshot plus optional labeled candidates |
 | `/v1/engines/recommend` | POST | Offline plan; available implementations and build candidates remain separate |
 | `/v1/ask` | POST | One provider (or default chain): `{prompt, provider?, model?, system?}` |
