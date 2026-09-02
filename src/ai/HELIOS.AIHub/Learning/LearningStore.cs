@@ -195,10 +195,13 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
 
         // Stream forward keeping a bounded tail window: the log is append-only and
         // grows with every routed attempt, so materializing and deserializing the whole
-        // file would make routing latency grow with total history. The substring
-        // pre-filter skips deserializing other tasks' lines entirely (the JSON string
-        // form of the task type, quotes included, can only appear in matching records
-        // or — rarely — inside another string field, which the exact check below drops).
+        // file would make routing latency grow with total history. When a taskType is
+        // given, the substring pre-filter skips deserializing other tasks' lines
+        // entirely (the JSON string form of the task type, quotes included, can only
+        // appear in matching records or — rarely — inside another string field, which
+        // the exact check below drops). A null taskType (GetRecentAllAsync, telemetry
+        // reads) disables the pre-filter by design: every non-empty line is
+        // deserialized, so that path scales with total file size, not the window.
         var window = new Queue<RoutingOutcome>(limit);
         var taskTypeToken = taskType is null ? null : JsonSerializer.Serialize(taskType);
         await Task.Yield();
