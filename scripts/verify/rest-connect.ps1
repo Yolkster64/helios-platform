@@ -274,7 +274,10 @@ function Test-GitHubLane {
         # through to the per-candidate walk, not falsely classify the transport).
         $anonLimitValue = 0
         $anonLimitIsNumeric = [int]::TryParse($anonLimit, [ref]$anonLimitValue)
-        if ($anonLimitIsNumeric -and $anonLimitValue -ne 60) {
+        # -gt, not -ne (review finding): injection is only proven by a limit ABOVE the
+        # anonymous 60/hr cap — a numeric-but-bogus payload (limit 0) must fall
+        # through to the per-candidate walk like any other malformed body.
+        if ($anonLimitIsNumeric -and $anonLimitValue -gt 60) {
             $anonIdentity = 'unknown'
             $anonUser = Invoke-HttpProbe -Url "$gitHubApi/user" -Headers $anonHeaders -TimeoutSec $TimeoutSeconds
             if ($anonUser.Status -eq 200) {
@@ -374,9 +377,12 @@ function Test-GitHubLane {
 }
 
 # --- azure lane -------------------------------------------------------------------------
-# Probes ARM with an acquired token. Returns the ready lane result on 200; $null on
-# 401/403 or any other failure (the caller notes it and continues the chain). The token
-# parameter exists only for the Authorization header — never logged or stored.
+# Probes ARM with an acquired token. Returns {Outcome; Lane}: 'ready' (Lane = the ready
+# result), 'forbidden' (Lane = a needs-owner RBAC diagnosis the CALLER stashes and only
+# uses if no later chain entry succeeds — review finding: an early 403 must not stop a
+# later authorized candidate), 'auth-rejected' (definitive 401 — the caller marks the
+# rejection flag), or 'transient' (transport/5xx/garbage — never grounds for credential
+# advice). The token parameter exists only for the Authorization header — never logged.
 function Invoke-ArmProbe {
     param(
         [Parameter(Mandatory)][string]$Token,
@@ -387,6 +393,13 @@ function Invoke-ArmProbe {
     $probe = Invoke-HttpProbe -Url $armSubscriptionsUrl -Headers @{ Authorization = "Bearer $Token" } -TimeoutSec $TimeoutSeconds
     if ($probe.Status -eq 200) {
         $parsed = Test-ParsedJson $probe.Body
+        # A 200 whose body is not a real subscriptions payload (HTML from an
+        # intermediary, malformed JSON, no 'value' array) proves NOTHING (review
+        # finding) — it must not become ready-with-zero-subscriptions.
+        if ($null -eq $parsed -or -not $parsed.PSObject.Properties['value']) {
+            $ChainNotes.Add("$Source ARM answered 200 but the body is not a parseable subscriptions payload (intermediary?) — not treated as connectivity proof")
+            return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
+        }
         $subs = @(Get-OptionalProperty $parsed 'value' @())
         $subCount = $subs.Count
         # Display name + id are identifiers, not secrets (connect-account.ps1 rule:
@@ -398,23 +411,32 @@ function Invoke-ArmProbe {
             $firstId = [string](Get-OptionalProperty $first 'subscriptionId' 'unknown-id')
             $firstText = "first: '$firstName' ($firstId)"
         }
-        return New-LaneResult -Lane 'azure' -State 'ready' -Source $Source -Identity $Identity `
-            -Detail ("ARM /subscriptions 200 — $subCount subscription(s); $firstText (token value never printed)")
+        return [pscustomobject]@{
+            Outcome = 'ready'
+            Lane    = (New-LaneResult -Lane 'azure' -State 'ready' -Source $Source -Identity $Identity `
+                -Detail ("ARM /subscriptions 200 — $subCount subscription(s); $firstText (token value never printed)"))
+        }
     }
     if ($probe.Status -eq 403) {
         # AUTHORIZATION, not authentication (review finding): the token is real and
-        # ARM recognized the principal — it just lacks an RBAC role. Re-login can
-        # never fix that, so this is a terminal needs-owner with a role-assignment
-        # action, never a fall-through to MFA advice.
-        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source $Source -Identity $Identity `
-            -Detail ('a valid token was acquired but ARM answered 403 — the principal lacks an RBAC role ' +
-                'on the subscription; re-authentication cannot grant permissions') `
-            -OwnerAction ("grant the principal an RBAC role (e.g. Reader) on the target subscription/resource " +
-                "group — az role assignment create --assignee <principal> --role Reader --scope <scope> " +
-                '(role assignment is deliberately owner-gated in this repo)')
+        # ARM recognized the principal — it just lacks an RBAC role, and re-login can
+        # never fix that. The diagnosis is deferred: a later chain entry may still be
+        # authorized (second review finding), so the caller stashes this and returns
+        # it only if nothing later succeeds.
+        $ChainNotes.Add("$Source acquired a token but ARM answered 403 — principal lacks an RBAC role (diagnosis kept; chain continues)")
+        return [pscustomobject]@{
+            Outcome = 'forbidden'
+            Lane    = (New-LaneResult -Lane 'azure' -State 'needs-owner' -Source $Source -Identity $Identity `
+                -Detail ('a valid token was acquired but ARM answered 403 — the principal lacks an RBAC role ' +
+                    'on the subscription; re-authentication cannot grant permissions') `
+                -OwnerAction ("grant the principal an RBAC role (e.g. Reader) on the target subscription/resource " +
+                    "group — az role assignment create --assignee <principal> --role Reader --scope <scope> " +
+                    '(role assignment is deliberately owner-gated in this repo)'))
+        }
     }
     if ($probe.Status -eq 401) {
         $ChainNotes.Add("$Source acquired a token but ARM answered HTTP 401 — the token itself was rejected")
+        return [pscustomobject]@{ Outcome = 'auth-rejected'; Lane = $null }
     }
     elseif ($probe.Status -eq 0) {
         $ChainNotes.Add("$Source acquired a token but the ARM probe hit a transport failure ($($probe.Transport))")
@@ -422,7 +444,7 @@ function Invoke-ArmProbe {
     else {
         $ChainNotes.Add("$Source acquired a token but ARM answered HTTP $($probe.Status)")
     }
-    return $null
+    return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
 }
 
 function Test-AzureLane {
@@ -436,6 +458,12 @@ function Test-AzureLane {
 
     $chainNotes = [System.Collections.Generic.List[string]]::new()
     $azCmd = Get-CliCommand -Name 'az'
+    # Failure classification across the whole chain (review findings): a 403 RBAC
+    # diagnosis is stashed and only used if nothing later succeeds; MFA/re-login
+    # advice requires at least one DEFINITIVE auth rejection — transient-only runs
+    # (transport/429/5xx) end as unavailable-retryable, never credential advice.
+    $armForbidden = $null
+    $sawAuthRejection = $false
 
     # 2. Env service principal — fully non-interactive. Secret variant: the credential
     #    values are read into locals, flow into an in-memory POST body, and die with
@@ -468,9 +496,11 @@ function Test-AzureLane {
             $tokenReply = Test-ParsedJson $tokenProbe.Body
             $spToken = [string](Get-OptionalProperty $tokenReply 'access_token' '')
             if ($spToken) {
-                $armResult = Invoke-ArmProbe -Token $spToken -Source 'env-service-principal' `
+                $arm = Invoke-ArmProbe -Token $spToken -Source 'env-service-principal' `
                     -Identity "service principal $clientId" -ChainNotes $chainNotes
-                if ($null -ne $armResult) { return $armResult }
+                if ($arm.Outcome -eq 'ready') { return $arm.Lane }
+                if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
+                if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
             }
             else {
                 $chainNotes.Add('env-service-principal: token endpoint 200 but no access_token field (raw body never echoed)')
@@ -479,9 +509,16 @@ function Test-AzureLane {
         else {
             $spStatus = if ($tokenProbe.Status -eq 0) { "transport failure ($($tokenProbe.Transport))" } else { "HTTP $($tokenProbe.Status)" }
             $chainNotes.Add("env-service-principal: token endpoint $spStatus (raw error body never echoed)")
+            # 400/401 from the token endpoint = the SP credential itself was rejected
+            # (invalid_client and friends) — a definitive rejection, unlike 5xx/transport.
+            if ($tokenProbe.Status -in 400, 401) { $sawAuthRejection = $true }
         }
     }
-    elseif ($spCertReady) {
+    # Independent `if`, not `elseif` (review finding): when a configured secret FAILS
+    # its exchange, the certificate's availability must still be reported — otherwise
+    # a normal rotation state (stale secret, valid cert) dead-ends in MFA advice.
+    # A secret SUCCESS never reaches here (it returned above).
+    if ($spCertReady) {
         # Certificate variant: the OAuth client assertion is a signed JWT — hand-rolling
         # that signature would re-implement a solved, security-critical flow, and the
         # az-delegated route (`az login --service-principal --certificate`) REWRITES the
@@ -495,7 +532,7 @@ function Test-AzureLane {
             'az login --service-principal --username $AZURE_CLIENT_ID --tenant $AZURE_TENANT_ID ' +
             '--certificate $AZURE_CLIENT_CERTIFICATE_PATH && az account get-access-token --resource-type arm')
     }
-    else {
+    if (-not $spSecretReady -and -not $spCertReady) {
         $chainNotes.Add('env-service-principal: AZURE_CLIENT_ID/AZURE_TENANT_ID + credential not all set (names checked only)')
     }
 
@@ -529,9 +566,11 @@ function Test-AzureLane {
         $miReply = Test-ParsedJson $miProbe.Body
         $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
         if ($miToken) {
-            $armResult = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
+            $arm = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
                 -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
-            if ($null -ne $armResult) { return $armResult }
+            if ($arm.Outcome -eq 'ready') { return $arm.Lane }
+            if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
+            if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
         }
         else {
             $chainNotes.Add("managed-identity ($miKind): endpoint 200 but no access_token field (raw body never echoed)")
@@ -552,9 +591,11 @@ function Test-AzureLane {
             $azReply = Test-ParsedJson (@($azOut) -join '')
             $azToken = [string](Get-OptionalProperty $azReply 'accessToken' '')
             if ($azToken) {
-                $armResult = Invoke-ArmProbe -Token $azToken -Source 'az-cli-cache' `
+                $arm = Invoke-ArmProbe -Token $azToken -Source 'az-cli-cache' `
                     -Identity 'the cached az login (whoever scripts/bootstrap/connect-account.ps1 pins)' -ChainNotes $chainNotes
-                if ($null -ne $armResult) { return $armResult }
+                if ($arm.Outcome -eq 'ready') { return $arm.Lane }
+                if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
+                if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
             }
             else {
                 $chainNotes.Add('az-cli-cache: exit 0 but no accessToken field in the JSON (raw output never echoed)')
@@ -562,14 +603,29 @@ function Test-AzureLane {
         }
         else {
             $chainNotes.Add("az-cli-cache: az account get-access-token exited $azExit — no usable cached login (the AADSTS50078 MFA-expired state lands here; stderr suppressed, never echoed)")
+            # az refusing to mint a token from its own cache is a definitive auth
+            # rejection (expired/absent login), not a transient service failure.
+            $sawAuthRejection = $true
         }
     }
     else {
         $chainNotes.Add('az-cli-cache: az is not on PATH (scripts/bootstrap/cloud-shell-setup.sh installs it)')
     }
 
-    # Chain exhausted: the one owner step, reported — never run.
+    # Chain exhausted — classify honestly (review findings):
     $chainText = $chainNotes -join '; '
+    # 1. A stashed 403 diagnosis wins: some rung authenticated but lacks RBAC — the
+    #    role-assignment action is the accurate remediation, never MFA.
+    if ($null -ne $armForbidden) { return $armForbidden }
+    # 2. No definitive rejection anywhere = transient-only evidence (transport, 429,
+    #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and
+    #    would prompt needless credential churn.
+    if (-not $sawAuthRejection) {
+        return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'none' `
+            -Detail ("no chain entry got a definitive answer — every attempt failed transiently: $chainText — " +
+                'retry later; do NOT change credentials on this evidence')
+    }
+    # 3. Definitive rejection(s): the one owner step, reported — never run.
     return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'none' `
         -Detail ("automatic chain exhausted (ci-oidc -> env service principal -> managed identity -> az cache): $chainText. " +
             "The zero-human-input paths that exist today are Azure Cloud Shell's implicit login and CI OIDC; everywhere " +
@@ -584,7 +640,7 @@ if ($DryRun) {
     Write-Host '  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> gh auth token (only if gh is on PATH)'
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
-    Write-Host '           401 => next candidate; all fail => needs-owner: gh auth login --web (device code)'
+    Write-Host '           401 => next candidate; all 401 => needs-owner (gh auth login --web); transient-only => unavailable (retry, never rotate)'
     Write-Host '           no candidate at all => unavailable (Invoke-WebRequest is built in — only the token can be missing)'
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
     Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => ci-delegated (azure/login owns the exchange; no token attempted)'
@@ -594,8 +650,8 @@ if ($DryRun) {
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set, else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $armSubscriptionsUrl"
-    Write-Host '           200 => ready (subscription count + first name/id); 401/403 => continue the chain'
-    Write-Host '           chain exhausted => needs-owner (tenant-scoped MFA login + setup-tenant.ps1 -OpsIdentity, reported never run)'
+    Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
+    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
     Write-Host ''
     Write-Host 'Dry run - no token read, no network call made, nothing written.'

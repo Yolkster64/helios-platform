@@ -134,11 +134,17 @@ function Invoke-HeliosAutoLogin {
         if ($null -ne $azLane) {
             $azState = [string]$azLane.state
             $azUsable = $azState -in @('ready', 'repaired')
-            $azDetail = "auth-doctor -Apply: az lane $azState"
+            # Carry the doctor's own detail through (review finding): 'unavailable'
+            # means az is not installed — collapsing that to needs-owner with a bare
+            # state name loses the installation guidance for both humans and JSON.
+            $azLaneDetail = if ($azLane.PSObject.Properties['detail']) { [string]$azLane.detail } else { '' }
+            $azDetail = "auth-doctor -Apply: az lane $azState" +
+                $(if ($azLaneDetail) { " — $azLaneDetail" } else { '' })
+            $azStepState = if ($azUsable) { 'ok' } elseif ($azState -eq 'unavailable') { 'unavailable' } else { 'needs-owner' }
             if (-not $azUsable -and $azLane.PSObject.Properties['ownerAction'] -and "$($azLane.ownerAction)".Trim()) {
                 $ownerActions.Add("$($azLane.ownerAction)".Trim())
             }
-            Add-Step -Step 'az' -State $(if ($azUsable) { 'ok' } else { 'needs-owner' }) -Detail $azDetail
+            Add-Step -Step 'az' -State $azStepState -Detail $azDetail
             # Surface the rest of the doctor's owner actions too — auto-login's summary
             # is meant to be the single list of what still needs a human.
             foreach ($lane in @($doctorReport.lanes)) {
@@ -165,7 +171,10 @@ function Invoke-HeliosAutoLogin {
         [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider' }
     )
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
-    $azCmd = Get-Command az -ErrorAction SilentlyContinue
+    # -CommandType Application (review finding): a dot-sourcing caller may carry an
+    # `az` alias/function whose .Source is not an invocable path — resolve the real
+    # executable only, as the verifier and auth doctor do.
+    $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue
     if (-not $azUsable) {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail 'az lane is not usable — Key Vault pulls need an authenticated az (see owner actions)'
     }
@@ -212,7 +221,7 @@ function Invoke-HeliosAutoLogin {
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
     if (-not (Test-EnvValue 'GITHUB_MODELS_TOKEN')) {
-        $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+        $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
             # list is ambiguous (review finding).

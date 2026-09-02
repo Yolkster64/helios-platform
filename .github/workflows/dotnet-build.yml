@@ -15,20 +15,15 @@ on:
       - 'Directory.Build.targets'
       - 'nuget.config'
       - '.github/workflows/dotnet-build.yml'
+  # No paths filter on pull_request (deliberate — required-check contract): the
+  # "Build solution & run tests" context is a ruleset-required status check, and a
+  # required check that never reports blocks that PR's merge forever. The workflow
+  # therefore triggers on EVERY PR; the `changes` job below detects whether the
+  # diff is build-relevant and SKIPS the build job when not — GitHub treats a
+  # skipped required check as satisfied, so docs-only PRs merge and build-relevant
+  # PRs are still gated on a real build.
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'config/**'
-      - 'scripts/build/**'
-      - '**.csproj'
-      - 'HELIOS.sln'
-      - 'Directory.Packages.props'
-      - 'Directory.Build.props'
-      - 'Directory.Build.targets'
-      - 'nuget.config'
-      - '.github/workflows/dotnet-build.yml'
   workflow_dispatch:
 
 permissions:
@@ -40,9 +35,41 @@ env:
   HELIOS_REQUIRE_PYTHON_SPOKE: 1
 
 jobs:
+  # PR-only path detection for the required-check contract described in the trigger
+  # comment: the pattern set below mirrors the push trigger's paths exactly.
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect build-relevant changes
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          printf '%s\n' "$changed"
+          pattern='^(src/|tests/|config/|scripts/build/|HELIOS\.sln$|Directory\.Packages\.props$|Directory\.Build\.props$|Directory\.Build\.targets$|nuget\.config$|\.github/workflows/dotnet-build\.yml$)|\.csproj$'
+          if printf '%s\n' "$changed" | grep -qE "$pattern"; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-test:
     name: Build solution & run tests
     runs-on: ubuntu-latest
+    needs: [changes]
+    # always() unlocks the needs edge on push/dispatch (where `changes` is skipped);
+    # the comparison is != 'false' so a broken changes job fails OPEN into a real
+    # build rather than silently skipping the gate.
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
