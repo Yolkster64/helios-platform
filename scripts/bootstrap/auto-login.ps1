@@ -278,7 +278,18 @@ function Invoke-HeliosAutoLogin {
     # `az` alias/function whose .Source is not an invocable path — resolve the real
     # executable only, as the verifier and auth doctor do.
     $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $azUsable) {
+    # Unresolved pairs FIRST (review finding): when every configured provider env
+    # already holds a value, or the profile declares no enabled vault-backed
+    # providers, the vault stage has nothing to acquire — demanding a vault URI
+    # (and adding a human action for it) would leave the "only steps that need
+    # a human" list non-empty for an already-satisfied configuration.
+    $unresolvedPairs = @($vaultPairs | Where-Object { -not (Test-EnvValue $_.Env) })
+    if (@($unresolvedPairs).Count -eq 0) {
+        $nothingToPullWhy = if (@($vaultPairs).Count -eq 0) { 'the active config declares no enabled vault-backed providers' }
+        else { 'every configured provider env already holds a value in this session (never clobbered)' }
+        Add-Step -Step 'keyvault' -State 'skipped' -Detail "$nothingToPullWhy — nothing to pull, vault prerequisite not required"
+    }
+    elseif (-not $azUsable) {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail 'az lane is not usable — Key Vault pulls need an authenticated az (see owner actions)'
     }
     elseif (-not $vaultUri) {
@@ -362,17 +373,80 @@ function Invoke-HeliosAutoLogin {
     # Target env is $ghModelsEnv — the github-models provider's CONFIGURED apiKeyEnv
     # (review finding), not a hardcoded name; a disabled provider skips the
     # fallback entirely.
+
+    # models:read PROOF for a raw GITHUB_TOKEN (review finding): non-emptiness is
+    # not usability — the github-models provider 403s on every call without
+    # models:read (connect-github.sh and setup-all.ps1 both treat it as required).
+    # Classic PATs expose their granted scopes in the X-OAuth-Scopes response
+    # header; fine-grained/Actions tokens do not, and an injecting transport makes
+    # per-token proof impossible (rest-connect.ps1 doctrine) — both read as
+    # 'unverifiable', never a false 'proven'. The token value exists only in the
+    # request header and is never printed.
+    function Get-GitHubTokenModelsScope {
+        param([Parameter(Mandatory)][string]$EnvName)
+        $ghHeaders = @{ Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        try {
+            $anon = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $ghHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            if ([int]$anon.StatusCode -eq 200) {
+                $anonParsed = $null
+                try { $anonParsed = $anon.Content | ConvertFrom-Json } catch { }
+                $anonLimit = 0
+                if ($null -ne $anonParsed -and $anonParsed.PSObject.Properties['rate'] -and
+                    [int]::TryParse([string]$anonParsed.rate.limit, [ref]$anonLimit) -and $anonLimit -gt 60) {
+                    return 'unverifiable'   # injecting transport: any token would look valid
+                }
+            }
+            $authHeaders = $ghHeaders.Clone()
+            $authHeaders['Authorization'] = "Bearer $([string](Get-Item "env:$EnvName").Value)"
+            $resp = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $authHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            $authHeaders = $null
+            if ([int]$resp.StatusCode -ne 200) { return 'invalid' }
+            $scopeKey = @($resp.Headers.Keys | Where-Object { $_ -ieq 'X-OAuth-Scopes' }) | Select-Object -First 1
+            $scopesText = if ($scopeKey) { (@($resp.Headers[$scopeKey]) -join ',') } else { '' }
+            if ([string]::IsNullOrWhiteSpace($scopesText)) { return 'unverifiable' }
+            if ($scopesText -match '(^|[,\s])models:read([,\s]|$)') { return 'proven' }
+            return 'missing-scope'
+        }
+        catch { return 'unverifiable' }
+    }
+
+    # True only when GITHUB_TOKEN's models:read is PROVEN — the reconcile filter
+    # retires the lane's vault action on this flag, never on mere presence.
+    $ghModelsSatisfiedViaGithubToken = $false
+    $ghFallbackNeeded = $false
     if (-not $ghModelsEnabled) {
         Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
     }
     elseif (-not (Test-EnvValue $ghModelsEnv) -and (Test-EnvValue 'GITHUB_TOKEN')) {
         # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the
-        # configured env is unset (review finding) — the documented CI path. The
-        # provider is therefore already satisfied; no export, no remediation.
-        Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it — the ' +
-            'github-models provider is satisfied without an export (validity not probed here; scripts/verify/rest-connect.ps1 is the wire truth)')
+        # configured env is unset (review finding) — the documented CI path — but
+        # only a token that actually carries models:read satisfies the provider.
+        switch (Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN') {
+            'proven' {
+                $ghModelsSatisfiedViaGithubToken = $true
+                Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and ProviderFactory.CreateGitHubModels falls back to it — ' +
+                    'the github-models provider is satisfied without an export')
+            }
+            'unverifiable' {
+                Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it, but its models:read ' +
+                    'permission is NOT verifiable here (fine-grained/Actions token exposes no scopes, or an injecting transport) — any vault ' +
+                    'repair stays listed as the deterministic path; if model calls 403, grant models: read')
+            }
+            'missing-scope' {
+                Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — the github-models provider would 403 on every call; trying the gh keyring next'
+                $ownerActions.Add("grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read, or store github-models-token in Key Vault")
+                $ghFallbackNeeded = $true
+            }
+            default {
+                Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN was rejected by api.github.com — it cannot satisfy the github-models provider; trying the gh keyring next'
+                $ghFallbackNeeded = $true
+            }
+        }
     }
     elseif (-not (Test-EnvValue $ghModelsEnv)) {
+        $ghFallbackNeeded = $true
+    }
+    if ($ghFallbackNeeded) {
         $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
@@ -438,7 +512,7 @@ function Invoke-HeliosAutoLogin {
             # GITHUB_TOKEN fallback too (review finding) — a run that ends with a
             # working github-models lane must not still demand a vault repair.
             $envSatisfied = (Test-EnvValue $name) -or
-                ($name -eq $ghModelsEnv -and $ghModelsEnabled -and (Test-EnvValue 'GITHUB_TOKEN'))
+                ($name -eq $ghModelsEnv -and $ghModelsSatisfiedViaGithubToken)
             if ($action.Contains($name) -and $envSatisfied) { $resolvedByExport = $true; break }
         }
         if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action) }

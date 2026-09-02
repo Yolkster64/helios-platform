@@ -25,9 +25,10 @@ answer a real REST call with a real token. That distinction is load-bearing —
 Lanes (one row each: {lane, state ready|needs-owner|unavailable|ci-delegated, source,
 identity, detail, ownerAction}):
 
-  github  Candidate tokens tried IN ORDER: env GH_TOKEN, env GITHUB_TOKEN, env
-          GITHUB_MODELS_TOKEN (the github-models provider's primary credential — the
-          token auto-login.ps1 exports from Key Vault), then — only
+  github  Candidate tokens tried IN ORDER: env GH_TOKEN, env GITHUB_TOKEN, then the
+          github-models provider's CONFIGURED apiKeyEnv (GITHUB_MODELS_TOKEN by default;
+          read from AIHUB_CONFIG or config/aihub.json — the token auto-login.ps1 exports
+          from Key Vault), then — only
           when the gh CLI is on PATH — the output of `gh auth token` (stderr suppressed;
           a failure there just ends the chain early, it is not an error). Each candidate
           is probed with GET https://api.github.com/rate_limit (Authorization: Bearer,
@@ -242,6 +243,28 @@ function Test-EnvValue {
 }
 
 # --- github lane ------------------------------------------------------------------------
+# The github-models provider's CONFIGURED token variable (review finding): auto-login
+# exports under whatever apiKeyEnv the active hub config declares (AIHUB_CONFIG beats
+# the repo default, as AIHubService.ResolveConfigPath does) and ProviderFactory reads
+# that same name — so the candidate walk must probe it too, not only fixed names.
+# Any read problem falls back to the default name; nothing here is fatal.
+function Get-ConfiguredGitHubModelsEnv {
+    $default = 'GITHUB_MODELS_TOKEN'
+    $configPath = if (Test-EnvValue 'AIHUB_CONFIG') { ([string]$env:AIHUB_CONFIG).Trim() }
+    else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
+    try {
+        $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $providers = Get-OptionalProperty $parsed 'providers'
+        if ($null -eq $providers) { return $default }
+        $gm = $providers.PSObject.Properties['github-models']
+        if ($null -eq $gm) { return $default }
+        $envName = [string](Get-OptionalProperty $gm.Value 'apiKeyEnv' '')
+        if ([string]::IsNullOrWhiteSpace($envName)) { return $default }
+        return $envName.Trim()
+    }
+    catch { return $default }
+}
+
 function Get-GitHubTokenCandidates {
     # Candidate ORDER is the contract: explicit env wins over the CLI keyring, and
     # GH_TOKEN (gh's own precedence rule) wins over GITHUB_TOKEN. GITHUB_MODELS_TOKEN
@@ -252,7 +275,9 @@ function Get-GitHubTokenCandidates {
     # Token values are read into the candidate objects here and die when the github
     # lane function returns — they are never interpolated into any reported string.
     $candidates = [System.Collections.Generic.List[object]]::new()
-    foreach ($envName in @('GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_MODELS_TOKEN')) {
+    # Third slot is the CONFIGURED models env (GITHUB_MODELS_TOKEN by default) —
+    # review finding: a renamed apiKeyEnv must still be probed.
+    foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN', (Get-ConfiguredGitHubModelsEnv)) | Select-Object -Unique)) {
         if (Test-Path "env:$envName") {
             $value = [string](Get-Item "env:$envName").Value
             if (-not [string]::IsNullOrWhiteSpace($value)) {
@@ -807,7 +832,7 @@ function Test-AzureLane {
 if ($DryRun) {
     Write-Host ''
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
-    Write-Host '  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> env GITHUB_MODELS_TOKEN -> gh auth token (only if gh is on PATH)'
+    Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> env $(Get-ConfiguredGitHubModelsEnv) (the configured github-models apiKeyEnv) -> gh auth token (only if gh is on PATH)"
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
     Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'
