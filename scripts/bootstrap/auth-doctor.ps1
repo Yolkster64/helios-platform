@@ -300,8 +300,14 @@ function Test-AzLane {
     # carries AZURE_CLIENT_* workload credentials has a working non-interactive
     # repair that a short-circuit here would throw away (and every downstream Key
     # Vault pull with it).
-    $spReady = (Test-Path env:AZURE_CLIENT_ID) -and (Test-Path env:AZURE_TENANT_ID) -and
-        ((Test-Path env:AZURE_CLIENT_SECRET) -or (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH))
+    # Non-whitespace values required (review finding): Actions expressions routinely
+    # materialize optional secrets as EMPTY variables, and an existence-only check
+    # would then suppress the correct CI-OIDC branch and run az login with empty
+    # arguments. Values are read only for this emptiness test, never logged.
+    $spReady = (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_ID)) -and
+        (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_TENANT_ID)) -and
+        ((-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_SECRET)) -or
+         (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_CERTIFICATE_PATH)))
 
     # 1. CI OIDC: the azure/login action owns the GitHub-OIDC-to-Entra exchange
     #    (federated credentials from scripts/bootstrap/azure-oidc-setup.ps1). Doing a
@@ -315,8 +321,9 @@ function Test-AzLane {
 
     # 2. Service principal from the environment — fully non-interactive.
     if ($spReady) {
-        # Certificate preferred over a shared secret when both are present.
-        $credEnvName = if (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH) { 'AZURE_CLIENT_CERTIFICATE_PATH' } else { 'AZURE_CLIENT_SECRET' }
+        # Certificate preferred over a shared secret when both are present
+        # (non-whitespace, same rule as $spReady above).
+        $credEnvName = if (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_CERTIFICATE_PATH)) { 'AZURE_CLIENT_CERTIFICATE_PATH' } else { 'AZURE_CLIENT_SECRET' }
         if (-not $Apply) {
             return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'service-principal' `
                 -Detail ("$reason; service-principal credentials are in the environment (AZURE_CLIENT_ID + AZURE_TENANT_ID + $credEnvName — names checked only) — automatic non-interactive repair is available") `

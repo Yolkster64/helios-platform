@@ -269,10 +269,26 @@ function Get-GitHubTokenCandidates {
         # Enterprise host, an unqualified `gh auth token` would hand back the
         # ENTERPRISE credential — which this lane would then send to api.github.com,
         # disclosing it to the wrong control plane.
-        $tokenLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
-        $ghExit = $LASTEXITCODE
+        # Env-cleared (review finding): gh gives GH_TOKEN/GITHUB_TOKEN precedence
+        # over its keyring, so with a stale env token set an unqualified call would
+        # echo the same candidate the chain already tested instead of the STORED
+        # login. The two shadowing variables are removed for this one call and
+        # restored immediately — values move only between env slots in-process.
+        $savedGhToken = $env:GH_TOKEN
+        $savedGithubToken = $env:GITHUB_TOKEN
+        try {
+            Remove-Item env:GH_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            $tokenLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
+            $ghExit = $LASTEXITCODE
+        }
+        finally {
+            if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
+            if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
+        }
         $ghToken = (@($tokenLines) -join '').Trim()
-        if ($ghExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghToken)) {
+        $alreadyCandidate = @($candidates | Where-Object { $_.Token -eq $ghToken }).Count -gt 0
+        if ($ghExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghToken) -and -not $alreadyCandidate) {
             $candidates.Add([pscustomobject]@{ Source = 'gh-cli'; Token = $ghToken })
         }
     }
@@ -666,8 +682,14 @@ function Test-AzureLane {
     #    ENTERPRISE_AI_CONNECTIONS.md §0) lands exactly here.
     if ($azCmd) {
         $credentialSourcePresent = $true
-        $azOut = @(& $azCmd.Source account get-access-token --resource-type arm --output json 2>$null)
+        # 2>&1 with type-based split (review finding): stderr must be INSPECTED —
+        # never echoed — to tell a definitive auth rejection (AADSTS code, "az
+        # login" advice) from a transport/service failure that credential churn
+        # cannot repair. Discarding it made every nonzero exit read as rejection.
+        $azAll = @(& $azCmd.Source account get-access-token --resource-type arm --output json 2>&1)
         $azExit = $LASTEXITCODE
+        $azOut = @($azAll | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" })
+        $azErrText = (@($azAll | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) -join ' ')
         if ($azExit -eq 0) {
             $azReply = Test-ParsedJson (@($azOut) -join '')
             $azToken = [string](Get-OptionalProperty $azReply 'accessToken' '')
@@ -683,10 +705,17 @@ function Test-AzureLane {
             }
         }
         else {
-            $chainNotes.Add("az-cli-cache: az account get-access-token exited $azExit — no usable cached login (the AADSTS50078 MFA-expired state lands here; stderr suppressed, never echoed)")
-            # az refusing to mint a token from its own cache is a definitive auth
-            # rejection (expired/absent login), not a transient service failure.
-            $sawAuthRejection = $true
+            # Definitive only on a recognizable auth error (review finding): DNS,
+            # throttling, and service outages also make az exit nonzero, and MFA
+            # advice cannot fix those. The stderr text is regex-scanned only —
+            # never echoed.
+            if ($azErrText -match 'AADSTS\d+' -or $azErrText -match "az login" -or $azErrText -match 'No subscription found') {
+                $chainNotes.Add("az-cli-cache: az account get-access-token exited $azExit with a definitive auth error (AADSTS/no-login; raw output never echoed) — the AADSTS50078 MFA-expired state lands here")
+                $sawAuthRejection = $true
+            }
+            else {
+                $chainNotes.Add("az-cli-cache: az account get-access-token exited $azExit without a recognizable auth error (transport/throttling/service failure suspected; raw output never echoed) — treated as transient")
+            }
         }
     }
     else {

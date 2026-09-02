@@ -185,7 +185,8 @@ function Invoke-HeliosAutoLogin {
     # the env var precedence over the repo default, so when a custom/cloud profile
     # is selected these exports must follow it — otherwise auto-login configures a
     # hub other than the one that will actually run.
-    $aihubConfigPath = if (Test-EnvValue 'AIHUB_CONFIG') { ([string]$env:AIHUB_CONFIG).Trim() }
+    $aihubConfigExplicit = Test-EnvValue 'AIHUB_CONFIG'
+    $aihubConfigPath = if ($aihubConfigExplicit) { ([string]$env:AIHUB_CONFIG).Trim() }
     else { Join-Path $RepoRoot 'config/aihub.json' }
     $aihubProviders = $null
     try {
@@ -193,6 +194,14 @@ function Invoke-HeliosAutoLogin {
         if ($aihubParsed.PSObject.Properties['providers']) { $aihubProviders = $aihubParsed.providers }
     }
     catch { }
+    # An EXPLICITLY selected profile that cannot be read is an internal failure
+    # (review finding): the hub itself will fail to load that same file, so
+    # silently exporting the built-in default mapping would configure a hub other
+    # than the one selected — and report success doing it. The fallback below is
+    # reserved for the absent/unreadable REPO DEFAULT only.
+    if ($aihubConfigExplicit -and $null -eq $aihubProviders) {
+        throw "AIHUB_CONFIG selects '$aihubConfigPath' but it is missing, unparseable, or has no providers section — fix the file or unset AIHUB_CONFIG; aborting instead of exporting the default profile's secrets"
+    }
     if ($null -ne $aihubProviders) {
         $pairIndex = [ordered]@{}
         foreach ($provProp in $aihubProviders.PSObject.Properties) {
@@ -243,13 +252,19 @@ function Invoke-HeliosAutoLogin {
     }
     # The gh-fallback's target env also follows the config (review finding):
     # ProviderFactory.CreateGitHubModels reads the CONFIGURED apiKeyEnv, so
-    # exporting a hardcoded name would light nothing after a rename.
+    # exporting a hardcoded name would light nothing after a rename. A DISABLED
+    # github-models provider disables the whole fallback (review finding): the
+    # hub will not instantiate that lane, so no credential is fetched for it.
     $ghModelsEnv = 'GITHUB_MODELS_TOKEN'
+    $ghModelsEnabled = $true
     if ($null -ne $aihubProviders -and $aihubProviders.PSObject.Properties['github-models']) {
         $ghModelsProv = $aihubProviders.PSObject.Properties['github-models'].Value
         if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
             -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
             $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
+        }
+        if ($ghModelsProv.PSObject.Properties['enabled'] -and $ghModelsProv.enabled -eq $false) {
+            $ghModelsEnabled = $false
         }
     }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
@@ -339,8 +354,12 @@ function Invoke-HeliosAutoLogin {
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
     # Target env is $ghModelsEnv — the github-models provider's CONFIGURED apiKeyEnv
-    # (review finding), not a hardcoded name.
-    if (-not (Test-EnvValue $ghModelsEnv)) {
+    # (review finding), not a hardcoded name; a disabled provider skips the
+    # fallback entirely.
+    if (-not $ghModelsEnabled) {
+        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
+    }
+    elseif (-not (Test-EnvValue $ghModelsEnv)) {
         $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
