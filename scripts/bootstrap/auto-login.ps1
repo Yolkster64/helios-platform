@@ -240,15 +240,21 @@ function Invoke-HeliosAutoLogin {
             }
         }
     }
-    if (@($vaultPairs).Count -eq 0) {
-        # Stated fallback, never silent: used only when config/aihub.json is
-        # missing or unparseable from this checkout.
+    if ($null -eq $aihubProviders -and @($vaultPairs).Count -eq 0) {
+        # Stated fallback, never silent — and ONLY for an unreadable REPO DEFAULT
+        # config (the explicit AIHUB_CONFIG case threw above). A config that
+        # parsed fine but declares zero enabled vault-backed providers is a
+        # deliberate profile (review finding): pulling the built-in triplet for it
+        # would export credentials for lanes that hub will never instantiate.
         Write-Report '  note: config/aihub.json unreadable — falling back to the built-in secret/env mapping'
         $vaultPairs = @(
             [pscustomobject]@{ SecretName = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/openai-codex providers & SDKs (fallback mapping)' }
             [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider (fallback mapping)' }
             [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider (fallback mapping)' }
         )
+    }
+    elseif (@($vaultPairs).Count -eq 0) {
+        Write-Report '  note: the active config declares no enabled vault-backed providers — nothing to pull from Key Vault'
     }
     # The gh-fallback's target env also follows the config (review finding):
     # ProviderFactory.CreateGitHubModels reads the CONFIGURED apiKeyEnv, so
@@ -369,8 +375,25 @@ function Invoke-HeliosAutoLogin {
         else {
             # --hostname github.com (review finding): never export a GitHub
             # Enterprise credential (GH_HOST context) into the github.com models lane.
-            $ghLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
-            $ghExit = [int]$LASTEXITCODE
+            # Env-cleared (review finding): gh gives GH_TOKEN/GITHUB_TOKEN precedence
+            # over its keyring, so with a stale env token set this would export that
+            # dead value instead of the STORED login. The shadowing variables are
+            # removed for this one call and restored immediately (values move only
+            # between env slots in-process; rest-connect.ps1 does the same).
+            $savedGhToken = $env:GH_TOKEN
+            $savedGithubToken = $env:GITHUB_TOKEN
+            try {
+                Remove-Item env:GH_TOKEN -ErrorAction SilentlyContinue
+                Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+                $ghLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
+                $ghExit = [int]$LASTEXITCODE
+            }
+            finally {
+                if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
+                if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
+                $savedGhToken = ''
+                $savedGithubToken = ''
+            }
             $ghToken = (@($ghLines) -join '').Trim()
             if ($ghExit -eq 0 -and $ghToken) {
                 Set-Item -Path "env:$ghModelsEnv" -Value $ghToken

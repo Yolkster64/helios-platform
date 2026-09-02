@@ -456,13 +456,16 @@ function Invoke-ArmProbe {
     if ($probe.Status -eq 200) {
         $parsed = Test-ParsedJson $probe.Body
         # A 200 whose body is not a real subscriptions payload (HTML from an
-        # intermediary, malformed JSON, no 'value' array) proves NOTHING (review
-        # finding) — it must not become ready-with-zero-subscriptions.
-        if ($null -eq $parsed -or -not $parsed.PSObject.Properties['value']) {
-            $ChainNotes.Add("$Source ARM answered 200 but the body is not a parseable subscriptions payload (intermediary?) — not treated as connectivity proof")
+        # intermediary, malformed JSON, no 'value' ARRAY) proves NOTHING (review
+        # finding) — and `value` must actually BE an array: a scalar there would
+        # otherwise get wrapped into a one-item collection and fabricate a
+        # subscription count out of an error body.
+        $armValue = if ($null -ne $parsed) { Get-OptionalProperty $parsed 'value' } else { $null }
+        if ($null -eq $parsed -or -not ($armValue -is [array])) {
+            $ChainNotes.Add("$Source ARM answered 200 but the body is not a parseable subscriptions payload with a 'value' array (intermediary?) — not treated as connectivity proof")
             return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
         }
-        $subs = @(Get-OptionalProperty $parsed 'value' @())
+        $subs = @($armValue)
         $subCount = $subs.Count
         # Display name + id are identifiers, not secrets (connect-account.ps1 rule:
         # pinning identities is the point).
@@ -745,11 +748,20 @@ function Test-AzureLane {
     #    one path that needs no MFA — the lane would otherwise end as retry advice
     #    or the generic MFA action.
     if ($spCertReady) {
+        # The repair runs through az (review finding): auth-doctor -Apply returns
+        # immediately when az is missing, so on an az-less host the action must
+        # name the install prerequisite or it sends the operator into a dead end.
+        $certAction = if ($azCmd) {
+            'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive certificate service-principal login; no MFA needed'
+        }
+        else {
+            'install the Azure CLI first (scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli), then: pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive certificate login; no MFA needed'
+        }
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
             -Detail ("the certificate service-principal flow is configured (AZURE_CLIENT_ID/AZURE_TENANT_ID/" +
                 "AZURE_CLIENT_CERTIFICATE_PATH set) and is a non-interactive repair this report-only probe " +
                 "deliberately does not execute: $chainText") `
-            -OwnerAction 'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive certificate service-principal login; no MFA needed'
+            -OwnerAction $certAction
     }
     # 4. No credential source EXISTED at all (review finding): nothing was actually
     #    attempted, so neither "retry later" nor credential-rotation advice is

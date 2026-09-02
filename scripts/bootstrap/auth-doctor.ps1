@@ -379,6 +379,16 @@ function Test-AzLane {
         $reason += ("; managed-identity repair failed (exit $($mi.ExitCode), raw output never echoed)")
     }
 
+    # 3.5 CI OIDC as the pre-interactive fallback (review finding): when the SP
+    #    (or MI) repair FAILED but this Actions job can still mint an OIDC token,
+    #    the azure/login step remains a working NON-interactive path — device-code
+    #    advice would be both wrong and useless in a headless CI job.
+    if ($inActions -and $env:ACTIONS_ID_TOKEN_REQUEST_URL) {
+        return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'ci-oidc' `
+            -Detail ("$reason; this Actions job can still mint an OIDC token (ACTIONS_ID_TOKEN_REQUEST_URL is present) — the azure/login step owns that exchange and this doctor never fights it") `
+            -OwnerAction 'add the azure/login step (client-id/tenant-id/subscription-id from the Actions variables scripts/bootstrap/azure-oidc-setup.ps1 prints) before this script runs'
+    }
+
     # 4. Interactive last — MFA/device-code needs a human and is NEVER run by this
     #    script, -Apply included. Exact command and tenant id from
     #    docs/architecture/ENTERPRISE_AI_CONNECTIONS.md §1 (Azure re-auth).
