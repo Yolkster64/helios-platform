@@ -28,8 +28,9 @@ Lanes:
                 docs/architecture/ENTERPRISE_AI_CONNECTIONS.md §0 measured on
                 2026-08-13 — profile cached but every ARM/Graph call failing
                 AADSTS50078 (MFA expired). Repairs under -Apply: service principal
-                from AZURE_CLIENT_ID + AZURE_TENANT_ID + (AZURE_CLIENT_SECRET or
-                AZURE_CLIENT_CERTIFICATE_PATH), or managed identity when
+                from AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_CERTIFICATE_PATH
+                (only when that file exists) and then AZURE_CLIENT_SECRET — a
+                rejected certificate falls back to the secret — or managed identity when
                 IDENTITY_ENDPOINT / MSI_ENDPOINT is present (or -UseManagedIdentity).
                 In Actions with ACTIONS_ID_TOKEN_REQUEST_URL present the azure/login
                 step owns the OIDC exchange (ci-oidc) and is never fought. The
@@ -320,39 +321,57 @@ function Test-AzLane {
     }
 
     # 2. Service principal from the environment — fully non-interactive.
+    #    Credential candidates in preference order (review finding): a certificate
+    #    is preferred over a shared secret, but only a certificate whose file exists
+    #    is a candidate at all, and a certificate az rejects must not throw away a
+    #    valid secret sitting next to it — every candidate is tried before the later
+    #    rungs get a turn. Path existence only; certificate contents are never read.
+    $spCandidates = [System.Collections.Generic.List[string]]::new()
+    $certPathValue = ''
     if ($spReady) {
-        # Certificate preferred over a shared secret when both are present
-        # (non-whitespace, same rule as $spReady above).
-        $credEnvName = if (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_CERTIFICATE_PATH)) { 'AZURE_CLIENT_CERTIFICATE_PATH' } else { 'AZURE_CLIENT_SECRET' }
+        $certPathValue = ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($certPathValue)) {
+            if (Test-Path -LiteralPath $certPathValue -PathType Leaf) { $spCandidates.Add('AZURE_CLIENT_CERTIFICATE_PATH') }
+            else { $reason += '; AZURE_CLIENT_CERTIFICATE_PATH is set but no file exists at that path (path checked only) — certificate login skipped' }
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_SECRET)) { $spCandidates.Add('AZURE_CLIENT_SECRET') }
+    }
+    if ($spCandidates.Count -gt 0) {
+        $credOrder = @($spCandidates) -join ', then '
         if (-not $Apply) {
             return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'service-principal' `
-                -Detail ("$reason; service-principal credentials are in the environment (AZURE_CLIENT_ID + AZURE_TENANT_ID + $credEnvName — names checked only) — automatic non-interactive repair is available") `
+                -Detail ("$reason; service-principal credentials are in the environment (AZURE_CLIENT_ID + AZURE_TENANT_ID + $credOrder — names checked only, certificate path existence only) — automatic non-interactive repair is available") `
                 -OwnerAction 'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply'
         }
-        Write-Report ("  az: applying az login --service-principal (credentials read from AZURE_CLIENT_ID / AZURE_TENANT_ID / $credEnvName — values never logged)")
-        # Argument ARRAY on purpose: each value flows env var -> process argv and
-        # never through an interpolated string that could be logged or echoed.
-        $spArgs = @(
-            'login', '--service-principal',
-            '--username', $env:AZURE_CLIENT_ID,
-            '--tenant', $env:AZURE_TENANT_ID,
-            '--output', 'none'
-        )
-        if ($credEnvName -eq 'AZURE_CLIENT_CERTIFICATE_PATH') {
-            $spArgs += @('--certificate', $env:AZURE_CLIENT_CERTIFICATE_PATH)
+        $spFailures = [System.Collections.Generic.List[string]]::new()
+        foreach ($credEnvName in $spCandidates) {
+            Write-Report ("  az: applying az login --service-principal (credentials read from AZURE_CLIENT_ID / AZURE_TENANT_ID / $credEnvName — values never logged)")
+            # Argument ARRAY on purpose: each value flows env var -> process argv and
+            # never through an interpolated string that could be logged or echoed.
+            $spArgs = @(
+                'login', '--service-principal',
+                '--username', $env:AZURE_CLIENT_ID,
+                '--tenant', $env:AZURE_TENANT_ID,
+                '--output', 'none'
+            )
+            if ($credEnvName -eq 'AZURE_CLIENT_CERTIFICATE_PATH') {
+                $spArgs += @('--certificate', $certPathValue)
+            }
+            else {
+                $spArgs += @('--password', $env:AZURE_CLIENT_SECRET)
+            }
+            $login = Invoke-Probe -Executable $azCmd.Source -Arguments $spArgs
+            $verify = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'get-access-token', '--output', 'none')
+            if ($login.ExitCode -eq 0 -and $verify.ExitCode -eq 0) {
+                $spRescue = if ($spFailures.Count -gt 0) { ' — after ' + (@($spFailures) -join '; ') } else { '' }
+                return New-LaneResult -Lane 'az' -State 'repaired' -Method 'service-principal' `
+                    -Detail ("az login --service-principal succeeded and a live token refresh verifies it (credentials taken from AZURE_CLIENT_ID / AZURE_TENANT_ID / $credEnvName by name; values never logged)$spRescue")
+            }
+            $spFailText = (@($login.Output) + @($verify.Output)) -join ' '
+            $spAad = if ($spFailText -match 'AADSTS\d+') { (' ({0})' -f $Matches[0]) } else { '' }
+            $spFailures.Add("$credEnvName was rejected$spAad, exit $($login.ExitCode)")
         }
-        else {
-            $spArgs += @('--password', $env:AZURE_CLIENT_SECRET)
-        }
-        $login = Invoke-Probe -Executable $azCmd.Source -Arguments $spArgs
-        $verify = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'get-access-token', '--output', 'none')
-        if ($login.ExitCode -eq 0 -and $verify.ExitCode -eq 0) {
-            return New-LaneResult -Lane 'az' -State 'repaired' -Method 'service-principal' `
-                -Detail ("az login --service-principal succeeded and a live token refresh verifies it (credentials taken from AZURE_CLIENT_ID / AZURE_TENANT_ID / $credEnvName by name; values never logged)")
-        }
-        $spFailText = (@($login.Output) + @($verify.Output)) -join ' '
-        $spAad = if ($spFailText -match 'AADSTS\d+') { (' ({0})' -f $Matches[0]) } else { '' }
-        $reason += ("; service-principal repair failed$spAad — exit $($login.ExitCode), raw output never echoed")
+        $reason += ('; service-principal repair failed — ' + (@($spFailures) -join '; ') + ' — raw output never echoed')
         # Fall through: the next automatic rung may still work.
     }
 

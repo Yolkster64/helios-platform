@@ -49,11 +49,13 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  (the bash twin). Env vars carrying a NON-EMPTY value are never
                  clobbered; an empty/whitespace value counts as unset (review
                  finding — matching the bash twin's nonempty rule).
-  gh-models      when GITHUB_MODELS_TOKEN is still effectively unset and
-                 `gh auth token` yields a token, export it (the connect-github.sh
-                 sourcing behavior, in pwsh). The models:read scope CANNOT be
-                 verified here when `gh auth status` is unusable, so the step says
-                 so and prints the refresh command to run if model calls 403.
+  gh-models      when GITHUB_MODELS_TOKEN is still effectively unset: a raw
+                 GITHUB_TOKEN satisfies the provider only when the wire PROVES
+                 models:read (X-OAuth-Scopes); otherwise `gh auth token` is read
+                 env-cleared and probed the same way — a proven token is exported,
+                 an unverifiable one (no scopes header, or an injecting transport)
+                 is exported with the scope/vault repair left standing, and a token
+                 proven to lack models:read (or rejected) is NOT exported at all.
   summary        which env NAMES were set this run, which lanes remain owner-gated.
 
 Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
@@ -277,7 +279,8 @@ function Invoke-HeliosAutoLogin {
     # -CommandType Application (review finding): a dot-sourcing caller may carry an
     # `az` alias/function whose .Source is not an invocable path — resolve the real
     # executable only, as the verifier and auth doctor do.
-    $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue
+    # First PATH hit only (see the gh lookup below for the duplicate-name failure).
+    $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     # Unresolved pairs FIRST (review finding): when every configured provider env
     # already holds a value, or the profile declares no enabled vault-backed
     # providers, the vault stage has nothing to acquire — demanding a vault URI
@@ -410,9 +413,15 @@ function Invoke-HeliosAutoLogin {
         catch { return 'unverifiable' }
     }
 
-    # True only when GITHUB_TOKEN's models:read is PROVEN — the reconcile filter
-    # retires the lane's vault action on this flag, never on mere presence.
-    $ghModelsSatisfiedViaGithubToken = $false
+    # True only when a models:read PROOF exists for the credential feeding the
+    # lane (a raw GITHUB_TOKEN or the gh-rung export) — the reconcile filter
+    # retires the lane's scope/vault actions on this flag, never on mere presence.
+    $ghModelsScopeProven = $false
+    # True when the gh rung exported a token whose scope could not be verified:
+    # that export is the best available credential, but it must not retire a
+    # repair action (review finding) until a run proves it.
+    $ghModelsUnprovenExport = $false
+    $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read, or store github-models-token in Key Vault"
     $ghFallbackNeeded = $false
     if (-not $ghModelsEnabled) {
         Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
@@ -423,7 +432,7 @@ function Invoke-HeliosAutoLogin {
         # only a token that actually carries models:read satisfies the provider.
         switch (Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN') {
             'proven' {
-                $ghModelsSatisfiedViaGithubToken = $true
+                $ghModelsScopeProven = $true
                 Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and ProviderFactory.CreateGitHubModels falls back to it — ' +
                     'the github-models provider is satisfied without an export')
             }
@@ -434,7 +443,7 @@ function Invoke-HeliosAutoLogin {
             }
             'missing-scope' {
                 Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — the github-models provider would 403 on every call; trying the gh keyring next'
-                $ownerActions.Add("grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read, or store github-models-token in Key Vault")
+                $ownerActions.Add($ghModelsRepairAction)
                 $ghFallbackNeeded = $true
             }
             default {
@@ -447,7 +456,11 @@ function Invoke-HeliosAutoLogin {
         $ghFallbackNeeded = $true
     }
     if ($ghFallbackNeeded) {
-        $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+        # First PATH hit only: Get-Command returns EVERY matching application when
+        # the name resolves more than once (a shim or a second install ahead of the
+        # real binary), and an array .Source would then be invoked as one bogus
+        # command name — measured as an internal failure, not a lane result.
+        $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
             # list is ambiguous (review finding).
@@ -477,16 +490,39 @@ function Invoke-HeliosAutoLogin {
             }
             $ghToken = (@($ghLines) -join '').Trim()
             if ($ghExit -eq 0 -and $ghToken) {
+                # Scope PROOF before the export counts (review finding): the stored
+                # gh login is probed exactly like GITHUB_TOKEN above. A token the
+                # wire proves to lack models:read is not exported at all (the
+                # provider would 403 on every call) and the repair action stands; an
+                # unverifiable one is exported as the best available credential but
+                # leaves every scope/vault repair listed until a run proves it.
                 Set-Item -Path "env:$ghModelsEnv" -Value $ghToken
                 $ghToken = ''
-                $exportedNames.Add($ghModelsEnv)
-                # Scope honesty (review finding): connect-github.sh verifies the
-                # models:read scope, but that check needs a usable `gh auth status`,
-                # which this environment may not have — so the export is made with
-                # the caveat stated instead of a silent claim of usability.
-                Add-Step -Step $ghModelsEnv -State 'exported' `
-                    -Detail ('from `gh auth token` — lights: gh-models provider IF the token carries models:read ' +
-                        '(not verifiable here); if model calls 403: gh auth refresh -h github.com --scopes models:read')
+                switch (Get-GitHubTokenModelsScope -EnvName $ghModelsEnv) {
+                    'proven' {
+                        $ghModelsScopeProven = $true
+                        $exportedNames.Add($ghModelsEnv)
+                        Add-Step -Step $ghModelsEnv -State 'exported' -Detail 'from `gh auth token` — X-OAuth-Scopes carries models:read; lights: gh-models provider'
+                    }
+                    'unverifiable' {
+                        $ghModelsUnprovenExport = $true
+                        $exportedNames.Add($ghModelsEnv)
+                        Add-Step -Step $ghModelsEnv -State 'exported' `
+                            -Detail ('from `gh auth token` — exported as the best available credential, but its models:read permission is NOT ' +
+                                'verifiable here (no X-OAuth-Scopes header, or an injecting transport); any scope/vault repair stays listed ' +
+                                'until a run proves it; if model calls 403: gh auth refresh -h github.com --scopes models:read')
+                    }
+                    'missing-scope' {
+                        Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
+                        Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported (the github-models provider would 403 on every call)'
+                        $ownerActions.Add($ghModelsRepairAction)
+                    }
+                    default {
+                        Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
+                        Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login was rejected by api.github.com — NOT exported'
+                        $ownerActions.Add("re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read, or store github-models-token in Key Vault (lights $ghModelsEnv)")
+                    }
+                }
             }
             else {
                 Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one'
@@ -510,9 +546,15 @@ function Invoke-HeliosAutoLogin {
         foreach ($name in $exportResolvableEnvNames) {
             # The models env counts as satisfied via the provider's documented
             # GITHUB_TOKEN fallback too (review finding) — a run that ends with a
-            # working github-models lane must not still demand a vault repair.
-            $envSatisfied = (Test-EnvValue $name) -or
-                ($name -eq $ghModelsEnv -and $ghModelsSatisfiedViaGithubToken)
+            # working github-models lane must not still demand a vault repair —
+            # but never on the strength of an unproven gh-rung export (review
+            # finding): a stored token that also lacks models:read would otherwise
+            # retire the very repair it needs. A vault-pulled or pre-set value is
+            # the deterministic path and counts as before.
+            $envSatisfied = if ($name -eq $ghModelsEnv) {
+                $ghModelsScopeProven -or ((Test-EnvValue $name) -and -not $ghModelsUnprovenExport)
+            }
+            else { Test-EnvValue $name }
             if ($action.Contains($name) -and $envSatisfied) { $resolvedByExport = $true; break }
         }
         if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action) }
