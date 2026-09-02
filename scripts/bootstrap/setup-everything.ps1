@@ -203,7 +203,10 @@ try {
     # not read an unparsable toolchain/identity/auth/inventory run as success).
     # Degraded-with-a-report (child exit 2) stays exit 0: that is the designed
     # report-first state the chained scripts document.
-    $softStepNames = @($chainSpecs | Where-Object { $_.Soft } | ForEach-Object { $_.Step })
+    # Index syntax, not dot notation: only the smoke spec defines a Soft key, and
+    # under Set-StrictMode Latest reading a missing hashtable member as a property
+    # throws — $_['Soft'] returns $null for the others instead (review finding).
+    $softStepNames = @($chainSpecs | Where-Object { $_['Soft'] } | ForEach-Object { $_['Step'] })
     $requiredFailed = @($steps | Where-Object {
             $_.step -notin $softStepNames -and ($_.state -eq 'failed' -or $_.exitCode -eq 1)
         } | ForEach-Object step)

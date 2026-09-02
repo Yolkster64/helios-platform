@@ -81,6 +81,13 @@ public static class ApiEndpoints
                     + "(e.g. 'absorption-benchmark', 'fork-observation'); live provider "
                     + "outcomes are recorded by the hub itself."));
             }
+            if (request.Quality is { } quality && !(double.IsFinite(quality) && quality is >= 0 and <= 1))
+            {
+                // Quality is a [0,1] rating; a finite-but-invalid value (e.g. 100)
+                // would silently poison /v1/metrics' AverageQuality (review finding).
+                return Results.BadRequest(new ApiError(
+                    "quality must be between 0 and 1 when provided."));
+            }
 
             await hub.Learning.RecordAsync(
                 new RoutingOutcome
@@ -159,8 +166,11 @@ public static class ApiEndpoints
                         TotalCostUsd: FiniteOrNull(outcomes.Sum(o => o.CostUsd)),
                         AverageCostUsd: FiniteOrNull(outcomes.Average(o => o.CostUsd)),
                         // Average(double?) ignores unrated outcomes and is null when
-                        // none are rated — never a fabricated 0.
-                        AverageQuality: FiniteOrNull(outcomes.Average(o => o.Quality)),
+                        // none are rated — never a fabricated 0. The [0,1] filter is
+                        // defense-in-depth for out-of-range ratings recorded before
+                        // POST /v1/learning validated the range.
+                        AverageQuality: FiniteOrNull(outcomes.Average(
+                            o => o.Quality is >= 0 and <= 1 ? o.Quality : null)),
                         // RoutingOutcome persists no token counts, so these cannot be
                         // derived honestly — see ProviderMetricsResponse.
                         TokensUsed: null,

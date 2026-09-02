@@ -212,6 +212,19 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task PostLearning_RejectsOutOfRangeQuality()
+    {
+        // Quality is a [0,1] rating; a finite-but-invalid value (e.g. 100) would
+        // silently poison /v1/metrics' AverageQuality.
+        var response = await _client.PostAsJsonAsync("/v1/learning",
+            new AdvisoryOutcomeRequest(TaskType: "absorption", Source: "absorption-benchmark",
+                Provider: "M0nado/helios-platform#222", Model: "abc", Success: true,
+                Quality: 100), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PostLearning_AcceptsAdvisoryOutcome_AndReportsStoreState()
     {
         var response = await _client.PostAsJsonAsync("/v1/learning",
