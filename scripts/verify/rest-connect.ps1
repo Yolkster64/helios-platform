@@ -42,9 +42,13 @@ identity, detail, ownerAction}):
 
   azure   Automatic-first chain; interactive login is NEVER run, only ever reported:
             1. CI OIDC        ACTIONS_ID_TOKEN_REQUEST_URL present (name check only)
-                              => state ci-delegated: azure/login owns the OIDC exchange
-                              in CI and this probe does not duplicate it. No token is
-                              attempted.
+                              => OIDC is AVAILABLE — evidence, not a completed login
+                              (the variable exists the moment a job grants id-token:
+                              write, even when azure/login never runs). The chain
+                              keeps walking for a token that actually exists; only
+                              when no rung holds one does the lane end ci-delegated,
+                              stating the azure/login prerequisite. The exchange
+                              itself is never duplicated here.
             2. env SP         AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET
                               => client_credentials POST to login.microsoftonline.com
                               (scope https://management.azure.com/.default; body built
@@ -338,6 +342,17 @@ function Test-GitHubLane {
                 $attemptNotes.Add("$sourceName rate_limit 200 but the body is not a parseable GitHub rate-limit payload (intermediary?)")
                 continue
             }
+            # Above the anonymous cap only (review finding): an intermediary that
+            # STRIPS the Authorization header makes the candidate's request
+            # effectively anonymous — GitHub then answers a legitimate 200 at the
+            # 60/hr cap, which is parseable but proves nothing about THIS token
+            # (every authenticated GitHub limit starts at 1000/hr). The anonymous
+            # control probe above already fell through in that scenario, so the
+            # same cap must gate the per-candidate attribution too.
+            if ($authLimitValue -le 60) {
+                $attemptNotes.Add("$sourceName rate_limit 200 but at the anonymous cap ($limit/hr) — Authorization likely stripped in transit; validity not attributed to this token")
+                continue
+            }
 
             # Identity is best-effort: some REST-valid token types (fine-grained with
             # narrow scopes, app installation tokens) cannot call /user. That does NOT
@@ -461,15 +476,20 @@ function Invoke-ArmProbe {
 }
 
 function Test-AzureLane {
-    # 1. CI OIDC — name check only; azure/login owns the exchange and this probe never
-    #    duplicates (or races) it.
-    if (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_URL) {
-        return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
-            -Identity 'the workflow federated identity' `
-            -Detail 'azure/login performs the OIDC exchange in CI — this probe does not duplicate it'
+    $chainNotes = [System.Collections.Generic.List[string]]::new()
+    # 1. CI OIDC — AVAILABILITY evidence, not a completed login (review finding):
+    #    GitHub sets ACTIONS_ID_TOKEN_REQUEST_URL the moment a job grants
+    #    `id-token: write`, including in jobs that never run azure/login. So its
+    #    presence no longer short-circuits the chain: the walk continues probing for
+    #    a token that actually exists (azure/login's product surfaces at the az-cache
+    #    rung), and only when no rung holds one does the lane end ci-delegated with
+    #    the azure/login prerequisite stated. The OIDC exchange itself is still never
+    #    duplicated (or raced) here.
+    $ciOidcAvailable = Test-Path env:ACTIONS_ID_TOKEN_REQUEST_URL
+    if ($ciOidcAvailable) {
+        $chainNotes.Add('ci-oidc: ACTIONS_ID_TOKEN_REQUEST_URL present — OIDC is available to this job (azure/login owns the exchange; never duplicated here)')
     }
 
-    $chainNotes = [System.Collections.Generic.List[string]]::new()
     $azCmd = Get-CliCommand -Name 'az'
     # Failure classification across the whole chain (review findings): a 403 RBAC
     # diagnosis is stashed and only used if nothing later succeeds; MFA/re-login
@@ -477,6 +497,12 @@ function Test-AzureLane {
     # (transport/429/5xx) end as unavailable-retryable, never credential advice.
     $armForbidden = $null
     $sawAuthRejection = $false
+    # No-candidate detection (review finding): "transient — retry later" is only
+    # honest when a credential source actually EXISTED and failed. On a fresh
+    # non-Azure host (no SP env vars, no managed-identity endpoint, no az CLI) no
+    # outage recovery can ever help, so the sources are tracked and their total
+    # absence reports as unavailable WITH the setup path instead of retry advice.
+    $credentialSourcePresent = $false
 
     # 2. Env service principal — fully non-interactive. Secret variant: the credential
     #    values are read into locals, flow into an in-memory POST body, and die with
@@ -495,6 +521,7 @@ function Test-AzureLane {
     $spCertReady = (Test-Path env:AZURE_CLIENT_ID) -and
         (Test-Path env:AZURE_TENANT_ID) -and (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH)
     if ($spSecretReady) {
+        $credentialSourcePresent = $true
         $clientId = [string]$env:AZURE_CLIENT_ID     # appId — an identifier, not a secret
         $tenantId = [string]$env:AZURE_TENANT_ID
         $body = ('grant_type=client_credentials&client_id={0}&client_secret={1}&scope={2}' -f
@@ -532,6 +559,7 @@ function Test-AzureLane {
     # a normal rotation state (stale secret, valid cert) dead-ends in MFA advice.
     # A secret SUCCESS never reaches here (it returned above).
     if ($spCertReady) {
+        $credentialSourcePresent = $true
         # Certificate variant: the OAuth client assertion is a signed JWT — hand-rolling
         # that signature would re-implement a solved, security-critical flow, and the
         # az-delegated route (`az login --service-principal --certificate`) REWRITES the
@@ -593,11 +621,22 @@ function Test-AzureLane {
         $miStatus = if ($miProbe.Status -eq 0) { 'unreachable (expected off-Azure; failed fast)' } else { "HTTP $($miProbe.Status)" }
         $chainNotes.Add("managed-identity ($miKind): $miStatus")
     }
+    # A managed-identity SOURCE exists when an endpoint env var declares one (App
+    # Service / Functions hosts) or IMDS actually answered a token request with 200.
+    # Unreachable IMDS (status 0) is the normal off-Azure state, and a non-200 HTTP
+    # answer at that address (e.g. a container fabric's metadata firewall returning
+    # 403 — measured) is just as permanently unusable: neither is a credential
+    # source, and "retry later" cannot fix either.
+    if ((Test-Path env:IDENTITY_ENDPOINT) -or (Test-Path env:MSI_ENDPOINT) -or
+        ($null -ne $miProbe -and $miProbe.Status -eq 200)) {
+        $credentialSourcePresent = $true
+    }
 
     # 4. az cached login — last automatic rung. Nonzero exit = this chain entry fails;
     #    the AADSTS50078 MFA-expired state (the measured broken state in
     #    ENTERPRISE_AI_CONNECTIONS.md §0) lands exactly here.
     if ($azCmd) {
+        $credentialSourcePresent = $true
         $azOut = @(& $azCmd.Source account get-access-token --resource-type arm --output json 2>$null)
         $azExit = $LASTEXITCODE
         if ($azExit -eq 0) {
@@ -630,7 +669,27 @@ function Test-AzureLane {
     # 1. A stashed 403 diagnosis wins: some rung authenticated but lacks RBAC — the
     #    role-assignment action is the accurate remediation, never MFA.
     if ($null -ne $armForbidden) { return $armForbidden }
-    # 2. No definitive rejection anywhere = transient-only evidence (transport, 429,
+    # 2. CI OIDC available but no rung held a usable token: the exchange has not run
+    #    in this job (yet) — the remediation is a workflow step (azure/login), never
+    #    MFA advice or a retry (review finding: the request URL's presence is
+    #    availability evidence, not a completed login).
+    if ($ciOidcAvailable) {
+        return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
+            -Identity 'the workflow federated identity' `
+            -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
+                'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
+    }
+    # 3. No credential source EXISTED at all (review finding): nothing was actually
+    #    attempted, so neither "retry later" nor credential-rotation advice is
+    #    honest — the host needs a first credential source, and that is the exact
+    #    guidance returned.
+    if (-not $credentialSourcePresent) {
+        return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'none' `
+            -Detail ("no Azure credential source exists on this host — no CI OIDC, no service-principal env vars, no managed-identity endpoint yielded a token, and az is not on PATH: $chainText — " +
+                'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
+            -OwnerAction $azureOwnerAction
+    }
+    # 4. No definitive rejection anywhere = transient-only evidence (transport, 429,
     #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and
     #    would prompt needless credential churn.
     if (-not $sawAuthRejection) {
@@ -638,7 +697,7 @@ function Test-AzureLane {
             -Detail ("no chain entry got a definitive answer — every attempt failed transiently: $chainText — " +
                 'retry later; do NOT change credentials on this evidence')
     }
-    # 3. Definitive rejection(s): the one owner step, reported — never run.
+    # 5. Definitive rejection(s): the one owner step, reported — never run.
     return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'none' `
         -Detail ("automatic chain exhausted (ci-oidc -> env service principal -> managed identity -> az cache): $chainText. " +
             "The zero-human-input paths that exist today are Azure Cloud Shell's implicit login and CI OIDC; everywhere " +
@@ -652,11 +711,12 @@ if ($DryRun) {
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
     Write-Host '  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> gh auth token (only if gh is on PATH)'
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
-    Write-Host "           200 => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
+    Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
+    Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'
     Write-Host '           401 => next candidate; all 401 => needs-owner (gh auth login --web); transient-only => unavailable (retry, never rotate)'
     Write-Host '           no candidate at all => unavailable (Invoke-WebRequest is built in — only the token can be missing)'
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
-    Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => ci-delegated (azure/login owns the exchange; no token attempted)'
+    Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first)'
     Write-Host '           2. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_CLIENT_SECRET => client_credentials POST to'
     Write-Host "              https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token (scope $armScope)"
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
@@ -664,7 +724,7 @@ if ($DryRun) {
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $armSubscriptionsUrl"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
-    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
+    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available => ci-delegated (azure/login must run first); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
     Write-Host ''
     Write-Host 'Dry run - no token read, no network call made, nothing written.'

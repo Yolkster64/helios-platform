@@ -38,7 +38,11 @@ jobs:
           # --no-renames a rename is a delete+add and both sides are matched.
           changed="$(git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA")"
           printf '%s\n' "$changed"
-          if printf '%s\n' "$changed" | grep -qE '^infra/'; then
+          # The workflow file itself is a relevant path (review finding): a PR that
+          # changes only this validator would otherwise skip all three required infra
+          # jobs, so a broken validator change would never be exercised before merge
+          # (the .NET detector includes its own workflow the same way).
+          if printf '%s\n' "$changed" | grep -qE '^(infra/|\.github/workflows/infra-validate\.yml$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"

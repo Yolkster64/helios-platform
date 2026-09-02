@@ -254,9 +254,28 @@ function Invoke-HeliosAutoLogin {
         }
     }
 
-    $uniqueOwnerActions = @($ownerActions | Select-Object -Unique)
+    # Owner actions were collected BEFORE the export steps ran (review finding): the
+    # auth-doctor's provider-lane actions say things like "pull openai-api-key into
+    # OPENAI_API_KEY" — and when the Key Vault or gh rung supplies that exact env var
+    # later in this same run, the pre-export action is already satisfied. The
+    # summary's contract is "the only steps that need a human", so any action naming
+    # a provider env var that NOW holds a value is dropped, with the drop reported.
+    $exportResolvableEnvNames = @('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_MODELS_TOKEN')
+    $resolvedActionCount = 0
+    $remainingOwnerActions = [System.Collections.Generic.List[string]]::new()
+    foreach ($action in $ownerActions) {
+        $resolvedByExport = $false
+        foreach ($name in $exportResolvableEnvNames) {
+            if ($action.Contains($name) -and (Test-EnvValue $name)) { $resolvedByExport = $true; break }
+        }
+        if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action) }
+    }
+    $uniqueOwnerActions = @($remainingOwnerActions | Select-Object -Unique)
 
     Write-Report ''
+    if ($resolvedActionCount -gt 0) {
+        Write-Report ("{0} pre-export owner action(s) dropped — the provider env var each referenced was satisfied later in this run" -f $resolvedActionCount)
+    }
     if ($exportedNames.Count -gt 0) {
         Write-Report ('Exported this run (names only): ' + (@($exportedNames) -join ', '))
         if (-not $DotSourced) { Write-Report 'These exports died with this process — dot-source the script to keep them.' }
