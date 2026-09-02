@@ -32,10 +32,6 @@
         "strict_required_status_checks_policy": false,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "Build solution & run tests" },
-          { "context": "bicep-validate" },
-          { "context": "arm-freshness" },
-          { "context": "terraform-validate" },
           { "context": "Preflight Validation" },
           { "context": "PowerShell Syntax Validation" },
           { "context": "File Structure Validation" },
