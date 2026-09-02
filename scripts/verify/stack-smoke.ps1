@@ -12,7 +12,7 @@ builds anything (`dotnet run ... --no-build` only — CI and the operator build 
 `dotnet build HELIOS.sln -c Release`); when dotnet or the Release outputs are absent it
 reports state build-missing with the exact build command and exits 0 (report-only).
 
-Lanes (one row each: {lane, state ok|degraded|pending|failed|build-missing, detail}):
+Lanes (one row each: {lane, state ok|degraded|failed|build-missing, detail}):
 
   preflight  dotnet on PATH + bin/Release outputs present for the Api, Cli, and Mcp
              projects. Missing => every live lane is skipped as build-missing, exit 0.
@@ -32,16 +32,18 @@ Lanes (one row each: {lane, state ok|degraded|pending|failed|build-missing, deta
              ever read or printed. The API process is ALWAYS stopped in finally via the
              stored process handle (kill by PID including the dotnet-run child tree —
              never pkill by name, which could hit an unrelated operator process).
-  metrics    /v1/metrics probed while the API is up: 200 = ok; 404 = state pending with
-             detail "P2 not merged yet" (never a failure until it ships); anything else
-             is degraded and never gates.
+  metrics    /v1/metrics probed while the API is up: 200 = ok; 404 = failed — the
+             endpoint is mapped in src/ai/HELIOS.AIHub.Api/ApiEndpoints.cs, so a 404
+             from a live server means a stale build or a route regression, never
+             "not shipped yet"; connection loss or any other status is degraded.
   mcp        the MCP server is spawned over stdio
              (dotnet run --project src/mcp/HELIOS.Mcp -c Release --no-build), given the
              newline-delimited JSON-RPC handshake (initialize ->
              notifications/initialized -> tools/list, following nextCursor pagination),
-             and the returned tool count must EQUAL the number of distinct helios_* tool
-             names enumerated in docs/mcp/CLIENT_SETUP.md — parsed from the doc at RUN
-             time, never hardcoded, so the doc and the server can never drift silently.
+             and the returned tool names must MATCH the distinct helios_* tool names
+             enumerated in docs/mcp/CLIENT_SETUP.md name-for-name (a bare count check
+             would miss a rename) — parsed from the doc at RUN time, never hardcoded,
+             so the doc and the server can never drift silently.
              The process is terminated in finally (stdin close, then tree kill by the
              stored handle).
   cli        `helios-ai status` must exit 0 (degraded '!' providers still exit 0 — the
@@ -126,7 +128,7 @@ function New-LaneResult {
     param(
         [Parameter(Mandatory)][string]$Lane,
         [Parameter(Mandatory)]
-        [ValidateSet('ok', 'degraded', 'pending', 'failed', 'build-missing')]
+        [ValidateSet('ok', 'degraded', 'failed', 'build-missing')]
         [string]$State,
         [Parameter(Mandatory)][string]$Detail
     )
@@ -236,11 +238,11 @@ if ($DryRun) {
     Write-Host '               GET /v1/learning /v1/insights (no taskType)     -> 400 + required-parameter error'
     Write-Host '               GET /v1/learning /v1/insights ?taskType=code_generation -> 200'
     Write-Host '             stop the API in finally (stored PID, tree kill — never pkill by name)'
-    Write-Host '  metrics    GET /v1/metrics -> 200 = ok; 404 = pending ("P2 not merged yet"); else degraded'
+    Write-Host '  metrics    GET /v1/metrics -> 200 = ok; 404 = failed (mapped route missing: stale build or regression); else degraded'
     Write-Host "  mcp        spawn: dotnet run --project $mcpProject -c Release --no-build"
     Write-Host '             JSON-RPC over stdio: initialize -> notifications/initialized -> tools/list (+pagination)'
-    Write-Host ("             assert tool count == distinct helios_* names in docs/mcp/CLIENT_SETUP.md " +
-        "(read at run time; currently $($docNames.Count))")
+    Write-Host ("             assert tool names match the distinct helios_* names in docs/mcp/CLIENT_SETUP.md " +
+        "name-for-name (read at run time; currently $($docNames.Count))")
     Write-Host '             terminate in finally (stdin close, then tree kill by stored handle)'
     Write-Host "  cli        dotnet run --project $cliProject -c Release --no-build -- status          -> exit 0"
     Write-Host "             dotnet run --project $cliProject -c Release --no-build -- fleet-plan --json -> parses as JSON (soft)"
@@ -398,14 +400,19 @@ try {
                     else { if ($apiState -eq 'ok') { $apiState = 'degraded' }; $apiChecks.Add("$path`?taskType HTTP $($probe.Status) (expected 200)") }
                 }
 
-                # /v1/metrics: its own lane so a pending P2 never muddies the api core
-                # contract verdict. 404 is NOT a failure until the endpoint ships.
+                # /v1/metrics: its own lane so a telemetry regression never muddies the
+                # api core contract verdict. The endpoint shipped alongside this script
+                # (ApiEndpoints.cs maps it), so 404 from a live server is contract
+                # drift — a stale build or a lost route — not "pending" (review
+                # finding: pending after shipping would disguise a regression).
                 $probe = Invoke-HttpProbe -Url "$probeBase/v1/metrics"
                 $metricsLane = if ($probe.Status -eq 200) {
-                    New-LaneResult -Lane 'metrics' -State 'ok' -Detail '/v1/metrics 200 — the P2 telemetry endpoint is live'
+                    New-LaneResult -Lane 'metrics' -State 'ok' -Detail '/v1/metrics 200 — the telemetry endpoint is live'
                 }
                 elseif ($probe.Status -eq 404) {
-                    New-LaneResult -Lane 'metrics' -State 'pending' -Detail 'P2 not merged yet'
+                    $hardFailure = $true
+                    New-LaneResult -Lane 'metrics' -State 'failed' -Detail ('/v1/metrics 404 but the route is mapped in ' +
+                        'ApiEndpoints.cs — stale build or route regression (rebuild: dotnet build HELIOS.sln -c Release)')
                 }
                 elseif ($probe.Status -eq 0) {
                     New-LaneResult -Lane 'metrics' -State 'degraded' -Detail "/v1/metrics unreachable ($($probe.Transport)) — never gates"
@@ -519,20 +526,27 @@ try {
                         $mcpDetail = ("tools/list returned $($uniqueServer.Count) tool(s), but docs/mcp/CLIENT_SETUP.md " +
                             'yielded no helios_* names to compare against (doc missing or reshaped)')
                     }
-                    elseif ($uniqueServer.Count -eq $docNames.Count) {
-                        $mcpDetail = ("tools/list returned $($uniqueServer.Count) tools == $($docNames.Count) distinct " +
-                            'helios_* names in docs/mcp/CLIENT_SETUP.md (counted at run time)')
-                    }
                     else {
-                        # Drift, not death: the server communicated — the doc and the tool
-                        # assembly disagree. Name the drift so the fix is one edit.
+                        # Compare NAMES, not counts: a rename keeps the cardinality
+                        # identical while the contract drifts (review finding), so
+                        # equality is asserted on the two sets and the counts are
+                        # only display.
                         $docOnly = @($docNames | Where-Object { $_ -notin $uniqueServer })
                         $serverOnly = @($uniqueServer | Where-Object { $_ -notin $docNames })
-                        $mcpState = 'degraded'
-                        $mcpDetail = "tool count drift: server $($uniqueServer.Count) vs doc $($docNames.Count)"
-                        if ($docOnly.Count -gt 0) { $mcpDetail += '; doc-only: ' + ($docOnly -join ', ') }
-                        if ($serverOnly.Count -gt 0) { $mcpDetail += '; server-only: ' + ($serverOnly -join ', ') }
-                        $mcpDetail += ' — align docs/mcp/CLIENT_SETUP.md with src/mcp/HELIOS.Mcp'
+                        if ($docOnly.Count -eq 0 -and $serverOnly.Count -eq 0) {
+                            $mcpDetail = ("tools/list returned $($uniqueServer.Count) tools matching the " +
+                                "$($docNames.Count) distinct helios_* names in docs/mcp/CLIENT_SETUP.md " +
+                                'name-for-name (compared at run time)')
+                        }
+                        else {
+                            # Drift, not death: the server communicated — the doc and the tool
+                            # assembly disagree. Name the drift so the fix is one edit.
+                            $mcpState = 'degraded'
+                            $mcpDetail = "tool drift: server $($uniqueServer.Count) vs doc $($docNames.Count)"
+                            if ($docOnly.Count -gt 0) { $mcpDetail += '; doc-only: ' + ($docOnly -join ', ') }
+                            if ($serverOnly.Count -gt 0) { $mcpDetail += '; server-only: ' + ($serverOnly -join ', ') }
+                            $mcpDetail += ' — align docs/mcp/CLIENT_SETUP.md with src/mcp/HELIOS.Mcp'
+                        }
                     }
                 }
             }
@@ -615,11 +629,10 @@ try {
     $summary = [ordered]@{
         ok           = @($lanes | Where-Object { $_.state -eq 'ok' }).Count
         degraded     = @($lanes | Where-Object { $_.state -eq 'degraded' }).Count
-        pending      = @($lanes | Where-Object { $_.state -eq 'pending' }).Count
         failed       = @($lanes | Where-Object { $_.state -eq 'failed' }).Count
         buildMissing = @($lanes | Where-Object { $_.state -eq 'build-missing' }).Count
     }
-    # Exit contract: report-only stays 0 — degraded/pending/build-missing are truthful
+    # Exit contract: report-only stays 0 — degraded/build-missing are truthful
     # states, not failures. Only a hard communication failure gates.
     $exitCode = if ($hardFailure) { 1 } else { 0 }
 
@@ -646,8 +659,8 @@ try {
         $verdict = if ($hardFailure) { 'HARD COMMUNICATION FAILURE — exit 1' }
         elseif ($summary.buildMissing -gt 0) { "build missing — run: $buildCommand (report-only, exit 0)" }
         else { 'stack communicates — exit 0 (degraded providers are the designed pre-owner-unlock state)' }
-        Write-Report ("Stack smoke: {0} ok, {1} degraded, {2} pending, {3} failed, {4} build-missing — {5}" -f
-            $summary.ok, $summary.degraded, $summary.pending, $summary.failed, $summary.buildMissing, $verdict)
+        Write-Report ("Stack smoke: {0} ok, {1} degraded, {2} failed, {3} build-missing — {4}" -f
+            $summary.ok, $summary.degraded, $summary.failed, $summary.buildMissing, $verdict)
     }
 
     exit $exitCode

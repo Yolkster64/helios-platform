@@ -37,7 +37,8 @@ work that remains lives in ownerActions, not in ready.
 Exit codes: 0 = every step clean or degraded-as-designed (degradation is reported,
 report-first contract of the chained scripts); 2 = identity mismatch (always, even
 report-only) or an -Apply run that left auth-doctor with unresolved gating lanes;
-1 = internal failure.
+1 = internal failure — this script's own, or any required (non-soft) step that
+could not run at all (script missing, unparsable output, or the child's exit 1).
 
 .PARAMETER Apply
 Pass -Apply through to auth-doctor.ps1: automatic NON-INTERACTIVE repair only
@@ -196,12 +197,25 @@ try {
     $ready = (-not $identityMismatch) -and ($steps.Count -eq $chainSpecs.Count) -and
         (@($steps | Where-Object { $_.state -notin @('ok', 'unavailable') }).Count -eq 0)
 
+    # A required (non-soft) step that could not run at all — script missing, output
+    # not parseable as JSON, or a child internal error (the child's own exit 1) — is
+    # this script's exit-1 internal-failure contract (review finding: automation must
+    # not read an unparsable toolchain/identity/auth/inventory run as success).
+    # Degraded-with-a-report (child exit 2) stays exit 0: that is the designed
+    # report-first state the chained scripts document.
+    $softStepNames = @($chainSpecs | Where-Object { $_.Soft } | ForEach-Object { $_.Step })
+    $requiredFailed = @($steps | Where-Object {
+            $_.step -notin $softStepNames -and ($_.state -eq 'failed' -or $_.exitCode -eq 1)
+        } | ForEach-Object step)
+
     # Exit contract: 2 = identity mismatch (always gates, report-only included) or an
     # -Apply run whose auth-doctor left gating lanes unresolved (its own exit 2);
-    # otherwise 0 — degraded steps are reported via ownerActions, report-first.
+    # 1 = a required step failed outright (above); otherwise 0 — degraded steps are
+    # reported via ownerActions, report-first.
     $exitCode = 0
     if ($identityMismatch) { $exitCode = 2 }
     elseif ($Apply -and $authStep -and $authStep.exitCode -eq 2) { $exitCode = 2 }
+    elseif ($requiredFailed.Count -gt 0) { $exitCode = 1 }
 
     if ($Json) {
         [ordered]@{
