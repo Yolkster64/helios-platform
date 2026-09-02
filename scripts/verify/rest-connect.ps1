@@ -301,6 +301,7 @@ function Test-GitHubLane {
     }
 
     $attemptNotes = [System.Collections.Generic.List[string]]::new()
+    $sawDefinitiveRejection = $false
     foreach ($candidate in $candidates) {
         $sourceName = [string]$candidate.Source
         # The bearer value exists only inside this header hashtable for the two probes
@@ -346,6 +347,7 @@ function Test-GitHubLane {
                     "this exact token; token value never printed)$skippedNote")
         }
         if ($rateProbe.Status -eq 401) {
+            $sawDefinitiveRejection = $true
             $attemptNotes.Add("$sourceName rate_limit 401 (candidate not REST-valid)")
         }
         elseif ($rateProbe.Status -eq 0) {
@@ -357,6 +359,14 @@ function Test-GitHubLane {
     }
 
     $chainText = $attemptNotes -join '; '
+    # Re-login advice only on a DEFINITIVE rejection (review finding): a 401 proves a
+    # candidate credential is bad, but transport failures / 429 / 5xx are transient —
+    # rotating a healthy token on those would destroy a working credential for nothing.
+    if (-not $sawDefinitiveRejection) {
+        return New-LaneResult -Lane 'github' -State 'unavailable' -Source 'none' `
+            -Detail ("no candidate got a definitive answer from api.github.com — every attempt was transient " +
+                "(transport/429/5xx): $chainText — retry later; do NOT rotate credentials on this evidence")
+    }
     return New-LaneResult -Lane 'github' -State 'needs-owner' -Source 'none' `
         -Detail ("every candidate token failed the direct REST probe: $chainText — a fresh device-code " +
             'login (or a rotated token in GH_TOKEN) is an owner step') `
@@ -391,8 +401,20 @@ function Invoke-ArmProbe {
         return New-LaneResult -Lane 'azure' -State 'ready' -Source $Source -Identity $Identity `
             -Detail ("ARM /subscriptions 200 — $subCount subscription(s); $firstText (token value never printed)")
     }
-    if ($probe.Status -in 401, 403) {
-        $ChainNotes.Add("$Source acquired a token but ARM answered HTTP $($probe.Status) — not authorized for management.azure.com")
+    if ($probe.Status -eq 403) {
+        # AUTHORIZATION, not authentication (review finding): the token is real and
+        # ARM recognized the principal — it just lacks an RBAC role. Re-login can
+        # never fix that, so this is a terminal needs-owner with a role-assignment
+        # action, never a fall-through to MFA advice.
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source $Source -Identity $Identity `
+            -Detail ('a valid token was acquired but ARM answered 403 — the principal lacks an RBAC role ' +
+                'on the subscription; re-authentication cannot grant permissions') `
+            -OwnerAction ("grant the principal an RBAC role (e.g. Reader) on the target subscription/resource " +
+                "group — az role assignment create --assignee <principal> --role Reader --scope <scope> " +
+                '(role assignment is deliberately owner-gated in this repo)')
+    }
+    if ($probe.Status -eq 401) {
+        $ChainNotes.Add("$Source acquired a token but ARM answered HTTP 401 — the token itself was rejected")
     }
     elseif ($probe.Status -eq 0) {
         $ChainNotes.Add("$Source acquired a token but the ARM probe hit a transport failure ($($probe.Transport))")
@@ -426,7 +448,10 @@ function Test-AzureLane {
     # diagnostic run must never do (see the cert rung below).
     $spSecretReady = (Test-Path env:AZURE_CLIENT_ID) -and (Test-Path env:AZURE_TENANT_ID) -and
         (Test-Path env:AZURE_CLIENT_SECRET)
-    $spCertReady = (-not $spSecretReady) -and (Test-Path env:AZURE_CLIENT_ID) -and
+    # Cert availability is INDEPENDENT of the secret (review finding): during
+    # credential rotation a stale secret with a valid certificate is a normal state,
+    # and the cert path must still be reported after the secret exchange fails.
+    $spCertReady = (Test-Path env:AZURE_CLIENT_ID) -and
         (Test-Path env:AZURE_TENANT_ID) -and (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH)
     if ($spSecretReady) {
         $clientId = [string]$env:AZURE_CLIENT_ID     # appId — an identifier, not a secret

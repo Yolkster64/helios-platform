@@ -27,21 +27,29 @@ DOT-SOURCE IT so the exports outlive the script:
     . scripts/bootstrap/auto-login.ps1
 
 Run normally it still works, but the exports die with the child process — the summary
-tells you which invocation you used.
+tells you which invocation you used. The whole implementation runs inside a function
+scope, so dot-sourcing does NOT change the caller's StrictMode or
+$ErrorActionPreference (review finding); on an internal failure a dot-sourced run
+RETHROWS so the caller can detect the partial setup, while a normal run exits 1.
 
 Chain (reuse-first — this script orchestrates, it does not reimplement):
   az lane        pwsh scripts/bootstrap/auth-doctor.ps1 -Apply -Json  → repaired/ready
                  or needs-owner (the one-time `az login --tenant ...` MFA +
                  setup-tenant.ps1 -OpsIdentity permanence path is printed verbatim).
-  Key Vault      only when the az lane is usable AND AZURE_KEY_VAULT_URI is set (the
-                 vault provisioned by infra/main.bicep): openai-api-key →
+  Key Vault      only when the az lane is usable AND AZURE_KEY_VAULT_URI holds a real
+                 value (the vault provisioned by infra/main.bicep): openai-api-key →
                  OPENAI_API_KEY (codex CLI + openai providers/SDKs), anthropic-api-key
                  → ANTHROPIC_API_KEY (claude CLI + anthropic provider),
                  github-models-token → GITHUB_MODELS_TOKEN (gh-models provider).
                  Same secret names as scripts/bootstrap/load-env-from-keyvault.sh
-                 (the bash twin). Existing env values are NEVER clobbered.
-  gh-models      when GITHUB_MODELS_TOKEN is still unset and `gh auth token` yields a
-                 token, export it (the connect-github.sh sourcing behavior, in pwsh).
+                 (the bash twin). Env vars carrying a NON-EMPTY value are never
+                 clobbered; an empty/whitespace value counts as unset (review
+                 finding — matching the bash twin's nonempty rule).
+  gh-models      when GITHUB_MODELS_TOKEN is still effectively unset and
+                 `gh auth token` yields a token, export it (the connect-github.sh
+                 sourcing behavior, in pwsh). The models:read scope CANNOT be
+                 verified here when `gh auth status` is unusable, so the step says
+                 so and prints the refresh command to run if model calls 403.
   summary        which env NAMES were set this run, which lanes remain owner-gated.
 
 Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
@@ -53,51 +61,64 @@ Emit one machine-readable rollup {script, generatedUtc, dotSourced, steps[],
 exportedNames[], ownerActions[], exitCode} instead of the human report.
 
 Exit contract: 0 = ran to completion (owner-gated lanes are reported, not failures);
-1 = internal failure. Dot-sourced, the exit code is not asserted (exiting would kill
-the caller's shell) — read the summary instead.
+1 = internal failure. Dot-sourced, exit codes are not asserted (exiting would kill
+the caller's shell): completion is silent success and an internal failure RETHROWS.
 #>
 [CmdletBinding()]
 param(
     [switch]$Json
 )
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $scriptDir '..' '..')
-# Dot-sourced => $MyInvocation.InvocationName is '.', and exports persist for the caller.
-$dotSourced = $MyInvocation.InvocationName -eq '.'
-
-$steps = [System.Collections.Generic.List[object]]::new()
-$exportedNames = [System.Collections.Generic.List[string]]::new()
-$ownerActions = [System.Collections.Generic.List[string]]::new()
-
-function Write-Report {
-    param([string]$Line = '')
-    if (-not $Json) { Write-Host $Line }
-}
-
-function Add-Step {
+# Everything lives in this function so StrictMode and ErrorActionPreference are
+# FUNCTION-scoped: dot-sourcing the script must never rewrite the caller's shell
+# preferences (review finding). Environment exports are process-wide, so they still
+# reach the dot-sourcing caller.
+function Invoke-HeliosAutoLogin {
     param(
-        [Parameter(Mandatory)][string]$Step,
-        [Parameter(Mandatory)][ValidateSet('ok', 'exported', 'skipped', 'needs-owner', 'unavailable')][string]$State,
-        [Parameter(Mandatory)][string]$Detail
+        [switch]$Json,
+        [bool]$DotSourced,
+        [Parameter(Mandatory)][string]$RepoRoot
     )
-    $steps.Add([pscustomobject]@{ step = $Step; state = $State; detail = $Detail })
-    Write-Report ('  {0,-14} {1,-12} {2}' -f $Step, $State, $Detail)
-}
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
 
-try {
+    $steps = [System.Collections.Generic.List[object]]::new()
+    $exportedNames = [System.Collections.Generic.List[string]]::new()
+    $ownerActions = [System.Collections.Generic.List[string]]::new()
+
+    function Write-Report {
+        param([string]$Line = '')
+        if (-not $Json) { Write-Host $Line }
+    }
+
+    function Add-Step {
+        param(
+            [Parameter(Mandatory)][string]$Step,
+            [Parameter(Mandatory)][ValidateSet('ok', 'exported', 'skipped', 'needs-owner', 'unavailable')][string]$State,
+            [Parameter(Mandatory)][string]$Detail
+        )
+        $steps.Add([pscustomobject]@{ step = $Step; state = $State; detail = $Detail })
+        Write-Report ('  {0,-14} {1,-12} {2}' -f $Step, $State, $Detail)
+    }
+
+    # Empty or whitespace counts as unset (review finding): CI shells commonly define
+    # variables as '' — the bash twin (load-env-from-keyvault.sh) preserves only
+    # nonempty values, and this script matches that rule everywhere.
+    function Test-EnvValue {
+        param([Parameter(Mandatory)][string]$Name)
+        if (-not (Test-Path "env:$Name")) { return $false }
+        return -not [string]::IsNullOrWhiteSpace([string](Get-Item "env:$Name").Value)
+    }
+
     Write-Report '== HELIOS auto-login (non-interactive acquire + export; zero prompts) =='
-    if (-not $dotSourced) {
+    if (-not $DotSourced) {
         Write-Report '   NOTE: not dot-sourced — env exports die with this process. For your shell:  . scripts/bootstrap/auto-login.ps1'
     }
     Write-Report ''
 
     # --- 1. az lane: delegate repair to auth-doctor -Apply (non-interactive only) ----
     $azUsable = $false
-    $doctorPath = Join-Path $repoRoot 'scripts/bootstrap/auth-doctor.ps1'
+    $doctorPath = Join-Path $RepoRoot 'scripts/bootstrap/auth-doctor.ps1'
     if (Test-Path -LiteralPath $doctorPath) {
         # stdout ONLY: the -Json contract puts the report there, and merging stderr
         # (warnings, progress lines) would break the JSON parse (review finding —
@@ -135,7 +156,6 @@ try {
     }
 
     # --- 2. Key Vault → env (the pwsh twin of load-env-from-keyvault.sh) ------------
-    # Secret NAME → env NAME, exactly the pairs the bash twin and config/aihub.json use.
     # SecretName is a Key Vault secret IDENTIFIER (which secret to fetch), never a
     # value — named so the code-checks security scanner's hardcoded-secret pattern
     # (`secret =` followed by a literal) does not false-positive on identifiers.
@@ -144,7 +164,7 @@ try {
         [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider' }
         [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider' }
     )
-    $vaultUri = if (Test-Path env:AZURE_KEY_VAULT_URI) { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
+    $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     $azCmd = Get-Command az -ErrorAction SilentlyContinue
     if (-not $azUsable) {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail 'az lane is not usable — Key Vault pulls need an authenticated az (see owner actions)'
@@ -167,38 +187,38 @@ try {
             $ownerActions.Add('fix AZURE_KEY_VAULT_URI: it is set but not a parseable https://<vault>.vault.azure.net/ URI')
         }
         else {
-        foreach ($pair in $vaultPairs) {
-            if (Test-Path "env:$($pair.Env)") {
-                Add-Step -Step $pair.Env -State 'skipped' -Detail 'already set in this session — never clobbered'
-                continue
-            }
-            # Value: az stdout → local → $env:NAME. It is never interpolated anywhere.
-            $secretValue = ''
-            $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.SecretName --query value --output tsv --only-show-errors 2>$null)
-            $secretExit = [int]$LASTEXITCODE
-            if ($secretExit -eq 0) { $secretValue = (@($secretLines) -join '').Trim() }
-            if ($secretValue) {
-                Set-Item -Path "env:$($pair.Env)" -Value $secretValue
+            foreach ($pair in $vaultPairs) {
+                if (Test-EnvValue $pair.Env) {
+                    Add-Step -Step $pair.Env -State 'skipped' -Detail 'already holds a value in this session — never clobbered'
+                    continue
+                }
+                # Value: az stdout → local → $env:NAME. It is never interpolated anywhere.
                 $secretValue = ''
-                $exportedNames.Add($pair.Env)
-                Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
+                $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.SecretName --query value --output tsv --only-show-errors 2>$null)
+                $secretExit = [int]$LASTEXITCODE
+                if ($secretExit -eq 0) { $secretValue = (@($secretLines) -join '').Trim() }
+                if ($secretValue) {
+                    Set-Item -Path "env:$($pair.Env)" -Value $secretValue
+                    $secretValue = ''
+                    $exportedNames.Add($pair.Env)
+                    Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
+                }
+                else {
+                    Add-Step -Step $pair.Env -State 'skipped' -Detail "Key Vault secret '$($pair.SecretName)' not readable (missing, empty, or no RBAC grant) — value state not probed further"
+                }
             }
-            else {
-                Add-Step -Step $pair.Env -State 'skipped' -Detail "Key Vault secret '$($pair.SecretName)' not readable (missing, empty, or no RBAC grant) — value state not probed further"
-            }
-        }
         }
     }
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
-    if (-not (Test-Path env:GITHUB_MODELS_TOKEN)) {
+    if (-not (Test-EnvValue 'GITHUB_MODELS_TOKEN')) {
         $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
             # list is ambiguous (review finding).
             Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
         }
-        if ($ghCmd) {
+        else {
             $ghLines = @(& $ghCmd.Source auth token 2>$null)
             $ghExit = [int]$LASTEXITCODE
             $ghToken = (@($ghLines) -join '').Trim()
@@ -206,7 +226,13 @@ try {
                 $env:GITHUB_MODELS_TOKEN = $ghToken
                 $ghToken = ''
                 $exportedNames.Add('GITHUB_MODELS_TOKEN')
-                Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'exported' -Detail 'from `gh auth token` — lights: gh-models provider'
+                # Scope honesty (review finding): connect-github.sh verifies the
+                # models:read scope, but that check needs a usable `gh auth status`,
+                # which this environment may not have — so the export is made with
+                # the caveat stated instead of a silent claim of usability.
+                Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'exported' `
+                    -Detail ('from `gh auth token` — lights: gh-models provider IF the token carries models:read ' +
+                        '(not verifiable here); if model calls 403: gh auth refresh -h github.com --scopes models:read')
             }
             else {
                 Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'skipped' -Detail 'gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one'
@@ -219,7 +245,7 @@ try {
     Write-Report ''
     if ($exportedNames.Count -gt 0) {
         Write-Report ('Exported this run (names only): ' + (@($exportedNames) -join ', '))
-        if (-not $dotSourced) { Write-Report 'These exports died with this process — dot-source the script to keep them.' }
+        if (-not $DotSourced) { Write-Report 'These exports died with this process — dot-source the script to keep them.' }
     }
     else {
         Write-Report 'Nothing newly exported this run.'
@@ -235,16 +261,24 @@ try {
         [ordered]@{
             script        = 'scripts/bootstrap/auto-login.ps1'
             generatedUtc  = (Get-Date).ToUniversalTime().ToString('o')
-            dotSourced    = $dotSourced
+            dotSourced    = $DotSourced
             steps         = @($steps)
             exportedNames = @($exportedNames)
             ownerActions  = @($uniqueOwnerActions)
             exitCode      = 0
         } | ConvertTo-Json -Depth 4
     }
-    if (-not $dotSourced) { exit 0 }
+}
+
+$autoLoginDotSourced = $MyInvocation.InvocationName -eq '.'
+try {
+    Invoke-HeliosAutoLogin -Json:$Json -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
+    if (-not $autoLoginDotSourced) { exit 0 }
 }
 catch {
     [Console]::Error.WriteLine("auto-login: internal failure: $($_.Exception.Message)")
-    if (-not $dotSourced) { exit 1 }
+    # Dot-sourced: rethrow so the caller can DETECT the partial setup (review
+    # finding) — exiting would kill their shell, and swallowing would fake success.
+    if ($autoLoginDotSourced) { throw }
+    exit 1
 }
