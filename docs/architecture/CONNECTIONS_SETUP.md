@@ -40,11 +40,25 @@ operations live in the `connector-integrations` skill
 calling only the existing scripts: `verify-readiness.ps1` (toolchain) →
 `connect-account.ps1` (identity) → `auth-doctor.ps1` (auth; `-Apply` passes
 through) → `setup-all.ps1` (inventory) → `scripts/verify/stack-smoke.ps1` (soft
-smoke), ending in one consolidated, deduped owner-action list (`-Json` for the
+smoke) → `scripts/verify/rest-connect.ps1` (soft control-plane REST probes),
+ending in one consolidated, deduped owner-action list (`-Json` for the
 machine rollup). The identity gate is hard: any `connect-account` mismatch aborts
 the chain immediately with exit 2 — acting as the wrong account is worse than
 acting unauthenticated. Report-first by default: nothing is mutated without
 `-Apply`, and even then repair is auth-doctor's non-interactive lane only.
+
+**Auto-login** (`. scripts/bootstrap/auto-login.ps1`, dot-sourced) is the
+acquire-and-export companion: it delegates az repair to `auth-doctor -Apply`
+(non-interactive only), pulls `openai-api-key` / `anthropic-api-key` /
+`github-models-token` from the Key Vault at `AZURE_KEY_VAULT_URI` into
+`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GITHUB_MODELS_TOKEN` (the exact names
+`config/aihub.json` declares — lighting the codex, claude, and gh-models lanes
+plus every SDK/REST consumer of the same names), and falls back to `gh auth
+token` for the models token. Zero prompts ever; values live only in process
+memory; existing env values are never clobbered. The zero-human-input paths that
+exist today: CI (OIDC + `GITHUB_TOKEN`), Azure Cloud Shell (implicit `az` login →
+auto-login lights everything), and any host holding the ops service principal
+minted once by `setup-tenant.ps1 -OpsIdentity`.
 
 **ant CLI facts** (per the CLI authentication docs):
 

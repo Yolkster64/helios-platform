@@ -231,8 +231,10 @@ function Test-GhLane {
                 -Detail ("$envTokenName is set (name checked only, value never read) and gh auth status accepts it$actionsNote")
         }
         return New-LaneResult -Lane 'gh' -State 'needs-owner' -Method 'env-token' `
-            -Detail ("$envTokenName is set (name checked only) but gh auth status exits $($status.ExitCode) — the token is stale or under-scoped (raw status output never echoed)$actionsNote") `
-            -OwnerAction 'gh auth login --web   # device-code flow; or rotate the env token'
+            -Detail ("$envTokenName is set (name checked only) but gh auth status exits $($status.ExitCode) — the gh CLI rejects the session, which does NOT prove the token is bad: REST-level " +
+                'connectivity can still exist (a proxy-injected session, or a fine-grained/app token the CLI dislikes). Wire-level ground truth: pwsh scripts/verify/rest-connect.ps1' +
+                " (raw status output never echoed)$actionsNote") `
+            -OwnerAction 'gh auth login --web   # device-code flow; or rotate the env token — but run scripts/verify/rest-connect.ps1 first: if the transport is already authenticated, nothing may be broken'
     }
 
     if ($status.ExitCode -eq 0) {
