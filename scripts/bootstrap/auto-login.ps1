@@ -161,8 +161,13 @@ function Invoke-HeliosAutoLogin {
             Add-Step -Step 'az' -State $azStepState -Detail $azDetail
             # Surface the rest of the doctor's owner actions too — auto-login's summary
             # is meant to be the single list of what still needs a human.
+            # A lane the doctor reports as 'disabled' (every consumer off in the active
+            # config) never carries an action, and even if one slipped through it must
+            # not be imported (review finding): the summary's contract is "only the
+            # steps that need a human", and nothing instantiates a disabled lane.
             foreach ($lane in @($doctorReport.lanes)) {
-                if ($lane.lane -ne 'az' -and $lane.PSObject.Properties['ownerAction'] -and "$($lane.ownerAction)".Trim()) {
+                $laneState = if ($lane.PSObject.Properties['state']) { [string]$lane.state } else { '' }
+                if ($lane.lane -ne 'az' -and $laneState -ne 'disabled' -and $lane.PSObject.Properties['ownerAction'] -and "$($lane.ownerAction)".Trim()) {
                     Add-OwnerAction -Text "$($lane.ownerAction)" -Imported
                 }
             }

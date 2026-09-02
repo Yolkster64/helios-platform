@@ -573,6 +573,11 @@ function Test-AzureLane {
     # outage recovery can ever help, so the sources are tracked and their total
     # absence reports as unavailable WITH the setup path instead of retry advice.
     $credentialSourcePresent = $false
+    # Token-held tracking (review finding): once ANY rung obtained a token and probed
+    # ARM, a later transient failure (timeout/429/5xx/garbage) is an outage, not an
+    # unexchanged OIDC — in an Actions job where azure/login already populated the
+    # az cache, "add the azure/login step" would prescribe a step that has run.
+    $tokenHeld = $false
 
     # 2. Env service principal — fully non-interactive. Secret variant: the credential
     #    values are read into locals, flow into an in-memory POST body, and die with
@@ -614,6 +619,7 @@ function Test-AzureLane {
             $tokenReply = Test-ParsedJson $tokenProbe.Body
             $spToken = [string](Get-OptionalProperty $tokenReply 'access_token' '')
             if ($spToken) {
+                $tokenHeld = $true
                 $arm = Invoke-ArmProbe -Token $spToken -Source 'env-service-principal' `
                     -Identity "service principal $clientId" -ChainNotes $chainNotes
                 if ($arm.Outcome -eq 'ready') { return $arm.Lane }
@@ -688,6 +694,7 @@ function Test-AzureLane {
         $miReply = Test-ParsedJson $miProbe.Body
         $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
         if ($miToken) {
+            $tokenHeld = $true
             $arm = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
                 -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
             if ($arm.Outcome -eq 'ready') { return $arm.Lane }
@@ -730,6 +737,7 @@ function Test-AzureLane {
             $azReply = Test-ParsedJson (@($azOut) -join '')
             $azToken = [string](Get-OptionalProperty $azReply 'accessToken' '')
             if ($azToken) {
+                $tokenHeld = $true
                 $arm = Invoke-ArmProbe -Token $azToken -Source 'az-cli-cache' `
                     -Identity 'the cached az login (whoever scripts/bootstrap/connect-account.ps1 pins)' -ChainNotes $chainNotes
                 if ($arm.Outcome -eq 'ready') { return $arm.Lane }
@@ -792,16 +800,24 @@ function Test-AzureLane {
                 "deliberately does not execute: $chainText$certOidcNote") `
             -OwnerAction $certAction
     }
-    # 3. CI OIDC available but no rung held a usable token (and no certificate to
+    # 3. CI OIDC available and NO rung ever held a token (and no certificate to
     #    prefer): the exchange has not run in this job (yet) — the remediation is a
     #    workflow step (azure/login), never MFA advice or a retry (review finding:
     #    the request URL's presence is availability evidence, not a completed login).
-    if ($ciOidcAvailable) {
+    #    When a rung DID hold a token (review finding: azure/login already populated
+    #    the az cache and ARM then timed out / 429 / 5xx / answered garbage), the
+    #    exchange has run — that case stays transient or definitive below, with the
+    #    OIDC availability noted rather than prescribed.
+    if ($ciOidcAvailable -and -not $tokenHeld) {
         return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
             -Identity 'the workflow federated identity' `
             -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
                 'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
     }
+    $oidcHeldNote = if ($ciOidcAvailable -and $tokenHeld) {
+        ' — OIDC is also available to this job, but a credential source already yielded a token here (azure/login has evidently run), so adding another azure/login step is not the remedy'
+    }
+    else { '' }
     # 4. No credential source EXISTED at all (review finding): nothing was actually
     #    attempted, so neither "retry later" nor credential-rotation advice is
     #    honest — the host needs a first credential source, and that is the exact
@@ -818,13 +834,13 @@ function Test-AzureLane {
     if (-not $sawAuthRejection) {
         return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'none' `
             -Detail ("no chain entry got a definitive answer — every attempt failed transiently: $chainText — " +
-                'retry later; do NOT change credentials on this evidence')
+                "retry later; do NOT change credentials on this evidence$oidcHeldNote")
     }
     # 6. Definitive rejection(s): the one owner step, reported — never run.
     return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'none' `
         -Detail ("automatic chain exhausted (ci-oidc -> env service principal -> managed identity -> az cache): $chainText. " +
             "The zero-human-input paths that exist today are Azure Cloud Shell's implicit login and CI OIDC; everywhere " +
-            'else the first token costs one MFA login, after which the ops workload identity removes the human forever') `
+            "else the first token costs one MFA login, after which the ops workload identity removes the human forever$oidcHeldNote") `
         -OwnerAction $azureOwnerAction
 }
 
@@ -847,7 +863,7 @@ if ($DryRun) {
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $armSubscriptionsUrl"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
-    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available => ci-delegated (azure/login must run first); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
+    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available and no rung ever held a token => ci-delegated (azure/login must run first; a held token that then failed transiently stays transient); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
     Write-Host ''
     Write-Host 'Dry run - no token read, no network call made, nothing written.'

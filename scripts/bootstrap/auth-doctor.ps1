@@ -42,7 +42,10 @@ Lanes:
                 the CLI only — connect-all.ps1 honesty rule).
   claude        a non-empty value in the env var the active config declares for the
                 anthropic provider (providers.anthropic.apiKeyEnv, read at run time
-                from AIHUB_CONFIG when set, else config/aihub.json — never hardcoded). A cached `claude` login cannot be probed
+                from AIHUB_CONFIG when set, else config/aihub.json — never hardcoded).
+                Any provider/CLI lane whose every consumer is disabled or absent in
+                that config reports `disabled` with no owner action — the hub never
+                instantiates it, so a credential demand would be a false step. A cached `claude` login cannot be probed
                 headlessly (probing would launch an interactive session), so it is
                 never counted.
   copilot       presence probe: standalone copilot CLI (@github/copilot — the shape
@@ -169,6 +172,48 @@ function Test-EnvValue {
     return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
 }
 
+# The active hub config — AIHUB_CONFIG over the repo default, the same precedence the
+# hub, auto-login.ps1 and rest-connect.ps1 apply — parsed once. Config = $null when
+# unreadable, so each lane falls back to its defaults and says so.
+$script:aihubConfigState = $null
+function Get-AIHubConfigState {
+    if ($null -ne $script:aihubConfigState) { return $script:aihubConfigState }
+    $label = 'config/aihub.json'
+    $path = Join-Path $repoRoot 'config' 'aihub.json'
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:AIHUB_CONFIG)) {
+        $path = ([string]$env:AIHUB_CONFIG).Trim()
+        $label = 'AIHUB_CONFIG'
+    }
+    $config = $null
+    try { $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json }
+    catch { Write-Verbose "$label read failed: $($_.Exception.Message)" }
+    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config }
+    return $script:aihubConfigState
+}
+
+# Enablement exactly as ProviderFactory.CreateAll applies it (review finding): a
+# provider or cliAgent with enabled=false — or a cliAgent absent from the list — is
+# never instantiated, so a lane whose EVERY consumer is off reports 'disabled' and
+# carries no owner action; demanding a credential for it would be a false step. An
+# unreadable config counts as enabled (the fallback names are then diagnosed).
+function Test-AIHubProviderEnabled {
+    param([Parameter(Mandatory)][string]$Name)
+    $cfg = (Get-AIHubConfigState).Config
+    if ($null -eq $cfg -or -not $cfg.PSObject.Properties['providers']) { return $true }
+    $prov = $cfg.providers.PSObject.Properties[$Name]
+    if ($null -eq $prov -or $null -eq $prov.Value) { return $false }
+    return -not ($prov.Value.PSObject.Properties['enabled'] -and $prov.Value.enabled -eq $false)
+}
+function Test-AIHubCliAgentEnabled {
+    param([Parameter(Mandatory)][string]$Name)
+    $cfg = (Get-AIHubConfigState).Config
+    if ($null -eq $cfg) { return $true }
+    if (-not $cfg.PSObject.Properties['cliAgents']) { return $false }
+    $agent = @($cfg.cliAgents | Where-Object { $null -ne $_ -and $_.PSObject.Properties['name'] -and [string]$_.name -eq $Name }) | Select-Object -First 1
+    if ($null -eq $agent) { return $false }
+    return -not ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false)
+}
+
 function Invoke-Probe {
     param(
         [Parameter(Mandatory)][string]$Executable,
@@ -199,7 +244,7 @@ function New-LaneResult {
     param(
         [Parameter(Mandatory)][string]$Lane,
         [Parameter(Mandatory)]
-        [ValidateSet('ready', 'repaired', 'needs-owner', 'unavailable')]
+        [ValidateSet('ready', 'repaired', 'needs-owner', 'unavailable', 'disabled')]
         [string]$State,
         [Parameter(Mandatory)][string]$Method,
         [Parameter(Mandatory)][string]$Detail,
@@ -428,6 +473,14 @@ function Test-AzLane {
 
 # --- openai-codex lane -----------------------------------------------------------------
 function Test-CodexLane {
+    # Same enablement rule as the claude lane: this lane covers the openai and
+    # openai-codex providers plus the codex agent; only when ALL are off is nothing
+    # instantiated and nothing requested.
+    if (-not (Test-AIHubProviderEnabled 'openai') -and -not (Test-AIHubProviderEnabled 'openai-codex') -and
+        -not (Test-AIHubCliAgentEnabled 'codex')) {
+        return New-LaneResult -Lane 'openai-codex' -State 'disabled' -Method 'config' -Gates $false `
+            -Detail ("the openai and openai-codex providers and the codex agent are all disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — nothing instantiates them, so no credential is needed and none is requested")
+    }
     if (Test-EnvValue 'OPENAI_API_KEY') {
         # Name-only presence check; the value never enters a variable. One key covers
         # both surfaces: the codex CLI agent and the openai/openai-codex API providers
@@ -465,30 +518,33 @@ function Test-ClaudeLane {
     # config/aihub.json is the contract for which env var the anthropic provider reads
     # (CLAUDE.md rule: config carries env-var NAMES only) — so the doctor reads the
     # config instead of hardcoding the name, falling back only if it is unreadable.
+    # A lane nobody instantiates asks for nothing (review finding): with the anthropic
+    # provider AND the claude-cli agent both off in the active config, a credential
+    # demand here would surface as a false owner step in every summary downstream.
+    if (-not (Test-AIHubProviderEnabled 'anthropic') -and -not (Test-AIHubCliAgentEnabled 'claude-cli')) {
+        return New-LaneResult -Lane 'claude' -State 'disabled' -Method 'config' -Gates $false `
+            -Detail ("the anthropic provider and the claude-cli agent are both disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — ProviderFactory.CreateAll instantiates neither, so no credential is needed and none is requested")
+    }
     $envName = 'ANTHROPIC_API_KEY'
     $vaultSecretName = 'anthropic-api-key'
-    # AIHUB_CONFIG takes precedence over the repo default, the same resolution the hub,
-    # auto-login.ps1 and rest-connect.ps1 apply — a custom profile must not be
-    # diagnosed against the repo's names.
-    $configLabel = 'config/aihub.json'
-    $configPath = Join-Path $repoRoot 'config' 'aihub.json'
-    if (-not [string]::IsNullOrWhiteSpace([string]$env:AIHUB_CONFIG)) {
-        $configPath = ([string]$env:AIHUB_CONFIG).Trim()
-        $configLabel = 'AIHUB_CONFIG'
-    }
+    # A custom profile must be diagnosed against its own names, so the config comes
+    # from Get-AIHubConfigState (AIHUB_CONFIG over the repo default).
+    $configState = Get-AIHubConfigState
+    $configLabel = $configState.Label
     $nameSource = "fallback defaults; $configLabel was unreadable"
-    try {
-        $aihub = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-        $declaredEnv = ([string]$aihub.providers.anthropic.apiKeyEnv).Trim()
-        $declaredVault = ([string]$aihub.providers.anthropic.apiKeySecretName).Trim()
-        if ($declaredEnv) {
-            $envName = $declaredEnv
-            $nameSource = "$configLabel providers.anthropic.apiKeyEnv"
+    if ($null -ne $configState.Config) {
+        try {
+            $declaredEnv = ([string]$configState.Config.providers.anthropic.apiKeyEnv).Trim()
+            $declaredVault = ([string]$configState.Config.providers.anthropic.apiKeySecretName).Trim()
+            if ($declaredEnv) {
+                $envName = $declaredEnv
+                $nameSource = "$configLabel providers.anthropic.apiKeyEnv"
+            }
+            if ($declaredVault) { $vaultSecretName = $declaredVault }
         }
-        if ($declaredVault) { $vaultSecretName = $declaredVault }
-    }
-    catch {
-        Write-Verbose "$configLabel read failed: $($_.Exception.Message)"
+        catch {
+            Write-Verbose "$configLabel providers.anthropic is not readable: $($_.Exception.Message)"
+        }
     }
 
     # Non-whitespace, not mere existence (same rule as the service-principal gate):
@@ -514,26 +570,30 @@ function Test-ClaudeLane {
 function Test-CopilotLane {
     param([Parameter(Mandatory)][pscustomobject]$GhResult)
 
-    $copilotCmd = Get-CliCommand -Name 'copilot'
-    $presence = ''
-    if ($copilotCmd) {
-        $presence = 'standalone copilot CLI (@github/copilot) is on PATH'
+    if (-not (Test-AIHubCliAgentEnabled 'copilot')) {
+        return New-LaneResult -Lane 'copilot' -State 'disabled' -Method 'config' -Gates $false `
+            -Detail ("the copilot agent is disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — the hub never launches it, so no login is needed and none is requested")
     }
-    else {
+
+    # Only the standalone binary satisfies this lane (review finding): the configured
+    # cliAgent runs `copilot -p ...` (@github/copilot), and the gh-copilot EXTENSION
+    # provides `gh copilot suggest/explain` — a different executable shape the hub
+    # cannot launch. The extension is reported as information, never as readiness.
+    $copilotCmd = Get-CliCommand -Name 'copilot'
+    $extensionNote = ''
+    if (-not $copilotCmd) {
         $ghCmd = Get-CliCommand -Name 'gh'
         if ($ghCmd) {
             # `gh extension list` reads local state only — no network call.
             $extensions = Invoke-Probe -Executable $ghCmd.Source -Arguments @('extension', 'list')
             if ((@($extensions.Output) -join ' ') -match 'gh-copilot') {
-                $presence = 'gh-copilot extension is installed (gh copilot suggest/explain shape)'
+                $extensionNote = ' (the gh-copilot extension IS installed, but it provides `gh copilot suggest/explain`, not the standalone `copilot -p` binary config/aihub.json invokes — informational only)'
             }
         }
-    }
-
-    if (-not $presence) {
         return New-LaneResult -Lane 'copilot' -State 'unavailable' -Method 'none' `
-            -Detail 'neither the standalone copilot CLI nor the gh-copilot extension is present — pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @github/copilot (the shape config/aihub.json invokes)'
+            -Detail ("the standalone copilot CLI (@github/copilot) is not on PATH$extensionNote — pwsh scripts/bootstrap/setup-ai-clis.ps1 installs the shape config/aihub.json invokes")
     }
+    $presence = 'standalone copilot CLI (@github/copilot) is on PATH'
 
     # copilot reuses the GitHub login (setup-ai-clis.ps1: GH_TOKEN/GITHUB_TOKEN are
     # honored headlessly), so its auth state IS the gh lane's state.
@@ -640,11 +700,13 @@ try {
     $repairedCount = @($laneResults | Where-Object { $_.state -eq 'repaired' }).Count
     $needsOwner = @($laneResults | Where-Object { $_.state -eq 'needs-owner' })
     $unavailableCount = @($laneResults | Where-Object { $_.state -eq 'unavailable' }).Count
+    $disabledCount = @($laneResults | Where-Object { $_.state -eq 'disabled' }).Count
 
     # Exit contract (see .DESCRIPTION): report-only always exits 0 — it diagnosed and
     # mutated nothing, which is exactly what it promised. Only -Apply gates on the
     # outcome, and only GATING needs-owner lanes gate: unavailable means the TOOL is
-    # missing (setup-ai-clis.ps1's job, not an auth failure), and connector lanes
+    # missing (setup-ai-clis.ps1's job, not an auth failure), disabled means the
+    # active config instantiates nothing on that lane, and connector lanes
     # (gates=false) are verify-only wiring reports whose fixes are repository secrets
     # or tenant consent — never logins this doctor could have applied.
     $exitCode = 0
@@ -662,6 +724,7 @@ try {
                 repaired    = $repairedCount
                 needsOwner  = $needsOwner.Count
                 unavailable = $unavailableCount
+                disabled    = $disabledCount
             }
             exitCode     = $exitCode
         } | ConvertTo-Json -Depth 6
@@ -680,12 +743,13 @@ try {
         Write-Report $table.TrimEnd()
 
         Write-Report ''
-        $gating = $laneResults.Count - $unavailableCount
+        $gating = $laneResults.Count - $unavailableCount - $disabledCount
         $summary = "Auth lanes: $($readyCount + $repairedCount)/$gating ready or repaired"
         if ($needsOwner.Count -gt 0) {
             $summary += ' — needs-owner: ' + (@($needsOwner | ForEach-Object lane) -join ', ')
         }
         if ($unavailableCount -gt 0) { $summary += "; unavailable (never gates): $unavailableCount" }
+        if ($disabledCount -gt 0) { $summary += "; disabled in the active config (never gates): " + (@($laneResults | Where-Object { $_.state -eq 'disabled' } | ForEach-Object lane) -join ', ') }
         if (-not $Apply) {
             $summary += ' [report-only: nothing was mutated, exit 0 by contract — rerun with -Apply for automatic non-interactive repair]'
         }
