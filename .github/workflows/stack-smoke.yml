@@ -1,0 +1,101 @@
+# Stack Smoke (informational)
+#
+# Runs the cross-stack smoke - scripts/verify/stack-smoke.ps1 - against the
+# freshly built Release outputs (the script itself runs --no-build), once in
+# human-readable form for the run log and once with -Json to capture
+# stack-smoke-report.json as an artifact.
+#
+# Honest boundary: this lane is INFORMATIONAL. The smoke script's contract is
+# report-mode: degraded or missing components exit 0 and the truth lives in
+# the JSON report, so a green run proves only that every layer could be
+# REACHED and REPORTED ON - never that every layer is healthy (read the
+# artifact for that). The one honest red is exit 1, reserved for a hard
+# communication failure (the smoke could not talk to the stack at all), and
+# this job deliberately lets that fail. Never make this a required check.
+#
+# Safety: no secrets, no network dependency beyond NuGet restore, and no
+# event context is ever interpolated into a run block (the dispatch trigger
+# takes no inputs, so there is nothing to indirect).
+name: Stack Smoke (informational)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly smoke at a quiet, repo-unique minute (Mondays 05:53 UTC, off the
+    # :00 load spike and clear of the other weekly lanes at :17 and :41).
+    # Cron is always UTC.
+    - cron: '53 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stack-smoke
+  # Queue, don't cancel: a cancelled smoke would upload a half-written or
+  # stale report and misread as a stack problem.
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Cross-stack smoke (report mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same SDK mechanism as dotnet-build.yml; global.json pins the resolved
+      # SDK to the 10.0 LTS line.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # The native library only feeds the hub's neural/similarity paths and the
+      # runtime degrades gracefully without it; the smoke reports that state
+      # instead of gating on it, so a native break must not redden this lane
+      # (dotnet-build.yml is where it goes red).
+      - name: Build native library (C++ spoke, optional here)
+        continue-on-error: true
+        run: ./scripts/build/build-native.sh
+
+      # The smoke needs Release outputs on disk: stack-smoke.ps1 exercises the
+      # built binaries with --no-build and never triggers a build itself.
+      - name: Build solution
+        run: dotnet build HELIOS.sln -c Release
+
+      # Contract (script authored in a parallel lane): report mode exits 0 even
+      # when components are degraded - the JSON report carries the truth; exit 1
+      # means hard communication failure and is allowed to fail this job.
+      # JSON pass first so the report artifact captures whatever the smoke saw
+      # even when the job goes red; then the human pass for the run log.
+      - name: Run stack smoke (JSON report + human log)
+        shell: pwsh
+        run: |
+          ./scripts/verify/stack-smoke.ps1 -Json > stack-smoke-report.json
+          $jsonExit = $LASTEXITCODE
+          ./scripts/verify/stack-smoke.ps1
+          $humanExit = $LASTEXITCODE
+          if ($jsonExit -ne 0 -or $humanExit -ne 0) {
+            Write-Error "Stack smoke reported a hard communication failure (json=$jsonExit human=$humanExit)."
+            exit 1
+          }
+
+      # if: always() - on the one honest red (hard communication failure) any
+      # partial report is exactly what a debugger wants. warn (not error) on a
+      # missing file: an early failure legitimately leaves no report behind.
+      - name: Upload stack smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-smoke-report
+          path: stack-smoke-report.json
+          if-no-files-found: warn
+          retention-days: 14
