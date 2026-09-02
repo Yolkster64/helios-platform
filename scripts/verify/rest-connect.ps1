@@ -460,7 +460,15 @@ function Invoke-ArmProbe {
         # finding) — and `value` must actually BE an array: a scalar there would
         # otherwise get wrapped into a one-item collection and fabricate a
         # subscription count out of an error body.
-        $armValue = if ($null -ne $parsed) { Get-OptionalProperty $parsed 'value' } else { $null }
+        # Direct property access, no helper (review finding): a PowerShell function
+        # return ENUMERATES arrays crossing the boundary — zero visible
+        # subscriptions came back $null and exactly one came back a scalar, so the
+        # array check below rejected perfectly valid ARM responses.
+        $armValue = $null
+        if ($null -ne $parsed) {
+            $armValueProp = $parsed.PSObject.Properties['value']
+            if ($null -ne $armValueProp) { $armValue = $armValueProp.Value }
+        }
         if ($null -eq $parsed -or -not ($armValue -is [array])) {
             $ChainNotes.Add("$Source ARM answered 200 but the body is not a parseable subscriptions payload with a 'value' array (intermediary?) — not treated as connectivity proof")
             return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
@@ -730,23 +738,15 @@ function Test-AzureLane {
     # 1. A stashed 403 diagnosis wins: some rung authenticated but lacks RBAC — the
     #    role-assignment action is the accurate remediation, never MFA.
     if ($null -ne $armForbidden) { return $armForbidden }
-    # 2. CI OIDC available but no rung held a usable token: the exchange has not run
-    #    in this job (yet) — the remediation is a workflow step (azure/login), never
-    #    MFA advice or a retry (review finding: the request URL's presence is
-    #    availability evidence, not a completed login).
-    if ($ciOidcAvailable) {
-        return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
-            -Identity 'the workflow federated identity' `
-            -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
-                'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
-    }
-    # 3. A configured certificate is a usable NON-INTERACTIVE repair that this
+    # 2. A configured certificate is a usable NON-INTERACTIVE repair that this
     #    report-only script deliberately does not execute (its az login rewrites the
     #    shared profile). When the chain ends without a ready lane, that repair must
     #    be the terminal ownerAction (review finding): setup-everything.ps1 harvests
     #    only ownerAction/nextCommand, so leaving it inside a chain note buries the
     #    one path that needs no MFA — the lane would otherwise end as retry advice
-    #    or the generic MFA action.
+    #    or the generic MFA action. It also OUTRANKS unexchanged CI OIDC (review
+    #    finding): the certificate works right now with no workflow edit, so it
+    #    must not be discarded in favor of "add azure/login" advice.
     if ($spCertReady) {
         # The repair runs through az (review finding): auth-doctor -Apply returns
         # immediately when az is missing, so on an az-less host the action must
@@ -757,11 +757,25 @@ function Test-AzureLane {
         else {
             'install the Azure CLI first (scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli), then: pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive certificate login; no MFA needed'
         }
+        # Both actions preserved when OIDC is also available (review finding): the
+        # certificate wins the ownerAction slot (it works right now with no
+        # workflow edit), and the azure/login alternative rides in the detail.
+        $certOidcNote = if ($ciOidcAvailable) { ' — alternative: this Actions job can also mint an OIDC token, so adding the azure/login step before this probe works too' } else { '' }
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
             -Detail ("the certificate service-principal flow is configured (AZURE_CLIENT_ID/AZURE_TENANT_ID/" +
                 "AZURE_CLIENT_CERTIFICATE_PATH set) and is a non-interactive repair this report-only probe " +
-                "deliberately does not execute: $chainText") `
+                "deliberately does not execute: $chainText$certOidcNote") `
             -OwnerAction $certAction
+    }
+    # 3. CI OIDC available but no rung held a usable token (and no certificate to
+    #    prefer): the exchange has not run in this job (yet) — the remediation is a
+    #    workflow step (azure/login), never MFA advice or a retry (review finding:
+    #    the request URL's presence is availability evidence, not a completed login).
+    if ($ciOidcAvailable) {
+        return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
+            -Identity 'the workflow federated identity' `
+            -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
+                'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
     }
     # 4. No credential source EXISTED at all (review finding): nothing was actually
     #    attempted, so neither "retry later" nor credential-rotation advice is

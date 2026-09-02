@@ -365,6 +365,13 @@ function Invoke-HeliosAutoLogin {
     if (-not $ghModelsEnabled) {
         Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
     }
+    elseif (-not (Test-EnvValue $ghModelsEnv) -and (Test-EnvValue 'GITHUB_TOKEN')) {
+        # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the
+        # configured env is unset (review finding) — the documented CI path. The
+        # provider is therefore already satisfied; no export, no remediation.
+        Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it — the ' +
+            'github-models provider is satisfied without an export (validity not probed here; scripts/verify/rest-connect.ps1 is the wire truth)')
+    }
     elseif (-not (Test-EnvValue $ghModelsEnv)) {
         $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
@@ -427,7 +434,12 @@ function Invoke-HeliosAutoLogin {
     foreach ($action in $ownerActions) {
         $resolvedByExport = $false
         foreach ($name in $exportResolvableEnvNames) {
-            if ($action.Contains($name) -and (Test-EnvValue $name)) { $resolvedByExport = $true; break }
+            # The models env counts as satisfied via the provider's documented
+            # GITHUB_TOKEN fallback too (review finding) — a run that ends with a
+            # working github-models lane must not still demand a vault repair.
+            $envSatisfied = (Test-EnvValue $name) -or
+                ($name -eq $ghModelsEnv -and $ghModelsEnabled -and (Test-EnvValue 'GITHUB_TOKEN'))
+            if ($action.Contains($name) -and $envSatisfied) { $resolvedByExport = $true; break }
         }
         if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action) }
     }
