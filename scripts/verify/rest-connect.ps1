@@ -25,7 +25,9 @@ answer a real REST call with a real token. That distinction is load-bearing —
 Lanes (one row each: {lane, state ready|needs-owner|unavailable|ci-delegated, source,
 identity, detail, ownerAction}):
 
-  github  Candidate tokens tried IN ORDER: env GH_TOKEN, env GITHUB_TOKEN, then — only
+  github  Candidate tokens tried IN ORDER: env GH_TOKEN, env GITHUB_TOKEN, env
+          GITHUB_MODELS_TOKEN (the github-models provider's primary credential — the
+          token auto-login.ps1 exports from Key Vault), then — only
           when the gh CLI is on PATH — the output of `gh auth token` (stderr suppressed;
           a failure there just ends the chain early, it is not an error). Each candidate
           is probed with GET https://api.github.com/rate_limit (Authorization: Bearer,
@@ -230,11 +232,15 @@ function Test-ParsedJson {
 # --- github lane ------------------------------------------------------------------------
 function Get-GitHubTokenCandidates {
     # Candidate ORDER is the contract: explicit env wins over the CLI keyring, and
-    # GH_TOKEN (gh's own precedence rule) wins over GITHUB_TOKEN. Token values are read
-    # into the candidate objects here and die when the github lane function returns —
-    # they are never interpolated into any reported string.
+    # GH_TOKEN (gh's own precedence rule) wins over GITHUB_TOKEN. GITHUB_MODELS_TOKEN
+    # is third (review finding): it is a real github.com credential — config/aihub.json
+    # and ProviderFactory treat it as the github-models provider's primary token, and
+    # auto-login.ps1 exports exactly this variable from Key Vault — so a host whose
+    # ONLY GitHub credential is the models token must not read as lane-unavailable.
+    # Token values are read into the candidate objects here and die when the github
+    # lane function returns — they are never interpolated into any reported string.
     $candidates = [System.Collections.Generic.List[object]]::new()
-    foreach ($envName in @('GH_TOKEN', 'GITHUB_TOKEN')) {
+    foreach ($envName in @('GH_TOKEN', 'GITHUB_TOKEN', 'GITHUB_MODELS_TOKEN')) {
         if (Test-Path "env:$envName") {
             $value = [string](Get-Item "env:$envName").Value
             if (-not [string]::IsNullOrWhiteSpace($value)) {
@@ -679,7 +685,21 @@ function Test-AzureLane {
             -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
                 'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
     }
-    # 3. No credential source EXISTED at all (review finding): nothing was actually
+    # 3. A configured certificate is a usable NON-INTERACTIVE repair that this
+    #    report-only script deliberately does not execute (its az login rewrites the
+    #    shared profile). When the chain ends without a ready lane, that repair must
+    #    be the terminal ownerAction (review finding): setup-everything.ps1 harvests
+    #    only ownerAction/nextCommand, so leaving it inside a chain note buries the
+    #    one path that needs no MFA — the lane would otherwise end as retry advice
+    #    or the generic MFA action.
+    if ($spCertReady) {
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
+            -Detail ("the certificate service-principal flow is configured (AZURE_CLIENT_ID/AZURE_TENANT_ID/" +
+                "AZURE_CLIENT_CERTIFICATE_PATH set) and is a non-interactive repair this report-only probe " +
+                "deliberately does not execute: $chainText") `
+            -OwnerAction 'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply   # non-interactive certificate service-principal login; no MFA needed'
+    }
+    # 4. No credential source EXISTED at all (review finding): nothing was actually
     #    attempted, so neither "retry later" nor credential-rotation advice is
     #    honest — the host needs a first credential source, and that is the exact
     #    guidance returned.
@@ -689,7 +709,7 @@ function Test-AzureLane {
                 'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
             -OwnerAction $azureOwnerAction
     }
-    # 4. No definitive rejection anywhere = transient-only evidence (transport, 429,
+    # 5. No definitive rejection anywhere = transient-only evidence (transport, 429,
     #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and
     #    would prompt needless credential churn.
     if (-not $sawAuthRejection) {
@@ -697,7 +717,7 @@ function Test-AzureLane {
             -Detail ("no chain entry got a definitive answer — every attempt failed transiently: $chainText — " +
                 'retry later; do NOT change credentials on this evidence')
     }
-    # 5. Definitive rejection(s): the one owner step, reported — never run.
+    # 6. Definitive rejection(s): the one owner step, reported — never run.
     return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'none' `
         -Detail ("automatic chain exhausted (ci-oidc -> env service principal -> managed identity -> az cache): $chainText. " +
             "The zero-human-input paths that exist today are Azure Cloud Shell's implicit login and CI OIDC; everywhere " +
@@ -709,7 +729,7 @@ function Test-AzureLane {
 if ($DryRun) {
     Write-Host ''
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
-    Write-Host '  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> gh auth token (only if gh is on PATH)'
+    Write-Host '  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> env GITHUB_MODELS_TOKEN -> gh auth token (only if gh is on PATH)'
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
     Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'
@@ -724,7 +744,7 @@ if ($DryRun) {
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $armSubscriptionsUrl"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
-    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available => ci-delegated (azure/login must run first); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
+    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available => ci-delegated (azure/login must run first); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
     Write-Host ''
     Write-Host 'Dry run - no token read, no network call made, nothing written.'

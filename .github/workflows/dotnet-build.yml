@@ -237,6 +237,11 @@ jobs:
   legacy-core-status:
     name: Legacy core build (informational)
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Same skip contract as build-and-test (review finding): without this gate a
+    # docs-only PR still paid for a full .NET build here. Not a required check, so
+    # skipping is free; always() unlocks the needs edge on push/dispatch.
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -265,6 +270,11 @@ jobs:
     name: .NET 11 preview build (informational, allowed to fail)
     runs-on: ubuntu-latest
     continue-on-error: true
+    needs: [changes]
+    # Same skip contract as build-and-test (review finding): a docs-only PR gets no
+    # preview build either. Depending ON `changes` is fine — the rule is that nothing
+    # may ever `needs:` THIS job.
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4

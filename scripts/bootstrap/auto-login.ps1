@@ -199,6 +199,24 @@ function Invoke-HeliosAutoLogin {
             $ownerActions.Add('fix AZURE_KEY_VAULT_URI: it is set but not a parseable https://<vault>.vault.azure.net/ URI')
         }
         else {
+            # Identity pinning (review finding): auth-doctor -Apply returns ready on
+            # ANY healthy cached az login before reaching its service-principal
+            # repair, so a developer login can mask the configured workload identity —
+            # and the developer may lack the vault's RBAC grant that the ops service
+            # principal holds. The cached identity is an identifier, never a secret:
+            # detect the mismatch up front, and if a pull then fails, report the
+            # exact non-interactive switch command instead of a generic RBAC shrug.
+            $cachedAzIdentity = ''
+            $azIdentityMismatch = $false
+            if (Test-EnvValue 'AZURE_CLIENT_ID') {
+                $acctLines = @(& $azCmd.Source account show --query user.name --output tsv --only-show-errors 2>$null)
+                if ([int]$LASTEXITCODE -eq 0) { $cachedAzIdentity = (@($acctLines) -join '').Trim() }
+                if ($cachedAzIdentity -and $cachedAzIdentity -ne ([string]$env:AZURE_CLIENT_ID).Trim()) {
+                    $azIdentityMismatch = $true
+                    Add-Step -Step 'az-identity' -State 'ok' -Detail ("cached az login is '$cachedAzIdentity', not the configured AZURE_CLIENT_ID workload identity — vault pulls proceed under the cached identity, whose Key Vault RBAC may differ")
+                }
+            }
+            $anyPullFailed = $false
             foreach ($pair in $vaultPairs) {
                 if (Test-EnvValue $pair.Env) {
                     Add-Step -Step $pair.Env -State 'skipped' -Detail 'already holds a value in this session — never clobbered'
@@ -217,7 +235,14 @@ function Invoke-HeliosAutoLogin {
                 }
                 else {
                     Add-Step -Step $pair.Env -State 'skipped' -Detail "Key Vault secret '$($pair.SecretName)' not readable (missing, empty, or no RBAC grant) — value state not probed further"
+                    $anyPullFailed = $true
                 }
+            }
+            if ($anyPullFailed -and $azIdentityMismatch) {
+                # The switch is fully non-interactive — the operator (or automation)
+                # just has to run it; auto-login itself only mutates the az profile
+                # through auth-doctor -Apply, which stops at the first healthy cache.
+                $ownerActions.Add('Key Vault pull failed under the cached az identity while AZURE_CLIENT_ID declares a workload identity — switch non-interactively: az login --service-principal --username $env:AZURE_CLIENT_ID --tenant $env:AZURE_TENANT_ID --password $env:AZURE_CLIENT_SECRET (or --certificate $env:AZURE_CLIENT_CERTIFICATE_PATH), then re-run auto-login')
             }
         }
     }
