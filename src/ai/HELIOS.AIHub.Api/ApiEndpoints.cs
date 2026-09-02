@@ -88,6 +88,18 @@ public static class ApiEndpoints
                 return Results.BadRequest(new ApiError(
                     "quality must be between 0 and 1 when provided."));
             }
+            if (!(double.IsFinite(request.LatencyMs) && request.LatencyMs >= 0))
+            {
+                // A negative or non-finite latency is physically impossible and
+                // would publish an impossible /v1/metrics average (review finding).
+                return Results.BadRequest(new ApiError(
+                    "latencyMs must be a nonnegative finite number."));
+            }
+            if (!(double.IsFinite(request.CostUsd) && request.CostUsd >= 0))
+            {
+                return Results.BadRequest(new ApiError(
+                    "costUsd must be a nonnegative finite number."));
+            }
 
             await hub.Learning.RecordAsync(
                 new RoutingOutcome
@@ -162,7 +174,12 @@ public static class ApiEndpoints
                         // response with a 500 until those records age out of the
                         // window (review finding). A non-finite aggregate becomes
                         // null instead.
-                        AverageLatencyMs: FiniteOrNull(outcomes.Average(o => o.LatencyMs)),
+                        // The >= 0 filter is defense-in-depth for impossible negative
+                        // latencies recorded before ingestion validated them; the
+                        // nullable selector makes an all-invalid window null, not a
+                        // throw (review finding).
+                        AverageLatencyMs: FiniteOrNull(outcomes.Average(
+                            o => o.LatencyMs >= 0 ? o.LatencyMs : (double?)null)),
                         TotalCostUsd: FiniteOrNull(outcomes.Sum(o => o.CostUsd)),
                         AverageCostUsd: FiniteOrNull(outcomes.Average(o => o.CostUsd)),
                         // Average(double?) ignores unrated outcomes and is null when

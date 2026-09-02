@@ -189,6 +189,17 @@ try {
             Write-Report ('IDENTITY MISMATCH on: ' + ($mismatchLanes -join ', ') + ' — chain ABORTED; later steps never ran.')
             break
         }
+        # An identity step that could not run at all (script missing, unparsable
+        # output, or an internal error) is just as gating as a mismatch: nothing
+        # verified WHO we are, so -Apply must never reach auth-doctor's mutating
+        # repair on the strength of it (review finding). Aborting here feeds the
+        # exit-1 required-step-failed contract below.
+        if ($result.state -eq 'failed' -or $result.exitCode -notin 0, 2) {
+            Write-Report ''
+            Write-Report ('IDENTITY UNVERIFIED: connect-account ' + $result.summary +
+                ' — chain ABORTED before any auth repair; later steps never ran.')
+            break
+        }
     }
 
     $identityMismatch = $mismatchLanes.Count -gt 0
@@ -208,7 +219,7 @@ try {
     # throws — $_['Soft'] returns $null for the others instead (review finding).
     $softStepNames = @($chainSpecs | Where-Object { $_['Soft'] } | ForEach-Object { $_['Step'] })
     $requiredFailed = @($steps | Where-Object {
-            $_.step -notin $softStepNames -and ($_.state -eq 'failed' -or $_.exitCode -eq 1)
+            $_.step -notin $softStepNames -and ($_.state -eq 'failed' -or $_.exitCode -notin 0, 2)
         } | ForEach-Object step)
 
     # Exit contract: 2 = identity mismatch (always gates, report-only included) or an

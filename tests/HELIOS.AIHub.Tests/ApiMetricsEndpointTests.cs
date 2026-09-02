@@ -137,6 +137,28 @@ public sealed class ApiMetricsEndpointTests
     }
 
     [Fact]
+    public async Task Metrics_NegativeLegacyLatency_ExcludedFromAverage()
+    {
+        // Ingestion now rejects negative latency, but rows recorded before that
+        // validation can still be in the store; the average must ignore them
+        // instead of publishing an impossible negative latency.
+        var store = new FakeLearningStore(new[]
+        {
+            Outcome("openai", success: true, latencyMs: -100, costUsd: 0),
+            Outcome("openai", success: true, latencyMs: 300, costUsd: 0),
+        });
+        using var factory = CreateFactory(store);
+        using var client = factory.CreateClient();
+
+        var metrics = await client.GetFromJsonAsync<MetricsResponse>("/v1/metrics", Json);
+
+        Assert.NotNull(metrics);
+        var openai = Assert.Single(metrics.Providers);
+        Assert.NotNull(openai.AverageLatencyMs);
+        Assert.Equal(300.0, openai.AverageLatencyMs.Value, precision: 12); // only the valid sample
+    }
+
+    [Fact]
     public async Task Metrics_IncludesSourceTaggedAdvisoryRecords()
     {
         // Advisory records are excluded from adaptive routing, but /v1/metrics is

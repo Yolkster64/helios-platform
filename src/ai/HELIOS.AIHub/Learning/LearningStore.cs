@@ -7,6 +7,17 @@ namespace HELIOS.AIHub.Learning;
 /// <summary>One recorded routing outcome — the unit the hub learns from.</summary>
 public sealed record RoutingOutcome
 {
+    /// <summary>
+    /// Stable identity stamped once at record time (HybridLearningStore stamps it
+    /// before fanning the same outcome to both stores). The hybrid read-side merge
+    /// dedups on this — telemetry fields make a lossy key: two concurrent outcomes
+    /// can legitimately share timestamp/provider/model/success/latency (review
+    /// finding). Null on rows recorded before the field existed; those fall back to
+    /// the telemetry-tuple dedup.
+    /// </summary>
+    [JsonPropertyName("outcomeId")]
+    public string? OutcomeId { get; init; }
+
     [JsonPropertyName("timestamp")]
     public DateTimeOffset Timestamp { get; init; }
 

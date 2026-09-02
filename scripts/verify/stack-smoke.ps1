@@ -32,7 +32,9 @@ Lanes (one row each: {lane, state ok|degraded|failed|build-missing, detail}):
              ever read or printed. The API process is ALWAYS stopped in finally via the
              stored process handle (kill by PID including the dotnet-run child tree —
              never pkill by name, which could hit an unrelated operator process).
-  metrics    /v1/metrics probed while the API is up: 200 = ok; 404 = failed — the
+  metrics    /v1/metrics probed while the API is up: 200 with parseable JSON = ok
+             (an unparsable 200 body is failed — same contract as the other read
+             lanes); 404 = failed — the
              endpoint is mapped in src/ai/HELIOS.AIHub.Api/ApiEndpoints.cs, so a 404
              from a live server means a stale build or a route regression, never
              "not shipped yet"; connection loss or any other status is degraded.
@@ -243,7 +245,7 @@ if ($DryRun) {
     Write-Host '               GET /v1/learning /v1/insights (no taskType)     -> 400 + required-parameter error'
     Write-Host '               GET /v1/learning /v1/insights ?taskType=code_generation -> 200'
     Write-Host '             stop the API in finally (stored PID, tree kill — never pkill by name)'
-    Write-Host '  metrics    GET /v1/metrics -> 200 = ok; 404 = failed (mapped route missing: stale build or regression); else degraded'
+    Write-Host '  metrics    GET /v1/metrics -> 200 + parseable JSON = ok; unparsable 200 or 404 = failed; else degraded'
     Write-Host "  mcp        spawn: dotnet run --project $mcpProject -c Release --no-build"
     Write-Host '             JSON-RPC over stdio: initialize -> notifications/initialized -> tools/list (+pagination)'
     Write-Host ("             assert tool names match the distinct helios_* names in docs/mcp/CLIENT_SETUP.md " +
@@ -411,8 +413,15 @@ try {
                 # drift — a stale build or a lost route — not "pending" (review
                 # finding: pending after shipping would disguise a regression).
                 $probe = Invoke-HttpProbe -Url "$probeBase/v1/metrics"
-                $metricsLane = if ($probe.Status -eq 200) {
-                    New-LaneResult -Lane 'metrics' -State 'ok' -Detail '/v1/metrics 200 — the telemetry endpoint is live'
+                $metricsLane = if ($probe.Status -eq 200 -and (Test-ParsesAsJson $probe.Body)) {
+                    New-LaneResult -Lane 'metrics' -State 'ok' -Detail '/v1/metrics 200 json — the telemetry endpoint is live'
+                }
+                elseif ($probe.Status -eq 200) {
+                    # Same contract as the other read lanes: a 200 whose body clients
+                    # cannot parse is drift on the dashboard seam, not health
+                    # (review finding).
+                    $hardFailure = $true
+                    New-LaneResult -Lane 'metrics' -State 'failed' -Detail '/v1/metrics 200 but body is not parseable JSON'
                 }
                 elseif ($probe.Status -eq 404) {
                     $hardFailure = $true

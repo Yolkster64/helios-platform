@@ -60,6 +60,7 @@ public sealed class AzureTableLearningStore : ILearningStore
         var inverted = DateTimeOffset.MaxValue.Ticks - outcome.Timestamp.Ticks;
         var entity = new TableEntity(Sanitize(outcome.TaskType), $"{inverted:D19}-{Guid.NewGuid():N}")
         {
+            ["OutcomeId"] = outcome.OutcomeId,
             ["TaskType"] = outcome.TaskType,
             ["Provider"] = outcome.Provider,
             ["Model"] = outcome.Model,
@@ -142,6 +143,7 @@ public sealed class AzureTableLearningStore : ILearningStore
 
     private static RoutingOutcome ToOutcome(TableEntity entity, string fallbackTaskType = "") => new()
     {
+        OutcomeId = entity.GetString("OutcomeId"),
         Timestamp = entity.GetDateTimeOffset("OccurredAt") ?? entity.Timestamp ?? DateTimeOffset.MinValue,
         TaskType = entity.GetString("TaskType") ?? fallbackTaskType,
         Provider = entity.GetString("Provider") ?? "",
@@ -188,6 +190,14 @@ public sealed class HybridLearningStore : ILearningStore
 
     public async Task RecordAsync(RoutingOutcome outcome, CancellationToken cancellationToken = default)
     {
+        // Stamp a stable identity ONCE, before the fan-out, so the local and remote
+        // copies of this outcome share it and the read-side merge can dedup on it
+        // instead of on lossy telemetry fields.
+        if (outcome.OutcomeId is null or "")
+        {
+            outcome = outcome with { OutcomeId = Guid.NewGuid().ToString("N") };
+        }
+
         await _local.RecordAsync(outcome, cancellationToken).ConfigureAwait(false);
         try
         {
@@ -224,11 +234,22 @@ public sealed class HybridLearningStore : ILearningStore
         var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
 
         return remote.Concat(local)
-            .DistinctBy(o => (o.Timestamp, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source))
+            .DistinctBy(MergeDedupKey)
             .OrderByDescending(o => o.Timestamp)
             .Take(limit)
             .ToList();
     }
+
+    // Dedup key for the local+remote merge. The stamped OutcomeId is the real
+    // identity — telemetry fields make a lossy key (two concurrent outcomes can
+    // legitimately share timestamp/provider/model/success/latency — review finding).
+    // Rows recorded before the id existed fall back to the telemetry tuple; a string
+    // key can never equal a boxed tuple key, so the two populations never collide.
+    // TaskType is in the fallback tuple because GetRecentAllAsync spans task types.
+    private static object MergeDedupKey(RoutingOutcome o) =>
+        o.OutcomeId is { Length: > 0 } id
+            ? id
+            : (o.Timestamp, o.TaskType, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source);
 
     public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
         int limit = 200, CancellationToken cancellationToken = default)
@@ -249,10 +270,8 @@ public sealed class HybridLearningStore : ILearningStore
 
         var local = await _local.GetRecentAllAsync(limit, cancellationToken).ConfigureAwait(false);
 
-        // TaskType joins the dedup key here: this window spans task types, so two
-        // different tasks' outcomes can otherwise collide on an identical tuple.
         return remote.Concat(local)
-            .DistinctBy(o => (o.Timestamp, o.TaskType, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source))
+            .DistinctBy(MergeDedupKey)
             .OrderByDescending(o => o.Timestamp)
             .Take(limit)
             .ToList();

@@ -225,6 +225,19 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task PostLearning_RejectsNegativeLatency()
+    {
+        // A negative latency is physically impossible and would publish an
+        // impossible /v1/metrics average.
+        var response = await _client.PostAsJsonAsync("/v1/learning",
+            new AdvisoryOutcomeRequest(TaskType: "absorption", Source: "absorption-benchmark",
+                Provider: "M0nado/helios-platform#222", Model: "abc", Success: true,
+                LatencyMs: -100), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PostLearning_AcceptsAdvisoryOutcome_AndReportsStoreState()
     {
         var response = await _client.PostAsJsonAsync("/v1/learning",
