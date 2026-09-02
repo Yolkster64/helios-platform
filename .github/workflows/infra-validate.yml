@@ -32,7 +32,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          # --no-renames (review finding): default rename detection emits only the
+          # DESTINATION path, so renaming infra/main.bicep out of infra/ would read
+          # as irrelevant and skip all three required infra checks. With
+          # --no-renames a rename is a delete+add and both sides are matched.
+          changed="$(git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA")"
           printf '%s\n' "$changed"
           if printf '%s\n' "$changed" | grep -qE '^infra/'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"

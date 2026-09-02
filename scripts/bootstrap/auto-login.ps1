@@ -179,8 +179,11 @@ function Invoke-HeliosAutoLogin {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail 'az lane is not usable — Key Vault pulls need an authenticated az (see owner actions)'
     }
     elseif (-not $vaultUri) {
-        Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is not set (name checked only) — provisioned by infra/main.bicep; azure-up.sh writes it into .helios/azure.env'
-        $ownerActions.Add('source .helios/azure.env (or export AZURE_KEY_VAULT_URI) so auto-login can pull provider keys from Key Vault')
+        Add-Step -Step 'keyvault' -State 'skipped' -Detail ('AZURE_KEY_VAULT_URI is not set (name checked only) — provisioned by infra/main.bicep; ' +
+            'azure-up.sh writes .helios/azure.env (bash) and azure-up.ps1 writes .helios/azure.env.ps1 (PowerShell)')
+        # Both shells get a working remediation (review finding): this script is
+        # dot-sourced from PowerShell, where bash `source`/`export` do nothing.
+        $ownerActions.Add('set AZURE_KEY_VAULT_URI so auto-login can pull provider keys — PowerShell: . .helios/azure.env.ps1 (or $env:AZURE_KEY_VAULT_URI = "https://<vault>.vault.azure.net/"); bash: source .helios/azure.env')
     }
     elseif (-not $azCmd) {
         Add-Step -Step 'keyvault' -State 'unavailable' -Detail 'az CLI not on PATH'
@@ -228,7 +231,9 @@ function Invoke-HeliosAutoLogin {
             Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
         }
         else {
-            $ghLines = @(& $ghCmd.Source auth token 2>$null)
+            # --hostname github.com (review finding): never export a GitHub
+            # Enterprise credential (GH_HOST context) into the github.com models lane.
+            $ghLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
             $ghExit = [int]$LASTEXITCODE
             $ghToken = (@($ghLines) -join '').Trim()
             if ($ghExit -eq 0 -and $ghToken) {

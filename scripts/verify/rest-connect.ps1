@@ -243,7 +243,11 @@ function Get-GitHubTokenCandidates {
         # Capture output BEFORE reading $LASTEXITCODE (StrictMode rule: a pipeline that
         # stops early can leave $LASTEXITCODE unassigned). `gh auth token` may fail —
         # that is fine, the chain just has one fewer candidate.
-        $tokenLines = @(& $ghCmd.Source auth token 2>$null)
+        # --hostname github.com (review finding): with GH_HOST pointing at a GitHub
+        # Enterprise host, an unqualified `gh auth token` would hand back the
+        # ENTERPRISE credential — which this lane would then send to api.github.com,
+        # disclosing it to the wrong control plane.
+        $tokenLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
         $ghExit = $LASTEXITCODE
         $ghToken = (@($tokenLines) -join '').Trim()
         if ($ghExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghToken)) {
@@ -325,6 +329,15 @@ function Test-GitHubLane {
             $rate = Get-OptionalProperty $rateParsed 'rate'
             $remaining = [string](Get-OptionalProperty $rate 'remaining' 'unknown')
             $limit = [string](Get-OptionalProperty $rate 'limit' 'unknown')
+            # Same payload discipline as the anonymous control (review finding): a 200
+            # whose body is not a real rate-limit payload (intermediary HTML, garbage
+            # JSON) proves nothing about THIS token — note it and try the next
+            # candidate instead of declaring ready on unknown/unknown.
+            $authLimitValue = 0
+            if ($null -eq $rateParsed -or -not [int]::TryParse($limit, [ref]$authLimitValue)) {
+                $attemptNotes.Add("$sourceName rate_limit 200 but the body is not a parseable GitHub rate-limit payload (intermediary?)")
+                continue
+            }
 
             # Identity is best-effort: some REST-valid token types (fine-grained with
             # narrow scopes, app installation tokens) cannot call /user. That does NOT
