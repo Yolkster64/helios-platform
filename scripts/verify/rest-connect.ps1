@@ -269,7 +269,12 @@ function Test-GitHubLane {
         $anonParsed = Test-ParsedJson $anonProbe.Body
         $anonRate = Get-OptionalProperty $anonParsed 'rate'
         $anonLimit = [string](Get-OptionalProperty $anonRate 'limit' 'unknown')
-        if ($anonLimit -ne '60') {
+        # Injection is asserted only on a NUMERIC limit above the anonymous 60/hr cap
+        # (review finding: an unexpected body shape parsing to 'unknown' must fall
+        # through to the per-candidate walk, not falsely classify the transport).
+        $anonLimitValue = 0
+        $anonLimitIsNumeric = [int]::TryParse($anonLimit, [ref]$anonLimitValue)
+        if ($anonLimitIsNumeric -and $anonLimitValue -ne 60) {
             $anonIdentity = 'unknown'
             $anonUser = Invoke-HttpProbe -Url "$gitHubApi/user" -Headers $anonHeaders -TimeoutSec $TimeoutSeconds
             if ($anonUser.Status -eq 200) {

@@ -99,7 +99,10 @@ try {
     $azUsable = $false
     $doctorPath = Join-Path $repoRoot 'scripts/bootstrap/auth-doctor.ps1'
     if (Test-Path -LiteralPath $doctorPath) {
-        $doctorLines = @(& pwsh -NoProfile -File $doctorPath -Apply -Json 2>&1 | ForEach-Object { "$_" })
+        # stdout ONLY: the -Json contract puts the report there, and merging stderr
+        # (warnings, progress lines) would break the JSON parse (review finding —
+        # the same lesson learn-fleet.ps1's capture already encodes).
+        $doctorLines = @(& pwsh -NoProfile -File $doctorPath -Apply -Json 2>$null | ForEach-Object { "$_" })
         $doctorExit = [int]$LASTEXITCODE
         $doctorReport = $null
         try { $doctorReport = ($doctorLines -join "`n") | ConvertFrom-Json } catch { }
@@ -133,10 +136,13 @@ try {
 
     # --- 2. Key Vault → env (the pwsh twin of load-env-from-keyvault.sh) ------------
     # Secret NAME → env NAME, exactly the pairs the bash twin and config/aihub.json use.
+    # SecretName is a Key Vault secret IDENTIFIER (which secret to fetch), never a
+    # value — named so the code-checks security scanner's hardcoded-secret pattern
+    # (`secret =` followed by a literal) does not false-positive on identifiers.
     $vaultPairs = @(
-        [pscustomobject]@{ Secret = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/azure-openai SDK & providers' }
-        [pscustomobject]@{ Secret = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider' }
-        [pscustomobject]@{ Secret = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider' }
+        [pscustomobject]@{ SecretName = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/azure-openai SDK & providers' }
+        [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider' }
+        [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider' }
     )
     $vaultUri = if (Test-Path env:AZURE_KEY_VAULT_URI) { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     $azCmd = Get-Command az -ErrorAction SilentlyContinue
@@ -151,7 +157,16 @@ try {
         Add-Step -Step 'keyvault' -State 'unavailable' -Detail 'az CLI not on PATH'
     }
     else {
-        $vaultName = ([uri]$vaultUri).Host.Split('.')[0]
+        # A malformed AZURE_KEY_VAULT_URI is a configuration problem, not an internal
+        # failure — the [uri] cast throws on scheme-less/garbage values (review
+        # finding), so it is guarded into a skipped step instead of aborting the run.
+        $vaultName = ''
+        try { $vaultName = ([uri]$vaultUri).Host.Split('.')[0] } catch { }
+        if (-not $vaultName) {
+            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but does not parse as a URI (expected https://<vault>.vault.azure.net/) — fix the value; nothing was pulled'
+            $ownerActions.Add('fix AZURE_KEY_VAULT_URI: it is set but not a parseable https://<vault>.vault.azure.net/ URI')
+        }
+        else {
         foreach ($pair in $vaultPairs) {
             if (Test-Path "env:$($pair.Env)") {
                 Add-Step -Step $pair.Env -State 'skipped' -Detail 'already set in this session — never clobbered'
@@ -159,24 +174,30 @@ try {
             }
             # Value: az stdout → local → $env:NAME. It is never interpolated anywhere.
             $secretValue = ''
-            $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.Secret --query value --output tsv --only-show-errors 2>$null)
+            $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.SecretName --query value --output tsv --only-show-errors 2>$null)
             $secretExit = [int]$LASTEXITCODE
             if ($secretExit -eq 0) { $secretValue = (@($secretLines) -join '').Trim() }
             if ($secretValue) {
                 Set-Item -Path "env:$($pair.Env)" -Value $secretValue
                 $secretValue = ''
                 $exportedNames.Add($pair.Env)
-                Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.Secret)' — lights: $($pair.Lights)"
+                Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
             }
             else {
-                Add-Step -Step $pair.Env -State 'skipped' -Detail "Key Vault secret '$($pair.Secret)' not readable (missing, empty, or no RBAC grant) — value state not probed further"
+                Add-Step -Step $pair.Env -State 'skipped' -Detail "Key Vault secret '$($pair.SecretName)' not readable (missing, empty, or no RBAC grant) — value state not probed further"
             }
+        }
         }
     }
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
     if (-not (Test-Path env:GITHUB_MODELS_TOKEN)) {
         $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+        if (-not $ghCmd) {
+            # Record the lane even when gh is absent — an unevaluated-looking steps
+            # list is ambiguous (review finding).
+            Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
+        }
         if ($ghCmd) {
             $ghLines = @(& $ghCmd.Source auth token 2>$null)
             $ghExit = [int]$LASTEXITCODE
