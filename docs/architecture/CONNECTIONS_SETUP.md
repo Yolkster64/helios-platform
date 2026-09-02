@@ -34,6 +34,18 @@ operations live in the `connector-integrations` skill
 | Anthropic (`ant`) | Profile credentials for the `anthropic` provider and `claude` CLI without handling a raw key | `ant auth login --no-browser` (prints the authorize URL, accepts the pasted code) |
 | OpenAI (`codex`) | `codex` cliAgent (`codex exec {prompt}`) | Headless: `OPENAI_API_KEY` from Key Vault (`openai-api-key`); `codex login` only where a browser exists |
 
+### One command, everything
+
+`pwsh scripts/bootstrap/setup-everything.ps1` chains the whole bring-up in order,
+calling only the existing scripts: `verify-readiness.ps1` (toolchain) →
+`connect-account.ps1` (identity) → `auth-doctor.ps1` (auth; `-Apply` passes
+through) → `setup-all.ps1` (inventory) → `scripts/verify/stack-smoke.ps1` (soft
+smoke), ending in one consolidated, deduped owner-action list (`-Json` for the
+machine rollup). The identity gate is hard: any `connect-account` mismatch aborts
+the chain immediately with exit 2 — acting as the wrong account is worse than
+acting unauthenticated. Report-first by default: nothing is mutated without
+`-Apply`, and even then repair is auth-doctor's non-interactive lane only.
+
 **ant CLI facts** (per the CLI authentication docs):
 
 - Interactive login is `ant auth login` (browser OAuth). On a remote or
@@ -96,7 +108,7 @@ printed ready to paste:
 
 | Setting | Kind | Read by `helios-deploy.yml` as |
 |---|---|---|
-| `AZURE_CLIENT_ID` | variable (required) | `vars.AZURE_CLIENT_ID` (falls back to `secrets.AZURE_CLIENT_ID`, the legacy location) |
+| `AZURE_CLIENT_ID` | variable (required) | `vars.AZURE_CLIENT_ID` (falls back to `secrets.AZURE_CLIENT_ID`, then the older `secrets.AZURE_OIDC_CLIENT_ID` alias — legacy locations, strictly last) |
 | `AZURE_TENANT_ID` | variable (required) | `vars.AZURE_TENANT_ID` (same fallback) |
 | `AZURE_SUBSCRIPTION_ID` | variable (required) | `vars.AZURE_SUBSCRIPTION_ID` (same fallback) |
 | `AZURE_RESOURCE_GROUP` | variable (optional) | defaults to `rg-helios-ai` |

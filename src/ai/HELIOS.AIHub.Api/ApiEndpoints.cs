@@ -81,6 +81,25 @@ public static class ApiEndpoints
                     + "(e.g. 'absorption-benchmark', 'fork-observation'); live provider "
                     + "outcomes are recorded by the hub itself."));
             }
+            if (request.Quality is { } quality && !(double.IsFinite(quality) && quality is >= 0 and <= 1))
+            {
+                // Quality is a [0,1] rating; a finite-but-invalid value (e.g. 100)
+                // would silently poison /v1/metrics' AverageQuality (review finding).
+                return Results.BadRequest(new ApiError(
+                    "quality must be between 0 and 1 when provided."));
+            }
+            if (!(double.IsFinite(request.LatencyMs) && request.LatencyMs >= 0))
+            {
+                // A negative or non-finite latency is physically impossible and
+                // would publish an impossible /v1/metrics average (review finding).
+                return Results.BadRequest(new ApiError(
+                    "latencyMs must be a nonnegative finite number."));
+            }
+            if (!(double.IsFinite(request.CostUsd) && request.CostUsd >= 0))
+            {
+                return Results.BadRequest(new ApiError(
+                    "costUsd must be a nonnegative finite number."));
+            }
 
             await hub.Learning.RecordAsync(
                 new RoutingOutcome
@@ -127,6 +146,67 @@ public static class ApiEndpoints
             }
             var drift = await spoke.DetectDriftAsync(chronological, ct);
             return Results.Ok(new InsightsResponse(taskType, true, null, summary, drift));
+        });
+
+        api.MapGet("/metrics", async (AIHubService hub, int? limit, CancellationToken ct) =>
+        {
+            // Telemetry, not routing: the window deliberately INCLUDES source-tagged
+            // advisory records — the same records adaptive routing and fleet-plan
+            // exclude — because a dashboard should show everything the store recorded.
+            var window = await hub.Learning.GetRecentAllAsync(
+                Math.Clamp(limit ?? 200, 1, 500), ct);
+
+            var providers = window
+                .GroupBy(o => o.Provider, StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var outcomes = group.ToList();
+                    var successes = outcomes.Count(o => o.Success);
+                    return new ProviderMetricsResponse(
+                        group.Key,
+                        Attempts: outcomes.Count,
+                        Successes: successes,
+                        AdvisoryCount: outcomes.Count(o => o.Source is not null),
+                        SuccessRate: (double)successes / outcomes.Count,
+                        // FiniteOrNull: strict JSON cannot carry NaN/Infinity, but it
+                        // CAN carry finite values whose sum or average overflows (two
+                        // 1e308 costs) — and the serializer then rejects the whole
+                        // response with a 500 until those records age out of the
+                        // window (review finding). A non-finite aggregate becomes
+                        // null instead.
+                        // The >= 0 filter is defense-in-depth for impossible negative
+                        // latencies recorded before ingestion validated them; the
+                        // nullable selector makes an all-invalid window null, not a
+                        // throw (review finding).
+                        AverageLatencyMs: FiniteOrNull(outcomes.Average(
+                            o => o.LatencyMs >= 0 ? o.LatencyMs : (double?)null)),
+                        TotalCostUsd: FiniteOrNull(outcomes.Sum(o => o.CostUsd)),
+                        AverageCostUsd: FiniteOrNull(outcomes.Average(o => o.CostUsd)),
+                        // Average(double?) ignores unrated outcomes and is null when
+                        // none are rated — never a fabricated 0. The [0,1] filter is
+                        // defense-in-depth for out-of-range ratings recorded before
+                        // POST /v1/learning validated the range.
+                        AverageQuality: FiniteOrNull(outcomes.Average(
+                            o => o.Quality is >= 0 and <= 1 ? o.Quality : null)),
+                        // RoutingOutcome persists no token counts, so these cannot be
+                        // derived honestly — see ProviderMetricsResponse.
+                        TokensUsed: null,
+                        CostPerMillionTokens: null);
+                })
+                .OrderByDescending(p => p.Attempts)
+                .ThenBy(p => p.Provider, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var message = window.Count > 0
+                ? null
+                : hub.Learning is NullLearningStore
+                    ? "Learning is disabled (or its store failed to initialize), so no "
+                      + "outcomes are recorded; enable learning in config/aihub.json."
+                    : "No routing outcomes recorded yet: route traffic through the hub "
+                      + "or POST advisory outcomes to /v1/learning.";
+
+            return Results.Ok(new MetricsResponse(
+                DateTimeOffset.UtcNow, window.Count, providers, message));
         });
 
         api.MapGet("/engines", async (
@@ -237,6 +317,10 @@ public static class ApiEndpoints
     /// configured access key; hosted deployments should additionally enforce their normal
     /// identity-aware ingress before traffic reaches Kestrel.
     /// </summary>
+    /// <summary>Null when the aggregate is not representable as a finite double.</summary>
+    private static double? FiniteOrNull(double? value) =>
+        value is { } finite && double.IsFinite(finite) ? finite : null;
+
     private static IResult? AuthorizeApiRequest(HttpContext context, string? configuredKey)
     {
         var remoteAddress = context.Connection.RemoteIpAddress;

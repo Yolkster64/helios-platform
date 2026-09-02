@@ -111,15 +111,20 @@ separate read-only identity (`:120-122`).
 
 **The vars-`||`-secrets identifier idiom.** The three OIDC identifiers are
 *identifiers, not secrets*, and live as repository **variables**, but legacy
-setups stored them as secrets — so consumers resolve both:
-`${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}` (and tenant/
-subscription likewise) in `helios-deploy.yml:62-64`,
-`claude-foundry.yml:67-69,86-88`, and
-`claude-foundry-comment-review.yml:59-61,74-76`. PR #102 (squash commit
-`57512b0`, verified against the GitHub API: it touches only
-`claude-foundry.yml`, which then still carried the comment lane) brought
-claude-foundry in line with helios-deploy. The comment-lane preflight prints
-the no-secret contract explicitly: *"No client secret is used."*
+setups stored them as secrets — some under the plain `AZURE_*` names, older
+ones under an `AZURE_OIDC_*` alias. Consumers therefore resolve a
+**three-term chain**, canonical location first and legacy alias strictly
+last: `${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID ||
+secrets.AZURE_OIDC_CLIENT_ID }}` (and tenant/subscription likewise) —
+repo-wide across `helios-deploy.yml`, `claude-foundry.yml`, and
+`claude-foundry-comment-review.yml`, in every env preflight and every
+`azure/login` step. PR #102 (squash commit `57512b0`, verified against the
+GitHub API: it touches only `claude-foundry.yml`, which then still carried
+the comment lane) first brought claude-foundry in line with helios-deploy on
+the two-term form; the PR #106 merge (`25e8e652`) restructured the comment
+lane and appended the `AZURE_OIDC_*` alias so the canonical locations always
+win when both exist. The comment-lane preflight prints the no-secret contract
+explicitly: *"No client secret is used."*
 (`claude-foundry-comment-review.yml:67`).
 
 **The one remaining anti-pattern** — `deploy.yml:25-30` still maps

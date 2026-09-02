@@ -154,6 +154,7 @@ ingress; the local access key is not a replacement for user authorization.
 | `/v1/learning` | GET | Recorded outcomes for one task type |
 | `/v1/learning` | POST | Provenance-required advisory outcome ingestion |
 | `/v1/insights` | GET | Python summary and drift analysis |
+| `/v1/metrics` | GET | Per-provider latency/success/cost telemetry over recent outcomes |
 | `/v1/engines` | GET | Implemented capabilities and runtime availability |
 | `/v1/engines/recommend` | POST | Deterministic engine advisory plan |
 | `/v1/ask` | POST | One provider or the default routed chain |

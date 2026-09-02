@@ -164,7 +164,7 @@
     }
   },
   "learning": {
-    "$comment": "Record-only by default: outcomes append to localPath (gitignored .helios/) and surface via /v1/learning + /v1/insights, while routing chains stay exactly as configured. adaptiveRouting=true is the deliberate opt-in that lets recorded history reorder chains - off so routing never changes itself silently. Store failures degrade to a null store; the hub never blocks on learning.",
+    "$comment": "Record-only by default: outcomes append to localPath (gitignored .helios/) and surface via /v1/learning, /v1/insights, and /v1/metrics, while routing chains stay exactly as configured. adaptiveRouting=true is the deliberate opt-in that lets recorded history reorder chains - off so routing never changes itself silently. Store failures degrade to a null store; the hub never blocks on learning.",
     "enabled": true,
     "mode": "local",
     "localPath": ".helios/learning/outcomes.jsonl",

@@ -1,0 +1,113 @@
+<!--
+    SOLAR LIGHT theme pack (alternate; NOT merged by default).
+    Authority: Themes/Tokens.xaml is the canonical token file (Monado pack) and owns the
+    semantic key set - decision record docs/architecture/GUI_UPGRADE_PLAN.md section 2.
+    Built from MonadoColorPalette's light set (#F5F7FA / #FFFFFF / #D0D8E0). This is a
+    light-appearance pack: the Default (dark-OS) dictionary intentionally carries the
+    same light values as the Light dictionary, so choosing Solar Light means a light
+    shell regardless of the OS theme. HighContrast still defers to system colors.
+    Identical semantic keys to every other pack; per-profile selection persists in
+    local app settings (selection UI and runtime swap are P6 - see Themes/README.md).
+
+    All ratios computed (WCAG 2.x relative luminance); body-text tokens hold >= 4.5:1
+    on every surface token. Worst-case pairs annotated inline.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- Default deliberately mirrors Light: Solar Light is light-first. -->
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#007694" />
+            <!-- 4.86:1 on #F5F7FA (worst surface) -->
+            <!-- Gold is a HIGHLIGHT token only - never a second primary accent.
+                 1.30:1 on light surfaces: decorative glow, never text. -->
+            <Color x:Key="AccentGoldColor">#FFD700</Color>
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="#FFD700" />
+
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="#FFFBFE" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#D0D8E0" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#A0A8B0" />
+
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A2838" />
+            <!-- 13.91:1 on #F5F7FA (worst), 14.95:1 on #FFFFFF -->
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5A6B78" />
+            <!-- 5.13:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF" />
+            <!-- 5.23:1 on the #007694 accent fill -->
+
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#17794E" />
+            <!-- 5.03:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#A85800" />
+            <!-- 4.81:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#CC0044" />
+            <!-- 5.35:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#17794E" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#A85800" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#5F6E7A" />
+            <!-- 4.89:1 on #F5F7FA (worst) -->
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#007694" />
+            <!-- 4.86:1 on #F5F7FA (worst surface) -->
+            <!-- Gold is a HIGHLIGHT token only - never a second primary accent.
+                 1.30:1 on light surfaces: decorative glow, never text. -->
+            <Color x:Key="AccentGoldColor">#FFD700</Color>
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="#FFD700" />
+
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="#FFFBFE" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#D0D8E0" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#A0A8B0" />
+
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A2838" />
+            <!-- 13.91:1 on #F5F7FA (worst), 14.95:1 on #FFFFFF -->
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5A6B78" />
+            <!-- 5.13:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF" />
+            <!-- 5.23:1 on the #007694 accent fill -->
+
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#17794E" />
+            <!-- 5.03:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#A85800" />
+            <!-- 4.81:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#CC0044" />
+            <!-- 5.35:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#17794E" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#A85800" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#5F6E7A" />
+            <!-- 4.89:1 on #F5F7FA (worst) -->
+        </ResourceDictionary>
+
+        <!-- Identical to the canonical pack: system colors only, OS-defined ratios. -->
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <StaticResource x:Key="AccentGoldColor" ResourceKey="SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

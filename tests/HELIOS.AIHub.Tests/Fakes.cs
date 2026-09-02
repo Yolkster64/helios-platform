@@ -55,6 +55,10 @@ public sealed class FakeLearningStore : ILearningStore
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(
             _history.Where(h => h.TaskType == taskType).Take(limit).ToList());
 
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(_history.Take(limit).ToList());
+
     /// <summary>Fixed-timestamp outcome so histories are fully deterministic and keyless.</summary>
     public static RoutingOutcome Outcome(
         string taskType, string provider, bool success, string? source = null) =>

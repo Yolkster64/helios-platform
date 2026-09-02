@@ -71,6 +71,45 @@ public class LocalJsonlLearningStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecentAllAsync_CrossesTaskTypes_NewestFirst()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        await store.RecordAsync(Outcome("openai", success: true, at: 1, taskType: "code_review"));
+        await store.RecordAsync(Outcome("anthropic", success: true, at: 2, taskType: "code_generation"));
+        await store.RecordAsync(Outcome("ollama", success: false, at: 3, taskType: "debugging"));
+
+        var recent = await store.GetRecentAllAsync();
+
+        Assert.Equal(3, recent.Count);
+        Assert.Equal("ollama", recent[0].Provider); // at: 3, newest
+        Assert.Equal("anthropic", recent[1].Provider);
+        Assert.Equal("openai", recent[2].Provider);
+    }
+
+    [Fact]
+    public async Task GetRecentAllAsync_RespectsLimit_KeepingTheNewest()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        await store.RecordAsync(Outcome("oldest", success: true, at: 1, taskType: "code_review"));
+        await store.RecordAsync(Outcome("middle", success: true, at: 2, taskType: "code_generation"));
+        await store.RecordAsync(Outcome("newest", success: true, at: 3, taskType: "debugging"));
+
+        var recent = await store.GetRecentAllAsync(limit: 2);
+
+        Assert.Equal(2, recent.Count);
+        Assert.Equal("newest", recent[0].Provider);
+        Assert.Equal("middle", recent[1].Provider);
+    }
+
+    [Fact]
+    public async Task GetRecentAllAsync_MissingFile_ReturnsEmpty()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        var recent = await store.GetRecentAllAsync();
+        Assert.Empty(recent);
+    }
+
+    [Fact]
     public async Task ConcurrentAppends_FromTwoStoreInstances_LoseNoLinesAndTearNone()
     {
         // Two store instances over the SAME path have independent in-process gates, so

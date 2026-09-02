@@ -130,7 +130,7 @@ $appRoleSpecs = @(
     [pscustomobject]@{
         Value       = 'AIHub.Read'
         DisplayName = 'Read hub state'
-        Description = 'GET /v1/status, /v1/routing, /v1/learning, /v1/insights, /v1/engines. No provider spend.'
+        Description = 'GET /v1/status, /v1/routing, /v1/learning, /v1/insights, /v1/metrics, /v1/engines. No provider spend.'
     }
     [pscustomobject]@{
         Value       = 'AIHub.Invoke'

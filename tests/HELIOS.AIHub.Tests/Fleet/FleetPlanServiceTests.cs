@@ -222,5 +222,12 @@ public class FleetPlanServiceTests
             Reads++;
             return Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
         }
+
+        public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+            int limit = 200, CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+        }
     }
 }

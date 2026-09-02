@@ -38,15 +38,26 @@ jobs:
       # Repos without the OIDC federated credential configured skip gracefully
       # instead of failing every push to main. AZURE_CLIENT_ID is an identifier,
       # not a secret — set it as an Actions variable (azure-oidc-setup.sh prints
-      # the gh one-liners); the legacy secrets location still works as a fallback.
+      # the gh one-liners); the legacy secrets locations (AZURE_* and the older
+      # AZURE_OIDC_* alias, strictly last) still work as fallbacks.
+      # All THREE identifiers are checked, resolved through the same fallback chains
+      # the login step uses: a repo carrying only a partial legacy set (say, just
+      # AZURE_OIDC_CLIENT_ID) must stay a graceful skip, not hand azure/login an
+      # empty tenant or subscription and fail the run.
       - name: Check Azure OIDC configuration
         id: creds
         env:
-          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID || secrets.AZURE_OIDC_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID || secrets.AZURE_OIDC_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || secrets.AZURE_OIDC_SUBSCRIPTION_ID }}
         run: |
-          if [ -z "$AZURE_CLIENT_ID" ]; then
+          missing=""
+          if [ -z "$AZURE_CLIENT_ID" ]; then missing="$missing AZURE_CLIENT_ID"; fi
+          if [ -z "$AZURE_TENANT_ID" ]; then missing="$missing AZURE_TENANT_ID"; fi
+          if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then missing="$missing AZURE_SUBSCRIPTION_ID"; fi
+          if [ -n "$missing" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::AZURE_CLIENT_ID variable not set — skipping deployment. Run scripts/bootstrap/azure-oidc-setup.sh and set the three AZURE_* repo variables it prints."
+            echo "::notice::Missing OIDC identifier(s):$missing — skipping deployment. Run scripts/bootstrap/azure-oidc-setup.sh and set the three AZURE_* repo variables it prints."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
@@ -59,9 +70,9 @@ jobs:
         if: steps.creds.outputs.configured == 'true'
         uses: azure/login@v2
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID || secrets.AZURE_OIDC_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID || secrets.AZURE_OIDC_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || secrets.AZURE_OIDC_SUBSCRIPTION_ID }}
 
       # Contributor is scoped to the resource group, so the identity cannot create
       # the RG itself (and an unconditional `az group create` would also fail on a

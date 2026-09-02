@@ -60,6 +60,7 @@ public sealed class AzureTableLearningStore : ILearningStore
         var inverted = DateTimeOffset.MaxValue.Ticks - outcome.Timestamp.Ticks;
         var entity = new TableEntity(Sanitize(outcome.TaskType), $"{inverted:D19}-{Guid.NewGuid():N}")
         {
+            ["OutcomeId"] = outcome.OutcomeId,
             ["TaskType"] = outcome.TaskType,
             ["Provider"] = outcome.Provider,
             ["Model"] = outcome.Model,
@@ -96,22 +97,7 @@ public sealed class AzureTableLearningStore : ILearningStore
 
         await foreach (var entity in query.ConfigureAwait(false))
         {
-            results.Add(new RoutingOutcome
-            {
-                Timestamp = entity.GetDateTimeOffset("OccurredAt") ?? entity.Timestamp ?? DateTimeOffset.MinValue,
-                TaskType = entity.GetString("TaskType") ?? taskType,
-                Provider = entity.GetString("Provider") ?? "",
-                Model = entity.GetString("Model") ?? "",
-                Success = entity.GetBoolean("Success") ?? false,
-                LatencyMs = entity.GetDouble("LatencyMs") ?? 0,
-                CostUsd = entity.GetDouble("CostUsd") ?? 0,
-                Quality = entity.GetDouble("Quality"),
-                Pool = entity.GetString("Pool"),
-                // Provenance must round-trip: an advisory record that comes back with
-                // Source == null would be indistinguishable from a live provider
-                // outcome and leak into adaptive routing.
-                Source = entity.GetString("Source"),
-            });
+            results.Add(ToOutcome(entity, fallbackTaskType: taskType));
             if (results.Count >= limit)
             {
                 break;
@@ -120,6 +106,58 @@ public sealed class AzureTableLearningStore : ILearningStore
 
         return results;
     }
+
+    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default)
+    {
+        await EnsureTableAsync(cancellationToken).ConfigureAwait(false);
+
+        // Cross-partition telemetry read. A filterless scan comes back ordered by
+        // (PartitionKey, RowKey) — newest-first only WITHIN each task-type partition —
+        // so "newest overall" has to see the whole table. That is acceptable for the
+        // same reason Table Storage was chosen at all (outcomes cost pennies at this
+        // volume, and the local JSONL twin reads its whole file too), and this path
+        // serves /v1/metrics display only, never a routing decision. Memory stays
+        // bounded: a min-heap keyed on timestamp keeps just the newest <c>limit</c>.
+        var newest = new PriorityQueue<RoutingOutcome, long>(limit + 1);
+        var query = _table.QueryAsync<TableEntity>(
+            maxPerPage: 1000, cancellationToken: cancellationToken);
+        await foreach (var entity in query.ConfigureAwait(false))
+        {
+            var outcome = ToOutcome(entity);
+            newest.Enqueue(outcome, outcome.Timestamp.UtcTicks);
+            if (newest.Count > limit)
+            {
+                newest.Dequeue(); // the oldest retained outcome falls out
+            }
+        }
+
+        var results = new List<RoutingOutcome>(newest.Count);
+        while (newest.TryDequeue(out var outcome, out _))
+        {
+            results.Add(outcome);
+        }
+        results.Reverse(); // the heap drains oldest first → newest first
+        return results;
+    }
+
+    private static RoutingOutcome ToOutcome(TableEntity entity, string fallbackTaskType = "") => new()
+    {
+        OutcomeId = entity.GetString("OutcomeId"),
+        Timestamp = entity.GetDateTimeOffset("OccurredAt") ?? entity.Timestamp ?? DateTimeOffset.MinValue,
+        TaskType = entity.GetString("TaskType") ?? fallbackTaskType,
+        Provider = entity.GetString("Provider") ?? "",
+        Model = entity.GetString("Model") ?? "",
+        Success = entity.GetBoolean("Success") ?? false,
+        LatencyMs = entity.GetDouble("LatencyMs") ?? 0,
+        CostUsd = entity.GetDouble("CostUsd") ?? 0,
+        Quality = entity.GetDouble("Quality"),
+        Pool = entity.GetString("Pool"),
+        // Provenance must round-trip: an advisory record that comes back with
+        // Source == null would be indistinguishable from a live provider
+        // outcome and leak into adaptive routing.
+        Source = entity.GetString("Source"),
+    };
 
     /// <summary>Table keys forbid / \ # ? and control characters.</summary>
     private static string Sanitize(string key)
@@ -152,6 +190,14 @@ public sealed class HybridLearningStore : ILearningStore
 
     public async Task RecordAsync(RoutingOutcome outcome, CancellationToken cancellationToken = default)
     {
+        // Stamp a stable identity ONCE, before the fan-out, so the local and remote
+        // copies of this outcome share it and the read-side merge can dedup on it
+        // instead of on lossy telemetry fields.
+        if (outcome.OutcomeId is null or "")
+        {
+            outcome = outcome with { OutcomeId = Guid.NewGuid().ToString("N") };
+        }
+
         await _local.RecordAsync(outcome, cancellationToken).ConfigureAwait(false);
         try
         {
@@ -188,7 +234,44 @@ public sealed class HybridLearningStore : ILearningStore
         var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
 
         return remote.Concat(local)
-            .DistinctBy(o => (o.Timestamp, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source))
+            .DistinctBy(MergeDedupKey)
+            .OrderByDescending(o => o.Timestamp)
+            .Take(limit)
+            .ToList();
+    }
+
+    // Dedup key for the local+remote merge. The stamped OutcomeId is the real
+    // identity — telemetry fields make a lossy key (two concurrent outcomes can
+    // legitimately share timestamp/provider/model/success/latency — review finding).
+    // Rows recorded before the id existed fall back to the telemetry tuple; a string
+    // key can never equal a boxed tuple key, so the two populations never collide.
+    // TaskType is in the fallback tuple because GetRecentAllAsync spans task types.
+    private static object MergeDedupKey(RoutingOutcome o) =>
+        o.OutcomeId is { Length: > 0 } id
+            ? id
+            : (o.Timestamp, o.TaskType, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source);
+
+    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default)
+    {
+        // Same merge-never-prefer rule as GetRecentAsync: local writes always land
+        // first and remote writes are best-effort, so neither side alone is complete.
+        IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
+        try
+        {
+            remote = await _remote.GetRecentAllAsync(limit, cancellationToken).ConfigureAwait(false);
+        }
+        catch (RequestFailedException)
+        {
+        }
+        catch (AuthenticationFailedException)
+        {
+        }
+
+        var local = await _local.GetRecentAllAsync(limit, cancellationToken).ConfigureAwait(false);
+
+        return remote.Concat(local)
+            .DistinctBy(MergeDedupKey)
             .OrderByDescending(o => o.Timestamp)
             .Take(limit)
             .ToList();
