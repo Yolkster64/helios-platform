@@ -57,8 +57,12 @@ plus every SDK/REST consumer of the same names), and falls back to `gh auth
 token` for the models token. Zero prompts ever; values live only in process
 memory; existing env values are never clobbered. The zero-human-input paths that
 exist today: CI (OIDC + `GITHUB_TOKEN`), Azure Cloud Shell (implicit `az` login →
-auto-login lights everything), and any host holding the ops service principal
-minted once by `setup-tenant.ps1 -OpsIdentity`.
+auto-login lights every provider **whose key the vault actually holds** — the
+default `azure-up` deployment creates no provider-key secrets, since
+`infra/main.bicep`'s key parameters default to empty strings, so storing
+`openai-api-key` / `anthropic-api-key` / `github-models-token` values is a
+one-time owner step), and any host holding the ops service principal minted once
+by `setup-tenant.ps1 -OpsIdentity`.
 
 **ant CLI facts** (per the CLI authentication docs):
 

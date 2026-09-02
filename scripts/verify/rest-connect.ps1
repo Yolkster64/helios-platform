@@ -607,7 +607,10 @@ function Test-AzureLane {
     #    Apps and the legacy MSI shape), else raw IMDS with the hard 2s no-proxy timeout.
     $miProbe = $null
     $miKind = ''
-    if (Test-Path env:IDENTITY_ENDPOINT) {
+    # Non-whitespace values only (review finding): an EMPTY IDENTITY_ENDPOINT must
+    # not win the branch on mere existence — it would build a relative URL and
+    # shadow a valid legacy MSI_ENDPOINT sitting right next to it.
+    if (Test-EnvValue 'IDENTITY_ENDPOINT') {
         $miKind = 'identity-endpoint'
         $miHeaders = @{}
         if (Test-Path env:IDENTITY_HEADER) { $miHeaders['X-IDENTITY-HEADER'] = [string]$env:IDENTITY_HEADER }
@@ -615,7 +618,7 @@ function Test-AzureLane {
         $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString('https://management.azure.com/'))"
         $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
     }
-    elseif (Test-Path env:MSI_ENDPOINT) {
+    elseif (Test-EnvValue 'MSI_ENDPOINT') {
         $miKind = 'msi-endpoint'
         $miHeaders = @{ Metadata = 'true' }
         if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
@@ -653,7 +656,7 @@ function Test-AzureLane {
     # answer at that address (e.g. a container fabric's metadata firewall returning
     # 403 — measured) is just as permanently unusable: neither is a credential
     # source, and "retry later" cannot fix either.
-    if ((Test-Path env:IDENTITY_ENDPOINT) -or (Test-Path env:MSI_ENDPOINT) -or
+    if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT') -or
         ($null -ne $miProbe -and $miProbe.Status -eq 200)) {
         $credentialSourcePresent = $true
     }

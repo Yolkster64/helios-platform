@@ -294,18 +294,26 @@ function Test-AzLane {
     # .DESCRIPTION. Interactive login is never reached by -Apply; it only ever
     # appears as the reported ownerAction at the bottom.
 
+    # Service-principal availability is computed FIRST because the OIDC rung yields
+    # to it (review finding): ACTIONS_ID_TOKEN_REQUEST_URL only proves the exchange
+    # is POSSIBLE, not that azure/login ran — a job that skipped azure/login but
+    # carries AZURE_CLIENT_* workload credentials has a working non-interactive
+    # repair that a short-circuit here would throw away (and every downstream Key
+    # Vault pull with it).
+    $spReady = (Test-Path env:AZURE_CLIENT_ID) -and (Test-Path env:AZURE_TENANT_ID) -and
+        ((Test-Path env:AZURE_CLIENT_SECRET) -or (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH))
+
     # 1. CI OIDC: the azure/login action owns the GitHub-OIDC-to-Entra exchange
     #    (federated credentials from scripts/bootstrap/azure-oidc-setup.ps1). Doing a
-    #    login here would fight it, so this is report-only by design.
-    if ($inActions -and $env:ACTIONS_ID_TOKEN_REQUEST_URL) {
+    #    login here would fight it, so this is report-only by design — reached only
+    #    when no service-principal repair is available.
+    if ($inActions -and $env:ACTIONS_ID_TOKEN_REQUEST_URL -and -not $spReady) {
         return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'ci-oidc' `
             -Detail ("$reason; this Actions job can mint an OIDC token (ACTIONS_ID_TOKEN_REQUEST_URL is present) — the azure/login step owns that exchange and this doctor never fights it") `
             -OwnerAction 'add the azure/login step (client-id/tenant-id/subscription-id from the Actions variables scripts/bootstrap/azure-oidc-setup.ps1 prints) before this script runs'
     }
 
     # 2. Service principal from the environment — fully non-interactive.
-    $spReady = (Test-Path env:AZURE_CLIENT_ID) -and (Test-Path env:AZURE_TENANT_ID) -and
-        ((Test-Path env:AZURE_CLIENT_SECRET) -or (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH))
     if ($spReady) {
         # Certificate preferred over a shared secret when both are present.
         $credEnvName = if (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH) { 'AZURE_CLIENT_CERTIFICATE_PATH' } else { 'AZURE_CLIENT_SECRET' }

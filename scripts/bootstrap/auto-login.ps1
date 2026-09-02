@@ -181,7 +181,12 @@ function Invoke-HeliosAutoLogin {
     # Providers lacking either field are excluded on purpose (azure-openai, for
     # example, declares no vault custody and needs its own endpoint wiring).
     $vaultPairs = @()
-    $aihubConfigPath = Join-Path $RepoRoot 'config/aihub.json'
+    # AIHUB_CONFIG precedence (review finding): AIHubService.ResolveConfigPath gives
+    # the env var precedence over the repo default, so when a custom/cloud profile
+    # is selected these exports must follow it — otherwise auto-login configures a
+    # hub other than the one that will actually run.
+    $aihubConfigPath = if (Test-EnvValue 'AIHUB_CONFIG') { ([string]$env:AIHUB_CONFIG).Trim() }
+    else { Join-Path $RepoRoot 'config/aihub.json' }
     $aihubProviders = $null
     try {
         $aihubParsed = Get-Content -LiteralPath $aihubConfigPath -Raw | ConvertFrom-Json
@@ -192,6 +197,10 @@ function Invoke-HeliosAutoLogin {
         $pairIndex = [ordered]@{}
         foreach ($provProp in $aihubProviders.PSObject.Properties) {
             $prov = $provProp.Value
+            # ProviderFactory.CreateAll excludes disabled providers (review
+            # finding): a lane the hub will not instantiate must not have its
+            # credential pulled into the process.
+            if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
             $envName = ''
             $providerSecretName = ''
             if ($prov.PSObject.Properties['apiKeyEnv']) { $envName = [string]$prov.apiKeyEnv }
@@ -231,6 +240,17 @@ function Invoke-HeliosAutoLogin {
             [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider (fallback mapping)' }
             [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider (fallback mapping)' }
         )
+    }
+    # The gh-fallback's target env also follows the config (review finding):
+    # ProviderFactory.CreateGitHubModels reads the CONFIGURED apiKeyEnv, so
+    # exporting a hardcoded name would light nothing after a rename.
+    $ghModelsEnv = 'GITHUB_MODELS_TOKEN'
+    if ($null -ne $aihubProviders -and $aihubProviders.PSObject.Properties['github-models']) {
+        $ghModelsProv = $aihubProviders.PSObject.Properties['github-models'].Value
+        if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
+            -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
+            $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
+        }
     }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     # -CommandType Application (review finding): a dot-sourcing caller may carry an
@@ -301,7 +321,10 @@ function Invoke-HeliosAutoLogin {
                     # unresolved acquisition — JSON consumers must be able to tell
                     # them apart, and the run must leave an actionable remediation.
                     Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the consumers it lights stay unconfigured"
-                    $ownerActions.Add("store or authorize Key Vault secret '$($pair.SecretName)' in vault '$vaultName' — az keyvault secret set --vault-name $vaultName --name $($pair.SecretName) (owner supplies the value), or grant the running identity 'Key Vault Secrets User'; then re-run auto-login")
+                    # The action names the env var it lights (review finding): the
+                    # post-export reconcile filter recognizes a resolved action only
+                    # by that name, so a gh-fallback export can retire this one.
+                    $ownerActions.Add("store or authorize Key Vault secret '$($pair.SecretName)' in vault '$vaultName' — az keyvault secret set --vault-name $vaultName --name $($pair.SecretName) (owner supplies the value), or grant the running identity 'Key Vault Secrets User'; then re-run auto-login (lights $($pair.Env))")
                     $anyPullFailed = $true
                 }
             }
@@ -315,12 +338,14 @@ function Invoke-HeliosAutoLogin {
     }
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
-    if (-not (Test-EnvValue 'GITHUB_MODELS_TOKEN')) {
+    # Target env is $ghModelsEnv — the github-models provider's CONFIGURED apiKeyEnv
+    # (review finding), not a hardcoded name.
+    if (-not (Test-EnvValue $ghModelsEnv)) {
         $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
         if (-not $ghCmd) {
             # Record the lane even when gh is absent — an unevaluated-looking steps
             # list is ambiguous (review finding).
-            Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
+            Add-Step -Step $ghModelsEnv -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
         }
         else {
             # --hostname github.com (review finding): never export a GitHub
@@ -329,19 +354,19 @@ function Invoke-HeliosAutoLogin {
             $ghExit = [int]$LASTEXITCODE
             $ghToken = (@($ghLines) -join '').Trim()
             if ($ghExit -eq 0 -and $ghToken) {
-                $env:GITHUB_MODELS_TOKEN = $ghToken
+                Set-Item -Path "env:$ghModelsEnv" -Value $ghToken
                 $ghToken = ''
-                $exportedNames.Add('GITHUB_MODELS_TOKEN')
+                $exportedNames.Add($ghModelsEnv)
                 # Scope honesty (review finding): connect-github.sh verifies the
                 # models:read scope, but that check needs a usable `gh auth status`,
                 # which this environment may not have — so the export is made with
                 # the caveat stated instead of a silent claim of usability.
-                Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'exported' `
+                Add-Step -Step $ghModelsEnv -State 'exported' `
                     -Detail ('from `gh auth token` — lights: gh-models provider IF the token carries models:read ' +
                         '(not verifiable here); if model calls 403: gh auth refresh -h github.com --scopes models:read')
             }
             else {
-                Add-Step -Step 'GITHUB_MODELS_TOKEN' -State 'skipped' -Detail 'gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one'
+                Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one'
             }
         }
     }
@@ -352,9 +377,9 @@ function Invoke-HeliosAutoLogin {
     # later in this same run, the pre-export action is already satisfied. The
     # summary's contract is "the only steps that need a human", so any action naming
     # a provider env var that NOW holds a value is dropped, with the drop reported.
-    # Derived from the config-driven pairs (plus the gh-rung's fixed export) so
-    # the reconcile filter tracks config/aihub.json the same way the pulls do.
-    $exportResolvableEnvNames = @(@($vaultPairs | ForEach-Object { $_.Env }) + 'GITHUB_MODELS_TOKEN' | Select-Object -Unique)
+    # Derived from the config-driven pairs (plus the gh-rung's configured target)
+    # so the reconcile filter tracks config/aihub.json the same way the pulls do.
+    $exportResolvableEnvNames = @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsEnv | Select-Object -Unique)
     $resolvedActionCount = 0
     $remainingOwnerActions = [System.Collections.Generic.List[string]]::new()
     foreach ($action in $ownerActions) {
