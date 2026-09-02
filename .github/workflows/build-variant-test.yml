@@ -37,9 +37,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # This matrix builds Node.js modules; the repo is .NET-first, so skip the
-      # whole variant matrix cleanly when there is no package.json to build
-      # (mirrors build-all-modules.yml).
+      # This matrix builds Node.js modules; the repo is .NET-first, so run a
+      # no-op matrix entry when there is no package.json to build.
       - name: Detect Node.js modules
         id: detect
         run: |
@@ -52,37 +51,49 @@ jobs:
       - name: Define Build Variants
         id: variants
         run: |
-          VARIANTS='[
-            {
-              "name": "dev",
-              "env": "development",
-              "minify": false,
-              "sourcemap": true,
-              "optimization": "none"
-            },
-            {
-              "name": "staging",
-              "env": "staging",
-              "minify": true,
-              "sourcemap": true,
-              "optimization": "balanced"
-            },
-            {
-              "name": "prod",
-              "env": "production",
-              "minify": true,
-              "sourcemap": false,
-              "optimization": "full"
-            },
-            {
-              "name": "test",
-              "env": "test",
-              "minify": false,
-              "sourcemap": true,
-              "optimization": "none",
-              "coverage": true
-            }
-          ]'
+          if [ "${{ steps.detect.outputs.has_node }}" = "true" ]; then
+            VARIANTS='[
+              {
+                "name": "dev",
+                "env": "development",
+                "minify": false,
+                "sourcemap": true,
+                "optimization": "none"
+              },
+              {
+                "name": "staging",
+                "env": "staging",
+                "minify": true,
+                "sourcemap": true,
+                "optimization": "balanced"
+              },
+              {
+                "name": "prod",
+                "env": "production",
+                "minify": true,
+                "sourcemap": false,
+                "optimization": "full"
+              },
+              {
+                "name": "test",
+                "env": "test",
+                "minify": false,
+                "sourcemap": true,
+                "optimization": "none",
+                "coverage": true
+              }
+            ]'
+          else
+            VARIANTS='[
+              {
+                "name": "no-node",
+                "env": "none",
+                "minify": false,
+                "sourcemap": false,
+                "optimization": "none"
+              }
+            ]'
+          fi
           # Multi-line values need the heredoc form; plain `name=value` only
           # accepts a single line and fails the job with "Invalid format".
           {
@@ -94,11 +105,17 @@ jobs:
       - name: Build Matrix
         id: matrix
         run: |
-          MATRIX='[
-            {"os": "ubuntu-latest", "node": "18"},
-            {"os": "ubuntu-latest", "node": "20"},
-            {"os": "windows-latest", "node": "18"}
-          ]'
+          if [ "${{ steps.detect.outputs.has_node }}" = "true" ]; then
+            MATRIX='[
+              {"os": "ubuntu-latest", "node": "18"},
+              {"os": "ubuntu-latest", "node": "20"},
+              {"os": "windows-latest", "node": "18"}
+            ]'
+          else
+            MATRIX='[
+              {"os": "ubuntu-latest", "node": "18"}
+            ]'
+          fi
           {
             echo 'matrix<<MATRIX_EOF'
             echo "$MATRIX"
@@ -109,7 +126,6 @@ jobs:
     name: Test ${{ matrix.variant.name }} on Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
     needs: setup-variants
-    if: needs.setup-variants.outputs.has_node == 'true'
     strategy:
       matrix:
         variant: ${{ fromJson(needs.setup-variants.outputs.variants) }}
@@ -128,6 +144,7 @@ jobs:
           submodules: true
 
       - name: Setup Node.js ${{ matrix.node }}
+        if: matrix.variant.name != 'no-node'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -145,14 +162,21 @@ jobs:
           echo "Optimization: ${{ matrix.variant.optimization }}"
           echo "==============================="
 
+      - name: No-op when no Node.js modules are present
+        if: matrix.variant.name == 'no-node'
+        run: echo "No Node.js modules were detected, so this variant entry is intentionally a no-op."
+
       - name: Install Dependencies
+        if: matrix.variant.name != 'no-node'
         run: npm ci
 
       - name: Build for ${{ matrix.variant.name }}
+        if: matrix.variant.name != 'no-node'
         run: |
           npm run build:${{ matrix.variant.name }}
 
       - name: Run Tests
+        if: matrix.variant.name != 'no-node'
         run: |
           npm test -- --testTimeout=30000
 
@@ -177,7 +201,7 @@ jobs:
           fi
 
       - name: Upload Variant Artifacts
-        if: always()
+        if: always() && matrix.variant.name != 'no-node'
         uses: actions/upload-artifact@v4
         with:
           name: variant-${{ matrix.variant.name }}-node${{ matrix.node }}-${{ matrix.os }}
