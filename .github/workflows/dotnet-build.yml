@@ -60,7 +60,11 @@ jobs:
           changed="$(git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA")"
           printf '%s\n' "$changed"
           pattern='^(src/|tests/|config/|scripts/build/|HELIOS\.sln$|Directory\.Packages\.props$|Directory\.Build\.props$|Directory\.Build\.targets$|nuget\.config$|\.github/workflows/dotnet-build\.yml$)|\.csproj$'
-          if printf '%s\n' "$changed" | grep -qE "$pattern"; then
+          # Here-string, not printf|grep -q (review finding): grep -q exits at the
+          # first match, and under the runner's default pipefail shell a SIGPIPE'd
+          # printf would flip this if to the false branch — skipping the REQUIRED
+          # build on exactly the large PRs that most need it.
+          if grep -qE "$pattern" <<< "$changed"; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"

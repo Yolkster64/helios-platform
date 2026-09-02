@@ -82,7 +82,8 @@ identity, detail, ownerAction}):
           costs the owner one MFA login — after which setup-tenant.ps1 -OpsIdentity
           mints the workload identity that removes the human forever.
 
-Secrets policy (CLAUDE.md rule): env vars are gated by NAME (Test-Path env:). Where a
+Secrets policy (CLAUDE.md rule): env vars are gated by NAME plus non-emptiness (an
+empty/whitespace value counts as unset; the value is read only for that test). Where a
 credential VALUE must be read to be USED (a bearer token cannot be sent by name), it is
 read into a function-local variable, flows only into an Authorization header or a POST
 body held in memory, and dies with the function scope — it never enters a detail
@@ -227,6 +228,17 @@ function Test-ParsedJson {
     param([string]$Text = '')
     if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
     try { return ($Text | ConvertFrom-Json) } catch { return $null }
+}
+
+# Empty or whitespace counts as unset (review finding): CI shells commonly define
+# variables as '' — a blank AZURE_CLIENT_CERTIFICATE_PATH must not arm the
+# terminal certificate action with an unusable empty path (the same rule
+# auto-login.ps1 applies to the provider env vars). The value is read only to
+# test emptiness; it is never printed or stored.
+function Test-EnvValue {
+    param([Parameter(Mandatory)][string]$Name)
+    if (-not (Test-Path "env:$Name")) { return $false }
+    return -not [string]::IsNullOrWhiteSpace([string](Get-Item "env:$Name").Value)
 }
 
 # --- github lane ------------------------------------------------------------------------
@@ -519,13 +531,21 @@ function Test-AzureLane {
     # prefers the SECRET, because the secret flow is pure in-memory REST while the
     # certificate flow requires an az login that mutates the shared profile — which a
     # diagnostic run must never do (see the cert rung below).
-    $spSecretReady = (Test-Path env:AZURE_CLIENT_ID) -and (Test-Path env:AZURE_TENANT_ID) -and
-        (Test-Path env:AZURE_CLIENT_SECRET)
+    $spSecretReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and
+        (Test-EnvValue 'AZURE_CLIENT_SECRET')
     # Cert availability is INDEPENDENT of the secret (review finding): during
     # credential rotation a stale secret with a valid certificate is a normal state,
     # and the cert path must still be reported after the secret exchange fails.
-    $spCertReady = (Test-Path env:AZURE_CLIENT_ID) -and
-        (Test-Path env:AZURE_TENANT_ID) -and (Test-Path env:AZURE_CLIENT_CERTIFICATE_PATH)
+    $spCertReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and
+        (Test-EnvValue 'AZURE_TENANT_ID') -and (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH')
+    # A set-but-missing certificate FILE cannot run the flow either (review
+    # finding): auth-doctor -Apply would just fail on the same absent file, so the
+    # terminal cert action must not be armed. Path existence only — contents are
+    # never read here.
+    if ($spCertReady -and -not (Test-Path -LiteralPath ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim())) {
+        $chainNotes.Add('env-service-principal-cert: AZURE_CLIENT_CERTIFICATE_PATH is set but no file exists at that path — the certificate flow cannot run until the file is present (path checked only, contents never read)')
+        $spCertReady = $false
+    }
     if ($spSecretReady) {
         $credentialSourcePresent = $true
         $clientId = [string]$env:AZURE_CLIENT_ID     # appId — an identifier, not a secret

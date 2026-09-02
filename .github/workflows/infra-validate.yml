@@ -42,7 +42,10 @@ jobs:
           # changes only this validator would otherwise skip all three required infra
           # jobs, so a broken validator change would never be exercised before merge
           # (the .NET detector includes its own workflow the same way).
-          if printf '%s\n' "$changed" | grep -qE '^(infra/|\.github/workflows/infra-validate\.yml$)'; then
+          # Here-string, not printf|grep -q (review finding): grep -q exits at the
+          # first match; under the runner's default pipefail a SIGPIPE'd printf
+          # would flip this if to the false branch and skip the required checks.
+          if grep -qE '^(infra/|\.github/workflows/infra-validate\.yml$)' <<< "$changed"; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"

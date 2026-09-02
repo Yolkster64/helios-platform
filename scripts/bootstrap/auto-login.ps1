@@ -166,7 +166,10 @@ function Invoke-HeliosAutoLogin {
     # value — named so the code-checks security scanner's hardcoded-secret pattern
     # (`secret =` followed by a literal) does not false-positive on identifiers.
     $vaultPairs = @(
-        [pscustomobject]@{ SecretName = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/azure-openai SDK & providers' }
+        # Lights lists the PUBLIC OpenAI lanes only (review finding): the
+        # azure-openai provider needs AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY
+        # and stays Unconfigured without them — this key does not light it.
+        [pscustomobject]@{ SecretName = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/openai-codex providers & SDKs' }
         [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider' }
         [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider' }
     )
