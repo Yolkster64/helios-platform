@@ -90,7 +90,15 @@ function Invoke-HeliosAutoLogin {
 
     $steps = [System.Collections.Generic.List[object]]::new()
     $exportedNames = [System.Collections.Generic.List[string]]::new()
-    $ownerActions = [System.Collections.Generic.List[string]]::new()
+    # Owner actions carry the env var whose satisfaction retires them (review
+    # finding): Env = the exact variable for actions this script composes ('' for
+    # actions no export can retire), $null for auth-doctor's imported free text,
+    # whose variable is recovered by an exact-identifier match at reconcile time.
+    $ownerActions = [System.Collections.Generic.List[object]]::new()
+    function Add-OwnerAction {
+        param([Parameter(Mandatory)][string]$Text, [AllowNull()][AllowEmptyString()][string]$Env = '', [switch]$Imported)
+        $ownerActions.Add([pscustomobject]@{ Text = $Text.Trim(); Env = $(if ($Imported) { $null } else { [string]$Env }) })
+    }
 
     function Write-Report {
         param([string]$Line = '')
@@ -148,14 +156,14 @@ function Invoke-HeliosAutoLogin {
                 $(if ($azLaneDetail) { " — $azLaneDetail" } else { '' })
             $azStepState = if ($azUsable) { 'ok' } elseif ($azState -eq 'unavailable') { 'unavailable' } else { 'needs-owner' }
             if (-not $azUsable -and $azLane.PSObject.Properties['ownerAction'] -and "$($azLane.ownerAction)".Trim()) {
-                $ownerActions.Add("$($azLane.ownerAction)".Trim())
+                Add-OwnerAction -Text "$($azLane.ownerAction)" -Imported
             }
             Add-Step -Step 'az' -State $azStepState -Detail $azDetail
             # Surface the rest of the doctor's owner actions too — auto-login's summary
             # is meant to be the single list of what still needs a human.
             foreach ($lane in @($doctorReport.lanes)) {
                 if ($lane.lane -ne 'az' -and $lane.PSObject.Properties['ownerAction'] -and "$($lane.ownerAction)".Trim()) {
-                    $ownerActions.Add("$($lane.ownerAction)".Trim())
+                    Add-OwnerAction -Text "$($lane.ownerAction)" -Imported
                 }
             }
         }
@@ -265,16 +273,24 @@ function Invoke-HeliosAutoLogin {
     # hub will not instantiate that lane, so no credential is fetched for it.
     $ghModelsEnv = 'GITHUB_MODELS_TOKEN'
     $ghModelsEnabled = $true
+    # The vault-repair guidance follows the provider's apiKeySecretName the same way
+    # (review finding): the config-driven pull reads ONLY that secret, so telling the
+    # owner to store the default name under a customized config would advertise a
+    # repair that can never light the lane. No apiKeySecretName at all means no
+    # vault path exists for this provider, and the guidance omits it.
+    $ghModelsSecretName = 'github-models-token'
     if ($null -ne $aihubProviders -and $aihubProviders.PSObject.Properties['github-models']) {
         $ghModelsProv = $aihubProviders.PSObject.Properties['github-models'].Value
         if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
             -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
             $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
         }
+        $ghModelsSecretName = if ($ghModelsProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghModelsProv.apiKeySecretName).Trim() } else { '' }
         if ($ghModelsProv.PSObject.Properties['enabled'] -and $ghModelsProv.enabled -eq $false) {
             $ghModelsEnabled = $false
         }
     }
+    $ghModelsVaultClause = if ($ghModelsSecretName) { ", or store Key Vault secret '$ghModelsSecretName' (the configured github-models apiKeySecretName)" } else { '' }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     # -CommandType Application (review finding): a dot-sourcing caller may carry an
     # `az` alias/function whose .Source is not an invocable path — resolve the real
@@ -300,7 +316,7 @@ function Invoke-HeliosAutoLogin {
             'azure-up.sh writes .helios/azure.env (bash) and azure-up.ps1 writes .helios/azure.env.ps1 (PowerShell)')
         # Both shells get a working remediation (review finding): this script is
         # dot-sourced from PowerShell, where bash `source`/`export` do nothing.
-        $ownerActions.Add('set AZURE_KEY_VAULT_URI so auto-login can pull provider keys — PowerShell: . .helios/azure.env.ps1 (or $env:AZURE_KEY_VAULT_URI = "https://<vault>.vault.azure.net/"); bash: source .helios/azure.env')
+        Add-OwnerAction -Text 'set AZURE_KEY_VAULT_URI so auto-login can pull provider keys — PowerShell: . .helios/azure.env.ps1 (or $env:AZURE_KEY_VAULT_URI = "https://<vault>.vault.azure.net/"); bash: source .helios/azure.env'
     }
     elseif (-not $azCmd) {
         Add-Step -Step 'keyvault' -State 'unavailable' -Detail 'az CLI not on PATH'
@@ -309,11 +325,21 @@ function Invoke-HeliosAutoLogin {
         # A malformed AZURE_KEY_VAULT_URI is a configuration problem, not an internal
         # failure — the [uri] cast throws on scheme-less/garbage values (review
         # finding), so it is guarded into a skipped step instead of aborting the run.
+        # Strict shape too (review finding): any parseable https host used to pass,
+        # so a stray value like https://example.com/ derived a vault named 'example',
+        # ran az against it, and told the owner to populate the WRONG vault. Only
+        # https plus a Key Vault hostname — <vault>.vault.<public or sovereign cloud
+        # suffix> — derives a name; anything else is reported as the URI problem it is.
         $vaultName = ''
-        try { $vaultName = ([uri]$vaultUri).Host.Split('.')[0] } catch { }
+        $vaultUriParsed = $null
+        try { $vaultUriParsed = [uri]$vaultUri } catch { }
+        if ($null -ne $vaultUriParsed -and $vaultUriParsed.Scheme -eq 'https' -and
+            $vaultUriParsed.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') {
+            $vaultName = $Matches['vault']
+        }
         if (-not $vaultName) {
-            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but does not parse as a URI (expected https://<vault>.vault.azure.net/) — fix the value; nothing was pulled'
-            $ownerActions.Add('fix AZURE_KEY_VAULT_URI: it is set but not a parseable https://<vault>.vault.azure.net/ URI')
+            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but is not an https://<vault>.vault.azure.net/ Key Vault URI (sovereign suffixes azure.cn, usgovcloudapi.net, microsoftazure.de also accepted) — fix the value; nothing was pulled and no vault was contacted'
+            Add-OwnerAction -Text 'fix AZURE_KEY_VAULT_URI: it is set but is not an https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault URI'
         }
         else {
             # Identity pinning (review finding): auth-doctor -Apply returns ready on
@@ -359,7 +385,7 @@ function Invoke-HeliosAutoLogin {
                     # The action names the env var it lights (review finding): the
                     # post-export reconcile filter recognizes a resolved action only
                     # by that name, so a gh-fallback export can retire this one.
-                    $ownerActions.Add("store or authorize Key Vault secret '$($pair.SecretName)' in vault '$vaultName' — az keyvault secret set --vault-name $vaultName --name $($pair.SecretName) (owner supplies the value), or grant the running identity 'Key Vault Secrets User'; then re-run auto-login (lights $($pair.Env))")
+                    Add-OwnerAction -Env $pair.Env -Text "store or authorize Key Vault secret '$($pair.SecretName)' in vault '$vaultName' — az keyvault secret set --vault-name $vaultName --name $($pair.SecretName) (owner supplies the value), or grant the running identity 'Key Vault Secrets User'; then re-run auto-login (lights $($pair.Env))"
                     $anyPullFailed = $true
                 }
             }
@@ -367,7 +393,7 @@ function Invoke-HeliosAutoLogin {
                 # The switch is fully non-interactive — the operator (or automation)
                 # just has to run it; auto-login itself only mutates the az profile
                 # through auth-doctor -Apply, which stops at the first healthy cache.
-                $ownerActions.Add('Key Vault pull failed under the cached az identity while AZURE_CLIENT_ID declares a workload identity — switch non-interactively: az login --service-principal --username $env:AZURE_CLIENT_ID --tenant $env:AZURE_TENANT_ID --password $env:AZURE_CLIENT_SECRET (or --certificate $env:AZURE_CLIENT_CERTIFICATE_PATH), then re-run auto-login')
+                Add-OwnerAction -Text 'Key Vault pull failed under the cached az identity while AZURE_CLIENT_ID declares a workload identity — switch non-interactively: az login --service-principal --username $env:AZURE_CLIENT_ID --tenant $env:AZURE_TENANT_ID --password $env:AZURE_CLIENT_SECRET (or --certificate $env:AZURE_CLIENT_CERTIFICATE_PATH), then re-run auto-login'
             }
         }
     }
@@ -421,7 +447,7 @@ function Invoke-HeliosAutoLogin {
     # that export is the best available credential, but it must not retire a
     # repair action (review finding) until a run proves it.
     $ghModelsUnprovenExport = $false
-    $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read, or store github-models-token in Key Vault"
+    $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$ghModelsVaultClause"
     $ghFallbackNeeded = $false
     if (-not $ghModelsEnabled) {
         Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
@@ -443,7 +469,7 @@ function Invoke-HeliosAutoLogin {
             }
             'missing-scope' {
                 Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — the github-models provider would 403 on every call; trying the gh keyring next'
-                $ownerActions.Add($ghModelsRepairAction)
+                Add-OwnerAction -Env $ghModelsEnv -Text $ghModelsRepairAction
                 $ghFallbackNeeded = $true
             }
             default {
@@ -515,12 +541,12 @@ function Invoke-HeliosAutoLogin {
                     'missing-scope' {
                         Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
                         Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported (the github-models provider would 403 on every call)'
-                        $ownerActions.Add($ghModelsRepairAction)
+                        Add-OwnerAction -Env $ghModelsEnv -Text $ghModelsRepairAction
                     }
                     default {
                         Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
                         Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login was rejected by api.github.com — NOT exported'
-                        $ownerActions.Add("re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read, or store github-models-token in Key Vault (lights $ghModelsEnv)")
+                        Add-OwnerAction -Env $ghModelsEnv -Text "re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read$ghModelsVaultClause (lights $ghModelsEnv)"
                     }
                 }
             }
@@ -542,8 +568,19 @@ function Invoke-HeliosAutoLogin {
     $resolvedActionCount = 0
     $remainingOwnerActions = [System.Collections.Generic.List[string]]::new()
     foreach ($action in $ownerActions) {
+        # Structural match (review finding): every action this script composes carries
+        # the exact env var it retires on. A substring test let a satisfied 'API_KEY'
+        # retire the unrelated OPENAI_API_KEY repair under a custom profile. The
+        # auth-doctor's imported free-text actions carry no env, so the variable they
+        # name is recovered by an exact-identifier match (bounded by the [A-Za-z0-9_]
+        # class) — never a substring.
+        $candidateEnvNames = if ($null -ne $action.Env) { @($action.Env | Where-Object { $_ }) }
+        else {
+            @($exportResolvableEnvNames | Where-Object {
+                $action.Text -match ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)') })
+        }
         $resolvedByExport = $false
-        foreach ($name in $exportResolvableEnvNames) {
+        foreach ($name in $candidateEnvNames) {
             # The models env counts as satisfied via the provider's documented
             # GITHUB_TOKEN fallback too (review finding) — a run that ends with a
             # working github-models lane must not still demand a vault repair —
@@ -555,9 +592,9 @@ function Invoke-HeliosAutoLogin {
                 $ghModelsScopeProven -or ((Test-EnvValue $name) -and -not $ghModelsUnprovenExport)
             }
             else { Test-EnvValue $name }
-            if ($action.Contains($name) -and $envSatisfied) { $resolvedByExport = $true; break }
+            if ($envSatisfied) { $resolvedByExport = $true; break }
         }
-        if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action) }
+        if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action.Text) }
     }
     $uniqueOwnerActions = @($remainingOwnerActions | Select-Object -Unique)
 

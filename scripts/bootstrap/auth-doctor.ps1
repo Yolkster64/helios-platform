@@ -40,9 +40,9 @@ Lanes:
                 the openai/openai-codex API providers); when the codex CLI is on PATH,
                 `codex login status` is probed non-interactively (a CLI login covers
                 the CLI only — connect-all.ps1 honesty rule).
-  claude        presence of the env var config/aihub.json declares for the anthropic
-                provider (providers.anthropic.apiKeyEnv — read from the config at run
-                time, not hardcoded). A cached `claude` login cannot be probed
+  claude        a non-empty value in the env var the active config declares for the
+                anthropic provider (providers.anthropic.apiKeyEnv, read at run time
+                from AIHUB_CONFIG when set, else config/aihub.json — never hardcoded). A cached `claude` login cannot be probed
                 headlessly (probing would launch an interactive session), so it is
                 never counted.
   copilot       presence probe: standalone copilot CLI (@github/copilot — the shape
@@ -160,6 +160,15 @@ function Get-CliCommand {
     Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
+# Credential presence = a NON-WHITESPACE value (review finding): Actions expressions
+# and dotenv loaders routinely materialize optional secrets as EMPTY variables, and an
+# existence-only test would report a lane ready that lights nothing. The value is read
+# only for this emptiness test and never logged.
+function Test-EnvValue {
+    param([Parameter(Mandatory)][string]$Name)
+    return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
+}
+
 function Invoke-Probe {
     param(
         [Parameter(Mandatory)][string]$Executable,
@@ -212,7 +221,7 @@ function New-LaneResult {
 # --- gh lane -------------------------------------------------------------------------
 function Test-GhLane {
     $ghCmd = Get-CliCommand -Name 'gh'
-    $envTokenName = @(@('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-Path "env:$_" }) | Select-Object -First 1
+    $envTokenName = @(@('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-EnvValue $_ }) | Select-Object -First 1
 
     if (-not $ghCmd) {
         $suffix = if ($envTokenName) { (' ({0} is set — name checked only — but there is no gh to drive)' -f $envTokenName) }
@@ -378,7 +387,7 @@ function Test-AzLane {
     # 3. Managed identity — also fully non-interactive. IDENTITY_ENDPOINT covers App
     #    Service/Functions/Container Apps; MSI_ENDPOINT is the legacy name; classic
     #    IMDS-only VMs expose neither, which is what -UseManagedIdentity is for.
-    $miAvailable = $UseManagedIdentity -or (Test-Path env:IDENTITY_ENDPOINT) -or (Test-Path env:MSI_ENDPOINT)
+    $miAvailable = $UseManagedIdentity -or (Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')
     if ($miAvailable) {
         if (-not $Apply) {
             return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'managed-identity' `
@@ -419,7 +428,7 @@ function Test-AzLane {
 
 # --- openai-codex lane -----------------------------------------------------------------
 function Test-CodexLane {
-    if (Test-Path env:OPENAI_API_KEY) {
+    if (Test-EnvValue 'OPENAI_API_KEY') {
         # Name-only presence check; the value never enters a variable. One key covers
         # both surfaces: the codex CLI agent and the openai/openai-codex API providers
         # (config/aihub.json apiKeyEnv).
@@ -458,22 +467,33 @@ function Test-ClaudeLane {
     # config instead of hardcoding the name, falling back only if it is unreadable.
     $envName = 'ANTHROPIC_API_KEY'
     $vaultSecretName = 'anthropic-api-key'
-    $nameSource = 'fallback defaults; config/aihub.json was unreadable'
+    # AIHUB_CONFIG takes precedence over the repo default, the same resolution the hub,
+    # auto-login.ps1 and rest-connect.ps1 apply — a custom profile must not be
+    # diagnosed against the repo's names.
+    $configLabel = 'config/aihub.json'
+    $configPath = Join-Path $repoRoot 'config' 'aihub.json'
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:AIHUB_CONFIG)) {
+        $configPath = ([string]$env:AIHUB_CONFIG).Trim()
+        $configLabel = 'AIHUB_CONFIG'
+    }
+    $nameSource = "fallback defaults; $configLabel was unreadable"
     try {
-        $aihub = Get-Content (Join-Path $repoRoot 'config' 'aihub.json') -Raw | ConvertFrom-Json
-        $declaredEnv = [string]$aihub.providers.anthropic.apiKeyEnv
-        $declaredVault = [string]$aihub.providers.anthropic.apiKeySecretName
+        $aihub = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $declaredEnv = ([string]$aihub.providers.anthropic.apiKeyEnv).Trim()
+        $declaredVault = ([string]$aihub.providers.anthropic.apiKeySecretName).Trim()
         if ($declaredEnv) {
             $envName = $declaredEnv
-            $nameSource = 'config/aihub.json providers.anthropic.apiKeyEnv'
+            $nameSource = "$configLabel providers.anthropic.apiKeyEnv"
         }
         if ($declaredVault) { $vaultSecretName = $declaredVault }
     }
     catch {
-        Write-Verbose "config/aihub.json read failed: $($_.Exception.Message)"
+        Write-Verbose "$configLabel read failed: $($_.Exception.Message)"
     }
 
-    if (Test-Path "env:$envName") {
+    # Non-whitespace, not mere existence (same rule as the service-principal gate):
+    # an empty variable lights nothing. The value is read only for this test.
+    if (-not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($envName))) {
         return New-LaneResult -Lane 'claude' -State 'ready' -Method 'env-token' `
             -Detail ("$envName is set (declared by $nameSource; name checked only, value never read) — covers the claude cliAgent and the anthropic provider")
     }
@@ -533,7 +553,7 @@ function Test-LinearLane {
     # (.github/workflows/linear-sync.yml) reads the REPOSITORY SECRET of that name and
     # skips green without it — a local env var covers local tooling only, so the
     # detail says which of the two this shell can actually see.
-    if (Test-Path env:LINEAR_API_KEY) {
+    if (Test-EnvValue 'LINEAR_API_KEY') {
         return New-LaneResult -Lane 'linear' -State 'ready' -Method 'env-token' -Gates $false `
             -Detail 'LINEAR_API_KEY is set in this shell (name checked only, value never read); the linear-sync.yml workflow separately needs the repository secret of the same name — verify per the CONNECTIONS_SETUP.md owner checklist (label an issue bug)'
     }
@@ -547,9 +567,9 @@ function Test-SlackLane {
     # SLACK_BOT_TOKEN honesty: connectors.json declares it (slack.botTokenEnv) but no
     # workflow or service in the repo consumes it today — setting it changes nothing
     # yet, and the report must not imply otherwise.
-    $botTokenState = if (Test-Path env:SLACK_BOT_TOKEN) { 'set in this shell' } else { 'not set' }
+    $botTokenState = if (Test-EnvValue 'SLACK_BOT_TOKEN') { 'set in this shell' } else { 'not set' }
     $botTokenNote = "SLACK_BOT_TOKEN ($botTokenState) is declared in config/connectors.json but nothing in the repo consumes it today"
-    if (Test-Path env:SLACK_WEBHOOK_URL) {
+    if (Test-EnvValue 'SLACK_WEBHOOK_URL') {
         return New-LaneResult -Lane 'slack' -State 'ready' -Method 'env-token' -Gates $false `
             -Detail ("SLACK_WEBHOOK_URL is set in this shell (name checked only, value never read); notify-slack.yml separately needs the repository secret of the same name. $botTokenNote")
     }
@@ -582,10 +602,10 @@ function Test-AzureDevOpsLane {
         if ($ext.ExitCode -eq 0 -and ((@($ext.Output) -join ' ') -match '\bazure-devops\b')) { $extPresent = $true }
     }
     $extState = if (-not $azCmd) { 'az not on PATH' } elseif ($extPresent) { 'installed' } else { 'not installed' }
-    $patState = if (Test-Path env:AZURE_DEVOPS_EXT_PAT) { 'set in this shell (name checked only)' } else { 'not set' }
+    $patState = if (Test-EnvValue 'AZURE_DEVOPS_EXT_PAT') { 'set in this shell (name checked only)' } else { 'not set' }
     $baseline = "no Azure DevOps org is configured in this repo today — nothing consumes either; az devops extension: $extState; AZURE_DEVOPS_EXT_PAT: $patState"
 
-    if ($extPresent -and (Test-Path env:AZURE_DEVOPS_EXT_PAT)) {
+    if ($extPresent -and (Test-EnvValue 'AZURE_DEVOPS_EXT_PAT')) {
         return New-LaneResult -Lane 'azure-devops' -State 'ready' -Method 'env-token' -Gates $false `
             -Detail ("raw material present, but $baseline. Wiring an org is future owner-initiated work; prefer the GitHub-OIDC federation pattern (scripts/bootstrap/azure-oidc-setup.ps1) over PATs where ADO supports it")
     }
