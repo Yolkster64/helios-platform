@@ -14,9 +14,11 @@ namespace HELIOS.Shell.Helpers;
 /// Stale-brush fix (GUI_UPGRADE_PLAN.md P1): <see cref="BrushFor"/> returns shared
 /// mutable <see cref="SolidColorBrush"/> instances instead of snapshotting whatever
 /// brush the theme dictionary held at bind time. <see cref="Attach"/> subscribes to the
-/// visual root's <see cref="FrameworkElement.ActualThemeChanged"/> and re-resolves the
-/// token colors into those instances, so every bound element — including default
-/// OneTime x:Bind rows — recolors immediately on a theme change with no refresh needed.
+/// visual root's <see cref="FrameworkElement.ActualThemeChanged"/> and to
+/// <see cref="AccessibilitySettings.HighContrastChanged"/> (high-contrast toggles do
+/// not change ActualTheme) and re-resolves the token colors into those instances, so
+/// every bound element — including default OneTime x:Bind rows — recolors immediately
+/// on a theme or contrast change with no refresh needed.
 /// The same contract covers the P6 theme packs: after swapping the merged token
 /// dictionary, call <see cref="Refresh(ElementTheme)"/> so no brush survives a pack
 /// switch stale.
@@ -57,6 +59,14 @@ public static class ReadinessVisuals
     public static void Attach(FrameworkElement root)
     {
         root.ActualThemeChanged += OnActualThemeChanged;
+        // A runtime high-contrast toggle does not raise ActualThemeChanged
+        // (ActualTheme stays Light/Dark), so without this second subscription the
+        // shared brushes would keep the previous palette until the next theme
+        // change or restart (review finding). HighContrastChanged arrives off the
+        // UI thread in desktop apps — marshal through the root's DispatcherQueue
+        // before mutating brushes that live UI elements are painting with.
+        Accessibility.HighContrastChanged += (_, _) =>
+            root.DispatcherQueue.TryEnqueue(() => Refresh(root.ActualTheme));
         Refresh(root.ActualTheme);
     }
 
