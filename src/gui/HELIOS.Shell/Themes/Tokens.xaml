@@ -1,14 +1,25 @@
 <!--
-    Design tokens (GUI_THEME_ANALYSIS.md "Theme system"):
+    CANONICAL DESIGN TOKENS - the single color authority for all HELIOS UI.
+    Decision record: docs/architecture/GUI_UPGRADE_PLAN.md section 2 (palette decision);
+    direction: docs/architecture/GUI_THEME_ANALYSIS.md ("Theme system").
 
-    - Semantic brushes only; pages reference them exclusively via {ThemeResource} so they
-      re-resolve on theme change. No XAML outside this file names a literal color.
-    - "Default" (WinUI's dark dictionary) carries the Xenoblade-derived identity mined
-      from the orphaned MonadoBlade.GUI: deep blues + the #00D9FF cyan accent from the
-      docs/WinUI3-Design AIHubPage mockup.
-    - Light is a faithful counterpart; HighContrast maps every token to a system color so
-      contrast themes stay legible (winui3-shell skill: always provide the HighContrast
-      entry).
+    - This file is the MONADO pack (default): #00D9FF accent on the Monado-navy
+      surface ramp (#0A1428 base). Sibling theme packs live next to this file
+      (Tokens.GitHubDark.xaml, Tokens.SolarLight.xaml, Tokens.HighContrast.xaml) and
+      carry IDENTICAL semantic keys, so pages never know which pack is active.
+      Per-profile pack selection persists in local app settings; the selection UI and
+      the runtime pack-swap path are P6 (see Themes/README.md).
+    - Semantic keys only; pages reference them exclusively via {ThemeResource} so they
+      re-resolve on theme change. No XAML outside the Themes/Tokens*.xaml pack files
+      names a literal color.
+    - Every text-on-surface ratio below was COMPUTED (WCAG 2.x relative luminance),
+      not inherited from report docs. Body-text tokens hold >= 4.5:1 against every
+      surface token in their dictionary; the worst-case pair is annotated inline.
+      Prior values that failed measurement were adjusted here:
+        ProviderUnconfigured dark #5C6B7A -> #8FA1B1 (was 2.28:1 on #253548).
+    - HighContrast maps every token to a system color so user contrast themes win
+      (winui3-shell skill: always provide the HighContrast entry). Ratios there are
+      OS-defined and not computable ahead of time.
 -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -16,39 +27,102 @@
 
     <ResourceDictionary.ThemeDictionaries>
 
-        <!-- Default == Dark in WinUI. The Xenoblade identity lives here. -->
+        <!-- Default == Dark in WinUI. The Monado navy identity lives here. -->
         <ResourceDictionary x:Key="Default">
+            <!-- Accents -->
             <SolidColorBrush x:Key="HeliosAccentBrush" Color="#00D9FF" />
-            <SolidColorBrush x:Key="SurfaceBrush" Color="#0D1117" />
-            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#16202D" />
-            <SolidColorBrush x:Key="CardStrokeBrush" Color="#26364A" />
+            <!-- 7.36:1 on #253548 (worst surface), 10.82:1 on #0A1428 -->
+            <!-- Gold is an optional HIGHLIGHT token for glow/celebration treatments
+                 only - NEVER a second primary accent (GUI_UPGRADE_PLAN.md section 2). -->
+            <Color x:Key="AccentGoldColor">#FFD700</Color>
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="#FFD700" />
+            <!-- 8.90:1 on #253548 (worst surface) -->
+
+            <!-- Monado navy surface ramp (MonadoColorPalette elevation ramp) -->
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#0A1428" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="#0F1D2E" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#1A2838" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#253548" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#1E3A4F" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#3A5A78" />
+
+            <!-- Text (body-text gate: >= 4.5:1 on every surface above) -->
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E8F1F8" />
+            <!-- 10.92:1 on #253548 (worst), 16.06:1 on #0A1428 -->
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8FA3B8" />
+            <!-- 4.82:1 on #253548 (worst), 7.08:1 on #0A1428 -->
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="#0A1428" />
+            <!-- 10.82:1 on the #00D9FF accent fill -->
+
+            <!-- Status (also used as text foregrounds, so body-text gated) -->
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#3DDC97" />
+            <!-- 7.07:1 on #253548 (worst) -->
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#FFB454" />
+            <!-- 7.08:1 on #253548 (worst) -->
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#FF6B84" />
+            <!-- 4.57:1 on #253548 (worst); MonadoColorPalette's #FF0055 measured 3.20:1 and was rejected -->
             <SolidColorBrush x:Key="ProviderReadyBrush" Color="#3DDC97" />
             <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#FFB454" />
-            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#5C6B7A" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#8FA1B1" />
+            <!-- 4.70:1 on #253548 (worst); prior #5C6B7A measured 2.28:1 and failed -->
         </ResourceDictionary>
 
+        <!-- Light: MonadoColorPalette's light set (#F5F7FA / #FFFFFF / #D0D8E0). -->
         <ResourceDictionary x:Key="Light">
-            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#0087A8" />
-            <SolidColorBrush x:Key="SurfaceBrush" Color="#F4F7FA" />
+            <!-- Accents -->
+            <SolidColorBrush x:Key="HeliosAccentBrush" Color="#007694" />
+            <!-- 4.86:1 on #F5F7FA (worst); the dark-pack #00D9FF measures 1.55:1 on white and cannot be text here -->
+            <!-- Gold highlight only; 1.30:1 on light surfaces - decorative glow, never text. -->
+            <Color x:Key="AccentGoldColor">#FFD700</Color>
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="#FFD700" />
+
+            <!-- Surfaces -->
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#F5F7FA" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="#FFFBFE" />
             <SolidColorBrush x:Key="CardSurfaceBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="CardStrokeBrush" Color="#D5DEE8" />
-            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#14212E" />
-            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#54687C" />
-            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#1B8A5A" />
-            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#B25E00" />
-            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#7A8894" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#D0D8E0" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#A0A8B0" />
+
+            <!-- Text -->
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A2838" />
+            <!-- 13.91:1 on #F5F7FA (worst), 14.95:1 on #FFFFFF -->
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5A6B78" />
+            <!-- 5.13:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF" />
+            <!-- 5.23:1 on the #007694 accent fill -->
+
+            <!-- Status -->
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="#17794E" />
+            <!-- 5.03:1 on #F5F7FA (worst); prior #1B8A5A measured 4.04:1 and failed -->
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="#A85800" />
+            <!-- 4.81:1 on #F5F7FA (worst); prior #B25E00 measured 4.35:1 and failed -->
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="#CC0044" />
+            <!-- 5.35:1 on #F5F7FA (worst) -->
+            <SolidColorBrush x:Key="ProviderReadyBrush" Color="#17794E" />
+            <SolidColorBrush x:Key="ProviderDegradedBrush" Color="#A85800" />
+            <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="#5F6E7A" />
+            <!-- 4.89:1 on #F5F7FA (worst); prior #7A8894 measured 3.38:1 and failed -->
         </ResourceDictionary>
 
-        <!-- Every token maps to a system color; no literals, so user contrast themes win. -->
+        <!-- Every token maps to a system color; no literals, so user contrast themes win.
+             Severity is conveyed by text/shape here, not hue (no system "error" color). -->
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="HeliosAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <StaticResource x:Key="AccentGoldColor" ResourceKey="SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="AccentGoldBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CardStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="StatusSuccessBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="StatusWarningBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="StatusErrorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="ProviderReadyBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ProviderDegradedBrush" Color="{ThemeResource SystemColorHotlightColor}" />
             <SolidColorBrush x:Key="ProviderUnconfiguredBrush" Color="{ThemeResource SystemColorGrayTextColor}" />

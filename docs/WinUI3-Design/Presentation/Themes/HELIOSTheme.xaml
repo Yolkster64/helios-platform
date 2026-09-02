@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    NON-CANONICAL PALETTE - reference only (do not consume from app XAML, and do not
+    "fix" colors here). The single color authority for all HELIOS UI is
+    src/gui/HELIOS.Shell/Themes/Tokens.xaml and its sibling theme packs
+    (decision record: docs/architecture/GUI_UPGRADE_PLAN.md section 2). Mine this file
+    for ramps and treatments; route any token change through Tokens.xaml.
+-->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">

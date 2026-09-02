@@ -7,9 +7,14 @@
             <ResourceDictionary.MergedDictionaries>
                 <!-- WinUI control styles (Fluent). Must be first so app dictionaries can override. -->
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Semantic design tokens (GUI_THEME_ANALYSIS.md): all pages reference
-                     these via {ThemeResource}; no XAML outside Tokens.xaml names a literal color. -->
+                <!-- Canonical semantic tokens (GUI_UPGRADE_PLAN.md section 2): the Monado
+                     pack, default of the theme packs under Themes/. All pages reference
+                     tokens via {ThemeResource}; no XAML outside the Themes/Tokens*.xaml
+                     pack files names a literal color. -->
                 <ResourceDictionary Source="ms-appx:///Themes/Tokens.xaml" />
+                <!-- Type ramp (P1): Display/Headline/Title/Body/Label TextBlock styles
+                     consuming only semantic tokens. -->
+                <ResourceDictionary Source="ms-appx:///Themes/Typography.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

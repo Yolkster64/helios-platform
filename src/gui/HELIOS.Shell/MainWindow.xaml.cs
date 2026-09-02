@@ -1,3 +1,4 @@
+using HELIOS.Shell.Helpers;
 using HELIOS.Shell.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,11 +19,21 @@ public sealed partial class MainWindow : Window
         Title = "HELIOS Shell";
         AppWindow.Resize(new SizeInt32(1280, 800));
 
-        // Land on the dashboard: select the nav item and navigate the frame directly
-        // (SelectionChanged does not fire for a programmatic pre-layout selection on
-        // all WinUI versions, so don't rely on it for the initial page).
-        Nav.SelectedItem = AIHubNavItem;
+        // Stale-brush fix (GUI_UPGRADE_PLAN.md P1): keep the readiness brushes in sync
+        // with the live theme. Window is not a FrameworkElement in WinUI 3, so the
+        // subscription goes on the content root (the NavigationView).
+        if (Content is FrameworkElement root)
+        {
+            ReadinessVisuals.Attach(root);
+        }
+
+        // Land on the dashboard: navigate the frame FIRST, then select the nav item.
+        // SelectionChanged does not fire for a programmatic pre-layout selection on
+        // all WinUI versions — but on versions where it DOES fire synchronously, the
+        // handler's own CurrentSourcePageType guard now sees AIHubPage already
+        // current and skips the double navigation (review finding).
         ContentFrame.Navigate(typeof(AIHubPage));
+        Nav.SelectedItem = AIHubNavItem;
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

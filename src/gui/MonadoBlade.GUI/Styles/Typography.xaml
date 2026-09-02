@@ -1,3 +1,10 @@
+<!--
+    NON-CANONICAL reference only. The live type ramp is ported to
+    src/gui/HELIOS.Shell/Themes/Typography.xaml (GUI_UPGRADE_PLAN.md P1); the literal
+    colors below are superseded by the semantic tokens in
+    src/gui/HELIOS.Shell/Themes/Tokens.xaml (decision record:
+    docs/architecture/GUI_UPGRADE_PLAN.md section 2). Do not consume from app XAML.
+-->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">

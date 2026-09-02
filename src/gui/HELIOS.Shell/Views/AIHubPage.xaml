@@ -23,7 +23,7 @@
 
             <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="AI Hub"
-                           FontSize="28" FontWeight="Bold"
+                           Style="{StaticResource HeliosHeadlineTextBlockStyle}"
                            Foreground="{ThemeResource HeliosAccentBrush}" />
                 <TextBlock Foreground="{ThemeResource TextSecondaryBrush}">
                     <Run Text="Provider status from helios-ai-api at" />
@@ -81,19 +81,18 @@
                                      Fill="{x:Bind helpers:ReadinessVisuals.BrushFor(Readiness)}" />
 
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Foreground="{ThemeResource TextPrimaryBrush}"
-                                           FontWeight="SemiBold">
+                                <TextBlock Style="{StaticResource HeliosBodyStrongTextBlockStyle}">
                                     <Run Text="{x:Bind Name}" />
                                     <Run Text=" · " />
                                     <Run Text="{x:Bind Kind}" />
                                 </TextBlock>
                                 <TextBlock Text="{x:Bind ModelDisplay}"
+                                           Style="{StaticResource HeliosBodyTextBlockStyle}"
                                            Foreground="{ThemeResource TextSecondaryBrush}" />
                                 <TextBlock Text="{x:Bind DetailDisplay}"
                                            Visibility="{x:Bind HasDetail}"
-                                           Foreground="{ThemeResource TextSecondaryBrush}"
-                                           TextWrapping="Wrap"
-                                           FontSize="12" />
+                                           Style="{StaticResource HeliosCaptionTextBlockStyle}"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
 
                             <TextBlock Grid.Column="2" Text="{x:Bind Readiness}"
