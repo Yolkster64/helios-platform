@@ -84,9 +84,12 @@ public sealed class ApiMetricsEndpointTests
         Assert.Equal(2, openai.Successes);
         Assert.Equal(0, openai.AdvisoryCount);
         Assert.Equal(2.0 / 3.0, openai.SuccessRate, precision: 12);
-        Assert.Equal(200.0, openai.AverageLatencyMs, precision: 12);
-        Assert.Equal(0.006, openai.TotalCostUsd, precision: 12);
-        Assert.Equal(0.002, openai.AverageCostUsd, precision: 12);
+        Assert.NotNull(openai.AverageLatencyMs);
+        Assert.Equal(200.0, openai.AverageLatencyMs.Value, precision: 12);
+        Assert.NotNull(openai.TotalCostUsd);
+        Assert.Equal(0.006, openai.TotalCostUsd.Value, precision: 12);
+        Assert.NotNull(openai.AverageCostUsd);
+        Assert.Equal(0.002, openai.AverageCostUsd.Value, precision: 12);
         Assert.NotNull(openai.AverageQuality); // only the single rated outcome counts
         Assert.Equal(0.5, openai.AverageQuality.Value, precision: 12);
 
@@ -94,13 +97,43 @@ public sealed class ApiMetricsEndpointTests
         Assert.Equal("anthropic", anthropic.Provider);
         Assert.Equal(1, anthropic.Attempts);
         Assert.Equal(1.0, anthropic.SuccessRate, precision: 12);
-        Assert.Equal(50.0, anthropic.AverageLatencyMs, precision: 12);
-        Assert.Equal(0.010, anthropic.TotalCostUsd, precision: 12);
+        Assert.NotNull(anthropic.AverageLatencyMs);
+        Assert.Equal(50.0, anthropic.AverageLatencyMs.Value, precision: 12);
+        Assert.NotNull(anthropic.TotalCostUsd);
+        Assert.Equal(0.010, anthropic.TotalCostUsd.Value, precision: 12);
         Assert.Null(anthropic.AverageQuality); // no rated outcomes → null, never 0
 
         // RoutingOutcome persists no token counts, so both stay honestly null.
         Assert.All(metrics.Providers, p => Assert.Null(p.TokensUsed));
         Assert.All(metrics.Providers, p => Assert.Null(p.CostPerMillionTokens));
+    }
+
+    [Fact]
+    public async Task Metrics_NonFiniteAggregates_BecomeNullInsteadOf500()
+    {
+        // Strict JSON cannot carry NaN/Infinity, but it CAN carry finite values whose
+        // sum or average overflows (two 1e308 costs -> +Infinity) — and the default
+        // serializer rejects non-finite doubles, which would turn every /v1/metrics
+        // call into a 500 until the records aged out of the window (review finding).
+        var store = new FakeLearningStore(new[]
+        {
+            Outcome("openai", success: true, latencyMs: 100, costUsd: 1e308),
+            Outcome("openai", success: true, latencyMs: 200, costUsd: 1e308),
+        });
+        using var factory = CreateFactory(store);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/metrics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var metrics = await response.Content.ReadFromJsonAsync<MetricsResponse>(Json);
+        Assert.NotNull(metrics);
+        var openai = Assert.Single(metrics.Providers);
+        Assert.Equal(2, openai.Attempts);
+        Assert.Null(openai.TotalCostUsd);      // 1e308 + 1e308 overflows -> null
+        Assert.Null(openai.AverageCostUsd);    // Average sums first -> also overflows
+        Assert.NotNull(openai.AverageLatencyMs); // sane values stay reported
+        Assert.Equal(150.0, openai.AverageLatencyMs.Value, precision: 12);
     }
 
     [Fact]

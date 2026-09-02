@@ -102,6 +102,10 @@ public sealed record MetricsResponse(
 /// neither value can be derived honestly. They stay in the contract, explicitly null,
 /// so dashboard cards keep a stable shape if token capture lands later; cost is instead
 /// reported as recorded — <c>TotalCostUsd</c> and per-call <c>AverageCostUsd</c>.
+/// <c>AverageLatencyMs</c>, <c>TotalCostUsd</c>, and <c>AverageCostUsd</c> are null in
+/// one defensive case: recorded values so large the aggregate overflows to a non-finite
+/// double (which the JSON serializer would reject, failing the whole response) — absent
+/// beats a 500 or a fabricated number.
 /// </summary>
 public sealed record ProviderMetricsResponse(
     string Provider,
@@ -109,9 +113,9 @@ public sealed record ProviderMetricsResponse(
     int Successes,
     int AdvisoryCount,
     double SuccessRate,
-    double AverageLatencyMs,
-    double TotalCostUsd,
-    double AverageCostUsd,
+    double? AverageLatencyMs,
+    double? TotalCostUsd,
+    double? AverageCostUsd,
     double? AverageQuality,
     long? TokensUsed,
     double? CostPerMillionTokens);

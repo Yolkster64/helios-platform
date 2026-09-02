@@ -149,12 +149,18 @@ public static class ApiEndpoints
                         Successes: successes,
                         AdvisoryCount: outcomes.Count(o => o.Source is not null),
                         SuccessRate: (double)successes / outcomes.Count,
-                        AverageLatencyMs: outcomes.Average(o => o.LatencyMs),
-                        TotalCostUsd: outcomes.Sum(o => o.CostUsd),
-                        AverageCostUsd: outcomes.Average(o => o.CostUsd),
+                        // FiniteOrNull: strict JSON cannot carry NaN/Infinity, but it
+                        // CAN carry finite values whose sum or average overflows (two
+                        // 1e308 costs) — and the serializer then rejects the whole
+                        // response with a 500 until those records age out of the
+                        // window (review finding). A non-finite aggregate becomes
+                        // null instead.
+                        AverageLatencyMs: FiniteOrNull(outcomes.Average(o => o.LatencyMs)),
+                        TotalCostUsd: FiniteOrNull(outcomes.Sum(o => o.CostUsd)),
+                        AverageCostUsd: FiniteOrNull(outcomes.Average(o => o.CostUsd)),
                         // Average(double?) ignores unrated outcomes and is null when
                         // none are rated — never a fabricated 0.
-                        AverageQuality: outcomes.Average(o => o.Quality),
+                        AverageQuality: FiniteOrNull(outcomes.Average(o => o.Quality)),
                         // RoutingOutcome persists no token counts, so these cannot be
                         // derived honestly — see ProviderMetricsResponse.
                         TokensUsed: null,
@@ -284,6 +290,10 @@ public static class ApiEndpoints
     /// configured access key; hosted deployments should additionally enforce their normal
     /// identity-aware ingress before traffic reaches Kestrel.
     /// </summary>
+    /// <summary>Null when the aggregate is not representable as a finite double.</summary>
+    private static double? FiniteOrNull(double? value) =>
+        value is { } finite && double.IsFinite(finite) ? finite : null;
+
     private static IResult? AuthorizeApiRequest(HttpContext context, string? configuredKey)
     {
         var remoteAddress = context.Connection.RemoteIpAddress;

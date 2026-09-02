@@ -197,17 +197,22 @@ function Invoke-BoundedDotnet {
 }
 
 # Reads newline-delimited JSON-RPC from the MCP server's stdout until the response with
-# the wanted id arrives or the deadline passes. Server log lines never appear here (the
-# server routes all logging to stderr — src/mcp/HELIOS.Mcp/Program.cs), but non-JSON or
-# other-id lines are skipped defensively anyway.
+# the wanted id arrives or the per-call timeout passes. The deadline is derived HERE,
+# fresh for every call — a single absolute deadline shared across the handshake would
+# shrink with each earlier reply and mark a healthy-but-slow server as a hard failure
+# (review finding: the timeout bounds EACH response, not the whole conversation).
+# Server log lines never appear here (the server routes all logging to stderr —
+# src/mcp/HELIOS.Mcp/Program.cs), but non-JSON or other-id lines are skipped
+# defensively anyway.
 function Read-McpResponse {
     param(
         [Parameter(Mandatory)]$Reader,
         [Parameter(Mandatory)][int]$WantId,
-        [Parameter(Mandatory)][datetime]$Deadline
+        [Parameter(Mandatory)][double]$TimeoutSeconds
     )
+    $deadline = [datetime]::UtcNow.AddSeconds($TimeoutSeconds)
     $pending = $null
-    while ([datetime]::UtcNow -lt $Deadline) {
+    while ([datetime]::UtcNow -lt $deadline) {
         if ($null -eq $pending) { $pending = $Reader.ReadLineAsync() }
         $completed = $false
         try { $completed = $pending.Wait(250) } catch { return $null }
@@ -472,7 +477,6 @@ try {
 
             $writer = $mcpProc.StandardInput
             $writer.AutoFlush = $true
-            $mcpDeadline = [datetime]::UtcNow.AddSeconds($TimeoutSeconds)
 
             # Newline-delimited JSON-RPC handshake: initialize (await the reply), then
             # the initialized notification, then tools/list.
@@ -484,7 +488,7 @@ try {
                     clientInfo      = @{ name = 'stack-smoke'; version = '1.0.0' }
                 }
             } | ConvertTo-Json -Compress -Depth 6))
-            $initReply = Read-McpResponse -Reader $mcpProc.StandardOutput -WantId 1 -Deadline $mcpDeadline
+            $initReply = Read-McpResponse -Reader $mcpProc.StandardOutput -WantId 1 -TimeoutSeconds $TimeoutSeconds
             if ($null -eq $initReply) {
                 $mcpState = 'failed'; $hardFailure = $true
                 $mcpDetail = "no initialize response within ${TimeoutSeconds}s (hard communication failure)"
@@ -501,7 +505,7 @@ try {
                     if ($cursor) { $listParams['cursor'] = $cursor }
                     $writer.WriteLine((@{ jsonrpc = '2.0'; id = $requestId; method = 'tools/list'; params = $listParams } |
                         ConvertTo-Json -Compress -Depth 4))
-                    $reply = Read-McpResponse -Reader $mcpProc.StandardOutput -WantId $requestId -Deadline $mcpDeadline
+                    $reply = Read-McpResponse -Reader $mcpProc.StandardOutput -WantId $requestId -TimeoutSeconds $TimeoutSeconds
                     if ($null -eq $reply) { $listFailed = $true; break }
                     $result = Get-OptionalProperty $reply 'result'
                     if ($null -eq $result) { $listFailed = $true; break }
