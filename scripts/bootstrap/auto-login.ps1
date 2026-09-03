@@ -70,8 +70,13 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  only its apiKeySecretName in-process; github-models then falls back
                  to GITHUB_TOKEN alone), so nothing is exported for it, and a blank
                  entry without any secret path is reported as an owner config fix.
-                 A profile with no providers section is a valid CLI-only profile
-                 (AIHubOptions.Providers starts empty), not a read failure.
+                 A variable that enabled entries map to DIFFERENT Key Vault secrets
+                 is a conflict: nothing is pulled into it (declaration order must
+                 never choose a credential every sharer then reads) and the owner
+                 action names the split. A profile with no providers section is a
+                 valid CLI-only profile (AIHubOptions.Providers starts empty), not a
+                 read failure; an explicitly selected profile the hub cannot load
+                 aborts before the az lane runs.
   summary        which env NAMES were set this run, which lanes remain owner-gated.
 
 Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
@@ -146,8 +151,52 @@ function Invoke-HeliosAutoLogin {
     }
     Write-Report ''
 
+    # --- 0. The active hub config, parsed FIRST -------------------------------------
+    # AIHUB_CONFIG precedence (review finding): AIHubService.ResolveConfigPath gives
+    # the env var precedence over the repo default, so when a custom/cloud profile
+    # is selected these exports must follow it — otherwise auto-login configures a
+    # hub other than the one that will actually run. Parsed before the az lane
+    # (review finding): an explicitly selected profile the hub cannot load must
+    # abort before auth-doctor -Apply mutates anything on its behalf.
+    $aihubConfigExplicit = Test-EnvValue 'AIHUB_CONFIG'
+    $aihubConfigPath = if ($aihubConfigExplicit) { ([string]$env:AIHUB_CONFIG).Trim() }
+    else { Join-Path $RepoRoot 'config/aihub.json' }
+    # The label auth-doctor uses for the same file, so shared action text dedupes.
+    $aihubConfigLabel = if ($aihubConfigExplicit) { 'AIHUB_CONFIG' } else { 'config/aihub.json' }
+    # Parse success is tracked apart from the providers table (review finding): a
+    # valid CLI-only profile may omit `providers` entirely — AIHubOptions.Providers
+    # starts as an empty dictionary, so the hub loads that profile and simply
+    # instantiates no API provider from it. An absent (or JSON null) section is
+    # therefore an EMPTY table, never a read failure; $aihubProviders stays $null
+    # only when the file itself is missing, unparseable, or not a JSON object (the
+    # hub binds the document to an object and fails the same way on anything else).
+    $aihubParseOk = $false
+    $aihubProviders = $null
+    $aihubProvidersDeclared = $false
+    try {
+        $aihubParsed = Get-Content -LiteralPath $aihubConfigPath -Raw | ConvertFrom-Json
+        $aihubParseOk = ($aihubParsed -is [System.Management.Automation.PSCustomObject])
+    }
+    catch { }
+    if ($aihubParseOk) {
+        $aihubProvidersDeclared = [bool]($aihubParsed.PSObject.Properties['providers'] -and $null -ne $aihubParsed.providers)
+        $aihubProviders = if ($aihubProvidersDeclared) { $aihubParsed.providers } else { [pscustomobject]@{} }
+    }
+    # An EXPLICITLY selected profile that cannot be read is an internal failure
+    # (review finding): the hub itself will fail to load that same file, so
+    # silently exporting the built-in default mapping would configure a hub other
+    # than the one selected — and report success doing it. The fallback in step 2
+    # is reserved for the absent/unreadable REPO DEFAULT only.
+    if ($aihubConfigExplicit -and -not $aihubParseOk) {
+        throw "AIHUB_CONFIG selects '$aihubConfigPath' but it is missing, unparseable, or not a JSON object — fix the file or unset AIHUB_CONFIG; aborting before any lane runs instead of exporting the default profile's secrets"
+    }
+    if ($aihubParseOk -and -not $aihubProvidersDeclared) {
+        Write-Report "  note: the active config ($aihubConfigPath) declares no providers section — the hub instantiates no API provider from it (CLI-only profile), so there is no credential to acquire for one"
+    }
+
     # --- 1. az lane: delegate repair to auth-doctor -Apply (non-interactive only) ----
     $azUsable = $false
+    $azLaneHadAction = $false
     $doctorPath = Join-Path $RepoRoot 'scripts/bootstrap/auth-doctor.ps1'
     if (Test-Path -LiteralPath $doctorPath) {
         # stdout ONLY: the -Json contract puts the report there, and merging stderr
@@ -173,6 +222,7 @@ function Invoke-HeliosAutoLogin {
             $azStepState = if ($azUsable) { 'ok' } elseif ($azState -eq 'unavailable') { 'unavailable' } else { 'needs-owner' }
             if (-not $azUsable -and $azLane.PSObject.Properties['ownerAction'] -and "$($azLane.ownerAction)".Trim()) {
                 Add-OwnerAction -Text "$($azLane.ownerAction)" -Imported
+                $azLaneHadAction = $true
             }
             Add-Step -Step 'az' -State $azStepState -Detail $azDetail
             # Surface the rest of the doctor's owner actions too — auto-login's summary
@@ -212,45 +262,6 @@ function Invoke-HeliosAutoLogin {
     # Providers lacking either field are excluded on purpose (azure-openai, for
     # example, declares no vault custody and needs its own endpoint wiring).
     $vaultPairs = @()
-    # AIHUB_CONFIG precedence (review finding): AIHubService.ResolveConfigPath gives
-    # the env var precedence over the repo default, so when a custom/cloud profile
-    # is selected these exports must follow it — otherwise auto-login configures a
-    # hub other than the one that will actually run.
-    $aihubConfigExplicit = Test-EnvValue 'AIHUB_CONFIG'
-    $aihubConfigPath = if ($aihubConfigExplicit) { ([string]$env:AIHUB_CONFIG).Trim() }
-    else { Join-Path $RepoRoot 'config/aihub.json' }
-    # The label auth-doctor uses for the same file, so shared action text dedupes.
-    $aihubConfigLabel = if ($aihubConfigExplicit) { 'AIHUB_CONFIG' } else { 'config/aihub.json' }
-    # Parse success is tracked apart from the providers table (review finding): a
-    # valid CLI-only profile may omit `providers` entirely — AIHubOptions.Providers
-    # starts as an empty dictionary, so the hub loads that profile and simply
-    # instantiates no API provider from it. An absent (or JSON null) section is
-    # therefore an EMPTY table, never a read failure; $aihubProviders stays $null
-    # only when the file itself is missing, unparseable, or not a JSON object (the
-    # hub binds the document to an object and fails the same way on anything else).
-    $aihubParseOk = $false
-    $aihubProviders = $null
-    $aihubProvidersDeclared = $false
-    try {
-        $aihubParsed = Get-Content -LiteralPath $aihubConfigPath -Raw | ConvertFrom-Json
-        $aihubParseOk = ($aihubParsed -is [System.Management.Automation.PSCustomObject])
-    }
-    catch { }
-    if ($aihubParseOk) {
-        $aihubProvidersDeclared = [bool]($aihubParsed.PSObject.Properties['providers'] -and $null -ne $aihubParsed.providers)
-        $aihubProviders = if ($aihubProvidersDeclared) { $aihubParsed.providers } else { [pscustomobject]@{} }
-    }
-    # An EXPLICITLY selected profile that cannot be read is an internal failure
-    # (review finding): the hub itself will fail to load that same file, so
-    # silently exporting the built-in default mapping would configure a hub other
-    # than the one selected — and report success doing it. The fallback below is
-    # reserved for the absent/unreadable REPO DEFAULT only.
-    if ($aihubConfigExplicit -and -not $aihubParseOk) {
-        throw "AIHUB_CONFIG selects '$aihubConfigPath' but it is missing, unparseable, or not a JSON object — fix the file or unset AIHUB_CONFIG; aborting instead of exporting the default profile's secrets"
-    }
-    if ($aihubParseOk -and -not $aihubProvidersDeclared) {
-        Write-Report "  note: the active config ($aihubConfigPath) declares no providers section — the hub instantiates no API provider from it (CLI-only profile), so there is no credential to acquire for one"
-    }
     # apiKeyEnv exactly as ProviderFactory reads it (review finding): the per-type
     # default (`ApiKeyEnv ?? <default>`) applies ONLY when the property is absent or
     # JSON null. An explicitly blank/whitespace name is passed through unchanged, and
@@ -276,6 +287,13 @@ function Invoke-HeliosAutoLogin {
     # Entra ID (DefaultAzureCredential) when its key is absent, so an unset key is a
     # supported state there, not a defect.
     $directKeyProviders = [System.Collections.Generic.List[object]]::new()
+    # Every enabled keyed entry that reads a variable, by variable (review finding):
+    # the GitHub-credential rule in step 3 must see readers of OTHER types too — an
+    # openai entry sharing a github-models entry's variable would receive the gh
+    # export through ProviderFactory.CreateAll exactly like a custom endpoint.
+    $envReaders = [ordered]@{}
+    # Variables that enabled entries map to DIFFERENT Key Vault secrets (see below).
+    $conflictingEnvs = @()
     if ($null -ne $aihubProviders) {
         $pairIndex = [ordered]@{}
         foreach ($provProp in $aihubProviders.PSObject.Properties) {
@@ -313,6 +331,8 @@ function Invoke-HeliosAutoLogin {
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # keyless types (ollama, azure-foundry-agent)
+            if (-not $envReaders.Contains($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
+            $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType })
             if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
                 if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { $_.Env -eq $envName }).Count) {
                     $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
@@ -329,7 +349,30 @@ function Invoke-HeliosAutoLogin {
             }
             $pairIndex[$pairKey].Consumers.Add($provProp.Name)
         }
-        foreach ($entry in $pairIndex.Values) {
+        # Conflicting secret→variable mappings (review finding): two enabled entries
+        # naming DIFFERENT Key Vault secrets for the SAME variable would let
+        # declaration order choose the credential — the first pull populates the
+        # variable, the never-clobber rule skips the rest, and SecretResolver's
+        # environment-first rule then hands that one value to every sharer, which
+        # may send it to the wrong service. Nothing is pulled into such a variable;
+        # the repair is distinct apiKeyEnv names (or one shared secret).
+        $conflictGroups = @($pairIndex.Values | Group-Object -Property Env |
+            Where-Object { @($_.Group | ForEach-Object { $_.SecretName } | Select-Object -Unique).Count -gt 1 })
+        foreach ($conflict in $conflictGroups) {
+            $conflictingEnvs += [string]$conflict.Name
+            $mapping = (@($conflict.Group | ForEach-Object { "'$($_.SecretName)' <- $(@($_.Consumers) -join ', ')" }) -join ' vs ')
+            if (Test-EnvValue $conflict.Name) {
+                Add-Step -Step $conflict.Name -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: enabled providers map DIFFERENT Key Vault secrets to it ($mapping), so every sharer reads this one value — give them distinct apiKeyEnv names"
+            }
+            else {
+                Add-Step -Step $conflict.Name -State 'needs-owner' -Detail "enabled providers map DIFFERENT Key Vault secrets to the same variable ($mapping) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer and could reach the wrong service; nothing was pulled into it"
+                # Same wording as auth-doctor's lane action (the step above carries the
+                # mapping), so the summary's unique filter collapses the two into one.
+                $conflictNames = @($conflict.Group | ForEach-Object { @($_.Consumers) } | Select-Object -Unique) -join ','
+                Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
+            }
+        }
+        foreach ($entry in @($pairIndex.Values | Where-Object { $conflictingEnvs -notcontains $_.Env })) {
             # The agent CLIs read two of these env names directly — that fact is
             # not in config, so it rides along as a fixed hint.
             $cliHint = switch ($entry.Env) {
@@ -398,7 +441,7 @@ function Invoke-HeliosAutoLogin {
     # light the lane; no secret name means no vault path and the clause is omitted).
     $ghModelsTargets = [System.Collections.Generic.List[object]]::new()
     if ($null -eq $aihubProviders) {
-        $ghModelsTargets.Add([pscustomobject]@{ Name = 'github-models'; Owners = @('github-models'); PublicOwners = @('github-models'); CustomOwners = @(); Env = 'GITHUB_MODELS_TOKEN'; SecretName = 'github-models-token'; Public = $true; Mixed = $false; SkipReason = '' })
+        $ghModelsTargets.Add([pscustomobject]@{ Name = 'github-models'; Owners = @('github-models'); PublicOwners = @('github-models'); OtherReaders = @(); Env = 'GITHUB_MODELS_TOKEN'; SecretName = 'github-models-token'; Public = $true; Mixed = $false; SkipReason = '' })
     }
     else {
         # Pass 1 — one row per enabled github-models entry that reads a variable (a
@@ -433,22 +476,35 @@ function Invoke-HeliosAutoLogin {
             $ownerNames = @($owners | ForEach-Object { $_.Name })
             $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
             $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
+            # Readers of OTHER keyed types (review finding, same class as the custom
+            # endpoint): an openai/anthropic/azure-openai entry sharing the variable
+            # would receive the GitHub credential too; a variable with conflicting
+            # secret mappings is already a reported defect and gets nothing either.
+            $foreignReaders = @()
+            if ($envReaders.Contains($ghEnvName)) {
+                $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
+            }
+            $isConflict = ($conflictingEnvs -contains $ghEnvName)
             # The vault clause follows the first apiKeySecretName declared among the
             # sharers (a repair naming another secret can never light the lane).
             $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
             if (-not $targetSecret) { $targetSecret = '' }
             $quotedPublic = (@($publicOwners | ForEach-Object { "'$_'" }) -join ', ')
             $quotedCustom = (@($customOwners | ForEach-Object { "'$_'" }) -join ', ')
-            $isMixed = ($publicOwners.Count -gt 0 -and $customOwners.Count -gt 0)
-            $isPublic = ($customOwners.Count -eq 0)
+            $otherReaders = @()
+            if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
+            if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
+            if ($isConflict) { $otherReaders += 'entries with conflicting Key Vault secret mappings (see its step above)' }
+            $isMixed = ($publicOwners.Count -gt 0 -and $otherReaders.Count -gt 0)
+            $isPublic = ($otherReaders.Count -eq 0)
             $ghSkip = if ($isMixed) {
-                "$ghEnvName is shared by public provider(s) $quotedPublic and custom-baseUrl provider(s) $quotedCustom (all type github-models) — a GitHub credential exported into it would be handed by ProviderFactory.CreateAll to the non-GitHub endpoint too, so GITHUB_TOKEN and the gh keyring are never exported for it; only its Key Vault pull (or setting $ghEnvName directly) applies, and the durable fix is distinct apiKeyEnv names for the public and custom providers"
+                "$ghEnvName is read by public github-models provider(s) $quotedPublic and also by $($otherReaders -join '; ') — a GitHub credential exported into it would be handed by ProviderFactory.CreateAll to a non-GitHub endpoint too, so GITHUB_TOKEN and the gh keyring are never exported for it; only its Key Vault pull (or setting $ghEnvName directly) applies, and the durable fix is distinct apiKeyEnv names"
             }
             elseif (-not $isPublic) {
                 "provider(s) $quotedCustom (type github-models) point at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnvName directly) applies"
             }
             else { '' }
-            $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; CustomOwners = $customOwners; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip })
+            $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip })
         }
     }
     $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
@@ -472,7 +528,23 @@ function Invoke-HeliosAutoLogin {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail "$nothingToPullWhy — nothing to pull, vault prerequisite not required"
     }
     elseif (-not $azUsable) {
-        Add-Step -Step 'keyvault' -State 'skipped' -Detail 'az lane is not usable — Key Vault pulls need an authenticated az (see owner actions)'
+        # The prerequisite is an owner action in its own right (review finding): the
+        # doctor's az lane reports 'unavailable' with NO action when az is absent, so
+        # the consolidated list would otherwise omit the one step every pull needs
+        # while this step told the reader to look there. When the doctor DID supply
+        # an az repair (MFA re-login, service-principal switch), that imported action
+        # is the repair and is only referenced, never duplicated.
+        $pendingPullsText = (@($unresolvedPairs | ForEach-Object { "'$($_.SecretName)' -> $($_.Env)" }) -join ', ')
+        if ($azState -eq 'unavailable') {
+            $azInstallAction = "install the Azure CLI (bash scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli) and re-run auto-login — auth-doctor -Apply then repairs the az lane non-interactively where a service principal or certificate is configured (setup-tenant.ps1 -OpsIdentity), or prints the exact one-time az login command; until then the Key Vault pulls $pendingPullsText cannot run"
+            Add-Step -Step 'keyvault' -State 'unavailable' -Detail "az (Azure CLI) is not on PATH — the Key Vault pulls $pendingPullsText need an authenticated az; $azInstallAction"
+            Add-OwnerAction -Text $azInstallAction
+        }
+        else {
+            $azRepairRef = if ($azLaneHadAction) { "the imported az-lane owner action is the repair" } else { "repair the az lane first (auth-doctor -Apply reported '$azState')" }
+            Add-Step -Step 'keyvault' -State 'needs-owner' -Detail "az lane is $azState — the Key Vault pulls $pendingPullsText need an authenticated az; $azRepairRef, then re-run auto-login"
+            if (-not $azLaneHadAction) { Add-OwnerAction -Text "repair the az lane (auth-doctor -Apply reported '$azState': $azLaneDetail), then re-run auto-login so it can pull $pendingPullsText" }
+        }
     }
     elseif (-not $vaultUri) {
         Add-Step -Step 'keyvault' -State 'skipped' -Detail ('AZURE_KEY_VAULT_URI is not set (name checked only) — provisioned by infra/main.bicep; ' +
@@ -778,10 +850,10 @@ function Invoke-HeliosAutoLogin {
     # the generic direct-key action for the same variable.
     foreach ($mixedTarget in @($ghModelsTargets | Where-Object { $_.Mixed })) {
         if (Test-EnvValue $mixedTarget.Env) { continue }
+        if ($conflictingEnvs -contains $mixedTarget.Env) { continue }   # the conflict action above already names the split
         $mixedVaultClause = if ($mixedTarget.SecretName) { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" } else { '' }
         $mixedPublic = (@($mixedTarget.PublicOwners | ForEach-Object { "'$_'" }) -join ', ')
-        $mixedCustom = (@($mixedTarget.CustomOwners | ForEach-Object { "'$_'" }) -join ', ')
-        Add-OwnerAction -Env $mixedTarget.Env -Text "give the github-models providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigPath} (public: $mixedPublic; custom baseUrl: $mixedCustom) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
+        Add-OwnerAction -Env $mixedTarget.Env -Text "give the providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigLabel} (public github-models: $mixedPublic; also read by: $($mixedTarget.OtherReaders -join '; ')) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
     }
 
     # Direct-key repairs (review finding): a provider that reads a key but declares

@@ -259,12 +259,21 @@ function Get-ConfiguredGitHubModelsEnvs {
     # to GitHub). Unreadable config → the default name; a parsed config with no
     # qualifying provider → no candidate from config at all.
     $default = 'GITHUB_MODELS_TOKEN'
-    $configPath = if (Test-EnvValue 'AIHUB_CONFIG') { ([string]$env:AIHUB_CONFIG).Trim() }
+    $explicitProfile = Test-EnvValue 'AIHUB_CONFIG'
+    $configPath = if ($explicitProfile) { ([string]$env:AIHUB_CONFIG).Trim() }
     else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
+    # An EXPLICITLY selected profile the hub cannot load contributes NO candidate
+    # (review finding): the built-in name would be an invented profile's, and the
+    # dry-run walk must say why instead. Only the unreadable REPO DEFAULT keeps it.
+    $script:configuredModelsNote = ''
+    $unreadableExplicit = "(AIHUB_CONFIG selects '$configPath' but it is missing, unparseable, or not a JSON object — the hub cannot load it either; no config candidate)"
     try {
         $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
         # The hub binds the document to an object; anything else is unreadable to it too.
-        if ($parsed -isnot [System.Management.Automation.PSCustomObject]) { return @($default) }
+        if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
+            if ($explicitProfile) { $script:configuredModelsNote = $unreadableExplicit; return @() }
+            return @($default)
+        }
         # An absent providers section is an EMPTY table (review finding):
         # AIHubOptions.Providers starts empty, so the hub loads a CLI-only profile and
         # instantiates no github-models provider from it — no candidate, not the default.
@@ -305,7 +314,10 @@ function Get-ConfiguredGitHubModelsEnvs {
         }
         return @($names)
     }
-    catch { return @($default) }
+    catch {
+        if ($explicitProfile) { $script:configuredModelsNote = $unreadableExplicit; return @() }
+        return @($default)
+    }
 }
 
 function Get-GitHubTokenCandidates {
@@ -868,10 +880,14 @@ function Test-AzureLane {
     #    exchange has run — that case stays transient or definitive below, with the
     #    OIDC availability noted rather than prescribed.
     if ($ciOidcAvailable -and -not $tokenHeld) {
+        # The workflow edit IS the owner action (review finding): setup-everything.ps1
+        # and JSON consumers consolidate ownerAction/nextCommand, so a repair that
+        # lives only in the detail text vanishes from the advertised action list.
         return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
             -Identity 'the workflow federated identity' `
             -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
-                'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it')
+                'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it') `
+            -OwnerAction 'add an azure/login@v2 step (client-id / tenant-id / subscription-id of the federated credential from scripts/bootstrap/azure-oidc-setup.ps1) before this probe in the workflow job — the job already has id-token: write, so no secret is needed'
     }
     $oidcHeldNote = if ($ciOidcAvailable -and $tokenHeld) {
         ' — OIDC is also available to this job, but a credential source already yielded a token here (azure/login has evidently run), so adding another azure/login step is not the remedy'
@@ -920,7 +936,9 @@ if ($DryRun) {
     Write-Host ''
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
     $configuredModelsEnvs = @(Get-ConfiguredGitHubModelsEnvs)
-    $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only, and never a variable a custom-endpoint provider also reads)" } else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
+    $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only, and never a variable a custom-endpoint provider also reads)" }
+    elseif ($script:configuredModelsNote) { $script:configuredModelsNote }
+    else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
     Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> $configuredModelsText -> gh auth token (only if gh is on PATH)"
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"

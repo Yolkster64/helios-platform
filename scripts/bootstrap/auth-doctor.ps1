@@ -184,16 +184,21 @@ function Get-AIHubConfigState {
     if ($null -ne $script:aihubConfigState) { return $script:aihubConfigState }
     $label = 'config/aihub.json'
     $path = Join-Path $repoRoot 'config' 'aihub.json'
+    $explicit = $false
     if (-not [string]::IsNullOrWhiteSpace([string]$env:AIHUB_CONFIG)) {
         $path = ([string]$env:AIHUB_CONFIG).Trim()
         $label = 'AIHUB_CONFIG'
+        $explicit = $true
     }
     $config = $null
     try { $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json }
     catch { Write-Verbose "$label read failed: $($_.Exception.Message)" }
     # The hub binds the document to an object; anything else fails there the same way.
     if ($config -isnot [System.Management.Automation.PSCustomObject]) { $config = $null }
-    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config }
+    # Explicit = AIHUB_CONFIG selected this file: the main flow aborts before any lane
+    # when such a profile is unreadable (review finding) — the fallback names belong
+    # to an unreadable REPO DEFAULT only, never to an invented custom profile.
+    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit }
     return $script:aihubConfigState
 }
 
@@ -232,7 +237,10 @@ function Get-AIHubEnabledProvidersOfType {
 # absent or JSON null, and SecretResolver reads no variable for a blank name — such
 # an entry resolves only its apiKeySecretName, in-process, so no variable can prove
 # it here, and without a secret it can never be configured at all. Normalizing blank
-# to the default would demand a variable the hub never reads.
+# to the default would demand a variable the hub never reads. Entries that map
+# DIFFERENT secrets to ONE variable come back as conflicts (review finding): the
+# vault hint would otherwise name whichever secret was declared first, and
+# auto-login pulls nothing into such a variable.
 function Get-ProviderCredentialPairs {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Entries,
@@ -240,6 +248,7 @@ function Get-ProviderCredentialPairs {
     )
     $pairs = [System.Collections.Generic.List[object]]::new()
     $blank = [System.Collections.Generic.List[object]]::new()
+    $readers = [ordered]@{}
     foreach ($entry in $Entries) {
         $prov = $entry.Value
         $envProp = $prov.PSObject.Properties['apiKeyEnv']
@@ -249,46 +258,191 @@ function Get-ProviderCredentialPairs {
             $blank.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
             continue
         }
+        if (-not $readers.Contains($declaredEnv)) { $readers[$declaredEnv] = [System.Collections.Generic.List[object]]::new() }
+        $readers[$declaredEnv].Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
         if (-not @($pairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
             $pairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
         }
     }
-    return [pscustomobject]@{ Pairs = $pairs; Blank = $blank }
+    $conflicts = [System.Collections.Generic.List[object]]::new()
+    foreach ($envName in @($readers.Keys)) {
+        $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | Select-Object -Unique)
+        if ($secrets.Count -gt 1) {
+            $conflicts.Add([pscustomobject]@{ Env = $envName; Names = @($readers[$envName] | ForEach-Object Name); Secrets = $secrets })
+        }
+    }
+    return [pscustomobject]@{ Pairs = $pairs; Blank = $blank; Conflicts = $conflicts }
 }
-# The blank-apiKeyEnv verdict shared by the API-key lanes: entries with a secret are a
-# note (the hub pulls that secret itself; unprovable from the environment), entries
-# without one are a config defect only an edit fixes.
-function Get-BlankEnvVerdict {
+# Config defects the API-key lanes report as owner actions, never as readiness:
+# blank-apiKeyEnv entries with no secret path, and conflicting secret mappings. Blank
+# entries WITH a secret are not defects — Get-BlankVaultChecks proves or fails them.
+function Get-ConfigDefectVerdict {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blank,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Conflicts,
         [Parameter(Mandatory)][string]$Type,
         [Parameter(Mandatory)][string]$DefaultEnv,
         [Parameter(Mandatory)][string]$ConfigLabel
     )
-    $vaulted = @($Blank | Where-Object { $_.SecretName })
     $defects = @($Blank | Where-Object { -not $_.SecretName })
     $quote = { param($names) (@($names | ForEach-Object { "'$_'" }) -join ', ') }
-    $note = if ($vaulted.Count -gt 0) {
-        "; provider(s) $(& $quote @($vaulted | ForEach-Object Name)) (type $Type) declare a blank apiKeyEnv and resolve Key Vault secret(s) $(& $quote @($vaulted | ForEach-Object SecretName | Select-Object -Unique)) in-process (AZURE_KEY_VAULT_URI) — the hub reads no variable for them, so they are not provable from the environment"
-    }
-    else { '' }
-    $defectDetail = ''
-    $defectAction = ''
+    $details = @()
+    $actions = @()
     if ($defects.Count -gt 0) {
         $defectNames = @($defects | ForEach-Object Name)
-        $defectDetail = "provider(s) $(& $quote $defectNames) (type $Type) declare an explicitly blank apiKeyEnv and no apiKeySecretName — ProviderFactory reads no variable and no secret for them ($DefaultEnv applies only when the property is absent), so they can never be configured$note"
-        $defectAction = "fix providers.{$($defectNames -join ',')}.apiKeyEnv in ${ConfigLabel}: set a variable name (or remove the property to use $DefaultEnv) and/or add apiKeySecretName"
+        $details += "provider(s) $(& $quote $defectNames) (type $Type) declare an explicitly blank apiKeyEnv and no apiKeySecretName — ProviderFactory reads no variable and no secret for them ($DefaultEnv applies only when the property is absent), so they can never be configured"
+        $actions += "fix providers.{$($defectNames -join ',')}.apiKeyEnv in ${ConfigLabel}: set a variable name (or remove the property to use $DefaultEnv) and/or add apiKeySecretName"
     }
-    return [pscustomobject]@{ Note = $note; DefectDetail = $defectDetail; DefectAction = $defectAction; HasDefects = ($defects.Count -gt 0) }
+    foreach ($conflict in $Conflicts) {
+        $details += "providers $(& $quote $conflict.Names) (type $Type) map different Key Vault secrets $(& $quote $conflict.Secrets) to the same variable $($conflict.Env) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer (auto-login pulls none of them)"
+        $actions += "give providers.{$($conflict.Names -join ',')} distinct apiKeyEnv names in ${ConfigLabel} (or one shared apiKeySecretName)"
+    }
+    return [pscustomobject]@{ HasDefects = ($details.Count -gt 0); DefectDetail = ($details -join '; '); DefectAction = ($actions -join '; ') }
 }
+# Existence proof for a blank-apiKeyEnv entry's Key Vault secret (review finding):
+# readiness is never inferred from having nothing to inspect. The proof is metadata
+# only — `az keyvault secret list` returns names, never values — under the az lane's
+# own login; anything short of a listed name is unproven and reported as the exact
+# prerequisite that is missing (vault URI, az lane, RBAC, or the secret itself).
+function Get-BlankVaultChecks {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blank,
+        [Parameter(Mandatory)][pscustomobject]$AzResult
+    )
+    # Returned as a plain array (not the comma-wrapped list): the caller's @() must
+    # see the ITEMS — a wrapped list would arrive as one element and an empty one
+    # would fail member enumeration under StrictMode.
+    $results = [System.Collections.Generic.List[object]]::new()
+    if ($Blank.Count -eq 0) { return $results.ToArray() }
+    $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
+    $vaultName = ''
+    if ($vaultUri) {
+        try {
+            $parsedUri = [uri]$vaultUri
+            if ($parsedUri.Scheme -eq 'https' -and $parsedUri.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { $vaultName = $Matches['vault'] }
+        }
+        catch { }
+    }
+    $azCmd = Get-CliCommand -Name 'az'
+    $blocker = ''
+    $blockerHint = ''
+    if (-not $vaultUri) {
+        $blocker = 'AZURE_KEY_VAULT_URI is unset, so the hub cannot reach any vault'
+        $blockerHint = 'set AZURE_KEY_VAULT_URI (PowerShell: . .helios/azure.env.ps1; bash: source .helios/azure.env)'
+    }
+    elseif (-not $vaultName) {
+        $blocker = 'AZURE_KEY_VAULT_URI is not an https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault URI'
+        $blockerHint = 'fix AZURE_KEY_VAULT_URI'
+    }
+    elseif ($AzResult.state -notin 'ready', 'repaired' -or -not $azCmd) {
+        $blocker = "the az lane is $($AzResult.state), so the secret cannot be listed from here"
+        $blockerHint = if ("$($AzResult.ownerAction)".Trim()) { "$($AzResult.ownerAction)" } else { 'repair the az lane (see its row), then re-run' }
+    }
+    $listed = @()
+    if (-not $blocker) {
+        $listProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('keyvault', 'secret', 'list', '--vault-name', $vaultName, '--query', '[].name', '--output', 'tsv', '--only-show-errors')
+        if ($listProbe.ExitCode -eq 0) { $listed = @(@($listProbe.Output) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }) }
+        else {
+            $blocker = "az keyvault secret list against vault '$vaultName' failed (exit $($listProbe.ExitCode): no RBAC grant, network, or wrong vault; output never echoed)"
+            $blockerHint = "grant the running identity 'Key Vault Secrets User' on vault '$vaultName' (or fix AZURE_KEY_VAULT_URI)"
+        }
+    }
+    foreach ($entry in $Blank) {
+        if ($blocker) {
+            $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unverifiable'; Reason = $blocker; Hint = $blockerHint; Vault = $vaultName })
+        }
+        elseif ($listed -contains $entry.SecretName) {
+            $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'present'; Reason = "listed in vault '$vaultName'"; Hint = ''; Vault = $vaultName })
+        }
+        else {
+            $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'absent'; Reason = "not present in vault '$vaultName'"; Hint = "az keyvault secret set --vault-name $vaultName --name $($entry.SecretName)   # owner supplies the value"; Vault = $vaultName })
+        }
+    }
+    return $results.ToArray()
+}
+# Shared evaluation for the two API-key lanes (openai-codex, claude): pairs and blank
+# entries from the enabled entries of one type, config defects, the Key Vault
+# existence proof for blank+vaulted entries, and the missing/satisfied split — one
+# rule set for both lanes. Satisfied means every variable holds a value AND every
+# in-process secret is proven present; nothing else counts as ready.
+function Get-ApiKeyLaneEvaluation {
+    param(
+        [AllowNull()][object]$Providers,
+        [Parameter(Mandatory)][string]$Type,
+        [Parameter(Mandatory)][string]$DefaultEnv,
+        [Parameter(Mandatory)][string]$DefaultSecret,
+        [Parameter(Mandatory)][string]$ConfigLabel,
+        [Parameter(Mandatory)][string]$CliOnlySource,
+        [Parameter(Mandatory)][pscustomobject]$AzResult
+    )
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    $blank = [System.Collections.Generic.List[object]]::new()
+    $conflicts = @()
+    $nameSource = "fallback defaults; $ConfigLabel was unreadable"
+    if ($null -ne $Providers) {
+        $derived = Get-ProviderCredentialPairs -Entries @($Providers) -DefaultEnv $DefaultEnv
+        $pairs = $derived.Pairs
+        $blank = $derived.Blank
+        $conflicts = @($derived.Conflicts)
+        $names = @($Providers | ForEach-Object Name) -join ','
+        $nameSource = if ($pairs.Count -gt 0) { "$ConfigLabel providers.{$names}.apiKeyEnv (type $Type; $DefaultEnv where the property is absent)" }
+        elseif ($blank.Count -gt 0) { "$ConfigLabel providers.{$names}.apiKeyEnv (type $Type; every enabled entry declares a blank apiKeyEnv, so the hub reads no variable for them)" }
+        else { $CliOnlySource }
+    }
+    # The built-in pair applies only when NO enabled entry exists to derive from — a
+    # profile whose entries all declare a blank apiKeyEnv reads no variable at all.
+    if ($pairs.Count -eq 0 -and $blank.Count -eq 0) { $pairs.Add([pscustomobject]@{ Env = $DefaultEnv; SecretName = $DefaultSecret }) }
+    $defect = Get-ConfigDefectVerdict -Blank @($blank) -Conflicts @($conflicts) -Type $Type -DefaultEnv $DefaultEnv -ConfigLabel $ConfigLabel
+    $vaultChecks = @(Get-BlankVaultChecks -Blank @($blank | Where-Object { $_.SecretName }) -AzResult $AzResult)
+    $provenVault = @($vaultChecks | Where-Object { $_.Status -eq 'present' })
+    $unprovenVault = @($vaultChecks | Where-Object { $_.Status -ne 'present' })
+    # Name-only presence checks; values never enter a variable.
+    $missingPairs = @($pairs | Where-Object { -not (Test-EnvValue $_.Env) })
+    $setEnvNames = @($pairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
+    $quote = { param($names) (@($names | ForEach-Object { "'$_'" }) -join ', ') }
+    $provenNote = if ($provenVault.Count -gt 0) {
+        "; provider(s) $(& $quote @($provenVault | ForEach-Object Name)) declare a blank apiKeyEnv and their Key Vault secret(s) $(& $quote @($provenVault | ForEach-Object SecretName | Select-Object -Unique)) are listed in vault '$($provenVault[0].Vault)' (names only, values never read) — the hub resolves them in-process under AZURE_KEY_VAULT_URI"
+    }
+    else { '' }
+    $missingItems = @(@($missingPairs | ForEach-Object Env) +
+        @($unprovenVault | ForEach-Object { "the in-process Key Vault path of provider '$($_.Name)' (blank apiKeyEnv; secret '$($_.SecretName)': $($_.Reason))" }))
+    $hints = @(@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env }) +
+        @($unprovenVault | ForEach-Object { $_.Hint } | Where-Object { $_ } | Select-Object -Unique))
+    [pscustomobject]@{
+        NameSource   = $nameSource
+        EnvList      = (@($pairs | ForEach-Object Env) -join ' / ')
+        HasEnvPairs  = ($pairs.Count -gt 0)
+        HasDefects   = $defect.HasDefects
+        DefectDetail = $defect.DefectDetail
+        DefectAction = $defect.DefectAction
+        Satisfied    = ($missingPairs.Count -eq 0 -and $unprovenVault.Count -eq 0)
+        ProvenNote   = $provenNote
+        MissingList  = ($missingItems -join ' / ')
+        PartialNote  = $(if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' })
+        VaultPull    = ($hints -join '; ')
+    }
+}
+# Enabled CLI entries are discovered by their configured COMMAND (review finding):
+# ProviderFactory.CreateAll instantiates every enabled cliAgents entry whatever its
+# routing name, and CliProcessAgent runs entry.command — so a profile naming its
+# codex entry 'code-prod' still launches codex. The command's leaf (directory and
+# .exe/.cmd stripped) is compared case-insensitively; the canonical name is accepted
+# only for an entry that declares no command at all.
 function Test-AIHubCliAgentEnabled {
-    param([Parameter(Mandatory)][string]$Name)
+    param([Parameter(Mandatory)][string]$Command, [string]$CanonicalName = '')
     $cfg = (Get-AIHubConfigState).Config
     if ($null -eq $cfg) { return $true }
-    if (-not $cfg.PSObject.Properties['cliAgents']) { return $false }
-    $agent = @($cfg.cliAgents | Where-Object { $null -ne $_ -and $_.PSObject.Properties['name'] -and [string]$_.name -eq $Name }) | Select-Object -First 1
-    if ($null -eq $agent) { return $false }
-    return -not ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false)
+    if (-not $cfg.PSObject.Properties['cliAgents'] -or $null -eq $cfg.cliAgents) { return $false }
+    foreach ($agent in @($cfg.cliAgents)) {
+        if ($null -eq $agent) { continue }
+        if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+        $leaf = ''
+        if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+        if ($leaf -and $leaf.Equals($Command, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+        if (-not $cmd -and $CanonicalName -and $agent.PSObject.Properties['name'] -and ([string]$agent.name).Trim().Equals($CanonicalName, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
 }
 
 # The exact pull command for one (secret, env) pair (review finding): the bash loader
@@ -566,14 +720,16 @@ function Test-AzLane {
 
 # --- openai-codex lane -----------------------------------------------------------------
 function Test-CodexLane {
+    param([Parameter(Mandatory)][pscustomobject]$AzResult)
     # Same enablement rule as the claude lane: this lane covers the openai and
     # openai-codex providers plus the codex agent; only when ALL are off is nothing
     # instantiated and nothing requested.
     # Providers of TYPE openai (review finding): the hub instantiates every enabled
     # entry and dispatches on provider.type, so a custom profile's OpenAI provider may
-    # live under any key ('gpt-prod'); the codex agent is the lane's CLI half.
+    # live under any key ('gpt-prod'); the codex agent is the lane's CLI half,
+    # discovered by its configured command (any entry running `codex`).
     $openAiProviders = Get-AIHubEnabledProvidersOfType -Type 'openai'
-    $codexAgentEnabled = Test-AIHubCliAgentEnabled 'codex'
+    $codexAgentEnabled = Test-AIHubCliAgentEnabled -Command 'codex' -CanonicalName 'codex'
     $configState = Get-AIHubConfigState
     $noApiProviders = ($null -ne $openAiProviders -and $openAiProviders.Count -eq 0)
     if ($noApiProviders -and -not $codexAgentEnabled) {
@@ -591,44 +747,30 @@ function Test-CodexLane {
     # every provider's credential independently (review finding) — one satisfied
     # variable never covers a sibling. The built-in pair applies only when the config
     # is unreadable or only the codex agent is enabled (the CLI honors OPENAI_API_KEY).
-    $credentialPairs = [System.Collections.Generic.List[object]]::new()
-    $blankEnvEntries = [System.Collections.Generic.List[object]]::new()
-    $nameSource = "fallback defaults; $($configState.Label) was unreadable"
-    if ($null -ne $openAiProviders) {
-        $derived = Get-ProviderCredentialPairs -Entries @($openAiProviders) -DefaultEnv 'OPENAI_API_KEY'
-        $credentialPairs = $derived.Pairs
-        $blankEnvEntries = $derived.Blank
-        $nameSource = if ($credentialPairs.Count -gt 0) { "$($configState.Label) providers.{$(@($openAiProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type openai; OPENAI_API_KEY where the property is absent)" }
-        elseif ($blankEnvEntries.Count -gt 0) { "$($configState.Label) providers.{$(@($openAiProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type openai; every enabled entry declares a blank apiKeyEnv, so the hub reads no variable for them)" }
-        else { "fallback default; only the codex agent is enabled in $($configState.Label)" }
-    }
-    # The built-in pair applies only when NO enabled entry exists to derive from — a
-    # profile whose entries all declare a blank apiKeyEnv reads no variable at all.
-    if ($credentialPairs.Count -eq 0 -and $blankEnvEntries.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; SecretName = 'openai-api-key' }) }
-    $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
-    $blankVerdict = Get-BlankEnvVerdict -Blank @($blankEnvEntries) -Type 'openai' -DefaultEnv 'OPENAI_API_KEY' -ConfigLabel $configState.Label
-    if ($blankVerdict.HasDefects) {
+    $eval = Get-ApiKeyLaneEvaluation -Providers $openAiProviders -Type 'openai' -DefaultEnv 'OPENAI_API_KEY' -DefaultSecret 'openai-api-key' `
+        -ConfigLabel $configState.Label -CliOnlySource "fallback default; only the codex agent is enabled in $($configState.Label)" -AzResult $AzResult
+    if ($eval.HasDefects) {
         return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'config' `
-            -Detail $blankVerdict.DefectDetail -OwnerAction $blankVerdict.DefectAction
+            -Detail $eval.DefectDetail -OwnerAction $eval.DefectAction
     }
+    $nameSource = $eval.NameSource
+    $envList = $eval.EnvList
 
-    # Name-only presence checks; values never enter a variable. EVERY distinct enabled
-    # provider variable must hold a value before the lane is ready.
-    $missingPairs = @($credentialPairs | Where-Object { -not (Test-EnvValue $_.Env) })
-    $setEnvNames = @($credentialPairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
-    if ($missingPairs.Count -eq 0) {
-        if ($credentialPairs.Count -eq 0) {
-            # Every enabled entry is vault-resolved in-process: nothing for this
-            # doctor to check or repair, and nothing it can prove either — said so.
+    # EVERY distinct enabled provider variable must hold a value — and every
+    # blank-apiKeyEnv entry's secret must be PROVEN present in the vault (names
+    # listed, values never read) — before the lane is ready (review finding: having
+    # nothing to inspect is not readiness).
+    if ($eval.Satisfied) {
+        if (-not $eval.HasEnvPairs) {
             return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'keyvault-inprocess' `
-                -Detail "no environment variable to check (declared by $nameSource)$($blankVerdict.Note)"
+                -Detail "no environment variable to check (declared by $nameSource)$($eval.ProvenNote)"
         }
         return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'env-token' `
-            -Detail "$envList set (declared by $nameSource; names checked only, values never read) — covers the codex CLI and every enabled openai/openai-codex API provider$($blankVerdict.Note)"
+            -Detail "$envList set (declared by $nameSource; names checked only, values never read) — covers the codex CLI and every enabled openai/openai-codex API provider$($eval.ProvenNote)"
     }
-    $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
-    $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }
-    $vaultPull = (@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env }) -join '; ')
+    $missingList = $eval.MissingList
+    $partialNote = $eval.PartialNote
+    $vaultPull = $eval.VaultPull
 
     # The codex CLI login is an alternative for the CLI agent only, and only when the
     # profile enables that agent — a CLI login never covers the API providers.
@@ -650,22 +792,23 @@ function Test-CodexLane {
             # The CLI is fine; the enabled API providers are not — they read their own
             # variables and a CLI login never covers them (connect-all.ps1 honesty rule).
             return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'env-token' `
-                -Detail "codex login status exits 0 (the codex CLI is authenticated), but the enabled openai/openai-codex API providers read $missingList (declared by $nameSource), which is not set$partialNote — a CLI login does not cover them" `
+                -Detail "codex login status exits 0 (the codex CLI is authenticated), but the enabled openai/openai-codex API providers need $missingList (declared by $nameSource), which is not satisfied$partialNote — a CLI login does not cover them" `
                 -OwnerAction $vaultPull
         }
         return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'device-code' `
-            -Detail ("codex login status exits $($probe.ExitCode) and $missingList is not set (declared by $nameSource)$partialNote — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
+            -Detail ("codex login status exits $($probe.ExitCode) and $missingList is not satisfied (declared by $nameSource)$partialNote — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
             -OwnerAction "codex login   # or: $vaultPull"
     }
 
     $cliNote = if ($codexAgentEnabled) { 'no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' } else { "the codex agent is disabled in $($configState.Label), so only the API key applies" }
     return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'env-token' `
-        -Detail "$missingList (declared by $nameSource) is not set$partialNote and $cliNote" `
+        -Detail "$missingList (declared by $nameSource) is not satisfied$partialNote and $cliNote" `
         -OwnerAction "$vaultPull   # after az login"
 }
 
 # --- claude lane -----------------------------------------------------------------------
 function Test-ClaudeLane {
+    param([Parameter(Mandatory)][pscustomobject]$AzResult)
     # config/aihub.json is the contract for which env var the anthropic provider reads
     # (CLAUDE.md rule: config carries env-var NAMES only) — so the doctor reads the
     # config instead of hardcoding the name, falling back only if it is unreadable.
@@ -675,7 +818,7 @@ function Test-ClaudeLane {
     # asks for nothing: with no enabled anthropic-type provider AND the claude-cli
     # agent off, a credential demand would surface as a false owner step downstream.
     $anthropicProviders = Get-AIHubEnabledProvidersOfType -Type 'anthropic'
-    $claudeAgentEnabled = Test-AIHubCliAgentEnabled 'claude-cli'
+    $claudeAgentEnabled = Test-AIHubCliAgentEnabled -Command 'claude' -CanonicalName 'claude-cli'
     $configState = Get-AIHubConfigState
     $configLabel = $configState.Label
     if ($null -ne $anthropicProviders -and $anthropicProviders.Count -eq 0 -and -not $claudeAgentEnabled) {
@@ -687,41 +830,29 @@ function Test-ClaudeLane {
     # declares no apiKeyEnv); every pair must hold a value, because CreateAll resolves
     # each provider's credential independently. The built-in pair applies when the
     # config is unreadable or only the claude-cli agent is enabled (the CLI reads it).
-    $credentialPairs = [System.Collections.Generic.List[object]]::new()
-    $blankEnvEntries = [System.Collections.Generic.List[object]]::new()
-    $nameSource = "fallback defaults; $configLabel was unreadable"
-    if ($null -ne $anthropicProviders) {
-        $derived = Get-ProviderCredentialPairs -Entries @($anthropicProviders) -DefaultEnv 'ANTHROPIC_API_KEY'
-        $credentialPairs = $derived.Pairs
-        $blankEnvEntries = $derived.Blank
-        $nameSource = if ($credentialPairs.Count -gt 0) { "$configLabel providers.{$(@($anthropicProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type anthropic; ANTHROPIC_API_KEY where the property is absent)" }
-        elseif ($blankEnvEntries.Count -gt 0) { "$configLabel providers.{$(@($anthropicProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type anthropic; every enabled entry declares a blank apiKeyEnv, so the hub reads no variable for them)" }
-        else { "fallback default; only the claude-cli agent is enabled in $configLabel" }
-    }
-    # The built-in pair applies only when NO enabled entry exists to derive from.
-    if ($credentialPairs.Count -eq 0 -and $blankEnvEntries.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'ANTHROPIC_API_KEY'; SecretName = 'anthropic-api-key' }) }
-    $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
-    $blankVerdict = Get-BlankEnvVerdict -Blank @($blankEnvEntries) -Type 'anthropic' -DefaultEnv 'ANTHROPIC_API_KEY' -ConfigLabel $configLabel
-    if ($blankVerdict.HasDefects) {
+    $eval = Get-ApiKeyLaneEvaluation -Providers $anthropicProviders -Type 'anthropic' -DefaultEnv 'ANTHROPIC_API_KEY' -DefaultSecret 'anthropic-api-key' `
+        -ConfigLabel $configLabel -CliOnlySource "fallback default; only the claude-cli agent is enabled in $configLabel" -AzResult $AzResult
+    if ($eval.HasDefects) {
         return New-LaneResult -Lane 'claude' -State 'needs-owner' -Method 'config' `
-            -Detail $blankVerdict.DefectDetail -OwnerAction $blankVerdict.DefectAction
+            -Detail $eval.DefectDetail -OwnerAction $eval.DefectAction
     }
+    $nameSource = $eval.NameSource
+    $envList = $eval.EnvList
 
     # Non-whitespace, not mere existence (same rule as the service-principal gate):
-    # an empty variable lights nothing. Values are read only for this test.
-    $missingPairs = @($credentialPairs | Where-Object { -not (Test-EnvValue $_.Env) })
-    $setEnvNames = @($credentialPairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
-    if ($missingPairs.Count -eq 0) {
-        if ($credentialPairs.Count -eq 0) {
+    # an empty variable lights nothing; an in-process secret counts only once its
+    # name is listed in the vault (review finding). Values are never read.
+    if ($eval.Satisfied) {
+        if (-not $eval.HasEnvPairs) {
             return New-LaneResult -Lane 'claude' -State 'ready' -Method 'keyvault-inprocess' `
-                -Detail "no environment variable to check (declared by $nameSource)$($blankVerdict.Note)"
+                -Detail "no environment variable to check (declared by $nameSource)$($eval.ProvenNote)"
         }
         return New-LaneResult -Lane 'claude' -State 'ready' -Method 'env-token' `
-            -Detail ("$envList set (declared by $nameSource; names checked only, values never read) — covers the claude cliAgent and every enabled anthropic provider$($blankVerdict.Note)")
+            -Detail ("$envList set (declared by $nameSource; names checked only, values never read) — covers the claude cliAgent and every enabled anthropic provider$($eval.ProvenNote)")
     }
-    $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
-    $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }
-    $vaultPull = (@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env }) -join '; ')
+    $missingList = $eval.MissingList
+    $partialNote = $eval.PartialNote
+    $vaultPull = $eval.VaultPull
 
     $claudeCmd = Get-CliCommand -Name 'claude'
     $cliNote = if (-not $claudeAgentEnabled) { "the claude-cli agent is disabled in $configLabel, so only the API key applies" }
@@ -729,7 +860,7 @@ function Test-ClaudeLane {
     else { 'no claude CLI on PATH either (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs it)' }
     $ownerAction = if ($claudeAgentEnabled) { "claude setup-token   # mint a long-lived token for the CLI (owner action); or: $vaultPull" } else { "$vaultPull   # after az login" }
     return New-LaneResult -Lane 'claude' -State 'needs-owner' -Method 'env-token' `
-        -Detail ("$missingList (declared by $nameSource) is not set$partialNote; $cliNote") `
+        -Detail ("$missingList (declared by $nameSource) is not satisfied$partialNote; $cliNote") `
         -OwnerAction $ownerAction
 }
 
@@ -737,7 +868,7 @@ function Test-ClaudeLane {
 function Test-CopilotLane {
     param([Parameter(Mandatory)][pscustomobject]$GhResult)
 
-    if (-not (Test-AIHubCliAgentEnabled 'copilot')) {
+    if (-not (Test-AIHubCliAgentEnabled -Command 'copilot' -CanonicalName 'copilot')) {
         return New-LaneResult -Lane 'copilot' -State 'disabled' -Method 'config' -Gates $false `
             -Detail ("the copilot agent is disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — the hub never launches it, so no login is needed and none is requested")
     }
@@ -846,12 +977,22 @@ try {
     Write-Report ''
     Write-Report '-- Lanes (automatic-first; interactive fixes are reported owner actions, never run) --'
 
+    # An explicitly selected profile the hub cannot load aborts BEFORE any lane runs
+    # (review finding): diagnosing — and with -Apply, repairing — an invented default
+    # profile would report success for a hub that will not start, or demand
+    # credentials for lanes that profile never enables.
+    $activeConfig = Get-AIHubConfigState
+    if ($activeConfig.Explicit -and $null -eq $activeConfig.Config) {
+        throw "AIHUB_CONFIG selects '$($activeConfig.Path)' but it is missing, unparseable, or not a JSON object — the hub cannot load that profile either; fix the file or unset AIHUB_CONFIG (no lane was diagnosed or repaired)"
+    }
+
     $ghResult = Test-GhLane
+    $azResult = Test-AzLane
     $laneResults = @(
         $ghResult
-        Test-AzLane
-        Test-CodexLane
-        Test-ClaudeLane
+        $azResult
+        Test-CodexLane -AzResult $azResult
+        Test-ClaudeLane -AzResult $azResult
         Test-CopilotLane -GhResult $ghResult
         Test-LinearLane
         Test-SlackLane
