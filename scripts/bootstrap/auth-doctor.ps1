@@ -579,6 +579,47 @@ function Get-ConfigDefectVerdict {
 # only — `az keyvault secret list` returns names, never values — under the az lane's
 # own login; anything short of a listed name is unproven and reported as the exact
 # prerequisite that is missing (vault URI, az lane, RBAC, or the secret itself).
+# The credential DefaultAzureCredential will select for the hub (review findings): the
+# environment service principal (AZURE_CLIENT_ID + secret / certificate), then a
+# workload identity, then a managed identity, and only then the az CLI cache — and a
+# configured credential that FAILS is not rescued by the next one. Names checked only.
+# Raw IMDS (review finding): a VM's system-assigned or attached identity declares
+# NEITHER IDENTITY_ENDPOINT nor MSI_ENDPOINT — ManagedIdentityCredential reaches it at
+# http://169.254.169.254/metadata/identity/oauth2/token and DefaultAzureCredential takes
+# that token BEFORE the az CLI cache, so the absence of the variables proves nothing.
+# IMDS is probed the way the SDK does it (Metadata: true, hard 2 s, never through a
+# proxy, no redirects); a 200 carrying a token means the hub authenticates as that
+# identity. The token is discarded, never stored; the result is cached per run.
+$script:imdsManagedIdentity = $null
+function Test-RawImdsManagedIdentity {
+    if ($null -ne $script:imdsManagedIdentity) { return $script:imdsManagedIdentity }
+    $imdsHasIdentity = $false
+    try {
+        $imdsReply = Invoke-WebRequest -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auth-doctor'
+        if ([int]$imdsReply.StatusCode -eq 200) {
+            $imdsJson = $null
+            try { $imdsJson = ([string]$imdsReply.Content) | ConvertFrom-Json } catch { $imdsJson = $null }
+            $imdsHasIdentity = ($null -ne $imdsJson -and $imdsJson.PSObject.Properties['access_token'] -and -not [string]::IsNullOrWhiteSpace([string]$imdsJson.access_token))
+            $imdsJson = $null
+        }
+        $imdsReply = $null
+    }
+    catch { $imdsHasIdentity = $false }
+    $script:imdsManagedIdentity = $imdsHasIdentity
+    return $script:imdsManagedIdentity
+}
+function Get-HubCredentialKind {
+    if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
+    if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { return 'workload identity' }
+    if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
+    if (Test-RawImdsManagedIdentity) { return 'managed identity' }
+    return 'az-cli'
+}
+# Where a selected managed identity comes from, for the report text only.
+function Get-HubManagedIdentitySource {
+    if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'IDENTITY_ENDPOINT / MSI_ENDPOINT' }
+    return 'raw IMDS at 169.254.169.254 — a system-assigned or VM-attached identity, no endpoint variable'
+}
 # The canonical Key Vault ORIGIN only (review finding): SecretResolver builds its
 # SecretClient from AZURE_KEY_VAULT_URI as written, so https://<vault>.vault.azure.net:444/
 # or a URI carrying a path, query, fragment or userinfo is a different (unusable)
@@ -643,10 +684,7 @@ function Get-BlankVaultChecks {
     $principalGap = ''
     $principalHint = ''
     if (-not $blocker -and $listed.Count -gt 0) {
-        $hubCredential = if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { 'environment service principal' }
-        elseif ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { 'workload identity' }
-        elseif ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { 'managed identity' }
-        else { 'az-cli' }
+        $hubCredential = Get-HubCredentialKind
         if ($hubCredential -ne 'az-cli') {
             $accountProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'show', '--query', '{type:user.type,name:user.name}', '--output', 'json', '--only-show-errors')
             $account = $null
@@ -655,7 +693,7 @@ function Get-BlankVaultChecks {
             $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
             $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
             if (-not $samePrincipal) {
-                $principalGap = "listed as enabled in vault '$vaultName' for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
+                $principalGap = "listed as enabled in vault '$vaultName' for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { " ($(Get-HubManagedIdentitySource))" } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
                 $principalHint = "grant that principal 'Key Vault Secrets User' on vault '$vaultName' (az role assignment create — owner-gated), or run pwsh scripts/bootstrap/auth-doctor.ps1 -Apply so az logs in as the same service principal, then re-run"
             }
         }

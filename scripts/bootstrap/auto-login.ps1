@@ -565,11 +565,43 @@ function Invoke-HeliosAutoLogin {
     # a workload identity, then a managed identity, and only then the az CLI cache the
     # az lane established — and a configured credential that FAILS is not rescued by
     # the next one. Names checked only.
+    # Raw IMDS (review finding): a VM's system-assigned or attached identity declares
+    # NEITHER IDENTITY_ENDPOINT nor MSI_ENDPOINT — ManagedIdentityCredential reaches it
+    # at http://169.254.169.254/metadata/identity/oauth2/token, and DefaultAzureCredential
+    # takes that token BEFORE it considers the az CLI cache, so the absence of the two
+    # variables proves nothing. IMDS is probed the way the SDK does it (Metadata: true,
+    # hard 2 s, never through a proxy, no redirects); a 200 carrying a token means the
+    # hub authenticates as that identity. The token is discarded, never stored; the
+    # result is cached for this run in a hashtable of the enclosing scope (no residue).
+    $hubProbeCache = @{}
+    function Test-RawImdsManagedIdentity {
+        if ($hubProbeCache.ContainsKey('imds')) { return $hubProbeCache['imds'] }
+        $imdsHasIdentity = $false
+        try {
+            $imdsReply = Invoke-WebRequest -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            if ([int]$imdsReply.StatusCode -eq 200) {
+                $imdsJson = $null
+                try { $imdsJson = ([string]$imdsReply.Content) | ConvertFrom-Json } catch { $imdsJson = $null }
+                $imdsHasIdentity = ($null -ne $imdsJson -and $imdsJson.PSObject.Properties['access_token'] -and -not [string]::IsNullOrWhiteSpace([string]$imdsJson.access_token))
+                $imdsJson = $null
+            }
+            $imdsReply = $null
+        }
+        catch { $imdsHasIdentity = $false }
+        $hubProbeCache['imds'] = $imdsHasIdentity
+        return $imdsHasIdentity
+    }
     function Get-HubCredentialKind {
         if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
         if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { return 'workload identity' }
         if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
+        if (Test-RawImdsManagedIdentity) { return 'managed identity' }
         return 'az-cli'
+    }
+    # Where a selected managed identity comes from, for the report text only.
+    function Get-HubManagedIdentitySource {
+        if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'IDENTITY_ENDPOINT / MSI_ENDPOINT' }
+        return 'raw IMDS at 169.254.169.254 — a system-assigned or VM-attached identity, no endpoint variable'
     }
     # True when az is logged in as the very service principal the environment
     # configures (auth-doctor -Apply's repair leaves it so): the az lane's success is
@@ -1099,7 +1131,7 @@ function Invoke-HeliosAutoLogin {
                     $hubCredentialKind = Get-HubCredentialKind
                     $hubPrincipalGap = ''
                     if ($hubCredentialKind -ne 'az-cli' -and -not (Test-HubPrincipalIsAzLogin -Kind $hubCredentialKind)) {
-                        $hubPrincipalGap = "DefaultAzureCredential will authenticate as the $hubCredentialKind$(if ($hubCredentialKind -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) ahead of the az CLI cache, and a failure there is not rescued by the az login — that principal's access to the Azure OpenAI resource is not proven from here"
+                        $hubPrincipalGap = "DefaultAzureCredential will authenticate as the $hubCredentialKind$(if ($hubCredentialKind -eq 'managed identity') { " ($(Get-HubManagedIdentitySource))" } else { ' (AZURE_CLIENT_ID)' }) ahead of the az CLI cache, and a failure there is not rescued by the az login — that principal's access to the Azure OpenAI resource is not proven from here"
                     }
                     if ($endpointProblems.Count -eq 0 -and -not $hubPrincipalGap) {
                         $fedBy = if ($hubCredentialKind -eq 'az-cli') { 'the az CLI login the az lane established' } else { "the $hubCredentialKind, which the az lane is logged in as" }
@@ -1391,7 +1423,7 @@ function Invoke-HeliosAutoLogin {
     if (-not $blankSecretBlocker -and $blankSecretNames.Count -gt 0) {
         $hubCredential = Get-HubCredentialKind
         if ($hubCredential -ne 'az-cli' -and -not (Test-HubPrincipalIsAzLogin -Kind $hubCredential)) {
-            $blankSecretPrincipalGap = "listed for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
+            $blankSecretPrincipalGap = "listed for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { " ($(Get-HubManagedIdentitySource))" } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
         }
     }
     foreach ($blank in $blankGhModels) {

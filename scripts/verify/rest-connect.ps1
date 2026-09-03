@@ -205,6 +205,14 @@ function Test-TrustedAzureEndpoint {
         $Warnings.Add("ignored $Label — host '$($parsedEndpoint.Host)' is not a known Azure endpoint ($($KnownHosts -join ', ')); approve a custom cloud through 'az cloud register' + 'az cloud set' instead")
         return ''
     }
+    # Canonical ORIGIN only (review finding): a known host on another port
+    # (https://login.microsoftonline.com:444), or with userinfo, a path, query or
+    # fragment, is a different origin from the one that was approved — the
+    # client-secret exchange and the bearer probes go only to the bare https origin.
+    if (-not $parsedEndpoint.IsDefaultPort -or $parsedEndpoint.UserInfo -or $parsedEndpoint.Query -or $parsedEndpoint.Fragment -or $parsedEndpoint.AbsolutePath -notin '', '/') {
+        $Warnings.Add("ignored $Label — not a canonical https origin (default port, no userinfo, path, query or fragment; value never echoed); no credential is sent to it")
+        return ''
+    }
     return $parsedEndpoint.GetLeftPart([System.UriPartial]::Authority)
 }
 # Managed-identity endpoints have a DOCUMENTED shape (review findings): App Service /
@@ -259,9 +267,11 @@ function Resolve-AzureCloudEndpoints {
     foreach ($candidate in @('AZURE_RESOURCE_MANAGER_ENDPOINT', 'ARM_ENDPOINT')) {
         $value = ([string][Environment]::GetEnvironmentVariable($candidate)).Trim()
         if (-not $value) { continue }
-        $armLabel = $candidate
+        # The walk continues past a REJECTED value (review finding): a broken preferred
+        # override must not silence a usable ARM_ENDPOINT behind it — only an accepted
+        # origin ends the walk (each rejection is already a warning above).
         $arm = Test-TrustedAzureEndpoint -Value $value -KnownHosts $script:knownAzureArmHosts -Label $candidate -Warnings $warnings
-        break
+        if ($arm) { $armLabel = $candidate; break }
     }
     $name = ''
     $source = ''
@@ -1446,6 +1456,7 @@ if ($DryRun) {
     }
     foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
+    Write-Host '           an override counts only as the canonical https origin of a known cloud host (default port, no userinfo, path, query or fragment); a rejected AZURE_RESOURCE_MANAGER_ENDPOINT still lets ARM_ENDPOINT be tried'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
