@@ -210,7 +210,11 @@ function Invoke-HeliosAutoLogin {
     # (review finding): an explicitly selected profile the hub cannot load must
     # abort before auth-doctor -Apply mutates anything on its behalf.
     $aihubConfigExplicit = Test-EnvValue 'AIHUB_CONFIG'
-    $aihubConfigPath = if ($aihubConfigExplicit) { ([string]$env:AIHUB_CONFIG).Trim() }
+    # The value is used LITERALLY (review finding): AIHubService.ResolveConfigPath
+    # hands the environment string to File.OpenRead untouched, so a padded value is
+    # a different (and for the hub, missing) file — trimming here would inspect a
+    # profile the product never loads.
+    $aihubConfigPath = if ($aihubConfigExplicit) { [string]$env:AIHUB_CONFIG }
     else { Join-Path $RepoRoot 'config/aihub.json' }
     # The label auth-doctor uses for the same file, so shared action text dedupes.
     $aihubConfigLabel = if ($aihubConfigExplicit) { 'AIHUB_CONFIG' } else { 'config/aihub.json' }
@@ -254,6 +258,58 @@ function Invoke-HeliosAutoLogin {
     if ($aihubProvidersShape) {
         throw "the active config ($aihubConfigPath) declares `"providers`" as $aihubProvidersShape, not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile); aborting before any lane runs"
     }
+    # Shape and member helpers shared by every check below.
+    function Get-JsonShapeName {
+        param([AllowNull()]$Value)
+        if ($null -eq $Value) { return 'null' }
+        if ($Value -is [System.Array]) { return 'an array' }
+        if ($Value -is [System.Management.Automation.PSCustomObject]) { return 'an object' }
+        if ($Value -is [string]) { return 'a JSON string' }
+        if ($Value -is [bool]) { return 'a JSON boolean' }
+        return 'a JSON number'
+    }
+    # Typed MEMBERS bind too (review finding): System.Text.Json rejects a JSON string
+    # where AIHubOptions declares a bool or an int ("enabled": "false",
+    # "timeoutSeconds": "300"), a non-integer number for an int, and null for a
+    # non-nullable bool / int; a string member accepts a string or null, except the
+    # two the hub dereferences unconditionally (provider type in CreateAll,
+    # learning.localPath in Load). Checked with the serializer's own contract —
+    # property names case-insensitive, unknown members ignored — before any repair.
+    $memberSchemas = @{
+        provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+        cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+        learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+    }
+    function Get-JsonMemberProblem {
+        param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
+        foreach ($member in $Object.PSObject.Properties) {
+            $kind = $Schema[$member.Name]   # hashtable keys compare case-insensitively, like the serializer
+            if (-not $kind) { continue }    # unknown members (e.g. $comment) are ignored by the serializer
+            $v = $member.Value
+            $ok = switch ($kind) {
+                'string' { ($null -eq $v) -or ($v -is [string]) }
+                'string!' { $v -is [string] }
+                'bool' { $v -is [bool] }
+                'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+            }
+            if (-not $ok) {
+                $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+                return "$Path.$($member.Name) is $(Get-JsonShapeName $v), but AIHubOptions binds it as $expected"
+            }
+        }
+        return ''
+    }
+    function Get-JsonChainProblem {
+        # The raw array is taken untyped (a [object[]] parameter would reject a chain
+        # whose only element is null before the check could name it).
+        param([AllowNull()]$ChainValue, [Parameter(Mandatory)][string]$Path)
+        $chainIndex = 0
+        foreach ($element in @($ChainValue)) {
+            if ($element -isnot [string]) { return "$Path[$chainIndex] is $(Get-JsonShapeName $element), but every routing chain element is a provider name (string) the hub looks up" }
+            $chainIndex++
+        }
+        return ''
+    }
     if ($aihubParseOk -and $aihubProvidersDeclared) {
         # Every ENTRY must be an object too (review finding): the table binds as
         # Dictionary<string, ProviderOptions>, a JSON null deserializes as a null
@@ -264,6 +320,8 @@ function Invoke-HeliosAutoLogin {
                 $entryShape = if ($null -eq $entryProp.Value) { 'null' } elseif ($entryProp.Value -is [System.Array]) { 'an array' } else { "a $($entryProp.Value.GetType().Name)" }
                 throw "the active config ($aihubConfigPath) declares providers.$($entryProp.Name) as $entryShape, not an object — ProviderFactory.CreateAll dereferences every provider entry and the hub fails to start; remove the entry or declare an object; aborting before any lane runs"
             }
+            $memberProblem = Get-JsonMemberProblem -Object $entryProp.Value -Schema $memberSchemas.provider -Path "providers.$($entryProp.Name)"
+            if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
         }
     }
     # The OTHER typed sections the hub binds (review finding): AIHubOptions declares
@@ -276,13 +334,6 @@ function Invoke-HeliosAutoLogin {
     # enumerates cliAgents and dereferences every element — so each of those fails
     # the hub too. Checked here, before the az lane can mutate anything on behalf of a
     # hub that cannot start. An ABSENT section keeps its initializer and is fine.
-    function Get-JsonShapeName {
-        param([AllowNull()]$Value)
-        if ($null -eq $Value) { return 'null' }
-        if ($Value -is [System.Array]) { return 'an array' }
-        if ($Value -is [System.Management.Automation.PSCustomObject]) { return 'an object' }
-        return "a $($Value.GetType().Name)"
-    }
     if ($aihubParseOk) {
         $sectionRules = @(
             [pscustomobject]@{ Name = 'cliAgents'; Wanted = 'an array'; Binds = 'List<CliAgentOptions>'; Fails = 'ProviderFactory.CreateAll enumerates it' }
@@ -304,14 +355,25 @@ function Invoke-HeliosAutoLogin {
                 if ($null -eq $cliElement -or $cliElement -isnot [System.Management.Automation.PSCustomObject]) {
                     throw "the active config ($aihubConfigPath) declares cliAgents[$cliIndex] as $(Get-JsonShapeName $cliElement), not an object — AIHubOptions binds each element as a CliAgentOptions object and ProviderFactory.CreateAll dereferences every one, so the hub fails to load or start on the file; remove the element or declare an object; aborting before any lane runs"
                 }
+                $memberProblem = Get-JsonMemberProblem -Object $cliElement -Schema $memberSchemas.cliAgent -Path "cliAgents[$cliIndex]"
+                if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
                 $cliIndex++
             }
+        }
+        $learningProp = $aihubParsed.PSObject.Properties['learning']
+        if ($null -ne $learningProp) {
+            $memberProblem = Get-JsonMemberProblem -Object $learningProp.Value -Schema $memberSchemas.learning -Path 'learning'
+            if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
         }
         $routingProp = $aihubParsed.PSObject.Properties['routing']
         if ($null -ne $routingProp) {
             $chainProp = $routingProp.Value.PSObject.Properties['defaultChain']
             if ($null -ne $chainProp -and (Get-JsonShapeName $chainProp.Value) -ne 'an array') {
                 throw "the active config ($aihubConfigPath) declares routing.defaultChain as $(Get-JsonShapeName $chainProp.Value), not an array — AIHubOptions binds it as a list of provider names and RoutingTableView reads it, so the hub fails to load or start on the file; aborting before any lane runs"
+            }
+            if ($null -ne $chainProp) {
+                $chainProblem = Get-JsonChainProblem -ChainValue $chainProp.Value -Path 'routing.defaultChain'
+                if ($chainProblem) { throw "the active config ($aihubConfigPath) declares $chainProblem — AIHubOptions.Load (System.Text.Json) rejects a non-string, and a null name crashes the routing lookup; fix the value; aborting before any lane runs" }
             }
             $tableProp = $routingProp.Value.PSObject.Properties['taskRouting']
             if ($null -ne $tableProp) {
@@ -322,6 +384,8 @@ function Invoke-HeliosAutoLogin {
                     if ((Get-JsonShapeName $chainEntry.Value) -ne 'an array') {
                         throw "the active config ($aihubConfigPath) declares routing.taskRouting.$($chainEntry.Name) as $(Get-JsonShapeName $chainEntry.Value), not an array — every task type binds to a list of provider names and RoutingTableView reads each, so the hub fails to load or start on the file; aborting before any lane runs"
                     }
+                    $chainProblem = Get-JsonChainProblem -ChainValue $chainEntry.Value -Path "routing.taskRouting.$($chainEntry.Name)"
+                    if ($chainProblem) { throw "the active config ($aihubConfigPath) declares $chainProblem — AIHubOptions.Load (System.Text.Json) rejects a non-string, and a null name crashes the routing lookup; fix the value; aborting before any lane runs" }
                 }
             }
         }
@@ -443,10 +507,13 @@ function Invoke-HeliosAutoLogin {
         if ([string]::IsNullOrWhiteSpace($declared)) { return '' }
         return $declared
     }
-    # The public GitHub Models endpoint is exactly the HTTPS origin of models.github.ai
-    # (review finding): the factory rejects a non-http(s) URL outright, and an http://
-    # origin would carry the exported credential in cleartext — neither may receive a
-    # GitHub token. Returns { Public; Note; Host }.
+    # The public GitHub Models endpoint is exactly the canonical HTTPS origin of
+    # models.github.ai — default port included (review findings): the factory rejects
+    # a non-http(s) URL outright, an http:// origin would carry the exported credential
+    # in cleartext, and https://models.github.ai:444 is a different origin the client
+    # would actually send requests to — none may receive a GitHub token. Returns
+    # { Public; Note; Host } where Host carries a non-default port so the family label
+    # of such an origin differs from the public one.
     function Test-PublicModelsOrigin {
         param([AllowEmptyString()][string]$BaseUrl = '')
         if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return [pscustomobject]@{ Public = $true; Note = ''; Host = 'models.github.ai' } }
@@ -455,15 +522,21 @@ function Invoke-HeliosAutoLogin {
             return [pscustomobject]@{ Public = $false; Note = 'not an absolute URL — ProviderFactory.CreateGitHubModels reports the provider unconfigured'; Host = '' }
         }
         $hostIsPublic = $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
-        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic) { return [pscustomobject]@{ Public = $true; Note = ''; Host = $parsedOrigin.Host } }
-        if ($parsedOrigin.Scheme -eq 'http' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it'; Host = $parsedOrigin.Host } }
-        if ($parsedOrigin.Scheme -notin 'http', 'https') { return [pscustomobject]@{ Public = $false; Note = "'$($parsedOrigin.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)"; Host = $parsedOrigin.Host } }
-        return [pscustomobject]@{ Public = $false; Note = ''; Host = $parsedOrigin.Host }
+        $originHost = if ($parsedOrigin.IsDefaultPort) { $parsedOrigin.Host } else { "$($parsedOrigin.Host):$($parsedOrigin.Port)" }
+        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic -and $parsedOrigin.IsDefaultPort) { return [pscustomobject]@{ Public = $true; Note = ''; Host = $parsedOrigin.Host } }
+        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = "port $($parsedOrigin.Port) on the public host — a different origin from the public GitHub Models service (default port only), so no GitHub credential is exported for it"; Host = $originHost } }
+        if ($parsedOrigin.Scheme -eq 'http' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it'; Host = $originHost } }
+        if ($parsedOrigin.Scheme -notin 'http', 'https') { return [pscustomobject]@{ Public = $false; Note = "'$($parsedOrigin.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)"; Host = $originHost } }
+        return [pscustomobject]@{ Public = $false; Note = ''; Host = $originHost }
     }
-    # Enabled CLI agents that read a FIXED variable (review finding): any enabled
-    # cliAgents entry whose command leaf is `codex` reads OPENAI_API_KEY and one running
-    # `claude` reads ANTHROPIC_API_KEY (the canonical name counts only for an entry
-    # declaring no command) — auth-doctor's discovery rule. Unreadable config → none.
+    # Enabled CLI agents that read a FIXED variable (review findings): any enabled
+    # cliAgents entry whose command leaf is `codex` reads OPENAI_API_KEY, one running
+    # `claude` reads ANTHROPIC_API_KEY, and one running `copilot` or `gh` inherits
+    # GH_TOKEN / GITHUB_TOKEN as its GitHub credential (the canonical name counts only
+    # for an entry declaring no command) — auth-doctor's discovery rule. The GitHub
+    # CLI readers make those two variables GitHub-family, so a provider of another
+    # family mapping a vault secret to them is an incompatible sharing and nothing is
+    # pulled into the variable the CLI process would inherit. Unreadable config → none.
     function Get-CliOwnedEnvReaders {
         $found = [System.Collections.Generic.List[object]]::new()
         if (-not $aihubParseOk -or -not $aihubParsed.PSObject.Properties['cliAgents'] -or $null -eq $aihubParsed.cliAgents) { return $found.ToArray() }
@@ -477,6 +550,10 @@ function Invoke-HeliosAutoLogin {
             $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
             if ($key -eq 'codex') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; Env = 'OPENAI_API_KEY' }) }
             elseif ($key -in 'claude', 'claude-cli') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; Env = 'ANTHROPIC_API_KEY' }) }
+            elseif ($key -in 'copilot', 'gh', 'gh-models') {
+                $cliType = if ($key -eq 'copilot') { 'copilot-cli' } else { 'gh-cli' }
+                foreach ($ghEnvName in @('GH_TOKEN', 'GITHUB_TOKEN')) { $found.Add([pscustomobject]@{ Name = $agentName; Type = $cliType; Family = 'github'; Env = $ghEnvName }) }
+            }
         }
         return $found.ToArray()
     }
@@ -590,10 +667,12 @@ function Invoke-HeliosAutoLogin {
             }
             $pairIndex[$pairKey].Members.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; EndpointEnv = $memberEndpointEnv })
         }
-        # CLI-owned variables join the reader map (review finding): an enabled codex
-        # agent reads the fixed OPENAI_API_KEY and an enabled claude agent reads
-        # ANTHROPIC_API_KEY (auth-doctor's CLI-half rule), so a Models entry pointed at
-        # either name shares it with a non-GitHub consumer and never gets the gh export.
+        # CLI-owned variables join the reader map (review findings): an enabled codex
+        # agent reads the fixed OPENAI_API_KEY, an enabled claude agent ANTHROPIC_API_KEY
+        # (auth-doctor's CLI-half rule), so a Models entry pointed at either name shares
+        # it with a non-GitHub consumer and never gets the gh export; an enabled copilot
+        # / gh agent inherits GH_TOKEN / GITHUB_TOKEN, so a non-GitHub provider mapping
+        # a vault secret to those names is an incompatible sharing and the pull is blocked.
         foreach ($cliReader in @(Get-CliOwnedEnvReaders)) {
             if (-not $envReaders.ContainsKey($cliReader.Env)) { $envReaders[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
             $envReaders[$cliReader.Env].Add([pscustomobject]@{ Name = $cliReader.Name; Type = $cliReader.Type; Family = $cliReader.Family })

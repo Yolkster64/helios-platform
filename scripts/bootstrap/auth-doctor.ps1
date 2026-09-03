@@ -192,7 +192,9 @@ function Get-AIHubConfigState {
     $path = Join-Path $repoRoot 'config' 'aihub.json'
     $explicit = $false
     if (-not [string]::IsNullOrWhiteSpace([string]$env:AIHUB_CONFIG)) {
-        $path = ([string]$env:AIHUB_CONFIG).Trim()
+        # Literal value (review finding): AIHubService.ResolveConfigPath hands it to
+        # File.OpenRead untouched, so a padded value names a different file for the hub.
+        $path = [string]$env:AIHUB_CONFIG
         $label = 'AIHUB_CONFIG'
         $explicit = $true
     }
@@ -243,7 +245,42 @@ function Get-AIHubConfigState {
     if ($null -ne $config) {
         $shapeOf = {
             param($v)
-            if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } else { "a $($v.GetType().Name)" }
+            if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } elseif ($v -is [string]) { 'a JSON string' } elseif ($v -is [bool]) { 'a JSON boolean' } else { 'a JSON number' }
+        }
+        # Typed MEMBERS bind too (review finding): System.Text.Json rejects a JSON
+        # string where AIHubOptions declares a bool or an int, a non-integer number for
+        # an int, and null for a non-nullable bool / int; a string member accepts a
+        # string or null, except provider.type (CreateAll dereferences it) and
+        # learning.localPath (Load dereferences it). Same rules as auto-login's step 0.
+        $memberSchemas = @{
+            provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+            cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+            learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+        }
+        $memberProblem = {
+            param($obj, [hashtable]$schema, [string]$path)
+            foreach ($m in $obj.PSObject.Properties) {
+                $kind = $schema[$m.Name]
+                if (-not $kind) { continue }
+                $v = $m.Value
+                $ok = switch ($kind) {
+                    'string' { ($null -eq $v) -or ($v -is [string]) }
+                    'string!' { $v -is [string] }
+                    'bool' { $v -is [bool] }
+                    'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+                }
+                if (-not $ok) {
+                    $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+                    return "$path.$($m.Name) as $(& $shapeOf $v), not $expected"
+                }
+            }
+            return ''
+        }
+        $chainProblem = {
+            param([object[]]$chain, [string]$path)
+            $i = 0
+            foreach ($e in $chain) { if ($e -isnot [string]) { return "$path[$i] as $(& $shapeOf $e), not a provider name (string)" }; $i++ }
+            return ''
         }
         foreach ($rule in @(@{ Name = 'cliAgents'; Wanted = 'an array' }, @{ Name = 'routing'; Wanted = 'an object' }, @{ Name = 'learning'; Wanted = 'an object' })) {
             $sectionProp = $config.PSObject.Properties[$rule.Name]
@@ -254,23 +291,41 @@ function Get-AIHubConfigState {
                 $cliIndex = 0
                 foreach ($element in @($sectionProp.Value)) {
                     if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $sectionShape = "cliAgents[$cliIndex] as $(& $shapeOf $element), not an object"; break }
+                    $sectionShape = & $memberProblem $element $memberSchemas.cliAgent "cliAgents[$cliIndex]"
+                    if ($sectionShape) { break }
                     $cliIndex++
                 }
+            }
+            elseif ($rule.Name -eq 'learning') {
+                $sectionShape = & $memberProblem $sectionProp.Value $memberSchemas.learning 'learning'
             }
             elseif ($rule.Name -eq 'routing') {
                 $chainProp = $sectionProp.Value.PSObject.Properties['defaultChain']
                 if ($null -ne $chainProp -and (& $shapeOf $chainProp.Value) -ne 'an array') { $sectionShape = "routing.defaultChain as $(& $shapeOf $chainProp.Value), not an array" }
+                elseif ($null -ne $chainProp) { $sectionShape = & $chainProblem @($chainProp.Value) 'routing.defaultChain' }
                 $tableProp = $sectionProp.Value.PSObject.Properties['taskRouting']
                 if (-not $sectionShape -and $null -ne $tableProp) {
                     if ((& $shapeOf $tableProp.Value) -ne 'an object') { $sectionShape = "routing.taskRouting as $(& $shapeOf $tableProp.Value), not an object" }
                     else {
                         foreach ($chainEntry in $tableProp.Value.PSObject.Properties) {
                             if ((& $shapeOf $chainEntry.Value) -ne 'an array') { $sectionShape = "routing.taskRouting.$($chainEntry.Name) as $(& $shapeOf $chainEntry.Value), not an array"; break }
+                            $sectionShape = & $chainProblem @($chainEntry.Value) "routing.taskRouting.$($chainEntry.Name)"
+                            if ($sectionShape) { break }
                         }
                     }
                 }
             }
             if ($sectionShape) { break }
+        }
+        # Provider entry members, once the table itself is well-shaped.
+        if (-not $sectionShape -and -not $providersShape -and -not $providersNull) {
+            $providersProp = $config.PSObject.Properties['providers']
+            if ($null -ne $providersProp -and $null -ne $providersProp.Value) {
+                foreach ($entryProp in $providersProp.Value.PSObject.Properties) {
+                    $sectionShape = & $memberProblem $entryProp.Value $memberSchemas.provider "providers.$($entryProp.Name)"
+                    if ($sectionShape) { break }
+                }
+            }
         }
     }
     $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull; ProvidersShape = $providersShape; SectionShape = $sectionShape }
@@ -347,8 +402,10 @@ function Test-PublicModelsOrigin {
     if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return [pscustomobject]@{ Public = $true; Host = 'models.github.ai' } }
     $parsedOrigin = $null
     if (-not [uri]::TryCreate($BaseUrl.Trim(), [System.UriKind]::Absolute, [ref]$parsedOrigin)) { return [pscustomobject]@{ Public = $false; Host = '' } }
-    $isPublic = ($parsedOrigin.Scheme -eq 'https' -and $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase))
-    return [pscustomobject]@{ Public = $isPublic; Host = $parsedOrigin.Host }
+    # Default port only (review finding): https://models.github.ai:444 is another origin.
+    $isPublic = ($parsedOrigin.Scheme -eq 'https' -and $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) -and $parsedOrigin.IsDefaultPort)
+    $originHost = if ($parsedOrigin.IsDefaultPort) { $parsedOrigin.Host } else { "$($parsedOrigin.Host):$($parsedOrigin.Port)" }
+    return [pscustomobject]@{ Public = $isPublic; Host = $originHost }
 }
 # Variable-level config defects across EVERY enabled consumer (review findings): built
 # once from the whole providers table PLUS the enabled CLI agents (a codex entry reads
@@ -408,12 +465,20 @@ function Get-AIHubVariableDefects {
                 if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
                 $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
                 $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
-                $cliReader = $null
-                if ($key -eq 'codex') { $cliReader = [pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; SecretName = ''; Env = 'OPENAI_API_KEY' } }
-                elseif ($key -in 'claude', 'claude-cli') { $cliReader = [pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; SecretName = ''; Env = 'ANTHROPIC_API_KEY' } }
-                if ($null -eq $cliReader) { continue }
-                if (-not $readers.ContainsKey($cliReader.Env)) { $readers[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
-                $readers[$cliReader.Env].Add($cliReader)
+                $cliReaders = @()
+                if ($key -eq 'codex') { $cliReaders = @([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; SecretName = ''; Env = 'OPENAI_API_KEY' }) }
+                elseif ($key -in 'claude', 'claude-cli') { $cliReaders = @([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; SecretName = ''; Env = 'ANTHROPIC_API_KEY' }) }
+                # copilot / gh inherit GH_TOKEN and GITHUB_TOKEN as GitHub credentials
+                # (review finding): a non-GitHub provider mapping a secret to either name
+                # is an incompatible sharing, so auto-login pulls nothing into it.
+                elseif ($key -in 'copilot', 'gh', 'gh-models') {
+                    $cliType = if ($key -eq 'copilot') { 'copilot-cli' } else { 'gh-cli' }
+                    $cliReaders = @(@('GH_TOKEN', 'GITHUB_TOKEN') | ForEach-Object { [pscustomobject]@{ Name = $agentName; Type = $cliType; Family = 'github'; SecretName = ''; Env = $_ } })
+                }
+                foreach ($cliReader in $cliReaders) {
+                    if (-not $readers.ContainsKey($cliReader.Env)) { $readers[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
+                    $readers[$cliReader.Env].Add($cliReader)
+                }
             }
         }
         foreach ($envName in @($readers.Keys)) {
@@ -1317,7 +1382,7 @@ try {
         throw "the active config ($($activeConfig.Path)) declares `"providers`" as $($activeConfig.ProvidersShape) — AIHubOptions binds that section as a dictionary of provider objects and ProviderFactory.CreateAll dereferences every entry, so the hub fails on the file; declare objects only (or omit the section for a CLI-only profile) (no lane was diagnosed or repaired)"
     }
     if ($activeConfig.SectionShape) {
-        throw "the active config ($($activeConfig.Path)) declares $($activeConfig.SectionShape) — AIHubOptions binds cliAgents as a list of objects and routing / learning as objects (defaultChain a list, taskRouting a dictionary of lists), and the hub dereferences each, so it fails to load or start on the file; fix the section or omit it for its defaults (no lane was diagnosed or repaired)"
+        throw "the active config ($($activeConfig.Path)) declares $($activeConfig.SectionShape) — AIHubOptions.Load (System.Text.Json) cannot bind the file to the hub's typed options, or the hub dereferences the value, so it fails to load or start; fix the section or value, or omit the section for its defaults (no lane was diagnosed or repaired)"
     }
 
     $ghResult = Test-GhLane

@@ -504,6 +504,37 @@ function Get-CliOwnedEnvNames {
     return $names.ToArray()
 }
 
+# Typed MEMBERS of the hub config (review finding): System.Text.Json rejects a JSON
+# string where AIHubOptions declares a bool or an int, a non-integer number for an
+# int, and null for a non-nullable bool / int; a string member accepts a string or
+# null, except provider.type and learning.localPath, which the hub dereferences.
+# Same rules as auto-login.ps1's step 0 and auth-doctor's Get-AIHubConfigState.
+$script:aihubMemberSchemas = @{
+    provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+    cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+    learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+}
+function Get-AIHubMemberProblem {
+    param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
+    foreach ($member in $Object.PSObject.Properties) {
+        $kind = $Schema[$member.Name]
+        if (-not $kind) { continue }
+        $v = $member.Value
+        $ok = switch ($kind) {
+            'string' { ($null -eq $v) -or ($v -is [string]) }
+            'string!' { $v -is [string] }
+            'bool' { $v -is [bool] }
+            'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+        }
+        if (-not $ok) {
+            $shape = if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } elseif ($v -is [string]) { 'a JSON string' } elseif ($v -is [bool]) { 'a JSON boolean' } else { 'a JSON number' }
+            $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+            return "$Path.$($member.Name) is $shape, not $expected"
+        }
+    }
+    return ''
+}
+
 function Get-ConfiguredGitHubModelsEnvs {
     # Enabled providers of TYPE github-models (review finding: ProviderFactory
     # dispatches on provider.type, never on a canonical key), each contributing its
@@ -518,7 +549,9 @@ function Get-ConfiguredGitHubModelsEnvs {
     # qualifying provider → no candidate from config at all.
     $default = 'GITHUB_MODELS_TOKEN'
     $explicitProfile = Test-EnvValue 'AIHUB_CONFIG'
-    $configPath = if ($explicitProfile) { ([string]$env:AIHUB_CONFIG).Trim() }
+    # Literal value (review finding): AIHubService.ResolveConfigPath hands it to
+    # File.OpenRead untouched, so a padded value names a different file for the hub.
+    $configPath = if ($explicitProfile) { [string]$env:AIHUB_CONFIG }
     else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
     # A profile the hub cannot load contributes NO candidate (review findings): the
     # built-in name would be an invented profile's, and the dry-run walk says why.
@@ -557,8 +590,13 @@ function Get-ConfiguredGitHubModelsEnvs {
                 $cliIndex = 0
                 foreach ($element in @($sectionValue)) {
                     if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $badElement = "cliAgents[$cliIndex] is $(if ($null -eq $element) { 'null' } else { 'a non-object' })"; break }
+                    $badElement = Get-AIHubMemberProblem -Object $element -Schema $script:aihubMemberSchemas.cliAgent -Path "cliAgents[$cliIndex]"
+                    if ($badElement) { break }
                     $cliIndex++
                 }
+            }
+            elseif ($shape -eq $rule.Wanted -and $rule.Name -eq 'learning') {
+                $badElement = Get-AIHubMemberProblem -Object $sectionValue -Schema $script:aihubMemberSchemas.learning -Path 'learning'
             }
             if ($shape -ne $rule.Wanted -or $badElement) {
                 $what = if ($badElement) { $badElement } else { "`"$($rule.Name)`" is $shape, not $($rule.Wanted)" }
@@ -583,6 +621,11 @@ function Get-ConfiguredGitHubModelsEnvs {
             # says so instead of quietly skipping the entry.
             if ($null -eq $prov -or $prov -isnot [System.Management.Automation.PSCustomObject]) {
                 $script:configuredModelsNote = "(the active config '$configPath' declares providers.$($prop.Name) as $(if ($null -eq $prov) { 'null' } else { 'a non-object' }) — ProviderFactory.CreateAll dereferences every provider entry and the hub fails to start; no config candidate)"
+                return @()
+            }
+            $entryProblem = Get-AIHubMemberProblem -Object $prov -Schema $script:aihubMemberSchemas.provider -Path "providers.$($prop.Name)"
+            if ($entryProblem) {
+                $script:configuredModelsNote = "(the active config '$configPath' declares $entryProblem — AIHubOptions.Load cannot bind it and the hub fails to load or start; no config candidate)"
                 return @()
             }
             $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim().ToLowerInvariant()
@@ -612,7 +655,8 @@ function Get-ConfiguredGitHubModelsEnvs {
                     $isPublicModels = $false
                     $parsedBase = $null
                     if ([uri]::TryCreate($baseUrl, [System.UriKind]::Absolute, [ref]$parsedBase)) {
-                        $isPublicModels = ($parsedBase.Scheme -eq 'https' -and $parsedBase.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase))
+                        # Default port only (review finding): https://models.github.ai:444 is another origin.
+                        $isPublicModels = ($parsedBase.Scheme -eq 'https' -and $parsedBase.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) -and $parsedBase.IsDefaultPort)
                     }
                 }
             }

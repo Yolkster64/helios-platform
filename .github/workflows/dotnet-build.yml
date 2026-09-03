@@ -61,18 +61,23 @@ jobs:
           # non-ASCII or special characters ("src/caf\303\251.cs"), so the anchored
           # pattern below would miss them and skip the required build. NUL-terminated
           # output is never quoted; tr turns it back into one path per line.
-          changed="$(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" | tr '\0' '\n')"
-          printf '%s\n' "$changed"
+          # NUL records all the way (review finding): a pathname may itself contain a
+          # newline, so turning the -z stream back into lines would split such a path
+          # and match (or miss) its fragments instead of the path. mapfile -d '' reads
+          # one NUL-terminated record per element; each record is matched whole, and
+          # the listing is printed with %q so an embedded newline stays visible.
+          mapfile -d '' changed < <(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          printf '%q\n' "${changed[@]}"
           pattern='^(src/|tests/|config/|scripts/build/|HELIOS\.sln$|Directory\.Packages\.props$|Directory\.Build\.props$|Directory\.Build\.targets$|nuget\.config$|\.github/workflows/dotnet-build\.yml$)|\.csproj$'
-          # Here-string, not printf|grep -q (review finding): grep -q exits at the
-          # first match, and under the runner's default pipefail shell a SIGPIPE'd
-          # printf would flip this if to the false branch — skipping the REQUIRED
-          # build on exactly the large PRs that most need it.
-          if grep -qE "$pattern" <<< "$changed"; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Whole-record match in the shell (review findings): no pipeline, so no
+          # SIGPIPE'd producer can flip the verdict under the runner's pipefail shell,
+          # and [[ =~ ]] anchors ^ and $ at the ends of the whole path, never at an
+          # embedded newline.
+          relevant=false
+          for path in "${changed[@]}"; do
+            if [[ "$path" =~ $pattern ]]; then relevant=true; break; fi
+          done
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 
   build-and-test:
     name: Build solution & run tests

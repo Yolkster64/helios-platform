@@ -40,20 +40,27 @@ jobs:
           # non-ASCII or special characters ("infra/r\303\251gion.bicep"), so the
           # anchored pattern below would miss them and skip the required infra checks.
           # NUL-terminated output is never quoted; tr turns it back into one path per line.
-          changed="$(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" | tr '\0' '\n')"
-          printf '%s\n' "$changed"
+          # NUL records all the way (review finding): a pathname may itself contain a
+          # newline, so turning the -z stream back into lines would split such a path
+          # and match (or miss) its fragments instead of the path. mapfile -d '' reads
+          # one NUL-terminated record per element; each record is matched whole, and
+          # the listing is printed with %q so an embedded newline stays visible.
+          mapfile -d '' changed < <(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          printf '%q\n' "${changed[@]}"
           # The workflow file itself is a relevant path (review finding): a PR that
           # changes only this validator would otherwise skip all three required infra
           # jobs, so a broken validator change would never be exercised before merge
           # (the .NET detector includes its own workflow the same way).
-          # Here-string, not printf|grep -q (review finding): grep -q exits at the
-          # first match; under the runner's default pipefail a SIGPIPE'd printf
-          # would flip this if to the false branch and skip the required checks.
-          if grep -qE '^(infra/|\.github/workflows/infra-validate\.yml$)' <<< "$changed"; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Whole-record match in the shell (review findings): no pipeline, so no
+          # SIGPIPE'd producer can flip the verdict under the runner's pipefail shell,
+          # and [[ =~ ]] anchors ^ and $ at the ends of the whole path, never at an
+          # embedded newline.
+          pattern='^(infra/|\.github/workflows/infra-validate\.yml$)'
+          relevant=false
+          for path in "${changed[@]}"; do
+            if [[ "$path" =~ $pattern ]]; then relevant=true; break; fi
+          done
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
 
   bicep-validate:
     runs-on: ubuntu-latest
