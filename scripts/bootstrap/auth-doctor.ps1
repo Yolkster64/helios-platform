@@ -354,7 +354,9 @@ function Get-AIHubEnabledProvidersOfType {
     foreach ($prop in $cfg.providers.PSObject.Properties) {
         $prov = $prop.Value
         if ($null -eq $prov) { continue }
-        $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim() } else { '' }
+        # Exactly as ProviderFactory.Create dispatches (review finding): case-folded,
+        # never trimmed — a padded type is an unknown provider that reads no key.
+        $provType = if ($prov.PSObject.Properties['type']) { [string]$prov.type } else { '' }
         if (-not $provType.Equals($Type, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
         if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
         $found.Add([pscustomobject]@{ Name = $prop.Name; Value = $prov })
@@ -430,7 +432,7 @@ function Get-AIHubVariableDefects {
                 $prov = $prop.Value
                 if ($null -eq $prov) { continue }
                 if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
-                $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim().ToLowerInvariant() } else { '' }
+                $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).ToLowerInvariant() } else { '' }   # untrimmed, like the factory
                 $typeDefault = switch ($provType) {
                     'openai' { 'OPENAI_API_KEY' }
                     'anthropic' { 'ANTHROPIC_API_KEY' }

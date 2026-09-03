@@ -557,6 +557,31 @@ function Invoke-HeliosAutoLogin {
         }
         return $found.ToArray()
     }
+    # The credential DefaultAzureCredential will select for the hub (review findings):
+    # the environment service principal (AZURE_CLIENT_ID + secret / certificate), then
+    # a workload identity, then a managed identity, and only then the az CLI cache the
+    # az lane established — and a configured credential that FAILS is not rescued by
+    # the next one. Names checked only.
+    function Get-HubCredentialKind {
+        if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
+        if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { return 'workload identity' }
+        if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
+        return 'az-cli'
+    }
+    # True when az is logged in as the very service principal the environment
+    # configures (auth-doctor -Apply's repair leaves it so): the az lane's success is
+    # then that credential's success. A managed identity can never be matched this way.
+    function Test-HubPrincipalIsAzLogin {
+        param([Parameter(Mandatory)][string]$Kind)
+        if ($Kind -eq 'managed identity' -or -not $azCmd) { return $false }
+        $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+        if ([int]$LASTEXITCODE -ne 0) { return $false }
+        $account = $null
+        try { $account = ($accountLines -join '') | ConvertFrom-Json } catch { return $false }
+        $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
+        $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
+        return ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+    }
     # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
     # so they are reported (and, without a secret path, handed to the owner as the
     # config defect they are) instead of being silently defaulted.
@@ -589,7 +614,10 @@ function Invoke-HeliosAutoLogin {
             # finding): a lane the hub will not instantiate must not have its
             # credential pulled into the process.
             if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
-            $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim().ToLowerInvariant() } else { '' }
+            # Exactly as ProviderFactory.Create dispatches (review finding): case-folded,
+            # never trimmed — " openai " is an UNKNOWN type the hub instantiates as an
+            # unconfigured agent that reads no key, so nothing may be pulled for it.
+            $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).ToLowerInvariant() } else { '' }
             # Only the four keyed types read a key (review finding): ProviderFactory's
             # ollama, azure-foundry-agent and unknown-type paths never call
             # SecretResolver, so an incidental apiKeyEnv / apiKeySecretName on such an
@@ -598,6 +626,13 @@ function Invoke-HeliosAutoLogin {
             # (its secret would be pulled into the process for nothing and reported
             # as lighting a provider that never reads it). Said once, then ignored.
             if ($provType -notin 'openai', 'anthropic', 'github-models', 'azure-openai') {
+                if ($provType.Trim() -in 'openai', 'anthropic', 'github-models', 'azure-openai') {
+                    # A keyed type with surrounding whitespace is the one misconfiguration
+                    # here that looks intentional: name it as the config fix it is.
+                    Add-Step -Step "provider:$($provProp.Name)" -State 'needs-owner' -Detail "declares type '$([string]$prov.type)' with surrounding whitespace — ProviderFactory dispatches on the exact (case-folded) type, so the hub treats it as an unknown provider that reads no key; nothing is pulled or exported for it"
+                    Add-OwnerAction -Text "fix providers.$($provProp.Name).type in ${aihubConfigLabel}: '$([string]$prov.type)' has surrounding whitespace — ProviderFactory compares the type exactly (case-folded only), so the entry is an unknown provider until it reads '$($provType.Trim())'"
+                    continue
+                }
                 $incidentalFields = @()
                 if ($prov.PSObject.Properties['apiKeyEnv'] -and -not [string]::IsNullOrWhiteSpace([string]$prov.apiKeyEnv)) { $incidentalFields += 'apiKeyEnv' }
                 if ($prov.PSObject.Properties['apiKeySecretName'] -and -not [string]::IsNullOrWhiteSpace([string]$prov.apiKeySecretName)) { $incidentalFields += 'apiKeySecretName' }
@@ -825,7 +860,7 @@ function Invoke-HeliosAutoLogin {
     foreach ($ghProp in $aihubProviders.PSObject.Properties) {
         $ghProv = $ghProp.Value
         if ($null -eq $ghProv -or -not $ghProv.PSObject.Properties['type'] -or
-            -not ([string]$ghProv.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            -not ([string]$ghProv.type).Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }   # untrimmed, like the factory
         if ($ghProv.PSObject.Properties['enabled'] -and $ghProv.enabled -eq $false) { continue }
         $ghDeclared = Get-DeclaredApiKeyEnv $ghProv
         if ($null -ne $ghDeclared -and $ghDeclared -eq '') { continue }
@@ -1025,8 +1060,25 @@ function Invoke-HeliosAutoLogin {
                         }
                         $endpointValue = ''
                     }
-                    if ($endpointProblems.Count -eq 0) {
-                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by the az lane this run established) when no key resolves, and its endpoint variable $($pair.EndpointEnvs -join ' / ') holds an absolute http(s) URL (name and shape checked only); no owner action"
+                    # The az lane proves the fallback only when DefaultAzureCredential
+                    # would actually reach the az CLI cache (review finding): an
+                    # environment service principal, workload identity or managed
+                    # identity is selected AHEAD of it and a failure there is final. az
+                    # logged in as that same service principal (auth-doctor -Apply's
+                    # repair) is the one case where the lane's success is the
+                    # credential's; everything else is unverifiable from here.
+                    $hubCredentialKind = Get-HubCredentialKind
+                    $hubPrincipalGap = ''
+                    if ($hubCredentialKind -ne 'az-cli' -and -not (Test-HubPrincipalIsAzLogin -Kind $hubCredentialKind)) {
+                        $hubPrincipalGap = "DefaultAzureCredential will authenticate as the $hubCredentialKind$(if ($hubCredentialKind -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) ahead of the az CLI cache, and a failure there is not rescued by the az login — that principal's access to the Azure OpenAI resource is not proven from here"
+                    }
+                    if ($endpointProblems.Count -eq 0 -and -not $hubPrincipalGap) {
+                        $fedBy = if ($hubCredentialKind -eq 'az-cli') { 'the az CLI login the az lane established' } else { "the $hubCredentialKind, which the az lane is logged in as" }
+                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by $fedBy) when no key resolves, and its endpoint variable $($pair.EndpointEnvs -join ' / ') holds an absolute http(s) URL (name and shape checked only); no owner action"
+                    }
+                    elseif ($endpointProblems.Count -eq 0) {
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID) and its endpoint variable holds an absolute http(s) URL, but $hubPrincipalGap"
+                        Add-OwnerAction -Text "prove the hub's Entra principal for $($pair.Lights): grant the $hubCredentialKind 'Cognitive Services OpenAI User' on the Azure OpenAI resource (az role assignment create — owner-gated) and, for a service principal, run pwsh scripts/bootstrap/auth-doctor.ps1 -Apply so az logs in as that same principal; or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established; or store the API key instead"
                     }
                     else {
                         Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID), but only with a usable endpoint: $($endpointProblems -join '; ') — the provider stays unconfigured until that is fixed"
@@ -1308,21 +1360,9 @@ function Invoke-HeliosAutoLogin {
     # proves nothing about the hub's access, so presence is reported unverifiable.
     $blankSecretPrincipalGap = ''
     if (-not $blankSecretBlocker -and $blankSecretNames.Count -gt 0) {
-        $hubCredential = if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { 'environment service principal' }
-        elseif ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { 'workload identity' }
-        elseif ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { 'managed identity' }
-        else { 'az-cli' }
-        if ($hubCredential -ne 'az-cli') {
-            $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
-            $accountExit = [int]$LASTEXITCODE
-            $account = $null
-            if ($accountExit -eq 0) { try { $account = ($accountLines -join '') | ConvertFrom-Json } catch { $account = $null } }
-            $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
-            $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
-            $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
-            if (-not $samePrincipal) {
-                $blankSecretPrincipalGap = "listed for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
-            }
+        $hubCredential = Get-HubCredentialKind
+        if ($hubCredential -ne 'az-cli' -and -not (Test-HubPrincipalIsAzLogin -Kind $hubCredential)) {
+            $blankSecretPrincipalGap = "listed for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
         }
     }
     foreach ($blank in $blankGhModels) {

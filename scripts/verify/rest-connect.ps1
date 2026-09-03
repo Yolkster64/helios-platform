@@ -69,8 +69,9 @@ identity, detail, ownerAction}):
                               available-but-needs-az otherwise.
             3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER), else MSI_ENDPOINT
                               (+MSI_SECRET) — each honored only on a documented local
-                              token-endpoint shape, and a rejected IDENTITY_ENDPOINT
-                              falls through to MSI_ENDPOINT; else the IMDS endpoint (169.254.169.254,
+                              token-endpoint shape, and an IDENTITY_ENDPOINT that is
+                              rejected or yields no token falls through to MSI_ENDPOINT;
+                              else the IMDS endpoint (169.254.169.254,
                               Metadata:true) with a HARD 2-second no-proxy timeout so a
                               non-Azure host fails fast instead of hanging.
             4. az cached      `az account get-access-token --resource-type arm` (stderr
@@ -514,6 +515,32 @@ $script:aihubMemberSchemas = @{
     cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
     learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
 }
+function Get-AIHubRoutingProblem {
+    param([Parameter(Mandatory)]$Routing)
+    $shapeOf = { param($v) if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } elseif ($v -is [string]) { 'a JSON string' } elseif ($v -is [bool]) { 'a JSON boolean' } else { 'a JSON number' } }
+    $chainProblem = {
+        param($chainValue, [string]$path)
+        $i = 0
+        foreach ($e in @($chainValue)) { if ($e -isnot [string]) { return "$path[$i] is $(& $shapeOf $e), not a provider name (string)" }; $i++ }
+        return ''
+    }
+    $chainProp = $Routing.PSObject.Properties['defaultChain']
+    if ($null -ne $chainProp) {
+        if ((& $shapeOf $chainProp.Value) -ne 'an array') { return "routing.defaultChain is $(& $shapeOf $chainProp.Value), not an array" }
+        $problem = & $chainProblem $chainProp.Value 'routing.defaultChain'
+        if ($problem) { return $problem }
+    }
+    $tableProp = $Routing.PSObject.Properties['taskRouting']
+    if ($null -ne $tableProp) {
+        if ((& $shapeOf $tableProp.Value) -ne 'an object') { return "routing.taskRouting is $(& $shapeOf $tableProp.Value), not an object" }
+        foreach ($entry in $tableProp.Value.PSObject.Properties) {
+            if ((& $shapeOf $entry.Value) -ne 'an array') { return "routing.taskRouting.$($entry.Name) is $(& $shapeOf $entry.Value), not an array" }
+            $problem = & $chainProblem $entry.Value "routing.taskRouting.$($entry.Name)"
+            if ($problem) { return $problem }
+        }
+    }
+    return ''
+}
 function Get-AIHubMemberProblem {
     param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
     foreach ($member in $Object.PSObject.Properties) {
@@ -598,6 +625,11 @@ function Get-ConfiguredGitHubModelsEnvs {
             elseif ($shape -eq $rule.Wanted -and $rule.Name -eq 'learning') {
                 $badElement = Get-AIHubMemberProblem -Object $sectionValue -Schema $script:aihubMemberSchemas.learning -Path 'learning'
             }
+            elseif ($shape -eq $rule.Wanted -and $rule.Name -eq 'routing') {
+                # Nested routing members too (review finding): defaultChain binds a
+                # List<string>, taskRouting a Dictionary<string, List<string>>.
+                $badElement = Get-AIHubRoutingProblem -Routing $sectionValue
+            }
             if ($shape -ne $rule.Wanted -or $badElement) {
                 $what = if ($badElement) { $badElement } else { "`"$($rule.Name)`" is $shape, not $($rule.Wanted)" }
                 $script:configuredModelsNote = "(the active config '$configPath' declares $what — AIHubOptions cannot bind it and the hub fails to load or start; no config candidate)"
@@ -628,7 +660,9 @@ function Get-ConfiguredGitHubModelsEnvs {
                 $script:configuredModelsNote = "(the active config '$configPath' declares $entryProblem — AIHubOptions.Load cannot bind it and the hub fails to load or start; no config candidate)"
                 return @()
             }
-            $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim().ToLowerInvariant()
+            # Exactly as ProviderFactory.Create dispatches (review finding): case-folded,
+            # never trimmed — a padded type is an unknown provider that reads no key.
+            $provType = ([string](Get-OptionalProperty $prov 'type' '')).ToLowerInvariant()
             $typeDefault = switch ($provType) {
                 'github-models' { $default }
                 'openai' { 'OPENAI_API_KEY' }
@@ -1147,85 +1181,90 @@ function Test-AzureLane {
     # A declared endpoint is validated BEFORE any header exists (review finding): the
     # identity header / secret is read only after the URL passed the local-host shape
     # check, so a bad value never sees a credential-bearing request.
-    $miEndpointRejected = $false
-    $miDeclared = $false
-    if (Test-EnvValue 'IDENTITY_ENDPOINT') {
-        $miDeclared = $true
-        $miKind = 'identity-endpoint'
-        $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:IDENTITY_ENDPOINT) -Label 'IDENTITY_ENDPOINT' -Notes $chainNotes
-        if ($miBase) {
-            $miHeaders = @{}
-            if (Test-Path env:IDENTITY_HEADER) { $miHeaders['X-IDENTITY-HEADER'] = [string]$env:IDENTITY_HEADER }
-            $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString($armResource))"
-            $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+    # No-token outcomes are chain evidence (review findings): a declared endpoint's
+    # 401/403 is a rejected credential (configuration, not an outage); anything else —
+    # unreachable, another status, 200 without access_token — is recorded and the
+    # chain moves on. Returns $true only for the rejected-credential case.
+    function Add-ManagedIdentityOutcomeNote {
+        param([Parameter(Mandatory)][string]$Kind, [Parameter(Mandatory)]$Probe)
+        if ($Probe.Status -eq 200) {
+            $chainNotes.Add("managed-identity ($Kind): endpoint 200 but no access_token field (raw body never echoed)")
+            return $false
         }
-        else { $miEndpointRejected = $true }
+        $miStatus = if ($Probe.Status -eq 0) { 'unreachable (expected off-Azure; failed fast)' } else { "HTTP $($Probe.Status)" }
+        if ($Kind -ne 'imds' -and $Probe.Status -in 401, 403) {
+            # Only a DECLARED endpoint (IDENTITY_ENDPOINT / MSI_ENDPOINT) can reject the
+            # request for a configuration reason; raw IMDS non-200s stay what they are
+            # (a non-Azure host or a metadata firewall — not a credential source).
+            $chainNotes.Add("managed-identity ($Kind): endpoint answered $miStatus — the identity header/secret (IDENTITY_HEADER / MSI_SECRET) or the endpoint wiring is rejected; this is configuration, not an outage")
+            return $true
+        }
+        $chainNotes.Add("managed-identity ($Kind): $miStatus")
+        return $false
     }
-    # The legacy MSI_ENDPOINT is tried whenever the preferred endpoint is absent OR was
-    # rejected (review finding): a stale or planted IDENTITY_ENDPOINT next to a valid
-    # MSI_ENDPOINT must not discard the usable identity source — the rejection stays
-    # in the chain notes, and the legacy endpoint passes the same shape check first.
-    if ($null -eq $miProbe -and (Test-EnvValue 'MSI_ENDPOINT')) {
+    # Every DECLARED endpoint is tried in order until one yields a token (review
+    # findings): a preferred IDENTITY_ENDPOINT that fails the shape check OR answers
+    # without a token (unreachable, non-200, 200 without access_token) must not silence
+    # a working legacy MSI_ENDPOINT. IMDS is probed only when neither is declared.
+    $miDeclared = $false
+    $miUsableDeclared = $false   # at least one declared endpoint passed the shape check
+    $miKind = ''
+    $miToken = ''
+    $miProbe = $null
+    $miCandidates = @(
+        [pscustomobject]@{ Kind = 'identity-endpoint'; Env = 'IDENTITY_ENDPOINT'; HeaderEnv = 'IDENTITY_HEADER'; HeaderName = 'X-IDENTITY-HEADER'; ApiVersion = '2019-08-01'; Metadata = $false }
+        [pscustomobject]@{ Kind = 'msi-endpoint'; Env = 'MSI_ENDPOINT'; HeaderEnv = 'MSI_SECRET'; HeaderName = 'Secret'; ApiVersion = '2017-09-01'; Metadata = $true }
+    )
+    foreach ($miCandidate in $miCandidates) {
+        if (-not (Test-EnvValue $miCandidate.Env)) { continue }
         $miDeclared = $true
-        $miKind = 'msi-endpoint'
-        $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:MSI_ENDPOINT) -Label 'MSI_ENDPOINT' -Notes $chainNotes
-        if ($miBase) {
-            $miEndpointRejected = $false
-            $miHeaders = @{ Metadata = 'true' }
-            if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
-            $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString($armResource))"
-            $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        $miKind = $miCandidate.Kind
+        $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string][Environment]::GetEnvironmentVariable($miCandidate.Env)) -Label $miCandidate.Env -Notes $chainNotes
+        if (-not $miBase) { continue }   # rejected by shape: the note above is the evidence, nothing was sent
+        $miUsableDeclared = $true
+        $miHeaders = @{}
+        if ($miCandidate.Metadata) { $miHeaders['Metadata'] = 'true' }
+        $miHeaderValue = [Environment]::GetEnvironmentVariable($miCandidate.HeaderEnv)
+        if ($null -ne $miHeaderValue) { $miHeaders[$miCandidate.HeaderName] = [string]$miHeaderValue }
+        $miHeaderValue = $null
+        $miUrl = "$miBase`?api-version=$($miCandidate.ApiVersion)&resource=$([uri]::EscapeDataString($armResource))"
+        $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        $miHeaders = $null
+        if ($miProbe.Status -eq 200) {
+            $miReply = Test-ParsedJson $miProbe.Body
+            $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
+            if ($miToken) { break }
         }
-        else { $miEndpointRejected = $true }
+        if (Add-ManagedIdentityOutcomeNote -Kind $miKind -Probe $miProbe) { $miAuthRejected = $true }
     }
     if (-not $miDeclared) {
         $miKind = 'imds'
         # HARD 2s + -NoProxy: 169.254.169.254 is link-local; on a non-Azure host the
         # connect must fail fast, and a proxy must never swallow it into a long hang.
         $miProbe = Invoke-HttpProbe -Url $imdsUrl -Headers @{ Metadata = 'true' } -TimeoutSec $imdsTimeoutSec -NoProxy
-    }
-    if ($null -ne $miProbe -and $miProbe.Status -eq 200) {
-        $miReply = Test-ParsedJson $miProbe.Body
-        $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
-        if ($miToken) {
-            $tokenHeld = $true
-            $arm = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
-                -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
-            if ($arm.Outcome -eq 'ready') { return $arm.Lane }
-            if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
-            if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+        if ($miProbe.Status -eq 200) {
+            $miReply = Test-ParsedJson $miProbe.Body
+            $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
         }
-        else {
-            $chainNotes.Add("managed-identity ($miKind): endpoint 200 but no access_token field (raw body never echoed)")
-        }
+        if (-not $miToken) { [void](Add-ManagedIdentityOutcomeNote -Kind 'imds' -Probe $miProbe) }
     }
-    elseif ($null -eq $miProbe) {
-        # A rejected declared endpoint: the validation note above is the evidence and
-        # nothing was sent, so there is no status to classify.
+    if ($miToken) {
+        $tokenHeld = $true
+        $arm = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
+            -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
+        if ($arm.Outcome -eq 'ready') { return $arm.Lane }
+        if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
+        if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
     }
-    else {
-        $miStatus = if ($miProbe.Status -eq 0) { 'unreachable (expected off-Azure; failed fast)' } else { "HTTP $($miProbe.Status)" }
-        if ($miKind -ne 'imds' -and $miProbe.Status -in 401, 403) {
-            # Only a DECLARED endpoint (IDENTITY_ENDPOINT / MSI_ENDPOINT) can reject
-            # the request for a configuration reason; raw IMDS non-200s stay what they
-            # are (a non-Azure host or a metadata firewall — not a credential source).
-            $miAuthRejected = $true
-            $chainNotes.Add("managed-identity ($miKind): endpoint answered $miStatus — the identity header/secret (IDENTITY_HEADER / MSI_SECRET) or the endpoint wiring is rejected; this is configuration, not an outage")
-        }
-        else {
-            $chainNotes.Add("managed-identity ($miKind): $miStatus")
-        }
-    }
-    # A managed-identity SOURCE exists when an endpoint env var declares one (App
-    # Service / Functions hosts) or IMDS actually answered a token request with 200.
-    # Unreachable IMDS (status 0) is the normal off-Azure state, and a non-200 HTTP
-    # answer at that address (e.g. a container fabric's metadata firewall returning
-    # 403 — measured) is just as permanently unusable: neither is a credential
-    # source, and "retry later" cannot fix either.
-    # A declared endpoint that failed the local-host shape check is not a source either
-    # (review finding): nothing was contacted, so it can neither succeed nor be retried.
-    if (((-not $miEndpointRejected) -and ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT'))) -or
-        ($null -ne $miProbe -and $miProbe.Status -eq 200)) {
+    # A managed-identity SOURCE exists when a declared endpoint passed the shape check
+    # (App Service / Functions / Arc / Cloud Shell hosts) or IMDS actually answered a
+    # token request with 200. Unreachable IMDS (status 0) is the normal off-Azure
+    # state, and a non-200 HTTP answer at that address (e.g. a container fabric's
+    # metadata firewall returning 403 — measured) is just as permanently unusable:
+    # neither is a credential source, and "retry later" cannot fix either. A declared
+    # endpoint that failed the shape check is not a source either (review finding):
+    # nothing was contacted, so it can neither succeed nor be retried.
+    if ($miUsableDeclared -or ($null -ne $miProbe -and $miProbe.Status -eq 200)) {
         $credentialSourcePresent = $true
     }
 
@@ -1407,7 +1446,7 @@ if ($DryRun) {
     foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
-    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and a rejected IDENTITY_ENDPOINT still lets a valid MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
+    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
