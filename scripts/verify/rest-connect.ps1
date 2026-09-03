@@ -165,6 +165,10 @@ $script:knownAzureClouds = @(
     [pscustomobject]@{ Name = 'AzureChinaCloud';   Authority = 'login.partner.microsoftonline.cn'; Arm = 'management.chinacloudapi.cn' },
     [pscustomobject]@{ Name = 'AzureGermanCloud';  Authority = 'login.microsoftonline.de';         Arm = 'management.microsoftazure.de' }
 )
+# Populated by Get-GitHubTokenCandidates / Get-ConfiguredGitHubModelsEnvs; declared
+# here so a lane that never reaches the candidate walk still reads an empty list.
+$script:candidateNotes = [System.Collections.Generic.List[string]]::new()
+$script:nonGitHubReaderEnvs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $script:knownAzureAuthorityHosts = @($script:knownAzureClouds | ForEach-Object { $_.Authority } | Select-Object -Unique)
 $script:knownAzureArmHosts = @($script:knownAzureClouds | ForEach-Object { $_.Arm } | Select-Object -Unique)
 # The known cloud one validated origin belongs to ($null for an az-registered custom
@@ -494,6 +498,7 @@ function Get-ConfiguredGitHubModelsEnvs {
     # (review finding): the built-in name would be an invented profile's, and the
     # dry-run walk must say why instead. Only the unreadable REPO DEFAULT keeps it.
     $script:configuredModelsNote = ''
+    $script:nonGitHubReaderEnvs = [System.Collections.Generic.HashSet[string]]::new($script:EnvNameComparer)
     $unreadableExplicit = "(AIHUB_CONFIG selects '$configPath' but it is missing, unparseable, or not a JSON object — the hub cannot load it either; no config candidate)"
     try {
         $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
@@ -523,7 +528,14 @@ function Get-ConfiguredGitHubModelsEnvs {
         $entries = [System.Collections.Generic.List[object]]::new()
         foreach ($prop in $providers.PSObject.Properties) {
             $prov = $prop.Value
-            if ($null -eq $prov) { continue }
+            # A null or non-object ENTRY fails the hub too (review finding):
+            # AIHubOptions binds Dictionary<string, ProviderOptions> and CreateAll
+            # dereferences every entry, so there is no hub to probe for — the walk
+            # says so instead of quietly skipping the entry.
+            if ($null -eq $prov -or $prov -isnot [System.Management.Automation.PSCustomObject]) {
+                $script:configuredModelsNote = "(the active config '$configPath' declares providers.$($prop.Name) as $(if ($null -eq $prov) { 'null' } else { 'a non-object' }) — ProviderFactory.CreateAll dereferences every provider entry and the hub fails to start; no config candidate)"
+                return @()
+            }
             $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim().ToLowerInvariant()
             $typeDefault = switch ($provType) {
                 'github-models' { $default }
@@ -568,6 +580,14 @@ function Get-ConfiguredGitHubModelsEnvs {
         # rule (case-sensitive on Unix — review finding).
         $names = [System.Collections.Generic.List[string]]::new()
         $seenNames = [System.Collections.Generic.HashSet[string]]::new($script:EnvNameComparer)
+        # Every variable a NON-GitHub consumer reads is remembered (review finding):
+        # the two fixed candidates GH_TOKEN / GITHUB_TOKEN bypass this function's
+        # result, yet an openai/anthropic/azure-openai entry or a CLI agent may be
+        # configured to read exactly those names — their value then belongs to that
+        # service and must not be sent to api.github.com either.
+        foreach ($entry in $entries) {
+            if (-not $entry.PublicModels) { [void]$script:nonGitHubReaderEnvs.Add($entry.Env) }
+        }
         foreach ($entry in $entries) {
             if (-not $seenNames.Add($entry.Env)) { continue }
             if (@($entries | Where-Object { $script:EnvNameComparer.Equals($_.Env, $entry.Env) -and -not $_.PublicModels }).Count) { continue }
@@ -591,9 +611,21 @@ function Get-GitHubTokenCandidates {
     # Token values are read into the candidate objects here and die when the github
     # lane function returns — they are never interpolated into any reported string.
     $candidates = [System.Collections.Generic.List[object]]::new()
+    $script:candidateNotes = [System.Collections.Generic.List[string]]::new()
     # Third slot is the CONFIGURED models env (GITHUB_MODELS_TOKEN by default) —
-    # review finding: a renamed apiKeyEnv must still be probed.
-    foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN') + @(Get-ConfiguredGitHubModelsEnvs) | Select-Object -Unique)) {
+    # review finding: a renamed apiKeyEnv must still be probed. The configured list
+    # is resolved FIRST so the non-GitHub reader set it records is complete before
+    # the two fixed names are screened against it.
+    $configuredEnvs = @(Get-ConfiguredGitHubModelsEnvs)
+    foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN') + $configuredEnvs | Select-Object -Unique)) {
+        # The fixed names are screened too (review finding): a provider or CLI agent
+        # configured to read GH_TOKEN / GITHUB_TOKEN owns that value — auto-login may
+        # even have populated it from that provider's Key Vault secret — so it is that
+        # service's credential, never a GitHub candidate.
+        if ($script:nonGitHubReaderEnvs.Contains($envName)) {
+            $script:candidateNotes.Add("env:$envName is read by an enabled non-GitHub consumer in the active config (openai / anthropic / azure-openai / custom-endpoint provider or CLI agent) — its value belongs to that service and was not offered to api.github.com")
+            continue
+        }
         # Literal name through the .NET API (review finding): the env: drive would
         # expand wildcard characters in a config-derived name.
         $value = [string][Environment]::GetEnvironmentVariable($envName)
@@ -687,6 +719,10 @@ function Test-GitHubLane {
     }
 
     $attemptNotes = [System.Collections.Generic.List[string]]::new()
+    # A fixed candidate screened out because a non-GitHub consumer reads it is
+    # evidence the operator must see (review finding): the walk would otherwise
+    # look as if the variable had simply been empty.
+    foreach ($screenedNote in @($script:candidateNotes)) { $attemptNotes.Add($screenedNote) }
     $sawDefinitiveRejection = $false
     $rejectedEnvSources = [System.Collections.Generic.List[string]]::new()
     foreach ($candidate in $candidates) {
@@ -1138,7 +1174,12 @@ function Test-AzureLane {
     $chainText = $chainNotes -join '; '
     # 1. A stashed 403 diagnosis wins: some rung authenticated but lacks RBAC — the
     #    role-assignment action is the accurate remediation, never MFA.
-    if ($null -ne $armForbidden) { return $armForbidden }
+    #    …unless a certificate service principal is configured (review finding): the
+    #    principal that got 403 (managed identity / az cache) and the certificate
+    #    principal can differ, so the non-interactive certificate path is advertised
+    #    first, with the 403 evidence attached, rather than discarded behind an RBAC
+    #    grant for a principal the hub may never use.
+    if ($null -ne $armForbidden -and -not $spCertReady) { return $armForbidden }
     # 2. A configured certificate is a usable NON-INTERACTIVE repair that this
     #    report-only script deliberately does not execute (its az login rewrites the
     #    shared profile). When the chain ends without a ready lane, that repair must
@@ -1162,10 +1203,13 @@ function Test-AzureLane {
         # certificate wins the ownerAction slot (it works right now with no
         # workflow edit), and the azure/login alternative rides in the detail.
         $certOidcNote = if ($ciOidcAvailable) { ' — alternative: this Actions job can also mint an OIDC token, so adding the azure/login step before this probe works too' } else { '' }
+        # A stashed 403 rides along as evidence (review finding): if the certificate
+        # principal turns out to be the SAME identity, the RBAC grant is the real repair.
+        $certForbiddenNote = if ($null -ne $armForbidden) { " — note: another credential source ($($armForbidden.source)) already authenticated but ARM answered 403 for that principal; if the certificate service principal is the same identity, the RBAC grant (az role assignment create --assignee <principal> --role Reader --scope <scope>, owner-gated) is the repair instead" } else { '' }
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
             -Detail ("the certificate service-principal flow is configured (AZURE_CLIENT_ID/AZURE_TENANT_ID/" +
                 "AZURE_CLIENT_CERTIFICATE_PATH set) and is a non-interactive repair this report-only probe " +
-                "deliberately does not execute: $chainText$certOidcNote") `
+                "deliberately does not execute: $chainText$certOidcNote$certForbiddenNote") `
             -OwnerAction $certAction
     }
     # 3. CI OIDC available and NO rung ever held a token (and no certificate to
@@ -1236,7 +1280,9 @@ if ($DryRun) {
     $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only, and never a variable a custom-endpoint provider also reads)" }
     elseif ($script:configuredModelsNote) { $script:configuredModelsNote }
     else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
-    Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> $configuredModelsText -> gh auth token (only if gh is on PATH)"
+    $screenedFixed = @(@('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { $script:nonGitHubReaderEnvs.Contains($_) })
+    $screenedFixedText = if ($screenedFixed.Count -gt 0) { " (screened out here: env $($screenedFixed -join ' / env ') — read by an enabled non-GitHub provider or CLI agent in the active config, so never offered to api.github.com)" } else { '' }
+    Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> $configuredModelsText -> gh auth token (only if gh is on PATH)$screenedFixedText"
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
     Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'

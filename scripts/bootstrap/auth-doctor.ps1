@@ -218,6 +218,18 @@ function Get-AIHubConfigState {
         if ($null -ne $providersProp -and $null -ne $providersProp.Value -and $providersProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
             $providersShape = if ($providersProp.Value -is [System.Array]) { 'an array' } else { "a $($providersProp.Value.GetType().Name)" }
         }
+        # Every ENTRY must be an object too (review finding): a JSON null deserializes
+        # as a null entry and ProviderFactory.CreateAll dereferences provider.Enabled
+        # on each, so the hub crashes on such a file exactly like on a null table.
+        elseif ($null -ne $providersProp -and $null -ne $providersProp.Value) {
+            foreach ($entryProp in $providersProp.Value.PSObject.Properties) {
+                if ($null -eq $entryProp.Value -or $entryProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+                    $entryShape = if ($null -eq $entryProp.Value) { 'null' } elseif ($entryProp.Value -is [System.Array]) { 'an array' } else { "a $($entryProp.Value.GetType().Name)" }
+                    $providersShape = "an object whose entry providers.$($entryProp.Name) is $entryShape (not an object)"
+                    break
+                }
+            }
+        }
     }
     $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull; ProvidersShape = $providersShape }
     return $script:aihubConfigState
@@ -464,12 +476,44 @@ function Get-BlankVaultChecks {
             $blockerHint = "grant the running identity 'Key Vault Secrets User' on vault '$vaultName' (or fix AZURE_KEY_VAULT_URI)"
         }
     }
+    # The principal that LISTED is not necessarily the principal that READS (review
+    # finding): SecretResolver builds its client on DefaultAzureCredential, which
+    # prefers the environment service principal (AZURE_CLIENT_ID + secret /
+    # certificate), then a workload identity, then a managed identity, and only then
+    # the az CLI cache this probe runs under. When the hub would authenticate as one
+    # of those and az is not logged in as that same principal, a listed name proves
+    # nothing about the hub's access — presence is reported unverifiable with the gap.
+    $principalGap = ''
+    $principalHint = ''
+    if (-not $blocker -and $listed.Count -gt 0) {
+        $hubCredential = if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { 'environment service principal' }
+        elseif ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { 'workload identity' }
+        elseif ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { 'managed identity' }
+        else { 'az-cli' }
+        if ($hubCredential -ne 'az-cli') {
+            $accountProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'show', '--query', '{type:user.type,name:user.name}', '--output', 'json', '--only-show-errors')
+            $account = $null
+            if ($accountProbe.ExitCode -eq 0) { try { $account = (@($accountProbe.Output) -join '') | ConvertFrom-Json } catch { $account = $null } }
+            $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
+            $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
+            $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+            if (-not $samePrincipal) {
+                $principalGap = "listed as enabled in vault '$vaultName' for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
+                $principalHint = "grant that principal 'Key Vault Secrets User' on vault '$vaultName' (az role assignment create — owner-gated), or run pwsh scripts/bootstrap/auth-doctor.ps1 -Apply so az logs in as the same service principal, then re-run"
+            }
+        }
+    }
     foreach ($entry in $Blank) {
         if ($blocker) {
             $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unverifiable'; Reason = $blocker; Hint = $blockerHint; Vault = $vaultName })
         }
         elseif ($listed -contains $entry.SecretName) {
-            $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'present'; Reason = "listed as enabled in vault '$vaultName'"; Hint = ''; Vault = $vaultName })
+            if ($principalGap) {
+                $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unverifiable'; Reason = $principalGap; Hint = $principalHint; Vault = $vaultName })
+            }
+            else {
+                $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'present'; Reason = "listed as enabled in vault '$vaultName'"; Hint = ''; Vault = $vaultName })
+            }
         }
         else {
             $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'absent'; Reason = "not present (or disabled) in vault '$vaultName'"; Hint = "az keyvault secret set --vault-name $vaultName --name $($entry.SecretName)   # owner supplies the value (or re-enable the existing secret)"; Vault = $vaultName })
@@ -1215,7 +1259,7 @@ try {
         throw "the active config ($($activeConfig.Path)) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object (no lane was diagnosed or repaired)"
     }
     if ($activeConfig.ProvidersShape) {
-        throw "the active config ($($activeConfig.Path)) declares `"providers`" as $($activeConfig.ProvidersShape), not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile) (no lane was diagnosed or repaired)"
+        throw "the active config ($($activeConfig.Path)) declares `"providers`" as $($activeConfig.ProvidersShape) — AIHubOptions binds that section as a dictionary of provider objects and ProviderFactory.CreateAll dereferences every entry, so the hub fails on the file; declare objects only (or omit the section for a CLI-only profile) (no lane was diagnosed or repaired)"
     }
 
     $ghResult = Test-GhLane

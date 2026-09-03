@@ -32,9 +32,10 @@ scope, so dot-sourcing does NOT change the caller's StrictMode or
 $ErrorActionPreference (review finding); on an internal failure a dot-sourced run
 RETHROWS so the caller can detect the partial setup, while a normal run exits 1.
 Scope hygiene: the helper symbols are removed from the caller's scope on every
-path; the one unavoidable residue is the -Json PARAMETER binding, which
-overwrites (and cleanup then deletes) any caller variable named $Json/$json —
-do not rely on that name surviving the call.
+path; the one unavoidable residue is the PARAMETER bindings (-Json and
+-UseManagedIdentity), which overwrite (and cleanup then deletes) any caller
+variable named $Json/$json or $UseManagedIdentity — do not rely on those names
+surviving the call.
 
 Chain (reuse-first — this script orchestrates, it does not reimplement):
   az lane        pwsh scripts/bootstrap/auth-doctor.ps1 -Apply -Json  → repaired/ready
@@ -239,6 +240,18 @@ function Invoke-HeliosAutoLogin {
     }
     if ($aihubProvidersShape) {
         throw "the active config ($aihubConfigPath) declares `"providers`" as $aihubProvidersShape, not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile); aborting before any lane runs"
+    }
+    if ($aihubParseOk -and $aihubProvidersDeclared) {
+        # Every ENTRY must be an object too (review finding): the table binds as
+        # Dictionary<string, ProviderOptions>, a JSON null deserializes as a null
+        # entry, and ProviderFactory.CreateAll dereferences provider.Enabled on each —
+        # the hub crashes on such a file, so no lane may run (or repair) on its behalf.
+        foreach ($entryProp in $aihubProviders.PSObject.Properties) {
+            if ($null -eq $entryProp.Value -or $entryProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+                $entryShape = if ($null -eq $entryProp.Value) { 'null' } elseif ($entryProp.Value -is [System.Array]) { 'an array' } else { "a $($entryProp.Value.GetType().Name)" }
+                throw "the active config ($aihubConfigPath) declares providers.$($entryProp.Name) as $entryShape, not an object — ProviderFactory.CreateAll dereferences every provider entry and the hub fails to start; remove the entry or declare an object; aborting before any lane runs"
+            }
+        }
     }
     # An EXPLICITLY selected profile that cannot be read is an internal failure
     # (review finding): the hub itself will fail to load that same file, so
@@ -1039,17 +1052,45 @@ function Invoke-HeliosAutoLogin {
             else { $blankSecretNames = @($listed | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
         }
     }
+    # The principal that LISTED is not necessarily the principal that READS (review
+    # finding): SecretResolver builds its client on DefaultAzureCredential, which
+    # prefers the environment service principal (AZURE_CLIENT_ID + secret /
+    # certificate), then a workload identity, then a managed identity, and only
+    # then the az CLI cache this listing ran under. When the hub would authenticate
+    # as one of those and az is not logged in as that same principal, a listed name
+    # proves nothing about the hub's access, so presence is reported unverifiable.
+    $blankSecretPrincipalGap = ''
+    if (-not $blankSecretBlocker -and $blankSecretNames.Count -gt 0) {
+        $hubCredential = if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { 'environment service principal' }
+        elseif ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { 'workload identity' }
+        elseif ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { 'managed identity' }
+        else { 'az-cli' }
+        if ($hubCredential -ne 'az-cli') {
+            $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+            $accountExit = [int]$LASTEXITCODE
+            $account = $null
+            if ($accountExit -eq 0) { try { $account = ($accountLines -join '') | ConvertFrom-Json } catch { $account = $null } }
+            $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
+            $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
+            $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+            if (-not $samePrincipal) {
+                $blankSecretPrincipalGap = "listed for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { ' (IDENTITY_ENDPOINT / MSI_ENDPOINT)' } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
+            }
+        }
+    }
     foreach ($blank in $blankGhModels) {
         $blankStep = "provider:$($blank.Name)"
         $blankWhy = 'declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (GITHUB_MODELS_TOKEN applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it'
         $blankPresence = ''
         if ($blank.SecretName) {
-            $blankPresence = if ($blankSecretBlocker) { 'unverifiable' } elseif ($blankSecretNames -contains $blank.SecretName.ToLowerInvariant()) { 'present' } else { 'absent' }
+            $blankPresence = if ($blankSecretBlocker) { 'unverifiable' }
+            elseif ($blankSecretNames -contains $blank.SecretName.ToLowerInvariant()) { if ($blankSecretPrincipalGap) { 'unverifiable' } else { 'present' } }
+            else { 'absent' }
         }
         $blankPresenceText = switch ($blankPresence) {
             'present' { " (listed as enabled in vault '$blankSecretVault')" }
             'absent' { " (NOT present, or disabled, in vault '$blankSecretVault')" }
-            'unverifiable' { " ($blankSecretBlocker)" }
+            'unverifiable' { " ($(if ($blankSecretBlocker) { $blankSecretBlocker } else { $blankSecretPrincipalGap }))" }
             default { '' }
         }
         $blankVaultNote = if ($blank.SecretName) { "; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$blankPresenceText" } else { '' }
@@ -1203,14 +1244,18 @@ function Invoke-HeliosAutoLogin {
 # Dot-source hygiene (review finding): the documented contract mutates exactly
 # two surfaces (the az profile via auth-doctor -Apply, and process env vars), so
 # every helper symbol this file necessarily creates in a dot-sourcing caller's
-# scope is removed again on every path below. ONE residue is not removable:
-# PowerShell binds the -Json parameter into the calling scope BEFORE any code
-# runs, so a caller variable named $Json/$json (names are case-insensitive) is
-# overwritten by the binding itself — cleanup deletes the symbol rather than
-# restoring a prior value. Do not rely on that name surviving this call.
+# scope is removed again on every path below. ONE class of residue is not
+# removable: PowerShell binds the -Json and -UseManagedIdentity parameters into
+# the calling scope BEFORE any code runs, so a caller variable named $Json/$json
+# or $UseManagedIdentity (names are case-insensitive) is overwritten by the
+# binding itself — cleanup deletes the symbols rather than restoring prior values.
+# Do not rely on those names surviving this call.
 function Remove-HeliosAutoLoginScopeResidue {
     Remove-Item -Path function:Invoke-HeliosAutoLogin -ErrorAction SilentlyContinue
     Remove-Item -Path variable:Json -ErrorAction SilentlyContinue
+    # Every PARAMETER binding is a residue, not only -Json (review finding): the
+    # -UseManagedIdentity switch lands in the caller's scope the same way.
+    Remove-Item -Path variable:UseManagedIdentity -ErrorAction SilentlyContinue
     Remove-Item -Path variable:autoLoginDotSourced -ErrorAction SilentlyContinue
     # Self-removal last: the already-loaded body keeps executing to completion.
     Remove-Item -Path function:Remove-HeliosAutoLoginScopeResidue -ErrorAction SilentlyContinue
