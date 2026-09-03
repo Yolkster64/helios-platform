@@ -36,10 +36,14 @@ Lanes:
                 step owns the OIDC exchange (ci-oidc) and is never fought. The
                 interactive fallback is the tenant-scoped re-login from
                 ENTERPRISE_AI_CONNECTIONS.md §1 — reported, never run.
-  openai-codex  OPENAI_API_KEY presence (name only — it covers both the codex CLI and
-                the openai/openai-codex API providers); when the codex CLI is on PATH,
-                `codex login status` is probed non-interactively (a CLI login covers
-                the CLI only — connect-all.ps1 honesty rule).
+  openai-codex  a non-empty value in an env var the ENABLED openai / openai-codex
+                providers declare (providers.*.apiKeyEnv from the active config,
+                AIHUB_CONFIG-first; OPENAI_API_KEY only as the fallback when the
+                config is unreadable or only the codex agent is enabled) — one key
+                covers the codex CLI and those API providers; when the codex agent is
+                enabled and the CLI is on PATH, `codex login status` is probed
+                non-interactively (a CLI login covers the CLI only — connect-all.ps1
+                honesty rule).
   claude        a non-empty value in the env var the active config declares for the
                 anthropic provider (providers.anthropic.apiKeyEnv, read at run time
                 from AIHUB_CONFIG when set, else config/aihub.json — never hardcoded).
@@ -476,20 +480,55 @@ function Test-CodexLane {
     # Same enablement rule as the claude lane: this lane covers the openai and
     # openai-codex providers plus the codex agent; only when ALL are off is nothing
     # instantiated and nothing requested.
-    if (-not (Test-AIHubProviderEnabled 'openai') -and -not (Test-AIHubProviderEnabled 'openai-codex') -and
-        -not (Test-AIHubCliAgentEnabled 'codex')) {
+    $enabledProviders = @(@('openai', 'openai-codex') | Where-Object { Test-AIHubProviderEnabled $_ })
+    $codexAgentEnabled = Test-AIHubCliAgentEnabled 'codex'
+    if ($enabledProviders.Count -eq 0 -and -not $codexAgentEnabled) {
         return New-LaneResult -Lane 'openai-codex' -State 'disabled' -Method 'config' -Gates $false `
             -Detail ("the openai and openai-codex providers and the codex agent are all disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — nothing instantiates them, so no credential is needed and none is requested")
     }
-    if (Test-EnvValue 'OPENAI_API_KEY') {
-        # Name-only presence check; the value never enters a variable. One key covers
-        # both surfaces: the codex CLI agent and the openai/openai-codex API providers
-        # (config/aihub.json apiKeyEnv).
+
+    # Credential names come from the ENABLED provider entries (review finding): the
+    # hub reads each provider's configured apiKeyEnv, so probing a hard-coded
+    # OPENAI_API_KEY under a renamed profile misses the key and demands a variable
+    # nothing reads — an action auto-login could never reconcile. The defaults apply
+    # only when the config is unreadable, the enabled providers declare no apiKeyEnv,
+    # or only the codex agent is enabled (the CLI honors OPENAI_API_KEY).
+    $configState = Get-AIHubConfigState
+    $envNames = [System.Collections.Generic.List[string]]::new()
+    $secretNames = [System.Collections.Generic.List[string]]::new()
+    $nameSource = "fallback defaults; $($configState.Label) was unreadable"
+    if ($null -ne $configState.Config) {
+        foreach ($providerName in $enabledProviders) {
+            try {
+                $prov = $configState.Config.providers.PSObject.Properties[$providerName].Value
+                $declaredEnv = if ($prov.PSObject.Properties['apiKeyEnv']) { ([string]$prov.apiKeyEnv).Trim() } else { '' }
+                $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
+                if ($declaredEnv -and -not $envNames.Contains($declaredEnv)) { $envNames.Add($declaredEnv) }
+                if ($declaredVault -and -not $secretNames.Contains($declaredVault)) { $secretNames.Add($declaredVault) }
+            }
+            catch { Write-Verbose "$($configState.Label) providers.$providerName is not readable: $($_.Exception.Message)" }
+        }
+        $nameSource = if ($envNames.Count -gt 0) { "$($configState.Label) providers.$($enabledProviders -join '/').apiKeyEnv" }
+        elseif ($enabledProviders.Count -eq 0) { "fallback default; only the codex agent is enabled in $($configState.Label)" }
+        else { "fallback default; the enabled providers in $($configState.Label) declare no apiKeyEnv" }
+    }
+    if ($envNames.Count -eq 0) { $envNames.Add('OPENAI_API_KEY') }
+    if ($secretNames.Count -eq 0) { $secretNames.Add('openai-api-key') }
+    $envList = @($envNames) -join ' / '
+    $secretList = @($secretNames) -join ' / '
+    $vaultPull = "source scripts/bootstrap/load-env-from-keyvault.sh (pulls $secretList into $envList)"
+
+    # Name-only presence check; the value never enters a variable. One key covers
+    # both surfaces: the codex CLI agent and the enabled openai/openai-codex providers.
+    $setEnv = @($envNames | Where-Object { Test-EnvValue $_ }) | Select-Object -First 1
+    if ($setEnv) {
         return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'env-token' `
-            -Detail 'OPENAI_API_KEY is set (name checked only, value never read) — covers the codex CLI and the openai/openai-codex API providers'
+            -Detail "$setEnv is set (declared by $nameSource; name checked only, value never read) — covers the codex CLI and the enabled openai/openai-codex API providers"
     }
 
-    $codexCmd = Get-CliCommand -Name 'codex'
+    # The codex CLI login is an alternative for the CLI agent only, and only when the
+    # profile enables that agent — a CLI login never covers the API providers.
+    $codexCmd = if ($codexAgentEnabled) { Get-CliCommand -Name 'codex' } else { $null }
     if ($codexCmd) {
         $probe = Invoke-Probe -Executable $codexCmd.Source -Arguments @('login', 'status')
         $text = @($probe.Output) -join '; '
@@ -497,20 +536,21 @@ function Test-CodexLane {
             # Old builds predate `login status` — reported honestly, never guessed.
             return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'cli-login' `
                 -Detail 'this codex build has no `login status` subcommand, so the lane cannot be verified headlessly' `
-                -OwnerAction 'codex login   # browser/device flow (owner action); or export OPENAI_API_KEY'
+                -OwnerAction "codex login   # browser/device flow (owner action); or export $envList"
         }
         if ($probe.ExitCode -eq 0) {
             return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'cli-login' `
-                -Detail 'codex login status exits 0 — the codex CLI is authenticated; note the openai/openai-codex API providers still read only OPENAI_API_KEY (or the openai-api-key Key Vault secret), a CLI login does not cover them (connect-all.ps1 honesty rule)'
+                -Detail "codex login status exits 0 — the codex CLI is authenticated; note the enabled openai/openai-codex API providers still read only $envList (or the $secretList Key Vault secret), a CLI login does not cover them (connect-all.ps1 honesty rule)"
         }
         return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'device-code' `
-            -Detail ("codex login status exits $($probe.ExitCode) and OPENAI_API_KEY is not set — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
-            -OwnerAction 'codex login   # or: source scripts/bootstrap/load-env-from-keyvault.sh (pulls openai-api-key into OPENAI_API_KEY)'
+            -Detail ("codex login status exits $($probe.ExitCode) and $envList is not set (declared by $nameSource) — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
+            -OwnerAction "codex login   # or: $vaultPull"
     }
 
+    $cliNote = if ($codexAgentEnabled) { 'no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' } else { "the codex agent is disabled in $($configState.Label), so only the API key applies" }
     return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'env-token' `
-        -Detail 'OPENAI_API_KEY is not set and no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' `
-        -OwnerAction 'source scripts/bootstrap/load-env-from-keyvault.sh   # after az login; pulls openai-api-key into OPENAI_API_KEY'
+        -Detail "$envList (declared by $nameSource) is not set and $cliNote" `
+        -OwnerAction "$vaultPull   # after az login; or store $secretList in Key Vault"
 }
 
 # --- claude lane -----------------------------------------------------------------------
