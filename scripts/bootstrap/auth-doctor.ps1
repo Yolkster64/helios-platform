@@ -716,7 +716,18 @@ function Get-BlankVaultChecks {
                 $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unverifiable'; Reason = $principalGap; Hint = $principalHint; Vault = $vaultName })
             }
             else {
-                $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'present'; Reason = "listed as enabled in vault '$vaultName'"; Hint = ''; Vault = $vaultName })
+                # A listing proves the NAME, not the value (review finding): the hub calls
+                # SecretClient.GetSecret, which needs secrets/get — an identity holding
+                # only list/metadata rights leaves the provider unconfigured. The get is
+                # non-outputting: `--query id` returns the secret identifier URL only, and
+                # even that is never printed.
+                $getProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('keyvault', 'secret', 'show', '--vault-name', $vaultName, '--name', $entry.SecretName, '--query', 'id', '--output', 'tsv', '--only-show-errors')
+                if ($getProbe.ExitCode -eq 0 -and ((@($getProbe.Output) -join '') -match '^https://')) {
+                    $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'present'; Reason = "listed as enabled in vault '$vaultName' and its value is readable by the az identity (non-outputting get: secret id only, never printed)"; Hint = ''; Vault = $vaultName })
+                }
+                else {
+                    $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unreadable'; Reason = "listed as enabled in vault '$vaultName' but its VALUE is not readable by the az identity (az keyvault secret show exited $($getProbe.ExitCode); output never echoed) — SecretClient.GetSecret needs secrets/get, so the hub would stay unconfigured"; Hint = "grant the running identity 'Key Vault Secrets User' on vault '$vaultName' (az role assignment create — owner-gated), then re-run"; Vault = $vaultName })
+                }
             }
         }
         else {
@@ -790,6 +801,47 @@ function Get-ApiKeyLaneEvaluation {
         PartialNote  = $(if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' })
         VaultPull    = ($hints -join '; ')
     }
+}
+# The configured command is what the hub RUNS (review finding): CliProcessAgent starts
+# options.Command as written, and its IsOnPath joins the value onto each PATH directory
+# — for a rooted path Path.Combine yields the path itself, so /opt/tools/codex is "on
+# PATH" whenever that file exists even when /opt/tools is not in PATH. The lanes probe
+# the configured value the same way instead of resolving the bare leaf, so a
+# path-qualified command the hub can run is never reported missing (and a bare name
+# is looked up exactly as configured).
+function Get-AIHubCliAgentCommand {
+    param([Parameter(Mandatory)][string]$Command)
+    $cfg = (Get-AIHubConfigState).Config
+    if ($null -eq $cfg -or -not $cfg.PSObject.Properties['cliAgents'] -or $null -eq $cfg.cliAgents) { return '' }
+    foreach ($agent in @($cfg.cliAgents)) {
+        if ($null -eq $agent) { continue }
+        if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
+        $leaf = ''
+        if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+        if ($leaf -and $leaf.Equals($Command, [System.StringComparison]::OrdinalIgnoreCase)) { return $cmd }
+    }
+    return ''
+}
+function Resolve-CliAgentExecutable {
+    param([AllowEmptyString()][string]$Configured = '', [Parameter(Mandatory)][string]$Fallback)
+    $wanted = if ($Configured) { $Configured } else { $Fallback }
+    if ($wanted -notmatch '[\\/]') {
+        $cmd = Get-CliCommand -Name $wanted
+        if ($cmd) { return [pscustomobject]@{ Source = $cmd.Source; Configured = $wanted; Found = $true; Note = '' } }
+        return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Note = "'$wanted' is not on PATH" }
+    }
+    $extensions = if ($IsWindows) { @('') + @(([string][Environment]::GetEnvironmentVariable('PATHEXT')).Split(';') | Where-Object { $_ }) } else { @('') }
+    $dirs = if ([System.IO.Path]::IsPathRooted($wanted)) { @('') } else { @(([string][Environment]::GetEnvironmentVariable('PATH')).Split([System.IO.Path]::PathSeparator) | Where-Object { $_ }) }
+    foreach ($dir in $dirs) {
+        foreach ($ext in $extensions) {
+            $candidate = if ($dir) { [System.IO.Path]::Combine($dir, $wanted + $ext) } else { $wanted + $ext }
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                return [pscustomobject]@{ Source = $candidate; Configured = $wanted; Found = $true; Note = "the configured command '$wanted' resolves to $candidate, as CliProcessAgent runs it" }
+            }
+        }
+    }
+    return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Note = "the configured command '$wanted' does not exist at that path (checked as CliProcessAgent would: rooted as written, else joined onto each PATH directory)" }
 }
 # Enabled CLI entries are discovered by their configured COMMAND (review finding):
 # ProviderFactory.CreateAll instantiates every enabled cliAgents entry whatever its
@@ -1172,8 +1224,9 @@ function Test-CodexLane {
             $cliDetail = 'the codex CLI reads OPENAI_API_KEY, which is set'
         }
         else {
-            $codexCmd = Get-CliCommand -Name 'codex'
-            if ($codexCmd) {
+            $codexCmd = Resolve-CliAgentExecutable -Configured (Get-AIHubCliAgentCommand -Command 'codex') -Fallback 'codex'
+            $codexNote = if ($codexCmd.Note -and $codexCmd.Found) { " — $($codexCmd.Note)" } else { '' }
+            if ($codexCmd.Found) {
                 $probe = Invoke-Probe -Executable $codexCmd.Source -Arguments @('login', 'status')
                 $text = @($probe.Output) -join '; '
                 if ($text -match '(?i)unrecognized subcommand|unexpected argument|unknown (sub)?command') {
@@ -1184,7 +1237,7 @@ function Test-CodexLane {
                 }
                 elseif ($probe.ExitCode -eq 0) {
                     $cliState = 'login'
-                    $cliDetail = 'codex login status exits 0 (the codex CLI holds a cached ChatGPT-plan login)'
+                    $cliDetail = "codex login status exits 0 (the codex CLI holds a cached ChatGPT-plan login)$codexNote"
                 }
                 else {
                     $cliState = 'missing'
@@ -1194,7 +1247,8 @@ function Test-CodexLane {
             }
             else {
                 $cliState = 'missing'
-                $cliDetail = 'OPENAI_API_KEY is unset and no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)'
+                $cliDetail = if ($codexCmd.Configured -match '[\\/]') { "OPENAI_API_KEY is unset and $($codexCmd.Note) — fix the cliAgents command in $($configState.Label) or install the CLI there" }
+                else { 'OPENAI_API_KEY is unset and no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' }
                 $cliAction = 'pwsh scripts/bootstrap/setup-ai-clis.ps1   # installs codex; then codex login, or set OPENAI_API_KEY for the codex CLI'
             }
         }
@@ -1304,8 +1358,9 @@ function Test-ClaudeLane {
         }
         else {
             $cliState = 'unverifiable'
-            $claudeCmd = Get-CliCommand -Name 'claude'
-            $cliDetail = if ($claudeCmd) { 'ANTHROPIC_API_KEY is unset and a cached claude login cannot be probed headlessly — probing would launch an interactive session (connect-all.ps1 rule)' }
+            $claudeCmd = Resolve-CliAgentExecutable -Configured (Get-AIHubCliAgentCommand -Command 'claude') -Fallback 'claude'
+            $cliDetail = if ($claudeCmd.Found) { 'ANTHROPIC_API_KEY is unset and a cached claude login cannot be probed headlessly — probing would launch an interactive session (connect-all.ps1 rule)' + $(if ($claudeCmd.Note) { " ($($claudeCmd.Note))" } else { '' }) }
+            elseif ($claudeCmd.Configured -match '[\\/]') { "ANTHROPIC_API_KEY is unset and $($claudeCmd.Note)" }
             else { 'ANTHROPIC_API_KEY is unset and no claude CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs it)' }
             $cliAction = 'claude setup-token   # mint a long-lived token for the CLI (owner action); or set ANTHROPIC_API_KEY for the claude CLI'
         }
@@ -1368,9 +1423,13 @@ function Test-CopilotLane {
     # cliAgent runs `copilot -p ...` (@github/copilot), and the gh-copilot EXTENSION
     # provides `gh copilot suggest/explain` — a different executable shape the hub
     # cannot launch. The extension is reported as information, never as readiness.
-    $copilotCmd = Get-CliCommand -Name 'copilot'
+    $copilotCmd = Resolve-CliAgentExecutable -Configured (Get-AIHubCliAgentCommand -Command 'copilot') -Fallback 'copilot'
     $extensionNote = ''
-    if (-not $copilotCmd) {
+    if (-not $copilotCmd.Found) {
+        if ($copilotCmd.Configured -match '[\\/]') {
+            return New-LaneResult -Lane 'copilot' -State 'unavailable' -Method 'none' `
+                -Detail ("$($copilotCmd.Note) — fix the cliAgents command in $((Get-AIHubConfigState).Label) or install the standalone copilot CLI (@github/copilot) there")
+        }
         $ghCmd = Get-CliCommand -Name 'gh'
         if ($ghCmd) {
             # `gh extension list` reads local state only — no network call.
@@ -1382,7 +1441,7 @@ function Test-CopilotLane {
         return New-LaneResult -Lane 'copilot' -State 'unavailable' -Method 'none' `
             -Detail ("the standalone copilot CLI (@github/copilot) is not on PATH$extensionNote — pwsh scripts/bootstrap/setup-ai-clis.ps1 installs the shape config/aihub.json invokes")
     }
-    $presence = 'standalone copilot CLI (@github/copilot) is on PATH'
+    $presence = if ($copilotCmd.Note) { "standalone copilot CLI (@github/copilot) is present ($($copilotCmd.Note))" } else { 'standalone copilot CLI (@github/copilot) is on PATH' }
 
     # A headless token authenticates copilot on its own (review finding): setup-ai-clis.ps1
     # documents GH_TOKEN / GITHUB_TOKEN as sufficient, so a host without gh must not be
@@ -1412,17 +1471,92 @@ function Test-CopilotLane {
 }
 
 # --- linear lane (connector; verify-only, never gates) --------------------------------
+# Repository-secret METADATA (review finding): the connector workflows read the
+# REPOSITORY secret, not this shell's variable, so the two are separate states and
+# neither is inferred from the other. `gh api repos/{owner}/{repo}/actions/secrets/<name>`
+# returns name and dates only — never a value — and needs the actions-secrets read
+# permission: a 404 counts as absent only when the listing endpoint answered 200 (GitHub
+# hides secrets from a token without that permission behind the same 404), anything
+# else is unknown with the reason. Screened GitHub tokens are cleared around the calls
+# exactly as for the gh lane; the repo comes from gh's own {owner}/{repo} resolution
+# (the current git remote, or GH_REPO).
+function Get-RepositorySecretState {
+    param([Parameter(Mandatory)][string]$Name)
+    if ($Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return [pscustomobject]@{ State = 'unknown'; Reason = "'$Name' is not a valid secret name" } }
+    $ghCmd = Get-CliCommand -Name 'gh'
+    if (-not $ghCmd) { return [pscustomobject]@{ State = 'unknown'; Reason = 'gh is not on PATH, so repository-secret metadata could not be read' } }
+    $cleared = @(Get-NonGitHubOwnedTokenNames)
+    $saved = @{}
+    foreach ($clearedName in $cleared) { $saved[$clearedName] = [Environment]::GetEnvironmentVariable($clearedName); [Environment]::SetEnvironmentVariable($clearedName, $null) }
+    try {
+        $listProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', 'repos/{owner}/{repo}/actions/secrets?per_page=1')
+        $itemProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', "repos/{owner}/{repo}/actions/secrets/$Name")
+    }
+    finally {
+        foreach ($clearedName in $cleared) { [Environment]::SetEnvironmentVariable($clearedName, $saved[$clearedName]) }
+        $saved = $null
+    }
+    $statusOf = {
+        param($probe)
+        $line = @($probe.Output | Where-Object { $_ -match '^HTTP/\S+\s+(\d{3})' } | Select-Object -First 1)
+        if ($line.Count -gt 0 -and $line[0] -match '^HTTP/\S+\s+(\d{3})') { [int]$Matches[1] } else { 0 }
+    }
+    $listStatus = & $statusOf $listProbe
+    $itemStatus = & $statusOf $itemProbe
+    if ($itemStatus -eq 200) { return [pscustomobject]@{ State = 'configured'; Reason = 'repository-secret metadata lists it (name and dates only, never a value)' } }
+    if ($itemStatus -eq 404 -and $listStatus -eq 200) { return [pscustomobject]@{ State = 'absent'; Reason = 'the repository-secret listing is readable and does not contain it' } }
+    $why = if ($itemStatus -eq 0) { "gh api could not be resolved or reached (not in a git checkout with a GitHub remote, or the call failed; output never echoed)" }
+    elseif ($itemStatus -in 401, 403, 404) { "HTTP $itemStatus — the wire token cannot read repository-secret metadata (GitHub answers $itemStatus without the actions-secrets read permission); a fine-grained PAT with Secrets: read, or the owner's gh login, can" }
+    else { "HTTP $itemStatus from the repository-secret metadata endpoint" }
+    return [pscustomobject]@{ State = 'unknown'; Reason = $why }
+}
+# Local variable and repository secret as two states (review finding): the connector
+# workflow runs on the repository secret; this shell's variable covers local tooling
+# only. Ready when the repository secret is configured; needs-owner when it is
+# proven absent; when unknown, the local variable alone can only vouch for local use.
+function Get-ConnectorSecretLane {
+    param(
+        [Parameter(Mandatory)][string]$Lane,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Declared,
+        [Parameter(Mandatory)][string]$Workflow,
+        [Parameter(Mandatory)][string]$Purpose,
+        [Parameter(Mandatory)][string]$OwnerAction,
+        [string]$Suffix = ''
+    )
+    $localSet = Test-EnvValue $Name
+    $localText = if ($localSet) { "$Name is set in this shell (name checked only, value never read — covers local tooling only)" } else { "$Name is not set in this shell (local tooling only)" }
+    $repo = Get-RepositorySecretState -Name $Name
+    $repoText = "repository secret ${Name}: $($repo.State) — $($repo.Reason)"
+    $suffixText = if ($Suffix) { ". $Suffix" } else { '' }
+    switch ($repo.State) {
+        'configured' {
+            return New-LaneResult -Lane $Lane -State 'ready' -Method 'repo-secret' -Gates $false `
+                -Detail ("$repoText, so $Workflow can run ($Purpose); $localText ($Declared)$suffixText")
+        }
+        'absent' {
+            return New-LaneResult -Lane $Lane -State 'needs-owner' -Method 'repo-secret' -Gates $false `
+                -Detail ("$repoText, so $Workflow skips green and $Purpose runs dark; $localText ($Declared)$suffixText") `
+                -OwnerAction $OwnerAction
+        }
+        default {
+            if ($localSet) {
+                return New-LaneResult -Lane $Lane -State 'ready' -Method 'env-token' -Gates $false `
+                    -Detail ("$localText ($Declared); $repoText — whether $Workflow can run is unverifiable from here: verify per the CONNECTIONS_SETUP.md owner checklist$suffixText")
+            }
+            return New-LaneResult -Lane $Lane -State 'needs-owner' -Method 'repo-secret' -Gates $false `
+                -Detail ("$localText ($Declared); $repoText — if $Workflow is meant to run ($Purpose), store the repository secret$suffixText") `
+                -OwnerAction $OwnerAction
+        }
+    }
+}
 function Test-LinearLane {
     # config/connectors.json linear.apiKeyEnv declares the name; the sync workflow
     # (.github/workflows/linear-sync.yml) reads the REPOSITORY SECRET of that name and
-    # skips green without it — a local env var covers local tooling only, so the
-    # detail says which of the two this shell can actually see.
-    if (Test-EnvValue 'LINEAR_API_KEY') {
-        return New-LaneResult -Lane 'linear' -State 'ready' -Method 'env-token' -Gates $false `
-            -Detail 'LINEAR_API_KEY is set in this shell (name checked only, value never read); the linear-sync.yml workflow separately needs the repository secret of the same name — verify per the CONNECTIONS_SETUP.md owner checklist (label an issue bug)'
-    }
-    return New-LaneResult -Lane 'linear' -State 'needs-owner' -Method 'repo-secret' -Gates $false `
-        -Detail 'LINEAR_API_KEY is not set (declared by config/connectors.json linear.apiKeyEnv); .github/workflows/linear-sync.yml skips green without the repository secret, so GitHub->Linear issue sync runs dark' `
+    # skips green without it — reported as its own state, never inferred from this
+    # shell's variable (review finding).
+    return Get-ConnectorSecretLane -Lane 'linear' -Name 'LINEAR_API_KEY' -Declared 'declared by config/connectors.json linear.apiKeyEnv' `
+        -Workflow '.github/workflows/linear-sync.yml' -Purpose 'GitHub->Linear issue sync' `
         -OwnerAction 'gh secret set LINEAR_API_KEY   # value from Linear Settings -> Security & access -> API'
 }
 
@@ -1433,13 +1567,10 @@ function Test-SlackLane {
     # yet, and the report must not imply otherwise.
     $botTokenState = if (Test-EnvValue 'SLACK_BOT_TOKEN') { 'set in this shell' } else { 'not set' }
     $botTokenNote = "SLACK_BOT_TOKEN ($botTokenState) is declared in config/connectors.json but nothing in the repo consumes it today"
-    if (Test-EnvValue 'SLACK_WEBHOOK_URL') {
-        return New-LaneResult -Lane 'slack' -State 'ready' -Method 'env-token' -Gates $false `
-            -Detail ("SLACK_WEBHOOK_URL is set in this shell (name checked only, value never read); notify-slack.yml separately needs the repository secret of the same name. $botTokenNote")
-    }
-    return New-LaneResult -Lane 'slack' -State 'needs-owner' -Method 'repo-secret' -Gates $false `
-        -Detail ("SLACK_WEBHOOK_URL is not set (declared by config/connectors.json slack.webhookUrlEnv); .github/workflows/notify-slack.yml skips green without the repository secret, so workflow notifications run dark. $botTokenNote") `
-        -OwnerAction 'gh secret set SLACK_WEBHOOK_URL   # value from the Slack app incoming-webhook config'
+    # The repository secret is its own state (review finding), as for the Linear lane.
+    return Get-ConnectorSecretLane -Lane 'slack' -Name 'SLACK_WEBHOOK_URL' -Declared 'declared by config/connectors.json slack.webhookUrlEnv' `
+        -Workflow '.github/workflows/notify-slack.yml' -Purpose 'workflow notifications' `
+        -OwnerAction 'gh secret set SLACK_WEBHOOK_URL   # value from the Slack app incoming-webhook config' -Suffix $botTokenNote
 }
 
 # --- sharepoint lane (connector; verify-only, never gates) -----------------------------

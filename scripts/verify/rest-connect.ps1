@@ -67,6 +67,10 @@ identity, detail, ownerAction}):
                               --service-principal --certificate` + `az account
                               get-access-token` when az is on PATH, and reported as
                               available-but-needs-az otherwise.
+            2b. workload id   AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_FEDERATED_TOKEN_FILE
+                              => the file's assertion posted once as a jwt-bearer
+                              client_assertion to the same token endpoint (read into
+                              memory, never echoed) — WorkloadIdentityCredential's rung.
             3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER), else MSI_ENDPOINT
                               (+MSI_SECRET) — each honored only on a documented local
                               token-endpoint shape, and an IDENTITY_ENDPOINT that is
@@ -1159,6 +1163,66 @@ function Test-AzureLane {
             if ($tokenProbe.Status -in 400, 401) { $sawAuthRejection = $true }
         }
     }
+    # 2b. Federated workload identity (review finding): AKS / Container Apps with a
+    #     federated credential supply AZURE_CLIENT_ID + AZURE_TENANT_ID +
+    #     AZURE_FEDERATED_TOKEN_FILE and no secret, and DefaultAzureCredential's
+    #     WorkloadIdentityCredential exchanges the file's assertion (jwt-bearer
+    #     client_assertion) for a token — mirrored here in memory: the assertion is
+    #     read into a local, posted once to the active cloud's authority, and never
+    #     echoed. It is a credential source in its own right, so an application
+    #     container without az is not told to install the CLI.
+    $wiReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and (Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE')
+    if ($wiReady) {
+        $credentialSourcePresent = $true
+        $wiPath = ([string]$env:AZURE_FEDERATED_TOKEN_FILE).Trim()
+        if (-not (Test-Path -LiteralPath $wiPath -PathType Leaf)) {
+            $chainNotes.Add('workload-identity: AZURE_FEDERATED_TOKEN_FILE is set but no FILE exists at that path (a directory does not count; path checked only) — the federated exchange cannot run')
+        }
+        else {
+            $assertion = ''
+            try { $assertion = ([string](Get-Content -LiteralPath $wiPath -Raw -ErrorAction Stop)).Trim() } catch { $assertion = '' }
+            if (-not $assertion) {
+                $chainNotes.Add('workload-identity: AZURE_FEDERATED_TOKEN_FILE is empty or unreadable (contents never echoed) — the federated exchange cannot run')
+            }
+            else {
+                $wiClientId = [string]$env:AZURE_CLIENT_ID     # appId — an identifier, not a secret
+                $wiTenantId = [string]$env:AZURE_TENANT_ID
+                $body = ('grant_type=client_credentials&client_id={0}&client_assertion_type={1}&client_assertion={2}&scope={3}' -f
+                    [uri]::EscapeDataString($wiClientId),
+                    [uri]::EscapeDataString('urn:ietf:params:oauth:client-assertion-type:jwt-bearer'),
+                    [uri]::EscapeDataString($assertion),
+                    [uri]::EscapeDataString($armScope))
+                $assertion = ''
+                $tokenUrl = "$($azureCloud.Authority)/$wiTenantId/oauth2/v2.0/token"
+                $tokenProbe = Invoke-HttpProbe -Url $tokenUrl -Method 'Post' -Body $body `
+                    -ContentType 'application/x-www-form-urlencoded' -TimeoutSec $TimeoutSeconds
+                $body = ''   # done with the assertion
+                if ($tokenProbe.Status -eq 200) {
+                    $tokenReply = Test-ParsedJson $tokenProbe.Body
+                    $wiToken = [string](Get-OptionalProperty $tokenReply 'access_token' '')
+                    if ($wiToken) {
+                        $tokenHeld = $true
+                        $arm = Invoke-ArmProbe -Token $wiToken -Source 'workload-identity' `
+                            -Identity "workload identity (client $wiClientId, federated assertion from AZURE_FEDERATED_TOKEN_FILE)" -ChainNotes $chainNotes
+                        if ($arm.Outcome -eq 'ready') { return $arm.Lane }
+                        if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
+                        if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+                    }
+                    else {
+                        $chainNotes.Add('workload-identity: token endpoint 200 but no access_token field (raw body never echoed)')
+                    }
+                }
+                else {
+                    $wiStatus = if ($tokenProbe.Status -eq 0) { "transport failure ($($tokenProbe.Transport))" } else { "HTTP $($tokenProbe.Status)" }
+                    $chainNotes.Add("workload-identity: token endpoint $wiStatus (raw error body never echoed)")
+                    if ($tokenProbe.Status -in 400, 401) { $sawAuthRejection = $true }
+                }
+            }
+        }
+    }
+    elseif (Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') {
+        $chainNotes.Add('workload-identity: AZURE_FEDERATED_TOKEN_FILE is set but AZURE_CLIENT_ID / AZURE_TENANT_ID are not both set (names checked only) — the federated exchange cannot run')
+    }
     # Independent `if`, not `elseif` (review finding): when a configured secret FAILS
     # its exchange, the certificate's availability must still be reported — otherwise
     # a normal rotation state (stale secret, valid cert) dead-ends in MFA advice.
@@ -1458,6 +1522,7 @@ if ($DryRun) {
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '           an override counts only as the canonical https origin of a known cloud host (default port, no userinfo, path, query or fragment); a rejected AZURE_RESOURCE_MANAGER_ENDPOINT still lets ARM_ENDPOINT be tried'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
+    Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source of its own'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"

@@ -1437,19 +1437,33 @@ function Invoke-HeliosAutoLogin {
             continue
         }
         $blankPresence = ''
+        $blankGetExit = 0
         if ($blank.SecretName) {
             $blankPresence = if ($blankSecretBlocker) { 'unverifiable' }
             elseif ($blankSecretNames -contains $blank.SecretName.ToLowerInvariant()) { if ($blankSecretPrincipalGap) { 'unverifiable' } else { 'present' } }
             else { 'absent' }
         }
+        if ($blankPresence -eq 'present') {
+            # A listing proves the NAME, not the value (review finding): CreateGitHubModels
+            # calls SecretClient.GetSecret, which needs secrets/get. Non-outputting get:
+            # `--query id` yields the secret identifier URL only, never printed.
+            $blankIdLines = @(& $azCmd.Source keyvault secret show --vault-name $blankSecretVault --name $blank.SecretName --query id --output tsv --only-show-errors 2>$null | ForEach-Object { "$_" })
+            $blankGetExit = [int]$LASTEXITCODE
+            if ($blankGetExit -ne 0 -or -not (($blankIdLines -join '') -match '^https://')) { $blankPresence = 'unreadable' }
+            $blankIdLines = $null
+        }
         $blankPresenceText = switch ($blankPresence) {
-            'present' { " (listed as enabled in vault '$blankSecretVault')" }
+            'present' { " (listed as enabled in vault '$blankSecretVault' and its value is readable by the az identity — non-outputting get, secret id only)" }
+            'unreadable' { " (listed as enabled in vault '$blankSecretVault' but its VALUE is not readable by the az identity — az keyvault secret show exited $blankGetExit, output never echoed; SecretClient.GetSecret needs secrets/get, so the in-process path cannot light it)" }
             'absent' { " (NOT present, or disabled, in vault '$blankSecretVault')" }
             'unverifiable' { " ($(if ($blankSecretBlocker) { $blankSecretBlocker } else { $blankSecretPrincipalGap }))" }
             default { '' }
         }
         $blankVaultNote = if ($blank.SecretName) { "; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$blankPresenceText" } else { '' }
         $blankSatisfied = $false
+        if ($blankPresence -eq 'unreadable') {
+            Add-OwnerAction -Text "grant the running identity 'Key Vault Secrets User' on vault '$blankSecretVault' so provider '$($blank.Name)' (type github-models) can read Key Vault secret '$($blank.SecretName)' in-process (az role assignment create — owner-gated), then re-run auto-login"
+        }
         if ($blankPresence -eq 'present') {
             $blankSatisfied = $true
             Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote — CreateGitHubModels reads that secret in-process, so the provider is satisfied without an export"
