@@ -277,7 +277,11 @@ function Invoke-HeliosAutoLogin {
     # github-models provider disables the whole fallback (review finding): the
     # hub will not instantiate that lane, so no credential is fetched for it.
     $ghModelsEnv = 'GITHUB_MODELS_TOKEN'
-    $ghModelsEnabled = $true
+    # A parsed config enables this lane only when it DECLARES an enabled github-models
+    # provider (review finding): ProviderFactory.CreateAll instantiates nothing for an
+    # absent entry, so exporting a stored GitHub credential for it would light no lane.
+    # Only the unreadable-config fallback (the built-in triplet) keeps the lane on.
+    $ghModelsEnabled = ($null -eq $aihubProviders)
     # The vault-repair guidance follows the provider's apiKeySecretName the same way
     # (review finding): the config-driven pull reads ONLY that secret, so telling the
     # owner to store the default name under a customized config would advertise a
@@ -291,9 +295,7 @@ function Invoke-HeliosAutoLogin {
             $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
         }
         $ghModelsSecretName = if ($ghModelsProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghModelsProv.apiKeySecretName).Trim() } else { '' }
-        if ($ghModelsProv.PSObject.Properties['enabled'] -and $ghModelsProv.enabled -eq $false) {
-            $ghModelsEnabled = $false
-        }
+        $ghModelsEnabled = -not ($ghModelsProv.PSObject.Properties['enabled'] -and $ghModelsProv.enabled -eq $false)
     }
     $ghModelsVaultClause = if ($ghModelsSecretName) { ", or store Key Vault secret '$ghModelsSecretName' (the configured github-models apiKeySecretName)" } else { '' }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
@@ -434,7 +436,11 @@ function Invoke-HeliosAutoLogin {
             $authHeaders['Authorization'] = "Bearer $([string](Get-Item "env:$EnvName").Value)"
             $resp = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $authHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
             $authHeaders = $null
-            if ([int]$resp.StatusCode -ne 200) { return 'invalid' }
+            # Definitive rejection only on 401 (review finding): 429/5xx/anything else
+            # is transient and must not condemn a token — the gh rung would otherwise
+            # delete a freshly exported credential and demand a re-login over an outage.
+            if ([int]$resp.StatusCode -eq 401) { return 'invalid' }
+            if ([int]$resp.StatusCode -ne 200) { return 'unverifiable' }
             $scopeKey = @($resp.Headers.Keys | Where-Object { $_ -ieq 'X-OAuth-Scopes' }) | Select-Object -First 1
             $scopesText = if ($scopeKey) { (@($resp.Headers[$scopeKey]) -join ',') } else { '' }
             if ([string]::IsNullOrWhiteSpace($scopesText)) { return 'unverifiable' }
@@ -455,7 +461,7 @@ function Invoke-HeliosAutoLogin {
     $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$ghModelsVaultClause"
     $ghFallbackNeeded = $false
     if (-not $ghModelsEnabled) {
-        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled in the active config — no token fetched or exported for a lane the hub will not instantiate'
+        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled or absent in the active config — no token fetched or exported for a lane the hub will not instantiate'
     }
     elseif (-not (Test-EnvValue $ghModelsEnv) -and (Test-EnvValue 'GITHUB_TOKEN')) {
         # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the

@@ -599,8 +599,11 @@ function Test-AzureLane {
     # finding): auth-doctor -Apply would just fail on the same absent file, so the
     # terminal cert action must not be armed. Path existence only — contents are
     # never read here.
-    if ($spCertReady -and -not (Test-Path -LiteralPath ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim())) {
-        $chainNotes.Add('env-service-principal-cert: AZURE_CLIENT_CERTIFICATE_PATH is set but no file exists at that path — the certificate flow cannot run until the file is present (path checked only, contents never read)')
+    # -PathType Leaf (review finding): a directory at that path passes a bare
+    # Test-Path, and the epilogue would then advertise auth-doctor -Apply — which
+    # requires a leaf itself and skips the certificate — as a working repair.
+    if ($spCertReady -and -not (Test-Path -LiteralPath ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim() -PathType Leaf)) {
+        $chainNotes.Add('env-service-principal-cert: AZURE_CLIENT_CERTIFICATE_PATH is set but no FILE exists at that path (a directory does not count) — the certificate flow cannot run until the file is present (path checked only, contents never read)')
         $spCertReady = $false
     }
     if ($spSecretReady) {
@@ -823,10 +826,14 @@ function Test-AzureLane {
     #    honest — the host needs a first credential source, and that is the exact
     #    guidance returned.
     if (-not $credentialSourcePresent) {
+        # The action must carry the prerequisite (review finding): this branch only
+        # exists when az is absent (an installed az is itself a credential source), and
+        # setup-everything.ps1 harvests ownerAction alone — an `az login` that cannot
+        # run would be its whole advertised repair.
         return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'none' `
             -Detail ("no Azure credential source exists on this host — no CI OIDC, no service-principal env vars, no managed-identity endpoint yielded a token, and az is not on PATH: $chainText — " +
                 'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
-            -OwnerAction $azureOwnerAction
+            -OwnerAction ("install the Azure CLI first (bash scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli), then: $azureOwnerAction")
     }
     # 5. No definitive rejection anywhere = transient-only evidence (transport, 429,
     #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and

@@ -218,6 +218,22 @@ function Test-AIHubCliAgentEnabled {
     return -not ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false)
 }
 
+# The exact pull command for one (secret, env) pair (review finding): the bash loader
+# scripts/bootstrap/load-env-from-keyvault.sh knows only the three built-in names, so a
+# custom profile must be pointed at the config-aware auto-login.ps1 — otherwise the
+# advertised repair leaves the diagnosed variable unset.
+function Get-VaultPullHint {
+    param([AllowEmptyString()][string]$SecretName, [Parameter(Mandatory)][string]$EnvName)
+    if ([string]::IsNullOrWhiteSpace($SecretName)) {
+        return "set $EnvName directly (the active config declares no apiKeySecretName for it, so no vault pull exists)"
+    }
+    $builtIn = @{ 'openai-api-key' = 'OPENAI_API_KEY'; 'anthropic-api-key' = 'ANTHROPIC_API_KEY'; 'github-models-token' = 'GITHUB_MODELS_TOKEN' }
+    if ($builtIn.ContainsKey($SecretName) -and $builtIn[$SecretName] -eq $EnvName) {
+        return "source scripts/bootstrap/load-env-from-keyvault.sh (bash) or pwsh: . scripts/bootstrap/auto-login.ps1 — pulls $SecretName into $EnvName"
+    }
+    return "pwsh: . scripts/bootstrap/auto-login.ps1 (config-aware; pulls $SecretName into $EnvName — load-env-from-keyvault.sh knows only the built-in names)"
+}
+
 function Invoke-Probe {
     param(
         [Parameter(Mandatory)][string]$Executable,
@@ -494,8 +510,11 @@ function Test-CodexLane {
     # only when the config is unreadable, the enabled providers declare no apiKeyEnv,
     # or only the codex agent is enabled (the CLI honors OPENAI_API_KEY).
     $configState = Get-AIHubConfigState
-    $envNames = [System.Collections.Generic.List[string]]::new()
-    $secretNames = [System.Collections.Generic.List[string]]::new()
+    # One (Env, Secret) pair per DISTINCT enabled-provider variable: providers sharing
+    # a variable collapse to one pair; providers with their own variables each keep
+    # theirs, because ProviderFactory.CreateAll resolves every provider's credential
+    # independently (review finding) — one satisfied variable never covers a sibling.
+    $credentialPairs = [System.Collections.Generic.List[object]]::new()
     $nameSource = "fallback defaults; $($configState.Label) was unreadable"
     if ($null -ne $configState.Config) {
         foreach ($providerName in $enabledProviders) {
@@ -503,28 +522,30 @@ function Test-CodexLane {
                 $prov = $configState.Config.providers.PSObject.Properties[$providerName].Value
                 $declaredEnv = if ($prov.PSObject.Properties['apiKeyEnv']) { ([string]$prov.apiKeyEnv).Trim() } else { '' }
                 $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
-                if ($declaredEnv -and -not $envNames.Contains($declaredEnv)) { $envNames.Add($declaredEnv) }
-                if ($declaredVault -and -not $secretNames.Contains($declaredVault)) { $secretNames.Add($declaredVault) }
+                if ($declaredEnv -and -not @($credentialPairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
+                    $credentialPairs.Add([pscustomobject]@{ Env = $declaredEnv; Secret = $declaredVault })
+                }
             }
             catch { Write-Verbose "$($configState.Label) providers.$providerName is not readable: $($_.Exception.Message)" }
         }
-        $nameSource = if ($envNames.Count -gt 0) { "$($configState.Label) providers.$($enabledProviders -join '/').apiKeyEnv" }
+        $nameSource = if ($credentialPairs.Count -gt 0) { "$($configState.Label) providers.$($enabledProviders -join '/').apiKeyEnv" }
         elseif ($enabledProviders.Count -eq 0) { "fallback default; only the codex agent is enabled in $($configState.Label)" }
         else { "fallback default; the enabled providers in $($configState.Label) declare no apiKeyEnv" }
     }
-    if ($envNames.Count -eq 0) { $envNames.Add('OPENAI_API_KEY') }
-    if ($secretNames.Count -eq 0) { $secretNames.Add('openai-api-key') }
-    $envList = @($envNames) -join ' / '
-    $secretList = @($secretNames) -join ' / '
-    $vaultPull = "source scripts/bootstrap/load-env-from-keyvault.sh (pulls $secretList into $envList)"
+    if ($credentialPairs.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; Secret = 'openai-api-key' }) }
+    $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
 
-    # Name-only presence check; the value never enters a variable. One key covers
-    # both surfaces: the codex CLI agent and the enabled openai/openai-codex providers.
-    $setEnv = @($envNames | Where-Object { Test-EnvValue $_ }) | Select-Object -First 1
-    if ($setEnv) {
+    # Name-only presence checks; values never enter a variable. EVERY distinct enabled
+    # provider variable must hold a value before the lane is ready.
+    $missingPairs = @($credentialPairs | Where-Object { -not (Test-EnvValue $_.Env) })
+    $setEnvNames = @($credentialPairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
+    if ($missingPairs.Count -eq 0) {
         return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'env-token' `
-            -Detail "$setEnv is set (declared by $nameSource; name checked only, value never read) — covers the codex CLI and the enabled openai/openai-codex API providers"
+            -Detail "$envList set (declared by $nameSource; names checked only, values never read) — covers the codex CLI and every enabled openai/openai-codex API provider"
     }
+    $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
+    $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }
+    $vaultPull = (@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.Secret -EnvName $_.Env }) -join '; ')
 
     # The codex CLI login is an alternative for the CLI agent only, and only when the
     # profile enables that agent — a CLI login never covers the API providers.
@@ -536,21 +557,28 @@ function Test-CodexLane {
             # Old builds predate `login status` — reported honestly, never guessed.
             return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'cli-login' `
                 -Detail 'this codex build has no `login status` subcommand, so the lane cannot be verified headlessly' `
-                -OwnerAction "codex login   # browser/device flow (owner action); or export $envList"
+                -OwnerAction "codex login   # browser/device flow (owner action); or: $vaultPull"
         }
         if ($probe.ExitCode -eq 0) {
-            return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'cli-login' `
-                -Detail "codex login status exits 0 — the codex CLI is authenticated; note the enabled openai/openai-codex API providers still read only $envList (or the $secretList Key Vault secret), a CLI login does not cover them (connect-all.ps1 honesty rule)"
+            if ($enabledProviders.Count -eq 0) {
+                return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'cli-login' `
+                    -Detail 'codex login status exits 0 — the codex CLI is authenticated, and only the codex agent is enabled in the active config (no API provider needs a key)'
+            }
+            # The CLI is fine; the enabled API providers are not — they read their own
+            # variables and a CLI login never covers them (connect-all.ps1 honesty rule).
+            return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'env-token' `
+                -Detail "codex login status exits 0 (the codex CLI is authenticated), but the enabled openai/openai-codex API providers read $missingList (declared by $nameSource), which is not set$partialNote — a CLI login does not cover them" `
+                -OwnerAction $vaultPull
         }
         return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'device-code' `
-            -Detail ("codex login status exits $($probe.ExitCode) and $envList is not set (declared by $nameSource) — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
+            -Detail ("codex login status exits $($probe.ExitCode) and $missingList is not set (declared by $nameSource)$partialNote — the ChatGPT-plan login is a browser/device flow only an owner can complete") `
             -OwnerAction "codex login   # or: $vaultPull"
     }
 
     $cliNote = if ($codexAgentEnabled) { 'no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' } else { "the codex agent is disabled in $($configState.Label), so only the API key applies" }
     return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'env-token' `
-        -Detail "$envList (declared by $nameSource) is not set and $cliNote" `
-        -OwnerAction "$vaultPull   # after az login; or store $secretList in Key Vault"
+        -Detail "$missingList (declared by $nameSource) is not set$partialNote and $cliNote" `
+        -OwnerAction "$vaultPull   # after az login"
 }
 
 # --- claude lane -----------------------------------------------------------------------
@@ -603,7 +631,7 @@ function Test-ClaudeLane {
     }
     return New-LaneResult -Lane 'claude' -State 'needs-owner' -Method 'env-token' `
         -Detail ("$envName (declared by $nameSource) is not set; $cliNote. Key Vault secret name: $vaultSecretName") `
-        -OwnerAction ("claude setup-token   # mint a long-lived token (owner action); or: source scripts/bootstrap/load-env-from-keyvault.sh to pull $vaultSecretName into $envName")
+        -OwnerAction ("claude setup-token   # mint a long-lived token (owner action); or: $(Get-VaultPullHint -SecretName $vaultSecretName -EnvName $envName)")
 }
 
 # --- copilot lane ----------------------------------------------------------------------
