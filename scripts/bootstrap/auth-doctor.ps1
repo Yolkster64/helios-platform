@@ -386,13 +386,16 @@ function Get-ProviderCredentialPairs {
         # exactly as declared, whitespace included, because the factory hands it to
         # Environment.GetEnvironmentVariable untouched (" KEY " is not KEY).
         $declaredEnv = if ($null -eq $envProp -or $null -eq $envProp.Value) { $DefaultEnv } elseif ([string]::IsNullOrWhiteSpace([string]$envProp.Value)) { '' } else { [string]$envProp.Value }
-        $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
+        # Literal (review finding): SecretResolver.Resolve hands apiKeySecretName to
+        # GetSecret exactly as written, so a padded name is the invalid name the hub
+        # requests — Get-BlankVaultChecks reports it instead of proving a trimmed one.
+        $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { [string]$prov.apiKeySecretName } else { '' }
         if ($declaredEnv -eq '') {
             $blank.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
             continue
         }
         if (-not @($pairs | Where-Object { Test-EnvNameEquals $_.Env $declaredEnv }).Count) {
-            $pairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
+            $pairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault; Name = $entry.Name })
         }
     }
     return [pscustomobject]@{ Pairs = $pairs; Blank = $blank }
@@ -420,13 +423,17 @@ function Test-PublicModelsOrigin {
 #                  so no single value can be valid for all of them and a preset or
 #                  exported value would reach the wrong service. A per-type view sees
 #                  neither, and would report both lanes ready on such a value.
-$script:aihubVariableDefects = $null
-function Get-AIHubVariableDefects {
-    if ($null -ne $script:aihubVariableDefects) { return $script:aihubVariableDefects }
-    $defects = [System.Collections.Generic.List[object]]::new()
+# Every enabled reader of every variable, from the whole providers table PLUS the
+# enabled CLI agents (review findings), cached: { Name; Type; Family; SecretName } per
+# variable under the OS name comparer. Get-AIHubVariableDefects derives the conflict /
+# incompatible verdicts from it; the gh and copilot lanes ask it who owns the fixed
+# GitHub variables.
+$script:aihubEnvReaders = $null
+function Get-AIHubEnvReaders {
+    if ($null -ne $script:aihubEnvReaders) { return $script:aihubEnvReaders }
+    $readers = [System.Collections.Generic.Dictionary[string, object]]::new($script:EnvNameComparer)
     $cfg = (Get-AIHubConfigState).Config
     if ($null -ne $cfg) {
-        $readers = [System.Collections.Generic.Dictionary[string, object]]::new($script:EnvNameComparer)
         if ($cfg.PSObject.Properties['providers'] -and $null -ne $cfg.providers) {
             foreach ($prop in $cfg.providers.PSObject.Properties) {
                 $prov = $prop.Value
@@ -446,7 +453,7 @@ function Get-AIHubVariableDefects {
                 # Get-ProviderCredentialPairs).
                 $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } elseif ([string]::IsNullOrWhiteSpace([string]$envProp.Value)) { '' } else { [string]$envProp.Value }
                 if (-not $envName) { continue }
-                $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
+                $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { [string]$prov.apiKeySecretName } else { '' }   # literal (review finding)
                 $family = $provType
                 if ($provType -eq 'github-models') {
                     $baseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
@@ -462,11 +469,14 @@ function Get-AIHubVariableDefects {
             foreach ($agent in @($cfg.cliAgents)) {
                 if ($null -eq $agent) { continue }
                 if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
-                $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+                # The configured COMMAND alone (review finding): CliProcessAgent runs
+                # options.Command as written and IsOnPath('') is false, so an entry
+                # without a command is unconfigured whatever its name says; untrimmed too.
+                $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
                 $leaf = ''
                 if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
                 $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
-                $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+                $key = if ($leaf) { $leaf.ToLowerInvariant() } else { '' }
                 $cliReaders = @()
                 if ($key -eq 'codex') { $cliReaders = @([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; SecretName = ''; Env = 'OPENAI_API_KEY' }) }
                 elseif ($key -in 'claude', 'claude-cli') { $cliReaders = @([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; SecretName = ''; Env = 'ANTHROPIC_API_KEY' }) }
@@ -483,16 +493,39 @@ function Get-AIHubVariableDefects {
                 }
             }
         }
-        foreach ($envName in @($readers.Keys)) {
-            $families = @($readers[$envName] | ForEach-Object { $_.Family } | Select-Object -Unique)
-            # Key Vault secret names are case-insensitive: folded before the distinct count.
-            $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
-            if ($families.Count -gt 1) {
-                $defects.Add([pscustomobject]@{ Kind = 'incompatible'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
-            }
-            elseif ($secrets.Count -gt 1) {
-                $defects.Add([pscustomobject]@{ Kind = 'conflict'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
-            }
+    }
+    $script:aihubEnvReaders = $readers
+    return $script:aihubEnvReaders
+}
+# The fixed GitHub variables (GH_TOKEN / GITHUB_TOKEN) that an enabled NON-GitHub
+# consumer reads as its apiKeyEnv (review finding): their value is that service's
+# key — auto-login may have exported it there — and `gh` would send it to github.com
+# as a token, so the gh and copilot lanes screen them out and never pass them to gh.
+# rest-connect.ps1 applies the same rule to its candidates.
+function Get-NonGitHubOwnedTokenNames {
+    $readers = Get-AIHubEnvReaders
+    $owned = [System.Collections.Generic.List[string]]::new()
+    foreach ($fixedName in @('GH_TOKEN', 'GITHUB_TOKEN')) {
+        if (-not $readers.ContainsKey($fixedName)) { continue }
+        $foreign = @($readers[$fixedName] | Where-Object { $_.Family -ne 'github' })
+        if ($foreign.Count -gt 0) { $owned.Add($fixedName) }
+    }
+    return $owned.ToArray()
+}
+$script:aihubVariableDefects = $null
+function Get-AIHubVariableDefects {
+    if ($null -ne $script:aihubVariableDefects) { return $script:aihubVariableDefects }
+    $defects = [System.Collections.Generic.List[object]]::new()
+    $readers = Get-AIHubEnvReaders
+    foreach ($envName in @($readers.Keys)) {
+        $families = @($readers[$envName] | ForEach-Object { $_.Family } | Select-Object -Unique)
+        # Key Vault secret names are case-insensitive: folded before the distinct count.
+        $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
+        if ($families.Count -gt 1) {
+            $defects.Add([pscustomobject]@{ Kind = 'incompatible'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
+        }
+        elseif ($secrets.Count -gt 1) {
+            $defects.Add([pscustomobject]@{ Kind = 'conflict'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
         }
     }
     $script:aihubVariableDefects = $defects.ToArray()
@@ -546,6 +579,22 @@ function Get-ConfigDefectVerdict {
 # only — `az keyvault secret list` returns names, never values — under the az lane's
 # own login; anything short of a listed name is unproven and reported as the exact
 # prerequisite that is missing (vault URI, az lane, RBAC, or the secret itself).
+# The canonical Key Vault ORIGIN only (review finding): SecretResolver builds its
+# SecretClient from AZURE_KEY_VAULT_URI as written, so https://<vault>.vault.azure.net:444/
+# or a URI carrying a path, query, fragment or userinfo is a different (unusable)
+# endpoint for the hub even though its host names a real vault — deriving a vault
+# name from it would prove a secret at an endpoint the hub never calls. Returns the
+# vault name for https://<vault>.vault.<public or sovereign suffix>/ on the default
+# port with no path beyond '/', else ''.
+function Get-KeyVaultNameFromUri {
+    param([AllowEmptyString()][string]$Value)
+    $parsed = $null
+    if ([string]::IsNullOrWhiteSpace($Value) -or -not [uri]::TryCreate($Value.Trim(), [System.UriKind]::Absolute, [ref]$parsed)) { return '' }
+    if ($parsed.Scheme -ne 'https' -or -not $parsed.IsDefaultPort -or $parsed.UserInfo -or $parsed.Query -or $parsed.Fragment) { return '' }
+    if ($parsed.AbsolutePath -notin '', '/') { return '' }
+    if ($parsed.Host -notmatch '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { return '' }
+    return $Matches['vault']
+}
 function Get-BlankVaultChecks {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blank,
@@ -557,14 +606,7 @@ function Get-BlankVaultChecks {
     $results = [System.Collections.Generic.List[object]]::new()
     if ($Blank.Count -eq 0) { return $results.ToArray() }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
-    $vaultName = ''
-    if ($vaultUri) {
-        try {
-            $parsedUri = [uri]$vaultUri
-            if ($parsedUri.Scheme -eq 'https' -and $parsedUri.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { $vaultName = $Matches['vault'] }
-        }
-        catch { }
-    }
+    $vaultName = Get-KeyVaultNameFromUri -Value $vaultUri
     $azCmd = Get-CliCommand -Name 'az'
     $blocker = ''
     $blockerHint = ''
@@ -573,7 +615,7 @@ function Get-BlankVaultChecks {
         $blockerHint = 'set AZURE_KEY_VAULT_URI (PowerShell: . .helios/azure.env.ps1; bash: source .helios/azure.env)'
     }
     elseif (-not $vaultName) {
-        $blocker = 'AZURE_KEY_VAULT_URI is not an https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault URI'
+        $blocker = 'AZURE_KEY_VAULT_URI is not the canonical https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault origin — default port, no path, query, fragment or userinfo — which is what SecretResolver builds its client from'
         $blockerHint = 'fix AZURE_KEY_VAULT_URI'
     }
     elseif ($AzResult.state -notin 'ready', 'repaired' -or -not $azCmd) {
@@ -619,6 +661,15 @@ function Get-BlankVaultChecks {
         }
     }
     foreach ($entry in $Blank) {
+        # An invalid NAME is a config defect before any vault question (review
+        # finding): Key Vault secret names are letters, digits and hyphens (1-127) and
+        # SecretResolver requests the string exactly as written, so " openai-api-key "
+        # is a request Key Vault rejects — proving the trimmed name would prove a
+        # secret the hub never asks for.
+        if ($entry.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+            $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'invalid'; Reason = "'$($entry.SecretName)' is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it"; Hint = "fix providers.$($entry.Name).apiKeySecretName in $((Get-AIHubConfigState).Label): '$($entry.SecretName)' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"; Vault = $vaultName })
+            continue
+        }
         if ($blocker) {
             $results.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $entry.SecretName; Status = 'unverifiable'; Reason = $blocker; Hint = $blockerHint; Vault = $vaultName })
         }
@@ -671,7 +722,7 @@ function Get-ApiKeyLaneEvaluation {
     }
     # The built-in pair applies only when NO enabled entry exists to derive from — a
     # profile whose entries all declare a blank apiKeyEnv reads no variable at all.
-    if ($pairs.Count -eq 0 -and $blank.Count -eq 0) { $pairs.Add([pscustomobject]@{ Env = $DefaultEnv; SecretName = $DefaultSecret }) }
+    if ($pairs.Count -eq 0 -and $blank.Count -eq 0) { $pairs.Add([pscustomobject]@{ Env = $DefaultEnv; SecretName = $DefaultSecret; Name = '' }) }
     $defect = Get-ConfigDefectVerdict -Blank @($blank) -Conflicts @($conflicts) -Type $Type -DefaultEnv $DefaultEnv -ConfigLabel $ConfigLabel
     $vaultChecks = @(Get-BlankVaultChecks -Blank @($blank | Where-Object { $_.SecretName }) -AzResult $AzResult)
     $provenVault = @($vaultChecks | Where-Object { $_.Status -eq 'present' })
@@ -686,7 +737,7 @@ function Get-ApiKeyLaneEvaluation {
     else { '' }
     $missingItems = @(@($missingPairs | ForEach-Object Env) +
         @($unprovenVault | ForEach-Object { "the in-process Key Vault path of provider '$($_.Name)' (blank apiKeyEnv; secret '$($_.SecretName)': $($_.Reason))" }))
-    $hints = @(@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env }) +
+    $hints = @(@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env -ProviderName $_.Name -ConfigLabel $ConfigLabel }) +
         @($unprovenVault | ForEach-Object { $_.Hint } | Where-Object { $_ } | Select-Object -Unique))
     [pscustomobject]@{
         NameSource   = $nameSource
@@ -706,21 +757,22 @@ function Get-ApiKeyLaneEvaluation {
 # ProviderFactory.CreateAll instantiates every enabled cliAgents entry whatever its
 # routing name, and CliProcessAgent runs entry.command — so a profile naming its
 # codex entry 'code-prod' still launches codex. The command's leaf (directory and
-# .exe/.cmd stripped) is compared case-insensitively; the canonical name is accepted
-# only for an entry that declares no command at all.
+# .exe/.cmd stripped) is compared case-insensitively. The command ALONE decides
+# (review finding): CliProcessAgent's IsOnPath(options.Command) is false for a blank
+# or missing command, so an entry named 'codex' without one is unconfigured — its
+# name never makes it an enabled executable; the command is read untrimmed, as run.
 function Test-AIHubCliAgentEnabled {
-    param([Parameter(Mandatory)][string]$Command, [string]$CanonicalName = '')
+    param([Parameter(Mandatory)][string]$Command)
     $cfg = (Get-AIHubConfigState).Config
     if ($null -eq $cfg) { return $true }
     if (-not $cfg.PSObject.Properties['cliAgents'] -or $null -eq $cfg.cliAgents) { return $false }
     foreach ($agent in @($cfg.cliAgents)) {
         if ($null -eq $agent) { continue }
         if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
-        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
         $leaf = ''
         if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
         if ($leaf -and $leaf.Equals($Command, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
-        if (-not $cmd -and $CanonicalName -and $agent.PSObject.Properties['name'] -and ([string]$agent.name).Trim().Equals($CanonicalName, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false
 }
@@ -730,9 +782,16 @@ function Test-AIHubCliAgentEnabled {
 # custom profile must be pointed at the config-aware auto-login.ps1 — otherwise the
 # advertised repair leaves the diagnosed variable unset.
 function Get-VaultPullHint {
-    param([AllowEmptyString()][string]$SecretName, [Parameter(Mandatory)][string]$EnvName)
+    param([AllowEmptyString()][string]$SecretName, [Parameter(Mandatory)][string]$EnvName, [AllowEmptyString()][string]$ProviderName = '', [string]$ConfigLabel = 'the active config')
     if ([string]::IsNullOrWhiteSpace($SecretName)) {
         return "set $EnvName directly (the active config declares no apiKeySecretName for it, so no vault pull exists)"
+    }
+    # An invalid NAME is a config defect, not a pull (review finding): SecretResolver
+    # requests it exactly as written and Key Vault rejects it — same wording as
+    # auto-login's action, so a merged summary dedupes the two.
+    if ($SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+        $target = if ($ProviderName) { "providers.$ProviderName.apiKeySecretName" } else { "the apiKeySecretName mapped to $EnvName" }
+        return "fix $target in ${ConfigLabel}: '$SecretName' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
     }
     $builtIn = @{ 'openai-api-key' = 'OPENAI_API_KEY'; 'anthropic-api-key' = 'ANTHROPIC_API_KEY'; 'github-models-token' = 'GITHUB_MODELS_TOKEN' }
     if ($builtIn.ContainsKey($SecretName) -and $builtIn[$SecretName] -eq $EnvName) {
@@ -759,10 +818,26 @@ function Invoke-GhAuthStatus {
     # --active restricts the check to the account subsequent gh commands actually use;
     # pre-2.40 gh lacks the flag — fall back one flag narrower (connect-all.ps1 /
     # connect-github.sh probe).
-    param([Parameter(Mandatory)][string]$GhExe)
-    $result = Invoke-Probe -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com', '--active')
-    if ($result.ExitCode -ne 0 -and ((@($result.Output) -join ' ') -match 'unknown flag')) {
-        $result = Invoke-Probe -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com')
+    # -ClearedNames (review finding): fixed GitHub variables owned by a non-GitHub
+    # consumer are removed from the environment for this one call and restored right
+    # after (values move between env slots in-process only), so gh never receives a
+    # foreign API key as its token — gh honors GH_TOKEN / GITHUB_TOKEN ahead of its
+    # keyring, so leaving them in place would send that key to github.com.
+    param([Parameter(Mandatory)][string]$GhExe, [AllowEmptyCollection()][string[]]$ClearedNames = @())
+    $saved = @{}
+    foreach ($clearedName in $ClearedNames) {
+        $saved[$clearedName] = [Environment]::GetEnvironmentVariable($clearedName)
+        [Environment]::SetEnvironmentVariable($clearedName, $null)
+    }
+    try {
+        $result = Invoke-Probe -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com', '--active')
+        if ($result.ExitCode -ne 0 -and ((@($result.Output) -join ' ') -match 'unknown flag')) {
+            $result = Invoke-Probe -Executable $GhExe -Arguments @('auth', 'status', '--hostname', 'github.com')
+        }
+    }
+    finally {
+        foreach ($clearedName in $ClearedNames) { [Environment]::SetEnvironmentVariable($clearedName, $saved[$clearedName]) }
+        $saved = $null
     }
     $result
 }
@@ -793,7 +868,12 @@ function New-LaneResult {
 # --- gh lane -------------------------------------------------------------------------
 function Test-GhLane {
     $ghCmd = Get-CliCommand -Name 'gh'
-    $envTokenName = @(@('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-EnvValue $_ }) | Select-Object -First 1
+    # Ownership screening (review finding): a fixed GitHub variable that an enabled
+    # non-GitHub consumer reads as its apiKeyEnv holds THAT service's key — it is not
+    # this lane's credential and is never passed to gh (cleared for the status call).
+    $screenedTokenNames = @(Get-NonGitHubOwnedTokenNames)
+    $envTokenName = @(@('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { (Test-EnvValue $_) -and ($_ -notin $screenedTokenNames) }) | Select-Object -First 1
+    $screenedNote = if ($screenedTokenNames.Count -gt 0) { " ($($screenedTokenNames -join ' / ') is read by an enabled non-GitHub consumer in the active config, so its value is that service's credential: screened out of this lane and never passed to gh)" } else { '' }
 
     if (-not $ghCmd) {
         $suffix = if ($envTokenName) { (' ({0} is set — name checked only — but there is no gh to drive)' -f $envTokenName) }
@@ -803,25 +883,25 @@ function Test-GhLane {
     }
 
     # Exit code only; the raw status text is never echoed (it names accounts/scopes).
-    $status = Invoke-GhAuthStatus -GhExe $ghCmd.Source
+    $status = Invoke-GhAuthStatus -GhExe $ghCmd.Source -ClearedNames $screenedTokenNames
 
     if ($envTokenName) {
         # gh honors env tokens ahead of its keyring, so a set token IS the auth.
         $actionsNote = if ($inActions) { ' — GitHub Actions: the workflow-provided GITHUB_TOKEN is the auth here' } else { '' }
         if ($status.ExitCode -eq 0) {
             return New-LaneResult -Lane 'gh' -State 'ready' -Method 'env-token' `
-                -Detail ("$envTokenName is set (name checked only, value never read) and gh auth status accepts it$actionsNote")
+                -Detail ("$envTokenName is set (name checked only, value never read) and gh auth status accepts it$actionsNote$screenedNote")
         }
         return New-LaneResult -Lane 'gh' -State 'needs-owner' -Method 'env-token' `
             -Detail ("$envTokenName is set (name checked only) but gh auth status exits $($status.ExitCode) — the gh CLI rejects the session, which does NOT prove the token is bad: REST-level " +
                 'connectivity can still exist (a proxy-injected session, or a fine-grained/app token the CLI dislikes). Wire-level ground truth: pwsh scripts/verify/rest-connect.ps1' +
-                " (raw status output never echoed)$actionsNote") `
+                " (raw status output never echoed)$actionsNote$screenedNote") `
             -OwnerAction 'gh auth login --web   # device-code flow; or rotate the env token — but run scripts/verify/rest-connect.ps1 first: if the transport is already authenticated, nothing may be broken'
     }
 
     if ($status.ExitCode -eq 0) {
         return New-LaneResult -Lane 'gh' -State 'ready' -Method 'stored-login' `
-            -Detail 'gh auth status reports an active github.com login from the keyring (raw output never echoed)'
+            -Detail ('gh auth status reports an active github.com login from the keyring (raw output never echoed)' + $screenedNote)
     }
 
     if ($inActions) {
@@ -833,7 +913,7 @@ function Test-GhLane {
     }
 
     return New-LaneResult -Lane 'gh' -State 'needs-owner' -Method 'device-code' `
-        -Detail 'no env token and no stored gh login — the device-code web login needs a human with a browser and is never automated' `
+        -Detail ('no env token and no stored gh login — the device-code web login needs a human with a browser and is never automated' + $screenedNote) `
         -OwnerAction 'gh auth login --web   # device-code flow; scripts/bootstrap/connect-github.sh adds the models:read scope'
 }
 
@@ -1009,7 +1089,7 @@ function Test-CodexLane {
     # live under any key ('gpt-prod'); the codex agent is the lane's CLI half,
     # discovered by its configured command (any entry running `codex`).
     $openAiProviders = Get-AIHubEnabledProvidersOfType -Type 'openai'
-    $codexAgentEnabled = Test-AIHubCliAgentEnabled -Command 'codex' -CanonicalName 'codex'
+    $codexAgentEnabled = Test-AIHubCliAgentEnabled -Command 'codex'
     $configState = Get-AIHubConfigState
     $noApiProviders = ($null -ne $openAiProviders -and $openAiProviders.Count -eq 0)
     if ($noApiProviders -and -not $codexAgentEnabled) {
@@ -1146,7 +1226,7 @@ function Test-ClaudeLane {
     # asks for nothing: with no enabled anthropic-type provider AND the claude-cli
     # agent off, a credential demand would surface as a false owner step downstream.
     $anthropicProviders = Get-AIHubEnabledProvidersOfType -Type 'anthropic'
-    $claudeAgentEnabled = Test-AIHubCliAgentEnabled -Command 'claude' -CanonicalName 'claude-cli'
+    $claudeAgentEnabled = Test-AIHubCliAgentEnabled -Command 'claude'
     $configState = Get-AIHubConfigState
     $configLabel = $configState.Label
     if ($null -ne $anthropicProviders -and $anthropicProviders.Count -eq 0 -and -not $claudeAgentEnabled) {
@@ -1241,7 +1321,7 @@ function Test-ClaudeLane {
 function Test-CopilotLane {
     param([Parameter(Mandatory)][pscustomobject]$GhResult)
 
-    if (-not (Test-AIHubCliAgentEnabled -Command 'copilot' -CanonicalName 'copilot')) {
+    if (-not (Test-AIHubCliAgentEnabled -Command 'copilot')) {
         return New-LaneResult -Lane 'copilot' -State 'disabled' -Method 'config' -Gates $false `
             -Detail ("the copilot agent is disabled or absent in the active config ($((Get-AIHubConfigState).Label)) — the hub never launches it, so no login is needed and none is requested")
     }
@@ -1269,7 +1349,10 @@ function Test-CopilotLane {
     # A headless token authenticates copilot on its own (review finding): setup-ai-clis.ps1
     # documents GH_TOKEN / GITHUB_TOKEN as sufficient, so a host without gh must not be
     # sent to `gh auth login`. Names checked only; wire validity is rest-connect's call.
-    $copilotTokenEnv = @('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-EnvValue $_ } | Select-Object -First 1
+    # Screened like the gh lane (review finding): a fixed variable an enabled
+    # non-GitHub consumer owns is that service's key, never copilot's token.
+    $copilotScreened = @(Get-NonGitHubOwnedTokenNames)
+    $copilotTokenEnv = @('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { (Test-EnvValue $_) -and ($_ -notin $copilotScreened) } | Select-Object -First 1
     if ($copilotTokenEnv) {
         $ghLaneNote = if ($GhResult.state -in 'ready', 'repaired') { '' } else { "; the gh lane is $($GhResult.state), which does not gate copilot (a gh CLI session is not required)" }
         return New-LaneResult -Lane 'copilot' -State 'ready' -Method 'env-token' `

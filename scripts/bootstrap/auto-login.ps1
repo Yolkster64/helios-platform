@@ -532,8 +532,8 @@ function Invoke-HeliosAutoLogin {
     # Enabled CLI agents that read a FIXED variable (review findings): any enabled
     # cliAgents entry whose command leaf is `codex` reads OPENAI_API_KEY, one running
     # `claude` reads ANTHROPIC_API_KEY, and one running `copilot` or `gh` inherits
-    # GH_TOKEN / GITHUB_TOKEN as its GitHub credential (the canonical name counts only
-    # for an entry declaring no command) — auth-doctor's discovery rule. The GitHub
+    # GH_TOKEN / GITHUB_TOKEN as its GitHub credential (an entry without a command is
+    # unconfigured, whatever its name) — auth-doctor's discovery rule. The GitHub
     # CLI readers make those two variables GitHub-family, so a provider of another
     # family mapping a vault secret to them is an incompatible sharing and nothing is
     # pulled into the variable the CLI process would inherit. Unreadable config → none.
@@ -543,11 +543,14 @@ function Invoke-HeliosAutoLogin {
         foreach ($agent in @($aihubParsed.cliAgents)) {
             if ($null -eq $agent) { continue }
             if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
-            $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+            # The configured COMMAND alone, untrimmed (review finding): CliProcessAgent
+            # runs options.Command as written and IsOnPath('') is false, so an entry
+            # without a command is unconfigured whatever its name says.
+            $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
             $leaf = ''
             if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
             $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
-            $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+            $key = if ($leaf) { $leaf.ToLowerInvariant() } else { '' }
             if ($key -eq 'codex') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; Env = 'OPENAI_API_KEY' }) }
             elseif ($key -in 'claude', 'claude-cli') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; Env = 'ANTHROPIC_API_KEY' }) }
             elseif ($key -in 'copilot', 'gh', 'gh-models') {
@@ -581,6 +584,22 @@ function Invoke-HeliosAutoLogin {
         $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
         $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
         return ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    # The canonical Key Vault ORIGIN only (review finding): SecretResolver builds its
+    # SecretClient from AZURE_KEY_VAULT_URI as written, so https://<vault>.vault.azure.net:444/
+    # or a URI carrying a path, query, fragment or userinfo is a different (unusable)
+    # endpoint for the hub even though its host names a real vault — deriving a vault
+    # name from it would prove a secret at an endpoint the hub never calls. Returns the
+    # vault name for https://<vault>.vault.<public or sovereign suffix>/ on the default
+    # port with no path beyond '/', else ''.
+    function Get-KeyVaultNameFromUri {
+        param([AllowEmptyString()][string]$Value)
+        $parsed = $null
+        if ([string]::IsNullOrWhiteSpace($Value) -or -not [uri]::TryCreate($Value.Trim(), [System.UriKind]::Absolute, [ref]$parsed)) { return '' }
+        if ($parsed.Scheme -ne 'https' -or -not $parsed.IsDefaultPort -or $parsed.UserInfo -or $parsed.Query -or $parsed.Fragment) { return '' }
+        if ($parsed.AbsolutePath -notin '', '/') { return '' }
+        if ($parsed.Host -notmatch '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { return '' }
+        return $Matches['vault']
     }
     # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
     # so they are reported (and, without a secret path, handed to the owner as the
@@ -643,7 +662,11 @@ function Invoke-HeliosAutoLogin {
                 continue
             }
             $providerSecretName = ''
-            if ($prov.PSObject.Properties['apiKeySecretName']) { $providerSecretName = ([string]$prov.apiKeySecretName).Trim() }
+            # Literal (review finding): SecretResolver.Resolve hands apiKeySecretName to
+            # GetSecret exactly as written, so a padded name is the invalid name the hub
+            # requests — reported as the config defect it is, never pulled under a
+            # trimmed name that would light the provider only through this export.
+            if ($prov.PSObject.Properties['apiKeySecretName'] -and $null -ne $prov.apiKeySecretName) { $providerSecretName = [string]$prov.apiKeySecretName }
             $declaredEnv = Get-DeclaredApiKeyEnv $prov
             # The factory's per-type default applies when an entry declares no
             # apiKeyEnv (review finding): CreateOpenAi/AnthropicAgent/CreateGitHubModels/
@@ -676,6 +699,12 @@ function Invoke-HeliosAutoLogin {
             else { $provType }
             if (-not $envReaders.ContainsKey($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
             $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Family = $readerFamily })
+            if (-not [string]::IsNullOrWhiteSpace($providerSecretName) -and $providerSecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+                Add-Step -Step "provider:$($provProp.Name)" -State 'needs-owner' -Detail "declares apiKeySecretName '$providerSecretName', which is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it; no vault pull is attempted for $envName"
+                # Same wording as auth-doctor's hint, so a merged summary dedupes it.
+                Add-OwnerAction -Env $envName -Text "fix providers.$($provProp.Name).apiKeySecretName in ${aihubConfigLabel}: '$providerSecretName' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+                continue
+            }
             if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
                 if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { Test-EnvNameEquals $_.Env $envName }).Count) {
                     $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
@@ -802,7 +831,13 @@ function Invoke-HeliosAutoLogin {
         foreach ($blank in @($blankEnvProviders | Where-Object { $_.Type -ne 'github-models' })) {
             $blankStep = "provider:$($blank.Name)"
             $blankWhy = "declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (the $($blank.Type) default applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it"
-            if ($blank.SecretName) {
+            if ($blank.SecretName -and $blank.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+                # An invalid NAME is a config defect before any vault question (review
+                # finding): the hub requests the string exactly as written.
+                Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy; its apiKeySecretName '$($blank.SecretName)' is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it, so the in-process path cannot light it either"
+                Add-OwnerAction -Text "fix providers.$($blank.Name).apiKeySecretName in ${aihubConfigLabel}: '$($blank.SecretName)' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+            }
+            elseif ($blank.SecretName) {
                 $vaultUriNote = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { '' } else { ' — AZURE_KEY_VAULT_URI is unset in this session, so that in-process pull cannot happen here' }
                 Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$vaultUriNote"
             }
@@ -865,7 +900,7 @@ function Invoke-HeliosAutoLogin {
         $ghDeclared = Get-DeclaredApiKeyEnv $ghProv
         if ($null -ne $ghDeclared -and $ghDeclared -eq '') { continue }
         $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
-        $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
+        $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName'] -and $null -ne $ghProv.apiKeySecretName) { [string]$ghProv.apiKeySecretName } else { '' }   # literal (review finding)
         $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
         # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
         $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
@@ -980,16 +1015,10 @@ function Invoke-HeliosAutoLogin {
         # ran az against it, and told the owner to populate the WRONG vault. Only
         # https plus a Key Vault hostname — <vault>.vault.<public or sovereign cloud
         # suffix> — derives a name; anything else is reported as the URI problem it is.
-        $vaultName = ''
-        $vaultUriParsed = $null
-        try { $vaultUriParsed = [uri]$vaultUri } catch { }
-        if ($null -ne $vaultUriParsed -and $vaultUriParsed.Scheme -eq 'https' -and
-            $vaultUriParsed.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') {
-            $vaultName = $Matches['vault']
-        }
+        $vaultName = Get-KeyVaultNameFromUri -Value $vaultUri
         if (-not $vaultName) {
-            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but is not an https://<vault>.vault.azure.net/ Key Vault URI (sovereign suffixes azure.cn, usgovcloudapi.net, microsoftazure.de also accepted) — fix the value; nothing was pulled and no vault was contacted'
-            Add-OwnerAction -Text 'fix AZURE_KEY_VAULT_URI: it is set but is not an https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault URI'
+            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but is not the canonical https://<vault>.vault.azure.net/ Key Vault origin (default port, no path, query, fragment or userinfo; sovereign suffixes azure.cn, usgovcloudapi.net, microsoftazure.de also accepted) — SecretResolver builds its client from the value as written, so fix it; nothing was pulled and no vault was contacted'
+            Add-OwnerAction -Text 'fix AZURE_KEY_VAULT_URI: it is set but is not the canonical https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault origin — default port, no path, query, fragment or userinfo'
         }
         else {
             # Identity pinning (review finding): auth-doctor -Apply returns ready on
@@ -1171,7 +1200,9 @@ function Invoke-HeliosAutoLogin {
     foreach ($target in $ghModelsTargets) {
         # Entries sharing one variable are one target; the label names them all.
         $targetLabel = if (@($target.Owners).Count -gt 1) { 'providers ' + ((@($target.Owners | ForEach-Object { "'$_'" })) -join ', ') } else { "provider '" + $target.Name + "'" }
-        $vaultClause = if ($target.SecretName) { ", or store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName)" } else { '' }
+        $vaultClause = if ($target.SecretName -and $target.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName)" }
+        elseif ($target.SecretName) { ", or fix its apiKeySecretName first ('$($target.SecretName)' is not a valid Key Vault secret name — see its provider step above)" }
+        else { '' }
         $repairAction = "grant models:read to the GitHub credential feeding $($target.Env) — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$vaultClause"
         if (-not $target.Public) {
             Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it"
@@ -1335,11 +1366,9 @@ function Invoke-HeliosAutoLogin {
     $blankSecretBlocker = ''
     $blankSecretVault = ''
     if (@($blankGhModels | Where-Object { $_.SecretName }).Count -gt 0) {
-        $presenceUri = $null
-        if ($vaultUri) { try { $presenceUri = [uri]$vaultUri } catch { } }
-        if ($null -ne $presenceUri -and $presenceUri.Scheme -eq 'https' -and $presenceUri.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { $blankSecretVault = $Matches['vault'] }
+        $blankSecretVault = Get-KeyVaultNameFromUri -Value $vaultUri
         if (-not $vaultUri) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is unset, so the hub cannot reach any vault' }
-        elseif (-not $blankSecretVault) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is not an https Key Vault URI, so the hub cannot reach the vault' }
+        elseif (-not $blankSecretVault) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is not the canonical https://<vault>.vault.azure.net/ Key Vault origin (default port, no path, query, fragment or userinfo), so the hub cannot reach the vault' }
         elseif (-not $azUsable) { $blankSecretBlocker = "the az lane is $azState, so the vault could not be inspected" }
         elseif (-not $azCmd) { $blankSecretBlocker = 'az is not on PATH, so the vault could not be inspected' }
         else {
@@ -1368,6 +1397,13 @@ function Invoke-HeliosAutoLogin {
     foreach ($blank in $blankGhModels) {
         $blankStep = "provider:$($blank.Name)"
         $blankWhy = 'declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (GITHUB_MODELS_TOKEN applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it'
+        if ($blank.SecretName -and $blank.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+            # An invalid NAME is a config defect before any vault question (review
+            # finding): the hub requests the string exactly as written.
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy; its apiKeySecretName '$($blank.SecretName)' is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it, so the in-process path cannot light it either"
+            Add-OwnerAction -Text "fix providers.$($blank.Name).apiKeySecretName in ${aihubConfigLabel}: '$($blank.SecretName)' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+            continue
+        }
         $blankPresence = ''
         if ($blank.SecretName) {
             $blankPresence = if ($blankSecretBlocker) { 'unverifiable' }
@@ -1432,7 +1468,9 @@ function Invoke-HeliosAutoLogin {
     foreach ($mixedTarget in @($ghModelsTargets | Where-Object { $_.Mixed })) {
         if (Test-EnvValue $mixedTarget.Env) { continue }
         if ($conflictingEnvSet.Contains($mixedTarget.Env) -or $incompatibleEnvSet.Contains($mixedTarget.Env)) { continue }   # the conflict / incompatible action above already names the split
-        $mixedVaultClause = if ($mixedTarget.SecretName) { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" } else { '' }
+        $mixedVaultClause = if ($mixedTarget.SecretName -and $mixedTarget.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" }
+        elseif ($mixedTarget.SecretName) { ", or fix its apiKeySecretName first ('$($mixedTarget.SecretName)' is not a valid Key Vault secret name — see its provider step above)" }
+        else { '' }
         $mixedPublic = (@($mixedTarget.PublicOwners | ForEach-Object { "'$_'" }) -join ', ')
         Add-OwnerAction -Env $mixedTarget.Env -Text "give the providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigLabel} (public github-models: $mixedPublic; also read by: $($mixedTarget.OtherReaders -join '; ')) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
     }

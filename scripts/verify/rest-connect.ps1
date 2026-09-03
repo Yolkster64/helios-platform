@@ -494,11 +494,12 @@ function Get-CliOwnedEnvNames {
     foreach ($agent in @($Config.cliAgents)) {
         if ($null -eq $agent) { continue }
         if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
-        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+        # The configured COMMAND alone, untrimmed (review finding): an entry without a
+        # command is unconfigured whatever its name says (IsOnPath('') is false).
+        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
         $leaf = ''
         if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
-        $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
-        $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+        $key = if ($leaf) { $leaf.ToLowerInvariant() } else { '' }
         if ($key -eq 'codex') { $names.Add('OPENAI_API_KEY') }
         elseif ($key -in 'claude', 'claude-cli') { $names.Add('ANTHROPIC_API_KEY') }
     }

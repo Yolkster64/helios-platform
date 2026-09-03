@@ -45,7 +45,18 @@ jobs:
           # and match (or miss) its fragments instead of the path. mapfile -d '' reads
           # one NUL-terminated record per element; each record is matched whole, and
           # the listing is printed with %q so an embedded newline stays visible.
-          mapfile -d '' changed < <(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          # The diff's exit status is checked (review finding): a git failure inside a
+          # process substitution is invisible to mapfile, which would then classify an
+          # EMPTY list as "not relevant" and skip the required job — so the diff lands
+          # in a file first and a failure fails this step loudly instead.
+          diff_file="$(mktemp)"
+          if ! git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_file"; then
+            echo "::error::git diff $BASE_SHA..$HEAD_SHA failed — the PR cannot be classified, failing instead of skipping the required checks"
+            rm -f "$diff_file"
+            exit 1
+          fi
+          mapfile -d '' changed < "$diff_file"
+          rm -f "$diff_file"
           printf '%q\n' "${changed[@]}"
           # The workflow file itself is a relevant path (review finding): a PR that
           # changes only this validator would otherwise skip all three required infra
