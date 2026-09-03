@@ -191,6 +191,8 @@ function Get-AIHubConfigState {
     $config = $null
     try { $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json }
     catch { Write-Verbose "$label read failed: $($_.Exception.Message)" }
+    # The hub binds the document to an object; anything else fails there the same way.
+    if ($config -isnot [System.Management.Automation.PSCustomObject]) { $config = $null }
     $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config }
     return $script:aihubConfigState
 }
@@ -207,8 +209,13 @@ function Get-AIHubConfigState {
 function Get-AIHubEnabledProvidersOfType {
     param([Parameter(Mandatory)][string]$Type)
     $cfg = (Get-AIHubConfigState).Config
-    if ($null -eq $cfg -or -not $cfg.PSObject.Properties['providers'] -or $null -eq $cfg.providers) { return $null }
+    if ($null -eq $cfg) { return $null }
     $found = [System.Collections.Generic.List[object]]::new()
+    # An absent (or null) providers section is an EMPTY table, not an unreadable
+    # config (review finding): AIHubOptions.Providers starts empty, so the hub loads
+    # a CLI-only profile and instantiates no API provider from it — the fallback
+    # names are for a file the hub could not read, never for one it reads fine.
+    if (-not $cfg.PSObject.Properties['providers'] -or $null -eq $cfg.providers) { return , $found }
     foreach ($prop in $cfg.providers.PSObject.Properties) {
         $prov = $prop.Value
         if ($null -eq $prov) { continue }
@@ -218,6 +225,61 @@ function Get-AIHubEnabledProvidersOfType {
         $found.Add([pscustomobject]@{ Name = $prop.Name; Value = $prov })
     }
     return , $found
+}
+# One (Env, SecretName) pair per DISTINCT variable the given enabled entries read,
+# plus the entries that declare a BLANK apiKeyEnv (review finding): ProviderFactory
+# applies the per-type default (`ApiKeyEnv ?? <default>`) only when the property is
+# absent or JSON null, and SecretResolver reads no variable for a blank name — such
+# an entry resolves only its apiKeySecretName, in-process, so no variable can prove
+# it here, and without a secret it can never be configured at all. Normalizing blank
+# to the default would demand a variable the hub never reads.
+function Get-ProviderCredentialPairs {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Entries,
+        [Parameter(Mandatory)][string]$DefaultEnv
+    )
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    $blank = [System.Collections.Generic.List[object]]::new()
+    foreach ($entry in $Entries) {
+        $prov = $entry.Value
+        $envProp = $prov.PSObject.Properties['apiKeyEnv']
+        $declaredEnv = if ($null -eq $envProp -or $null -eq $envProp.Value) { $DefaultEnv } else { ([string]$envProp.Value).Trim() }
+        $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
+        if ($declaredEnv -eq '') {
+            $blank.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
+            continue
+        }
+        if (-not @($pairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
+            $pairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
+        }
+    }
+    return [pscustomobject]@{ Pairs = $pairs; Blank = $blank }
+}
+# The blank-apiKeyEnv verdict shared by the API-key lanes: entries with a secret are a
+# note (the hub pulls that secret itself; unprovable from the environment), entries
+# without one are a config defect only an edit fixes.
+function Get-BlankEnvVerdict {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blank,
+        [Parameter(Mandatory)][string]$Type,
+        [Parameter(Mandatory)][string]$DefaultEnv,
+        [Parameter(Mandatory)][string]$ConfigLabel
+    )
+    $vaulted = @($Blank | Where-Object { $_.SecretName })
+    $defects = @($Blank | Where-Object { -not $_.SecretName })
+    $quote = { param($names) (@($names | ForEach-Object { "'$_'" }) -join ', ') }
+    $note = if ($vaulted.Count -gt 0) {
+        "; provider(s) $(& $quote @($vaulted | ForEach-Object Name)) (type $Type) declare a blank apiKeyEnv and resolve Key Vault secret(s) $(& $quote @($vaulted | ForEach-Object SecretName | Select-Object -Unique)) in-process (AZURE_KEY_VAULT_URI) — the hub reads no variable for them, so they are not provable from the environment"
+    }
+    else { '' }
+    $defectDetail = ''
+    $defectAction = ''
+    if ($defects.Count -gt 0) {
+        $defectNames = @($defects | ForEach-Object Name)
+        $defectDetail = "provider(s) $(& $quote $defectNames) (type $Type) declare an explicitly blank apiKeyEnv and no apiKeySecretName — ProviderFactory reads no variable and no secret for them ($DefaultEnv applies only when the property is absent), so they can never be configured$note"
+        $defectAction = "fix providers.{$($defectNames -join ',')}.apiKeyEnv in ${ConfigLabel}: set a variable name (or remove the property to use $DefaultEnv) and/or add apiKeySecretName"
+    }
+    return [pscustomobject]@{ Note = $note; DefectDetail = $defectDetail; DefectAction = $defectAction; HasDefects = ($defects.Count -gt 0) }
 }
 function Test-AIHubCliAgentEnabled {
     param([Parameter(Mandatory)][string]$Name)
@@ -530,30 +592,39 @@ function Test-CodexLane {
     # variable never covers a sibling. The built-in pair applies only when the config
     # is unreadable or only the codex agent is enabled (the CLI honors OPENAI_API_KEY).
     $credentialPairs = [System.Collections.Generic.List[object]]::new()
+    $blankEnvEntries = [System.Collections.Generic.List[object]]::new()
     $nameSource = "fallback defaults; $($configState.Label) was unreadable"
     if ($null -ne $openAiProviders) {
-        foreach ($entry in $openAiProviders) {
-            $prov = $entry.Value
-            $declaredEnv = if ($prov.PSObject.Properties['apiKeyEnv']) { ([string]$prov.apiKeyEnv).Trim() } else { '' }
-            if (-not $declaredEnv) { $declaredEnv = 'OPENAI_API_KEY' }
-            $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
-            if (-not @($credentialPairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
-                $credentialPairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
-            }
-        }
-        $nameSource = if ($credentialPairs.Count -gt 0) { "$($configState.Label) providers.{$(@($openAiProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type openai; OPENAI_API_KEY where unset)" }
+        $derived = Get-ProviderCredentialPairs -Entries @($openAiProviders) -DefaultEnv 'OPENAI_API_KEY'
+        $credentialPairs = $derived.Pairs
+        $blankEnvEntries = $derived.Blank
+        $nameSource = if ($credentialPairs.Count -gt 0) { "$($configState.Label) providers.{$(@($openAiProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type openai; OPENAI_API_KEY where the property is absent)" }
+        elseif ($blankEnvEntries.Count -gt 0) { "$($configState.Label) providers.{$(@($openAiProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type openai; every enabled entry declares a blank apiKeyEnv, so the hub reads no variable for them)" }
         else { "fallback default; only the codex agent is enabled in $($configState.Label)" }
     }
-    if ($credentialPairs.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; SecretName = 'openai-api-key' }) }
+    # The built-in pair applies only when NO enabled entry exists to derive from — a
+    # profile whose entries all declare a blank apiKeyEnv reads no variable at all.
+    if ($credentialPairs.Count -eq 0 -and $blankEnvEntries.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; SecretName = 'openai-api-key' }) }
     $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
+    $blankVerdict = Get-BlankEnvVerdict -Blank @($blankEnvEntries) -Type 'openai' -DefaultEnv 'OPENAI_API_KEY' -ConfigLabel $configState.Label
+    if ($blankVerdict.HasDefects) {
+        return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'config' `
+            -Detail $blankVerdict.DefectDetail -OwnerAction $blankVerdict.DefectAction
+    }
 
     # Name-only presence checks; values never enter a variable. EVERY distinct enabled
     # provider variable must hold a value before the lane is ready.
     $missingPairs = @($credentialPairs | Where-Object { -not (Test-EnvValue $_.Env) })
     $setEnvNames = @($credentialPairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
     if ($missingPairs.Count -eq 0) {
+        if ($credentialPairs.Count -eq 0) {
+            # Every enabled entry is vault-resolved in-process: nothing for this
+            # doctor to check or repair, and nothing it can prove either — said so.
+            return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'keyvault-inprocess' `
+                -Detail "no environment variable to check (declared by $nameSource)$($blankVerdict.Note)"
+        }
         return New-LaneResult -Lane 'openai-codex' -State 'ready' -Method 'env-token' `
-            -Detail "$envList set (declared by $nameSource; names checked only, values never read) — covers the codex CLI and every enabled openai/openai-codex API provider"
+            -Detail "$envList set (declared by $nameSource; names checked only, values never read) — covers the codex CLI and every enabled openai/openai-codex API provider$($blankVerdict.Note)"
     }
     $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
     $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }
@@ -617,30 +688,36 @@ function Test-ClaudeLane {
     # each provider's credential independently. The built-in pair applies when the
     # config is unreadable or only the claude-cli agent is enabled (the CLI reads it).
     $credentialPairs = [System.Collections.Generic.List[object]]::new()
+    $blankEnvEntries = [System.Collections.Generic.List[object]]::new()
     $nameSource = "fallback defaults; $configLabel was unreadable"
     if ($null -ne $anthropicProviders) {
-        foreach ($entry in $anthropicProviders) {
-            $prov = $entry.Value
-            $declaredEnv = if ($prov.PSObject.Properties['apiKeyEnv']) { ([string]$prov.apiKeyEnv).Trim() } else { '' }
-            if (-not $declaredEnv) { $declaredEnv = 'ANTHROPIC_API_KEY' }
-            $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
-            if (-not @($credentialPairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
-                $credentialPairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
-            }
-        }
-        $nameSource = if ($credentialPairs.Count -gt 0) { "$configLabel providers.{$(@($anthropicProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type anthropic; ANTHROPIC_API_KEY where unset)" }
+        $derived = Get-ProviderCredentialPairs -Entries @($anthropicProviders) -DefaultEnv 'ANTHROPIC_API_KEY'
+        $credentialPairs = $derived.Pairs
+        $blankEnvEntries = $derived.Blank
+        $nameSource = if ($credentialPairs.Count -gt 0) { "$configLabel providers.{$(@($anthropicProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type anthropic; ANTHROPIC_API_KEY where the property is absent)" }
+        elseif ($blankEnvEntries.Count -gt 0) { "$configLabel providers.{$(@($anthropicProviders | ForEach-Object Name) -join ',')}.apiKeyEnv (type anthropic; every enabled entry declares a blank apiKeyEnv, so the hub reads no variable for them)" }
         else { "fallback default; only the claude-cli agent is enabled in $configLabel" }
     }
-    if ($credentialPairs.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'ANTHROPIC_API_KEY'; SecretName = 'anthropic-api-key' }) }
+    # The built-in pair applies only when NO enabled entry exists to derive from.
+    if ($credentialPairs.Count -eq 0 -and $blankEnvEntries.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'ANTHROPIC_API_KEY'; SecretName = 'anthropic-api-key' }) }
     $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
+    $blankVerdict = Get-BlankEnvVerdict -Blank @($blankEnvEntries) -Type 'anthropic' -DefaultEnv 'ANTHROPIC_API_KEY' -ConfigLabel $configLabel
+    if ($blankVerdict.HasDefects) {
+        return New-LaneResult -Lane 'claude' -State 'needs-owner' -Method 'config' `
+            -Detail $blankVerdict.DefectDetail -OwnerAction $blankVerdict.DefectAction
+    }
 
     # Non-whitespace, not mere existence (same rule as the service-principal gate):
     # an empty variable lights nothing. Values are read only for this test.
     $missingPairs = @($credentialPairs | Where-Object { -not (Test-EnvValue $_.Env) })
     $setEnvNames = @($credentialPairs | Where-Object { Test-EnvValue $_.Env } | ForEach-Object Env)
     if ($missingPairs.Count -eq 0) {
+        if ($credentialPairs.Count -eq 0) {
+            return New-LaneResult -Lane 'claude' -State 'ready' -Method 'keyvault-inprocess' `
+                -Detail "no environment variable to check (declared by $nameSource)$($blankVerdict.Note)"
+        }
         return New-LaneResult -Lane 'claude' -State 'ready' -Method 'env-token' `
-            -Detail ("$envList set (declared by $nameSource; names checked only, values never read) — covers the claude cliAgent and every enabled anthropic provider")
+            -Detail ("$envList set (declared by $nameSource; names checked only, values never read) — covers the claude cliAgent and every enabled anthropic provider$($blankVerdict.Note)")
     }
     $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
     $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }

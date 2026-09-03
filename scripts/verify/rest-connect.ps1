@@ -263,24 +263,45 @@ function Get-ConfiguredGitHubModelsEnvs {
     else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
     try {
         $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        # The hub binds the document to an object; anything else is unreadable to it too.
+        if ($parsed -isnot [System.Management.Automation.PSCustomObject]) { return @($default) }
+        # An absent providers section is an EMPTY table (review finding):
+        # AIHubOptions.Providers starts empty, so the hub loads a CLI-only profile and
+        # instantiates no github-models provider from it — no candidate, not the default.
         $providers = Get-OptionalProperty $parsed 'providers'
-        if ($null -eq $providers) { return @($default) }
-        $names = [System.Collections.Generic.List[string]]::new()
+        if ($null -eq $providers) { return @() }
+        # Pass 1 — every enabled github-models entry that reads a variable, with its
+        # endpoint ownership. apiKeyEnv follows ProviderFactory exactly (review
+        # finding): the default applies only when the property is absent/null; a
+        # declared-blank name means the hub reads NO variable (SecretResolver skips a
+        # blank name), so there is nothing to probe for that entry.
+        $entries = [System.Collections.Generic.List[object]]::new()
         foreach ($prop in $providers.PSObject.Properties) {
             $prov = $prop.Value
             if ($null -eq $prov) { continue }
             $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim()
             if (-not $provType.Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
             if ((Get-OptionalProperty $prov 'enabled' $true) -eq $false) { continue }
+            $envProp = $prov.PSObject.Properties['apiKeyEnv']
+            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $default } else { ([string]$envProp.Value).Trim() }
+            if (-not $envName) { continue }
             $baseUrl = ([string](Get-OptionalProperty $prov 'baseUrl' '')).Trim()
+            $isPublic = $true
             if ($baseUrl) {
                 $baseHost = ''
                 try { $baseHost = ([uri]$baseUrl).Host } catch { }
-                if (-not $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+                $isPublic = $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
             }
-            $envName = ([string](Get-OptionalProperty $prov 'apiKeyEnv' '')).Trim()
-            if (-not $envName) { $envName = $default }
-            if (-not $names.Contains($envName)) { $names.Add($envName) }
+            $entries.Add([pscustomobject]@{ Env = $envName; Public = $isPublic })
+        }
+        # Pass 2 — a variable is a candidate only when EVERY entry reading it is
+        # public (review finding, mixed ownership): one shared by a public and a
+        # custom-baseUrl provider may hold the custom endpoint's credential, which
+        # must never reach api.github.com — the same rule as the custom-only case.
+        $names = [System.Collections.Generic.List[string]]::new()
+        foreach ($envName in @($entries | ForEach-Object { $_.Env } | Select-Object -Unique)) {
+            if (@($entries | Where-Object { $_.Env -eq $envName -and -not $_.Public }).Count) { continue }
+            $names.Add($envName)
         }
         return @($names)
     }
@@ -899,7 +920,7 @@ if ($DryRun) {
     Write-Host ''
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
     $configuredModelsEnvs = @(Get-ConfiguredGitHubModelsEnvs)
-    $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only)" } else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
+    $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only, and never a variable a custom-endpoint provider also reads)" } else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
     Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> $configuredModelsText -> gh auth token (only if gh is on PATH)"
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
