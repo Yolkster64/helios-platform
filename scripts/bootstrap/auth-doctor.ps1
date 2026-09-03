@@ -523,7 +523,7 @@ function Test-CodexLane {
                 $declaredEnv = if ($prov.PSObject.Properties['apiKeyEnv']) { ([string]$prov.apiKeyEnv).Trim() } else { '' }
                 $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
                 if ($declaredEnv -and -not @($credentialPairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
-                    $credentialPairs.Add([pscustomobject]@{ Env = $declaredEnv; Secret = $declaredVault })
+                    $credentialPairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
                 }
             }
             catch { Write-Verbose "$($configState.Label) providers.$providerName is not readable: $($_.Exception.Message)" }
@@ -532,7 +532,7 @@ function Test-CodexLane {
         elseif ($enabledProviders.Count -eq 0) { "fallback default; only the codex agent is enabled in $($configState.Label)" }
         else { "fallback default; the enabled providers in $($configState.Label) declare no apiKeyEnv" }
     }
-    if ($credentialPairs.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; Secret = 'openai-api-key' }) }
+    if ($credentialPairs.Count -eq 0) { $credentialPairs.Add([pscustomobject]@{ Env = 'OPENAI_API_KEY'; SecretName = 'openai-api-key' }) }
     $envList = @($credentialPairs | ForEach-Object Env) -join ' / '
 
     # Name-only presence checks; values never enter a variable. EVERY distinct enabled
@@ -545,7 +545,7 @@ function Test-CodexLane {
     }
     $missingList = @($missingPairs | ForEach-Object Env) -join ' / '
     $partialNote = if ($setEnvNames.Count -gt 0) { " ($($setEnvNames -join ' / ') is set, but each enabled provider reads its own variable)" } else { '' }
-    $vaultPull = (@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.Secret -EnvName $_.Env }) -join '; ')
+    $vaultPull = (@($missingPairs | ForEach-Object { Get-VaultPullHint -SecretName $_.SecretName -EnvName $_.Env }) -join '; ')
 
     # The codex CLI login is an alternative for the CLI agent only, and only when the
     # profile enables that agent — a CLI login never covers the API providers.
