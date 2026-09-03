@@ -141,8 +141,11 @@ function Invoke-HeliosAutoLogin {
     # nonempty values, and this script matches that rule everywhere.
     function Test-EnvValue {
         param([Parameter(Mandatory)][string]$Name)
-        if (-not (Test-Path "env:$Name")) { return $false }
-        return -not [string]::IsNullOrWhiteSpace([string](Get-Item "env:$Name").Value)
+        # .NET API, never the env: drive (review finding): a config-derived name such
+        # as API_* would be expanded as a wildcard by the provider, while the hub reads
+        # the literal name through Environment.GetEnvironmentVariable. Every read,
+        # export, and removal of a config-derived name below uses the same API.
+        return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
     }
 
     Write-Report '== HELIOS auto-login (non-interactive acquire + export; zero prompts) =='
@@ -606,7 +609,7 @@ function Invoke-HeliosAutoLogin {
                 $secretExit = [int]$LASTEXITCODE
                 if ($secretExit -eq 0) { $secretValue = (@($secretLines) -join '').Trim() }
                 if ($secretValue) {
-                    Set-Item -Path "env:$($pair.Env)" -Value $secretValue
+                    [Environment]::SetEnvironmentVariable($pair.Env, $secretValue)   # literal name (review finding)
                     $secretValue = ''
                     $exportedNames.Add($pair.Env)
                     Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
@@ -661,7 +664,7 @@ function Invoke-HeliosAutoLogin {
                 }
             }
             $authHeaders = $ghHeaders.Clone()
-            $authHeaders['Authorization'] = "Bearer $([string](Get-Item "env:$EnvName").Value)"
+            $authHeaders['Authorization'] = "Bearer $([string][Environment]::GetEnvironmentVariable($EnvName))"
             $resp = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $authHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
             $authHeaders = $null
             # Definitive rejection only on 401 (review finding): 429/5xx/anything else
@@ -690,6 +693,9 @@ function Invoke-HeliosAutoLogin {
     # repair action until a run proves it.
     $ghModelsProvenEnvs = [System.Collections.Generic.List[string]]::new()
     $ghModelsUnprovenExportEnvs = [System.Collections.Generic.List[string]]::new()
+    # Held values the wire REJECTED (401 or no models:read) — never satisfied, whatever
+    # they contain (review finding); the value itself is left untouched.
+    $ghModelsRejectedEnvs = [System.Collections.Generic.List[string]]::new()
     $ghTokenVerdict = $null     # GITHUB_TOKEN is probed at most once per run
     $ghKeyring = $null          # the gh keyring is read (env-cleared) and probed at most once per run
     foreach ($target in $ghModelsTargets) {
@@ -702,7 +708,32 @@ function Invoke-HeliosAutoLogin {
             continue
         }
         if (Test-EnvValue $target.Env) {
-            Add-Step -Step $target.Env -State 'skipped' -Detail "already holds a value in this session (preset or pulled from Key Vault) — the GitHub-credential fallback is not needed for $targetLabel"
+            # A preset or vault-pulled value is probed exactly like GITHUB_TOKEN and the
+            # gh keyring (review finding): non-emptiness is not usability, and the
+            # reconcile filter must never retire a repair on the strength of a revoked
+            # or scope-less token. The value is never clobbered — only judged.
+            $heldVerdict = Get-GitHubTokenModelsScope -EnvName $target.Env
+            $heldSource = 'already holds a value in this session (preset or pulled from Key Vault)'
+            switch ($heldVerdict) {
+                'proven' {
+                    $ghModelsProvenEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'ok' -Detail "$heldSource and X-OAuth-Scopes carries models:read — $targetLabel is satisfied; no GitHub-credential fallback needed"
+                }
+                'unverifiable' {
+                    $ghModelsUnprovenExportEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'ok' -Detail "$heldSource; its models:read permission is NOT verifiable here (no X-OAuth-Scopes header, or an injecting transport) — kept as-is and no fallback attempted, but any scope/vault repair stays listed until a run proves it"
+                }
+                'missing-scope' {
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; the value is left untouched (never clobbered)"
+                    Add-OwnerAction -Env $target.Env -Text $repairAction
+                }
+                default {
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but api.github.com rejects it (401) — $targetLabel cannot use it; the value is left untouched (never clobbered)"
+                    Add-OwnerAction -Env $target.Env -Text "rotate the value held by $($target.Env) — api.github.com rejects it: replace it in the shell$vaultClause, or unset it so the GITHUB_TOKEN / gh-keyring fallback can apply on the next run (lights $($target.Env))"
+                }
+            }
             continue
         }
         $needFallback = $true
@@ -782,7 +813,7 @@ function Invoke-HeliosAutoLogin {
         # and the repair action stands; an unverifiable one is exported as the best
         # available credential but leaves every scope/vault repair listed until a
         # run proves it.
-        Set-Item -Path "env:$($target.Env)" -Value $ghKeyring.Token
+        [Environment]::SetEnvironmentVariable($target.Env, $ghKeyring.Token)   # literal name (review finding)
         if ($null -eq $ghKeyring.Verdict) { $ghKeyring.Verdict = Get-GitHubTokenModelsScope -EnvName $target.Env }
         switch ($ghKeyring.Verdict) {
             'proven' {
@@ -799,12 +830,12 @@ function Invoke-HeliosAutoLogin {
                         'until a run proves it; if model calls 403: gh auth refresh -h github.com --scopes models:read')
             }
             'missing-scope' {
-                Remove-Item -Path "env:$($target.Env)" -ErrorAction SilentlyContinue
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
                 Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported ($targetLabel would 403 on every call)"
                 Add-OwnerAction -Env $target.Env -Text $repairAction
             }
             default {
-                Remove-Item -Path "env:$($target.Env)" -ErrorAction SilentlyContinue
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
                 Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login was rejected by api.github.com — NOT exported for $targetLabel"
                 Add-OwnerAction -Env $target.Env -Text "re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read$vaultClause (lights $($target.Env))"
             }
@@ -888,6 +919,7 @@ function Invoke-HeliosAutoLogin {
     function Test-EnvSatisfied {
         param([Parameter(Mandatory)][string]$Name)
         if ($ghModelsPublicEnvs -contains $Name) {
+            if ($ghModelsRejectedEnvs.Contains($Name)) { return $false }
             return ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($Name) -or
                 ((Test-EnvValue $Name) -and -not $ghModelsUnprovenExportEnvs.Contains($Name)))
         }

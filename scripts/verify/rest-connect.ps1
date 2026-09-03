@@ -141,7 +141,10 @@ $imdsTimeoutSec = 2   # HARD by design: a non-Azure host must fail fast, not han
 $userAgent = 'helios-rest-connect'
 # Exact owner runbook (ENTERPRISE_AI_CONNECTIONS.md §1 + setup-tenant.ps1 -OpsIdentity):
 # one MFA login now, then the workload identity makes every future session automatic.
-$azureOwnerAction = 'az login --tenant "349e1399-dccf-45b1-af7e-05d7b0676abf" (MFA once), then pwsh scripts/bootstrap/setup-tenant.ps1 -OpsIdentity to mint the service principal that makes every future session non-interactive'
+# Executable as written in PowerShell 7 AND bash (review finding): `&&` sequences the
+# steps in both shells and the prose lives in a trailing comment; setup-tenant.ps1
+# defaults to dry-run, so the -Apply switch is part of the command.
+$azureOwnerAction = 'az login --tenant "349e1399-dccf-45b1-af7e-05d7b0676abf" && pwsh scripts/bootstrap/setup-tenant.ps1 -OpsIdentity -Apply   # MFA once at the login; the -Apply run then mints the ops service principal that makes every future session non-interactive'
 
 # -Json promises one object and nothing else on stdout, and from an external caller's
 # viewpoint Write-Host lands on stdout too — so all progress printing gates on it
@@ -238,8 +241,10 @@ function Test-ParsedJson {
 # test emptiness; it is never printed or stored.
 function Test-EnvValue {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Test-Path "env:$Name")) { return $false }
-    return -not [string]::IsNullOrWhiteSpace([string](Get-Item "env:$Name").Value)
+    # .NET API, never the env: drive (review finding): a config-derived name such as
+    # API_* would be expanded as a wildcard by the provider, while the hub reads the
+    # literal name through Environment.GetEnvironmentVariable.
+    return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
 }
 
 # --- github lane ------------------------------------------------------------------------
@@ -279,37 +284,50 @@ function Get-ConfiguredGitHubModelsEnvs {
         # instantiates no github-models provider from it — no candidate, not the default.
         $providers = Get-OptionalProperty $parsed 'providers'
         if ($null -eq $providers) { return @() }
-        # Pass 1 — every enabled github-models entry that reads a variable, with its
-        # endpoint ownership. apiKeyEnv follows ProviderFactory exactly (review
-        # finding): the default applies only when the property is absent/null; a
+        # Pass 1 — every enabled KEYED entry (github-models, openai, anthropic,
+        # azure-openai) that reads a variable, with whether it is a PUBLIC github-models
+        # provider. apiKeyEnv follows ProviderFactory exactly (review finding): the
+        # per-type default applies only when the property is absent/null; a
         # declared-blank name means the hub reads NO variable (SecretResolver skips a
         # blank name), so there is nothing to probe for that entry.
         $entries = [System.Collections.Generic.List[object]]::new()
         foreach ($prop in $providers.PSObject.Properties) {
             $prov = $prop.Value
             if ($null -eq $prov) { continue }
-            $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim()
-            if (-not $provType.Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim().ToLowerInvariant()
+            $typeDefault = switch ($provType) {
+                'github-models' { $default }
+                'openai' { 'OPENAI_API_KEY' }
+                'anthropic' { 'ANTHROPIC_API_KEY' }
+                'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                default { '' }
+            }
+            if (-not $typeDefault) { continue }   # keyless types read no variable
             if ((Get-OptionalProperty $prov 'enabled' $true) -eq $false) { continue }
             $envProp = $prov.PSObject.Properties['apiKeyEnv']
-            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $default } else { ([string]$envProp.Value).Trim() }
+            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
             if (-not $envName) { continue }
-            $baseUrl = ([string](Get-OptionalProperty $prov 'baseUrl' '')).Trim()
-            $isPublic = $true
-            if ($baseUrl) {
-                $baseHost = ''
-                try { $baseHost = ([uri]$baseUrl).Host } catch { }
-                $isPublic = $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+            $isPublicModels = $false
+            if ($provType -eq 'github-models') {
+                $isPublicModels = $true
+                $baseUrl = ([string](Get-OptionalProperty $prov 'baseUrl' '')).Trim()
+                if ($baseUrl) {
+                    $baseHost = ''
+                    try { $baseHost = ([uri]$baseUrl).Host } catch { }
+                    $isPublicModels = $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+                }
             }
-            $entries.Add([pscustomobject]@{ Env = $envName; Public = $isPublic })
+            $entries.Add([pscustomobject]@{ Env = $envName; PublicModels = $isPublicModels })
         }
-        # Pass 2 — a variable is a candidate only when EVERY entry reading it is
-        # public (review finding, mixed ownership): one shared by a public and a
-        # custom-baseUrl provider may hold the custom endpoint's credential, which
-        # must never reach api.github.com — the same rule as the custom-only case.
+        # Pass 2 — a variable is a candidate only when EVERY enabled entry reading it
+        # is a PUBLIC github-models provider (review findings, mixed and cross-type
+        # ownership): one also read by a custom-baseUrl Models entry or by an
+        # openai/anthropic/azure-openai entry may hold THAT service's credential,
+        # which must never be sent to api.github.com — the same rule auto-login.ps1
+        # applies before exporting into such a variable.
         $names = [System.Collections.Generic.List[string]]::new()
         foreach ($envName in @($entries | ForEach-Object { $_.Env } | Select-Object -Unique)) {
-            if (@($entries | Where-Object { $_.Env -eq $envName -and -not $_.Public }).Count) { continue }
+            if (@($entries | Where-Object { $_.Env -eq $envName -and -not $_.PublicModels }).Count) { continue }
             $names.Add($envName)
         }
         return @($names)
@@ -333,11 +351,11 @@ function Get-GitHubTokenCandidates {
     # Third slot is the CONFIGURED models env (GITHUB_MODELS_TOKEN by default) —
     # review finding: a renamed apiKeyEnv must still be probed.
     foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN') + @(Get-ConfiguredGitHubModelsEnvs) | Select-Object -Unique)) {
-        if (Test-Path "env:$envName") {
-            $value = [string](Get-Item "env:$envName").Value
-            if (-not [string]::IsNullOrWhiteSpace($value)) {
-                $candidates.Add([pscustomobject]@{ Source = "env:$envName"; Token = $value.Trim() })
-            }
+        # Literal name through the .NET API (review finding): the env: drive would
+        # expand wildcard characters in a config-derived name.
+        $value = [string][Environment]::GetEnvironmentVariable($envName)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $candidates.Add([pscustomobject]@{ Source = "env:$envName"; Token = $value.Trim() })
         }
     }
     $ghCmd = Get-CliCommand -Name 'gh'
@@ -427,6 +445,7 @@ function Test-GitHubLane {
 
     $attemptNotes = [System.Collections.Generic.List[string]]::new()
     $sawDefinitiveRejection = $false
+    $rejectedEnvSources = [System.Collections.Generic.List[string]]::new()
     foreach ($candidate in $candidates) {
         $sourceName = [string]$candidate.Source
         # The bearer value exists only inside this header hashtable for the two probes
@@ -494,6 +513,7 @@ function Test-GitHubLane {
         if ($rateProbe.Status -eq 401) {
             $sawDefinitiveRejection = $true
             $attemptNotes.Add("$sourceName rate_limit 401 (candidate not REST-valid)")
+            if ($sourceName -like 'env:*') { $rejectedEnvSources.Add($sourceName.Substring(4)) }
         }
         elseif ($rateProbe.Status -eq 0) {
             $attemptNotes.Add("$sourceName transport failure ($($rateProbe.Transport))")
@@ -512,10 +532,15 @@ function Test-GitHubLane {
             -Detail ("no candidate got a definitive answer from api.github.com — every attempt was transient " +
                 "(transport/429/5xx): $chainText — retry later; do NOT rotate credentials on this evidence")
     }
+    # The action must be runnable on THIS host (review finding): with gh absent, a bare
+    # `gh auth login` cannot execute — name the rejected variable(s) for rotation and
+    # put the CLI installation before the login command.
+    $ghOnPath = [bool](Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $rotateAction = if ($rejectedEnvSources.Count -gt 0) { "rotate $(@($rejectedEnvSources | Select-Object -Unique) -join ' / ') (each answered 401 from api.github.com) with a valid token" } else { '' }
+    $loginAction = if ($ghOnPath) { 'gh auth login --web   # device-code flow' } else { 'bash scripts/bootstrap/cloud-shell-setup.sh && gh auth login --web   # step 1 installs the GitHub CLI (or https://cli.github.com); then the device-code flow' }
     return New-LaneResult -Lane 'github' -State 'needs-owner' -Source 'none' `
-        -Detail ("every candidate token failed the direct REST probe: $chainText — a fresh device-code " +
-            'login (or a rotated token in GH_TOKEN) is an owner step') `
-        -OwnerAction 'gh auth login --web (device code)'
+        -Detail ("every candidate token failed the direct REST probe: $chainText — a rotated token in the rejected variable, or a fresh device-code login, is an owner step") `
+        -OwnerAction ((@($rotateAction, $loginAction) | Where-Object { $_ }) -join '; or: ')
 }
 
 # --- azure lane -------------------------------------------------------------------------
@@ -905,7 +930,7 @@ function Test-AzureLane {
         return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'none' `
             -Detail ("no Azure credential source exists on this host — no CI OIDC, no service-principal env vars, no managed-identity endpoint yielded a token, and az is not on PATH: $chainText — " +
                 'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
-            -OwnerAction ("install the Azure CLI first (bash scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli), then: $azureOwnerAction")
+            -OwnerAction ("bash scripts/bootstrap/cloud-shell-setup.sh && $azureOwnerAction   # step 1 installs the Azure CLI (or https://aka.ms/azure-cli)")
     }
     # 4b. A declared managed-identity endpoint REJECTED the request (401/403): the
     #     host's identity wiring is wrong, and no retry or MFA login repairs that —
