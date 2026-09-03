@@ -175,6 +175,12 @@ function Test-EnvValue {
     param([Parameter(Mandatory)][string]$Name)
     return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
 }
+# Environment-variable NAME semantics follow the OS (review finding): case-sensitive on
+# Linux/macOS (MODEL_KEY and model_key are two variables ProviderFactory reads
+# literally), case-insensitive on Windows. Name comparisons and indexes use this
+# comparer — never -eq / [ordered] hashtables, which would merge two Unix variables.
+$script:EnvNameComparer = if ($IsWindows) { [System.StringComparer]::OrdinalIgnoreCase } else { [System.StringComparer]::Ordinal }
+function Test-EnvNameEquals { param([string]$A, [string]$B) return $script:EnvNameComparer.Equals($A, $B) }
 
 # The active hub config — AIHUB_CONFIG over the repo default, the same precedence the
 # hub, auto-login.ps1 and rest-connect.ps1 apply — parsed once. Config = $null when
@@ -255,7 +261,7 @@ function Get-ProviderCredentialPairs {
             $blank.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
             continue
         }
-        if (-not @($pairs | Where-Object { $_.Env -eq $declaredEnv }).Count) {
+        if (-not @($pairs | Where-Object { Test-EnvNameEquals $_.Env $declaredEnv }).Count) {
             $pairs.Add([pscustomobject]@{ Env = $declaredEnv; SecretName = $declaredVault })
         }
     }
@@ -274,7 +280,7 @@ function Get-AIHubSecretConflicts {
     $conflicts = [System.Collections.Generic.List[object]]::new()
     $cfg = (Get-AIHubConfigState).Config
     if ($null -ne $cfg -and $cfg.PSObject.Properties['providers'] -and $null -ne $cfg.providers) {
-        $readers = [ordered]@{}
+        $readers = [System.Collections.Generic.Dictionary[string, object]]::new($script:EnvNameComparer)
         foreach ($prop in $cfg.providers.PSObject.Properties) {
             $prov = $prop.Value
             if ($null -eq $prov) { continue }
@@ -292,11 +298,12 @@ function Get-AIHubSecretConflicts {
             $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
             if (-not $envName) { continue }
             $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
-            if (-not $readers.Contains($envName)) { $readers[$envName] = [System.Collections.Generic.List[object]]::new() }
+            if (-not $readers.ContainsKey($envName)) { $readers[$envName] = [System.Collections.Generic.List[object]]::new() }
             $readers[$envName].Add([pscustomobject]@{ Name = $prop.Name; Type = $provType; SecretName = $secretName })
         }
         foreach ($envName in @($readers.Keys)) {
-            $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | Select-Object -Unique)
+            # Key Vault secret names are case-insensitive: folded before the distinct count.
+            $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
             if ($secrets.Count -gt 1) {
                 $conflicts.Add([pscustomobject]@{ Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
             }

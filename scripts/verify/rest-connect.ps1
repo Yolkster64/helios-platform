@@ -1,7 +1,9 @@
 <#
 .SYNOPSIS
 REST-level connectivity verifier and NON-INTERACTIVE token acquirer for the two control
-planes: GitHub REST (api.github.com) and Azure ARM (management.azure.com). Report-first:
+planes: GitHub REST (api.github.com) and Azure ARM (the active cloud's Resource Manager
+endpoint — management.azure.com for the public cloud, resolved from AZURE_AUTHORITY_HOST /
+ARM_ENDPOINT or `az cloud show` for sovereign clouds). Report-first:
 every run diagnoses, mutates nothing gate-worthy, never starts an interactive flow, and
 exits 0 — needs-owner is a truthful reported state, never a failure.
 
@@ -53,8 +55,9 @@ identity, detail, ownerAction}):
                               stating the azure/login prerequisite. The exchange
                               itself is never duplicated here.
             2. env SP         AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET
-                              => client_credentials POST to login.microsoftonline.com
-                              (scope https://management.azure.com/.default; body built
+                              => client_credentials POST to the active cloud's authority
+                              (login.microsoftonline.com for the public cloud; scope
+                              <ARM endpoint>/.default; body built
                               in memory, response token held in a local variable only,
                               never logged). With AZURE_CLIENT_CERTIFICATE_PATH instead
                               of a secret, the JWT client assertion is never hand-rolled
@@ -70,7 +73,7 @@ identity, detail, ownerAction}):
                               suppressed, exit code gates the chain entry — the
                               AADSTS50078 MFA-expired state lands here).
           The FIRST chain entry that yields a token is probed live with GET
-          https://management.azure.com/subscriptions?api-version=2022-12-01: 200 =>
+          <ARM endpoint>/subscriptions?api-version=2022-12-01: 200 =>
           ready (detail: subscription count + first display name/id — identifiers, not
           secrets); 401/403 => that token is not authorized for ARM and the chain
           continues. Nothing working => needs-owner with the exact tenant-scoped MFA
@@ -134,9 +137,62 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $gitHubApi = 'https://api.github.com'
-$armSubscriptionsUrl = 'https://management.azure.com/subscriptions?api-version=2022-12-01'
-$armScope = 'https://management.azure.com/.default'
-$imdsUrl = 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'
+# Azure control-plane endpoints follow the ACTIVE CLOUD (review finding): a sovereign
+# cloud (Azure Government, China, …) rejects tokens minted at login.microsoftonline.com
+# and answers nothing useful at management.azure.com, so every otherwise valid
+# credential would fail and the terminal repair would prescribe a public-cloud login.
+# Resolution order: the Azure SDK environment conventions (AZURE_AUTHORITY_HOST plus
+# AZURE_RESOURCE_MANAGER_ENDPOINT / ARM_ENDPOINT), then the az CLI's active cloud
+# (`az cloud show` reads local config only — no network, no login), then the public
+# cloud. The chosen cloud and its source are reported in the dry-run walk.
+function Resolve-AzureCloudEndpoints {
+    $authority = ([string][Environment]::GetEnvironmentVariable('AZURE_AUTHORITY_HOST')).Trim()
+    $arm = ''
+    foreach ($candidate in @('AZURE_RESOURCE_MANAGER_ENDPOINT', 'ARM_ENDPOINT')) {
+        $value = ([string][Environment]::GetEnvironmentVariable($candidate)).Trim()
+        if ($value) { $arm = $value; break }
+    }
+    $name = ''
+    $source = if ($authority -or $arm) { 'environment (AZURE_AUTHORITY_HOST / ARM_ENDPOINT)' } else { '' }
+    if (-not $authority -or -not $arm) {
+        $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($azCmd) {
+            $cloudLines = @(& $azCmd.Source cloud show --query '{name:name,arm:endpoints.resourceManager,aad:endpoints.activeDirectory}' --output json --only-show-errors 2>$null)
+            if ([int]$LASTEXITCODE -eq 0) {
+                $cloud = $null
+                try { $cloud = ($cloudLines -join "`n") | ConvertFrom-Json } catch { }
+                if ($null -ne $cloud) {
+                    $cloudName = if ($cloud.PSObject.Properties['name'] -and $null -ne $cloud.name) { ([string]$cloud.name).Trim() } else { '' }
+                    $cloudAad = if ($cloud.PSObject.Properties['aad'] -and $null -ne $cloud.aad) { ([string]$cloud.aad).Trim() } else { '' }
+                    $cloudArm = if ($cloud.PSObject.Properties['arm'] -and $null -ne $cloud.arm) { ([string]$cloud.arm).Trim() } else { '' }
+                    if ($cloudName) { $name = $cloudName }
+                    if (-not $authority -and $cloudAad) { $authority = $cloudAad }
+                    if (-not $arm -and $cloudArm) { $arm = $cloudArm }
+                    if (-not $source) { $source = 'az cloud show (the active az cloud)' }
+                    elseif ($cloudName) { $source += " + az cloud show ($cloudName)" }
+                }
+            }
+        }
+    }
+    if (-not $authority) { $authority = 'https://login.microsoftonline.com' }
+    if (-not $arm) { $arm = 'https://management.azure.com' }
+    if (-not $name) { $name = if ($source) { 'environment-configured' } else { 'AzureCloud' } }
+    if (-not $source) { $source = 'public-cloud default (no AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)' }
+    $armBase = $arm.TrimEnd('/')
+    [pscustomobject]@{
+        Name             = $name
+        Source           = $source
+        Authority        = $authority.TrimEnd('/')
+        ArmResource      = "$armBase/"
+        ArmScope         = "$armBase/.default"
+        SubscriptionsUrl = "$armBase/subscriptions?api-version=2022-12-01"
+    }
+}
+$azureCloud = Resolve-AzureCloudEndpoints
+$armSubscriptionsUrl = $azureCloud.SubscriptionsUrl
+$armScope = $azureCloud.ArmScope
+$armResource = $azureCloud.ArmResource
+$imdsUrl = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$([uri]::EscapeDataString($armResource))"
 $imdsTimeoutSec = 2   # HARD by design: a non-Azure host must fail fast, not hang.
 $userAgent = 'helios-rest-connect'
 # Exact owner runbook (ENTERPRISE_AI_CONNECTIONS.md §1 + setup-tenant.ps1 -OpsIdentity):
@@ -246,6 +302,9 @@ function Test-EnvValue {
     # literal name through Environment.GetEnvironmentVariable.
     return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
 }
+# Environment-variable NAME semantics follow the OS (review finding): case-sensitive on
+# Linux/macOS, case-insensitive on Windows — used for every config-derived name compare.
+$script:EnvNameComparer = if ($IsWindows) { [System.StringComparer]::OrdinalIgnoreCase } else { [System.StringComparer]::Ordinal }
 
 # --- github lane ------------------------------------------------------------------------
 # The github-models provider's CONFIGURED token variable (review finding): auto-login
@@ -309,12 +368,16 @@ function Get-ConfiguredGitHubModelsEnvs {
             if (-not $envName) { continue }
             $isPublicModels = $false
             if ($provType -eq 'github-models') {
+                # Public means the exact HTTPS origin (review finding): an http:// or
+                # non-http(s) URL on the public host never gets a GitHub credential.
                 $isPublicModels = $true
                 $baseUrl = ([string](Get-OptionalProperty $prov 'baseUrl' '')).Trim()
                 if ($baseUrl) {
-                    $baseHost = ''
-                    try { $baseHost = ([uri]$baseUrl).Host } catch { }
-                    $isPublicModels = $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+                    $isPublicModels = $false
+                    $parsedBase = $null
+                    if ([uri]::TryCreate($baseUrl, [System.UriKind]::Absolute, [ref]$parsedBase)) {
+                        $isPublicModels = ($parsedBase.Scheme -eq 'https' -and $parsedBase.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase))
+                    }
                 }
             }
             $entries.Add([pscustomobject]@{ Env = $envName; PublicModels = $isPublicModels })
@@ -324,11 +387,14 @@ function Get-ConfiguredGitHubModelsEnvs {
         # ownership): one also read by a custom-baseUrl Models entry or by an
         # openai/anthropic/azure-openai entry may hold THAT service's credential,
         # which must never be sent to api.github.com — the same rule auto-login.ps1
-        # applies before exporting into such a variable.
+        # applies before exporting into such a variable. Names compare under the OS
+        # rule (case-sensitive on Unix — review finding).
         $names = [System.Collections.Generic.List[string]]::new()
-        foreach ($envName in @($entries | ForEach-Object { $_.Env } | Select-Object -Unique)) {
-            if (@($entries | Where-Object { $_.Env -eq $envName -and -not $_.PublicModels }).Count) { continue }
-            $names.Add($envName)
+        $seenNames = [System.Collections.Generic.HashSet[string]]::new($script:EnvNameComparer)
+        foreach ($entry in $entries) {
+            if (-not $seenNames.Add($entry.Env)) { continue }
+            if (@($entries | Where-Object { $script:EnvNameComparer.Equals($_.Env, $entry.Env) -and -not $_.PublicModels }).Count) { continue }
+            $names.Add($entry.Env)
         }
         return @($names)
     }
@@ -698,7 +764,7 @@ function Test-AzureLane {
             [uri]::EscapeDataString($clientId),
             [uri]::EscapeDataString([string]$env:AZURE_CLIENT_SECRET),
             [uri]::EscapeDataString($armScope))
-        $tokenUrl = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
+        $tokenUrl = "$($azureCloud.Authority)/$tenantId/oauth2/v2.0/token"   # the active cloud's authority
         $tokenProbe = Invoke-HttpProbe -Url $tokenUrl -Method 'Post' -Body $body `
             -ContentType 'application/x-www-form-urlencoded' -TimeoutSec $TimeoutSeconds
         $body = ''   # done with the credential material
@@ -760,7 +826,7 @@ function Test-AzureLane {
         $miHeaders = @{}
         if (Test-Path env:IDENTITY_HEADER) { $miHeaders['X-IDENTITY-HEADER'] = [string]$env:IDENTITY_HEADER }
         $miBase = ([string]$env:IDENTITY_ENDPOINT).TrimEnd('/')
-        $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString('https://management.azure.com/'))"
+        $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString($armResource))"
         $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
     }
     elseif (Test-EnvValue 'MSI_ENDPOINT') {
@@ -768,7 +834,7 @@ function Test-AzureLane {
         $miHeaders = @{ Metadata = 'true' }
         if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
         $miBase = ([string]$env:MSI_ENDPOINT).TrimEnd('/')
-        $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString('https://management.azure.com/'))"
+        $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString($armResource))"
         $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
     }
     else {
@@ -973,7 +1039,8 @@ if ($DryRun) {
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
     Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first)'
     Write-Host '           2. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_CLIENT_SECRET => client_credentials POST to'
-    Write-Host "              https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token (scope $armScope)"
+    Write-Host "              $($azureCloud.Authority)/<tenant>/oauth2/v2.0/token (scope $armScope)"
+    Write-Host "           cloud: $($azureCloud.Name) — authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource) (resolved from $($azureCloud.Source))"
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set, else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'

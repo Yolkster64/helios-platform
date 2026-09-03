@@ -147,6 +147,24 @@ function Invoke-HeliosAutoLogin {
         # export, and removal of a config-derived name below uses the same API.
         return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
     }
+    # Environment-variable NAME semantics follow the OS (review finding): on Linux and
+    # macOS MODEL_KEY and model_key are two variables and ProviderFactory reads each
+    # literally; on Windows they are one. Every name comparison, set, and index below
+    # uses this comparer — never PowerShell's case-insensitive -eq / -contains /
+    # Group-Object / [ordered] hashtable, which would merge two Unix variables.
+    $envNameComparer = if ($IsWindows) { [System.StringComparer]::OrdinalIgnoreCase } else { [System.StringComparer]::Ordinal }
+    $envNameRegexOptions = if ($IsWindows) { [System.Text.RegularExpressions.RegexOptions]::IgnoreCase } else { [System.Text.RegularExpressions.RegexOptions]::None }
+    function Test-EnvNameEquals { param([string]$A, [string]$B) return $envNameComparer.Equals($A, $B) }
+    function New-EnvNameSet { return , [System.Collections.Generic.HashSet[string]]::new($envNameComparer) }
+    # Distinct names in first-seen order under the OS comparer (Select-Object -Unique
+    # is case-sensitive on every OS and would split one Windows variable in two).
+    function Get-UniqueEnvNames {
+        param([AllowEmptyCollection()][string[]]$Names = @())
+        $seen = New-EnvNameSet
+        $ordered = [System.Collections.Generic.List[string]]::new()
+        foreach ($n in @($Names)) { if ($seen.Add($n)) { $ordered.Add($n) } }
+        return $ordered.ToArray()
+    }
 
     Write-Report '== HELIOS auto-login (non-interactive acquire + export; zero prompts) =='
     if (-not $DotSourced) {
@@ -294,11 +312,14 @@ function Invoke-HeliosAutoLogin {
     # the GitHub-credential rule in step 3 must see readers of OTHER types too — an
     # openai entry sharing a github-models entry's variable would receive the gh
     # export through ProviderFactory.CreateAll exactly like a custom endpoint.
-    $envReaders = [ordered]@{}
+    $envReaders = [System.Collections.Generic.Dictionary[string, object]]::new($envNameComparer)
     # Variables that enabled entries map to DIFFERENT Key Vault secrets (see below).
     $conflictingEnvs = @()
+    $conflictingEnvSet = New-EnvNameSet
     if ($null -ne $aihubProviders) {
-        $pairIndex = [ordered]@{}
+        # Keyed "<secret> -> <variable>" under the OS name comparer (review finding);
+        # Key Vault secret names are case-insensitive and are folded to lower case.
+        $pairIndex = [System.Collections.Generic.Dictionary[string, object]]::new($envNameComparer)
         foreach ($provProp in $aihubProviders.PSObject.Properties) {
             $prov = $provProp.Value
             if ($null -eq $prov) { continue }
@@ -334,16 +355,16 @@ function Invoke-HeliosAutoLogin {
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # keyless types (ollama, azure-foundry-agent)
-            if (-not $envReaders.Contains($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
+            if (-not $envReaders.ContainsKey($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
             $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType })
             if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
-                if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { $_.Env -eq $envName }).Count) {
+                if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { Test-EnvNameEquals $_.Env $envName }).Count) {
                     $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
                 }
                 continue
             }
-            $pairKey = "$providerSecretName -> $envName"
-            if (-not $pairIndex.Contains($pairKey)) {
+            $pairKey = "$($providerSecretName.ToLowerInvariant()) -> $envName"
+            if (-not $pairIndex.ContainsKey($pairKey)) {
                 $pairIndex[$pairKey] = [pscustomobject]@{
                     SecretName = $providerSecretName
                     Env        = $envName
@@ -359,10 +380,13 @@ function Invoke-HeliosAutoLogin {
         # environment-first rule then hands that one value to every sharer, which
         # may send it to the wrong service. Nothing is pulled into such a variable;
         # the repair is distinct apiKeyEnv names (or one shared secret).
-        $conflictGroups = @($pairIndex.Values | Group-Object -Property Env |
-            Where-Object { @($_.Group | ForEach-Object { $_.SecretName } | Select-Object -Unique).Count -gt 1 })
+        # Group-Object is case-insensitive unless told otherwise — the OS rule applies
+        # to the variable names; secret names are folded (Key Vault ignores case).
+        $conflictGroups = @($pairIndex.Values | Group-Object -Property Env -CaseSensitive:(-not $IsWindows) |
+            Where-Object { @($_.Group | ForEach-Object { $_.SecretName.ToLowerInvariant() } | Select-Object -Unique).Count -gt 1 })
         foreach ($conflict in $conflictGroups) {
             $conflictingEnvs += [string]$conflict.Name
+            [void]$conflictingEnvSet.Add([string]$conflict.Name)
             $mapping = (@($conflict.Group | ForEach-Object { "'$($_.SecretName)' <- $(@($_.Consumers) -join ', ')" }) -join ' vs ')
             if (Test-EnvValue $conflict.Name) {
                 Add-Step -Step $conflict.Name -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: enabled providers map DIFFERENT Key Vault secrets to it ($mapping), so every sharer reads this one value — give them distinct apiKeyEnv names"
@@ -375,7 +399,7 @@ function Invoke-HeliosAutoLogin {
                 Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
             }
         }
-        foreach ($entry in @($pairIndex.Values | Where-Object { $conflictingEnvs -notcontains $_.Env })) {
+        foreach ($entry in @($pairIndex.Values | Where-Object { -not $conflictingEnvSet.Contains($_.Env) })) {
             # The agent CLIs read two of these env names directly — that fact is
             # not in config, so it rides along as a fixed hint.
             $cliHint = switch ($entry.Env) {
@@ -460,12 +484,23 @@ function Invoke-HeliosAutoLogin {
             $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
             $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
             $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
+            # Public means the exact HTTPS origin (review finding): the factory rejects a
+            # non-http(s) URL outright, and an http:// origin would carry the exported
+            # credential in cleartext — neither may receive a GitHub token.
             $ghPublic = $true
+            $ghBaseUrlNote = ''
             if ($ghBaseUrl) {
-                try { $ghPublic = ([uri]$ghBaseUrl).Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) }
-                catch { $ghPublic = $false }
+                $ghPublic = $false
+                $ghParsedUrl = $null
+                if ([uri]::TryCreate($ghBaseUrl, [System.UriKind]::Absolute, [ref]$ghParsedUrl)) {
+                    $ghHostIsPublic = $ghParsedUrl.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+                    if ($ghParsedUrl.Scheme -eq 'https' -and $ghHostIsPublic) { $ghPublic = $true }
+                    elseif ($ghParsedUrl.Scheme -eq 'http' -and $ghHostIsPublic) { $ghBaseUrlNote = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it' }
+                    elseif ($ghParsedUrl.Scheme -notin 'http', 'https') { $ghBaseUrlNote = "'$($ghParsedUrl.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)" }
+                }
+                else { $ghBaseUrlNote = 'not an absolute URL — ProviderFactory.CreateGitHubModels reports the provider unconfigured' }
             }
-            $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghPublic })
+            $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghPublic; Note = $ghBaseUrlNote })
         }
         # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
         # known (review finding): a public entry listed before a custom-baseUrl entry
@@ -474,8 +509,8 @@ function Invoke-HeliosAutoLogin {
         # the custom endpoint as well. A variable with MIXED ownership is one target
         # that never receives a GitHub credential; only its Key Vault pull (or a
         # direct export) applies, and the durable repair is distinct apiKeyEnv names.
-        foreach ($ghEnvName in @($ghModelsEntries | ForEach-Object { $_.Env } | Select-Object -Unique)) {
-            $owners = @($ghModelsEntries | Where-Object { $_.Env -eq $ghEnvName })
+        foreach ($ghEnvName in @(Get-UniqueEnvNames -Names @($ghModelsEntries | ForEach-Object { $_.Env }))) {
+            $owners = @($ghModelsEntries | Where-Object { Test-EnvNameEquals $_.Env $ghEnvName })
             $ownerNames = @($owners | ForEach-Object { $_.Name })
             $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
             $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
@@ -484,16 +519,18 @@ function Invoke-HeliosAutoLogin {
             # would receive the GitHub credential too; a variable with conflicting
             # secret mappings is already a reported defect and gets nothing either.
             $foreignReaders = @()
-            if ($envReaders.Contains($ghEnvName)) {
+            if ($envReaders.ContainsKey($ghEnvName)) {
                 $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
             }
-            $isConflict = ($conflictingEnvs -contains $ghEnvName)
+            $isConflict = $conflictingEnvSet.Contains($ghEnvName)
             # The vault clause follows the first apiKeySecretName declared among the
             # sharers (a repair naming another secret can never light the lane).
             $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
             if (-not $targetSecret) { $targetSecret = '' }
             $quotedPublic = (@($publicOwners | ForEach-Object { "'$_'" }) -join ', ')
             $quotedCustom = (@($customOwners | ForEach-Object { "'$_'" }) -join ', ')
+            $customNotes = @($owners | Where-Object { -not $_.Public -and $_.Note } | ForEach-Object { "'$($_.Name)': $($_.Note)" })
+            if ($customNotes.Count -gt 0) { $quotedCustom += " ($($customNotes -join '; '))" }
             $otherReaders = @()
             if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
             if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
@@ -513,6 +550,11 @@ function Invoke-HeliosAutoLogin {
     $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
     $ghModelsPublicEnvs = @($ghModelsPublicTargets | ForEach-Object { $_.Env })
     $ghModelsMixedEnvs = @($ghModelsTargets | Where-Object { $_.Mixed } | ForEach-Object { $_.Env })
+    # Membership under the OS name comparer (never -contains).
+    $ghModelsPublicEnvSet = New-EnvNameSet
+    foreach ($publicEnvName in $ghModelsPublicEnvs) { [void]$ghModelsPublicEnvSet.Add($publicEnvName) }
+    $ghModelsMixedEnvSet = New-EnvNameSet
+    foreach ($mixedEnvName in $ghModelsMixedEnvs) { [void]$ghModelsMixedEnvSet.Add($mixedEnvName) }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     # -CommandType Application (review finding): a dot-sourcing caller may carry an
     # `az` alias/function whose .Source is not an invocable path — resolve the real
@@ -881,7 +923,7 @@ function Invoke-HeliosAutoLogin {
     # the generic direct-key action for the same variable.
     foreach ($mixedTarget in @($ghModelsTargets | Where-Object { $_.Mixed })) {
         if (Test-EnvValue $mixedTarget.Env) { continue }
-        if ($conflictingEnvs -contains $mixedTarget.Env) { continue }   # the conflict action above already names the split
+        if ($conflictingEnvSet.Contains($mixedTarget.Env)) { continue }   # the conflict action above already names the split
         $mixedVaultClause = if ($mixedTarget.SecretName) { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" } else { '' }
         $mixedPublic = (@($mixedTarget.PublicOwners | ForEach-Object { "'$_'" }) -join ', ')
         Add-OwnerAction -Env $mixedTarget.Env -Text "give the providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigLabel} (public github-models: $mixedPublic; also read by: $($mixedTarget.OtherReaders -join '; ')) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
@@ -895,8 +937,8 @@ function Invoke-HeliosAutoLogin {
     # exported) through the GitHub credential is already served.
     foreach ($direct in $directKeyProviders) {
         if (Test-EnvValue $direct.Env) { continue }
-        if ($ghModelsMixedEnvs -contains $direct.Env) { continue }   # the mixed-ownership action above carries this variable's repair
-        if ($direct.Type -eq 'github-models' -and ($ghModelsPublicEnvs -contains $direct.Env) -and ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($direct.Env))) { continue }
+        if ($ghModelsMixedEnvSet.Contains($direct.Env)) { continue }   # the mixed-ownership action above carries this variable's repair
+        if ($direct.Type -eq 'github-models' -and $ghModelsPublicEnvSet.Contains($direct.Env) -and ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($direct.Env))) { continue }
         Add-OwnerAction -Env $direct.Env -Text "set $($direct.Env) directly for provider '$($direct.Name)' (type $($direct.Type)) — the active config declares no apiKeySecretName for it, so no Key Vault pull exists: export it in the shell, or add apiKeySecretName to that provider and store the secret (lights $($direct.Env))"
     }
 
@@ -909,7 +951,7 @@ function Invoke-HeliosAutoLogin {
     # Derived from the config-driven pairs, the public github-models targets, and the
     # direct-key providers, so the reconcile filter tracks config/aihub.json the same
     # way the pulls do.
-    $exportResolvableEnvNames = @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsPublicEnvs + @($directKeyProviders | ForEach-Object { $_.Env }) | Select-Object -Unique)
+    $exportResolvableEnvNames = @(Get-UniqueEnvNames -Names @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsPublicEnvs + @($directKeyProviders | ForEach-Object { $_.Env })))
     # A public github-models env counts as satisfied via the provider's documented
     # GITHUB_TOKEN fallback too (review finding) — a run that ends with a working
     # github-models lane must not still demand a vault repair — but never on the
@@ -918,7 +960,7 @@ function Invoke-HeliosAutoLogin {
     # vault-pulled or pre-set value is the deterministic path and counts as before.
     function Test-EnvSatisfied {
         param([Parameter(Mandatory)][string]$Name)
-        if ($ghModelsPublicEnvs -contains $Name) {
+        if ($ghModelsPublicEnvSet.Contains($Name)) {
             if ($ghModelsRejectedEnvs.Contains($Name)) { return $false }
             return ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($Name) -or
                 ((Test-EnvValue $Name) -and -not $ghModelsUnprovenExportEnvs.Contains($Name)))
@@ -939,7 +981,7 @@ function Invoke-HeliosAutoLogin {
         $candidateEnvNames = @(if ($null -ne $action.Env) { @($action.Env | Where-Object { $_ }) }
             else {
                 @($exportResolvableEnvNames | Where-Object {
-                    $action.Text -match ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)') })
+                    [regex]::IsMatch($action.Text, ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)'), $envNameRegexOptions) })
             })
         # ALL-variable semantics (review finding): an action is retired only when
         # EVERY variable it names is satisfied — a compound doctor action covering
