@@ -414,6 +414,11 @@ function Invoke-HttpProbe {
             TimeoutSec         = $TimeoutSec
             SkipHttpErrorCheck = $true
             UserAgent          = $userAgent
+            # No redirects (second-reviewer finding): Invoke-WebRequest follows 3xx by
+            # default and would replay a bearer token, identity header, or client-secret
+            # POST body at whatever Location the server named — an endpoint this script
+            # never validated. A 3xx is reported as the status it is and never followed.
+            MaximumRedirection = 0
         }
         if ($Headers.Count -gt 0) { $request['Headers'] = $Headers }
         if ($Body) { $request['Body'] = $Body }
@@ -517,6 +522,29 @@ function Get-ConfiguredGitHubModelsEnvs {
             $script:configuredModelsNote = "(the active config '$configPath' declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate it and the hub fails to start; no config candidate)"
             return @()
         }
+        # The other typed sections fail the hub the same way (review finding): a null
+        # or wrong-shaped cliAgents (List<CliAgentOptions>, enumerated by CreateAll with
+        # every element dereferenced), routing or learning (objects the hub and
+        # AIHubOptions.Load dereference) means there is no hub to probe for.
+        foreach ($rule in @(@{ Name = 'cliAgents'; Wanted = 'an array' }, @{ Name = 'routing'; Wanted = 'an object' }, @{ Name = 'learning'; Wanted = 'an object' })) {
+            $sectionProp = $parsed.PSObject.Properties[$rule.Name]
+            if ($null -eq $sectionProp) { continue }
+            $sectionValue = $sectionProp.Value
+            $shape = if ($null -eq $sectionValue) { 'null' } elseif ($sectionValue -is [System.Array]) { 'an array' } elseif ($sectionValue -is [System.Management.Automation.PSCustomObject]) { 'an object' } else { "a $($sectionValue.GetType().Name)" }
+            $badElement = ''
+            if ($shape -eq $rule.Wanted -and $rule.Name -eq 'cliAgents') {
+                $cliIndex = 0
+                foreach ($element in @($sectionValue)) {
+                    if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $badElement = "cliAgents[$cliIndex] is $(if ($null -eq $element) { 'null' } else { 'a non-object' })"; break }
+                    $cliIndex++
+                }
+            }
+            if ($shape -ne $rule.Wanted -or $badElement) {
+                $what = if ($badElement) { $badElement } else { "`"$($rule.Name)`" is $shape, not $($rule.Wanted)" }
+                $script:configuredModelsNote = "(the active config '$configPath' declares $what — AIHubOptions cannot bind it and the hub fails to load or start; no config candidate)"
+                return @()
+            }
+        }
         $providers = Get-OptionalProperty $parsed 'providers'
         if ($null -eq $providers) { return @() }
         # Pass 1 — every enabled KEYED entry (github-models, openai, anthropic,
@@ -547,7 +575,11 @@ function Get-ConfiguredGitHubModelsEnvs {
             if (-not $typeDefault) { continue }   # keyless types read no variable
             if ((Get-OptionalProperty $prov 'enabled' $true) -eq $false) { continue }
             $envProp = $prov.PSObject.Properties['apiKeyEnv']
-            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
+            # LITERAL name (review finding): blank is detected with IsNullOrWhiteSpace —
+            # the only normalization SecretResolver applies — and any other value is
+            # probed exactly as declared, whitespace included, because the factory
+            # hands it to Environment.GetEnvironmentVariable untouched.
+            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } elseif ([string]::IsNullOrWhiteSpace([string]$envProp.Value)) { '' } else { [string]$envProp.Value }
             if (-not $envName) { continue }
             $isPublicModels = $false
             if ($provType -eq 'github-models') {

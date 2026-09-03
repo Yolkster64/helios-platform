@@ -231,7 +231,49 @@ function Get-AIHubConfigState {
             }
         }
     }
-    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull; ProvidersShape = $providersShape }
+    # The OTHER typed sections (review finding): cliAgents binds List<CliAgentOptions>
+    # (ProviderFactory.CreateAll enumerates it and dereferences every element), routing
+    # and learning bind objects (AIHubOptions.Load dereferences learning.localPath; the
+    # hub's constructor and RoutingTableView read routing, defaultChain as a list and
+    # taskRouting as a dictionary of lists). System.Text.Json rejects a wrong shape and
+    # an explicit null lands on the property, so either fails the hub — the main flow
+    # aborts on SectionShape exactly as on ProvidersShape. Absent sections keep their
+    # initializers and are fine. Same rules as auto-login.ps1's step 0.
+    $sectionShape = ''
+    if ($null -ne $config) {
+        $shapeOf = {
+            param($v)
+            if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } else { "a $($v.GetType().Name)" }
+        }
+        foreach ($rule in @(@{ Name = 'cliAgents'; Wanted = 'an array' }, @{ Name = 'routing'; Wanted = 'an object' }, @{ Name = 'learning'; Wanted = 'an object' })) {
+            $sectionProp = $config.PSObject.Properties[$rule.Name]
+            if ($null -eq $sectionProp) { continue }
+            $shape = & $shapeOf $sectionProp.Value
+            if ($shape -ne $rule.Wanted) { $sectionShape = "`"$($rule.Name)`" as $shape, not $($rule.Wanted)"; break }
+            if ($rule.Name -eq 'cliAgents') {
+                $cliIndex = 0
+                foreach ($element in @($sectionProp.Value)) {
+                    if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $sectionShape = "cliAgents[$cliIndex] as $(& $shapeOf $element), not an object"; break }
+                    $cliIndex++
+                }
+            }
+            elseif ($rule.Name -eq 'routing') {
+                $chainProp = $sectionProp.Value.PSObject.Properties['defaultChain']
+                if ($null -ne $chainProp -and (& $shapeOf $chainProp.Value) -ne 'an array') { $sectionShape = "routing.defaultChain as $(& $shapeOf $chainProp.Value), not an array" }
+                $tableProp = $sectionProp.Value.PSObject.Properties['taskRouting']
+                if (-not $sectionShape -and $null -ne $tableProp) {
+                    if ((& $shapeOf $tableProp.Value) -ne 'an object') { $sectionShape = "routing.taskRouting as $(& $shapeOf $tableProp.Value), not an object" }
+                    else {
+                        foreach ($chainEntry in $tableProp.Value.PSObject.Properties) {
+                            if ((& $shapeOf $chainEntry.Value) -ne 'an array') { $sectionShape = "routing.taskRouting.$($chainEntry.Name) as $(& $shapeOf $chainEntry.Value), not an array"; break }
+                        }
+                    }
+                }
+            }
+            if ($sectionShape) { break }
+        }
+    }
+    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull; ProvidersShape = $providersShape; SectionShape = $sectionShape }
     return $script:aihubConfigState
 }
 
@@ -282,7 +324,11 @@ function Get-ProviderCredentialPairs {
     foreach ($entry in $Entries) {
         $prov = $entry.Value
         $envProp = $prov.PSObject.Properties['apiKeyEnv']
-        $declaredEnv = if ($null -eq $envProp -or $null -eq $envProp.Value) { $DefaultEnv } else { ([string]$envProp.Value).Trim() }
+        # LITERAL name (review finding): blank is detected with IsNullOrWhiteSpace — the
+        # only normalization SecretResolver applies — and any other value is checked
+        # exactly as declared, whitespace included, because the factory hands it to
+        # Environment.GetEnvironmentVariable untouched (" KEY " is not KEY).
+        $declaredEnv = if ($null -eq $envProp -or $null -eq $envProp.Value) { $DefaultEnv } elseif ([string]::IsNullOrWhiteSpace([string]$envProp.Value)) { '' } else { [string]$envProp.Value }
         $declaredVault = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
         if ($declaredEnv -eq '') {
             $blank.Add([pscustomobject]@{ Name = $entry.Name; SecretName = $declaredVault })
@@ -337,7 +383,9 @@ function Get-AIHubVariableDefects {
                 }
                 if (-not $typeDefault) { continue }
                 $envProp = $prov.PSObject.Properties['apiKeyEnv']
-                $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
+                # Literal name, blank via IsNullOrWhiteSpace only (review finding — see
+                # Get-ProviderCredentialPairs).
+                $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } elseif ([string]::IsNullOrWhiteSpace([string]$envProp.Value)) { '' } else { [string]$envProp.Value }
                 if (-not $envName) { continue }
                 $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
                 $family = $provType
@@ -1260,6 +1308,9 @@ try {
     }
     if ($activeConfig.ProvidersShape) {
         throw "the active config ($($activeConfig.Path)) declares `"providers`" as $($activeConfig.ProvidersShape) — AIHubOptions binds that section as a dictionary of provider objects and ProviderFactory.CreateAll dereferences every entry, so the hub fails on the file; declare objects only (or omit the section for a CLI-only profile) (no lane was diagnosed or repaired)"
+    }
+    if ($activeConfig.SectionShape) {
+        throw "the active config ($($activeConfig.Path)) declares $($activeConfig.SectionShape) — AIHubOptions binds cliAgents as a list of objects and routing / learning as objects (defaultChain a list, taskRouting a dictionary of lists), and the hub dereferences each, so it fails to load or start on the file; fix the section or omit it for its defaults (no lane was diagnosed or repaired)"
     }
 
     $ghResult = Test-GhLane
