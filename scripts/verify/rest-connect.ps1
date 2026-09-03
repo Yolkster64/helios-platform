@@ -73,7 +73,9 @@ identity, detail, ownerAction}):
                               memory, never echoed) — WorkloadIdentityCredential's rung.
             3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER), else MSI_ENDPOINT
                               (+MSI_SECRET) — each honored only on a documented local
-                              token-endpoint shape, and an IDENTITY_ENDPOINT that is
+                              token-endpoint shape (host, scheme, port AND path; the
+                              user-assigned identity is selected with AZURE_CLIENT_ID
+                              where the shape supports it), and an IDENTITY_ENDPOINT that is
                               rejected or yields no token falls through to MSI_ENDPOINT;
                               else the IMDS endpoint (169.254.169.254,
                               Metadata:true) with a HARD 2-second no-proxy timeout so a
@@ -260,6 +262,27 @@ function Test-TrustedManagedIdentityEndpoint {
     if ($isImds -and ($parsed.Scheme -ne 'http' -or -not $parsed.IsDefaultPort -or -not $tokenPath.Equals('/metadata/identity/oauth2/token', [System.StringComparison]::OrdinalIgnoreCase))) {
         $Notes.Add("managed-identity: ignored $Label — 169.254.169.254 is only ever http://169.254.169.254/metadata/identity/oauth2/token (value never echoed); no identity header or secret was sent to it")
         return ''
+    }
+    # Loopback shapes are bound to their documented scheme AND port per path (review
+    # finding): on the path alone a planted http://localhost:8080/msi/token would pass
+    # and receive IDENTITY_HEADER. App Service / Functions inject 127.0.0.1:41xxx,
+    # Container Apps localhost:42356 and Azure ML localhost:46808 for /msi/token; Arc
+    # is 127.0.0.1:40342 for /metadata/identity/oauth2/token; Cloud Shell is
+    # localhost:50342 for /oauth2/token — all plain http. (Linux App Service publishes
+    # a link-local 169.254.129.x:8081 endpoint, not a loopback host: reported as
+    # ignored today — a documented limitation, not a planted value.)
+    if ($isLoopback) {
+        $endpointPort = [int]$parsed.Port
+        $portKnown = switch ($tokenPath.ToLowerInvariant()) {
+            '/msi/token' { (($endpointPort -ge 41000) -and ($endpointPort -le 41999)) -or ($endpointPort -in 42356, 46808) }
+            '/metadata/identity/oauth2/token' { $endpointPort -eq 40342 }
+            '/oauth2/token' { $endpointPort -eq 50342 }
+            default { $false }
+        }
+        if ($parsed.Scheme -ne 'http' -or -not $portKnown) {
+            $Notes.Add("managed-identity: ignored $Label — loopback endpoint on an undocumented scheme or port for its path (documented shapes: http://127.0.0.1:41xxx/msi/token, http://localhost:42356/msi/token, http://localhost:46808/msi/token, http://127.0.0.1:40342/metadata/identity/oauth2/token, http://localhost:50342/oauth2/token; value never echoed); no identity header or secret was sent to it")
+            return ''
+        }
     }
     return $parsed.GetLeftPart([System.UriPartial]::Path).TrimEnd('/')
 }
@@ -1286,9 +1309,18 @@ function Test-AzureLane {
     $miKind = ''
     $miToken = ''
     $miProbe = $null
+    # AZURE_CLIENT_ID (when set) selects the USER-ASSIGNED identity, exactly as
+    # ManagedIdentityCredential does (review finding): without the selector an
+    # endpoint answers for the system-assigned identity — a different principal, so
+    # the lane would report a false failure or readiness for the wrong identity. The
+    # selector is `client_id` on the 2019-08-01 App Service shape and on IMDS,
+    # `clientid` on the legacy 2017-09-01 MSI shape; the Arc and Cloud Shell shapes
+    # serve the system-assigned identity only and get a note instead. An identifier,
+    # not a secret (never echoed anyway).
+    $miClientId = if (Test-EnvValue 'AZURE_CLIENT_ID') { ([string]$env:AZURE_CLIENT_ID).Trim() } else { '' }
     $miCandidates = @(
-        [pscustomobject]@{ Kind = 'identity-endpoint'; Env = 'IDENTITY_ENDPOINT'; HeaderEnv = 'IDENTITY_HEADER'; HeaderName = 'X-IDENTITY-HEADER'; ApiVersion = '2019-08-01'; Metadata = $false }
-        [pscustomobject]@{ Kind = 'msi-endpoint'; Env = 'MSI_ENDPOINT'; HeaderEnv = 'MSI_SECRET'; HeaderName = 'Secret'; ApiVersion = '2017-09-01'; Metadata = $true }
+        [pscustomobject]@{ Kind = 'identity-endpoint'; Env = 'IDENTITY_ENDPOINT'; HeaderEnv = 'IDENTITY_HEADER'; HeaderName = 'X-IDENTITY-HEADER'; ApiVersion = '2019-08-01'; Metadata = $false; Selector = 'client_id' }
+        [pscustomobject]@{ Kind = 'msi-endpoint'; Env = 'MSI_ENDPOINT'; HeaderEnv = 'MSI_SECRET'; HeaderName = 'Secret'; ApiVersion = '2017-09-01'; Metadata = $true; Selector = 'clientid' }
     )
     foreach ($miCandidate in $miCandidates) {
         if (-not (Test-EnvValue $miCandidate.Env)) { continue }
@@ -1302,7 +1334,16 @@ function Test-AzureLane {
         $miHeaderValue = [Environment]::GetEnvironmentVariable($miCandidate.HeaderEnv)
         if ($null -ne $miHeaderValue) { $miHeaders[$miCandidate.HeaderName] = [string]$miHeaderValue }
         $miHeaderValue = $null
-        $miUrl = "$miBase`?api-version=$($miCandidate.ApiVersion)&resource=$([uri]::EscapeDataString($armResource))"
+        $miSelector = ''
+        if ($miClientId) {
+            if ($miBase.EndsWith('/msi/token', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $miSelector = "&$($miCandidate.Selector)=$([uri]::EscapeDataString($miClientId))"
+            }
+            else {
+                $chainNotes.Add("managed-identity ($miKind): AZURE_CLIENT_ID is set, but this endpoint shape (Arc / Cloud Shell) serves the system-assigned identity only — no user-assigned selector exists, so any token it returns is that identity's, not the configured client's")
+            }
+        }
+        $miUrl = "$miBase`?api-version=$($miCandidate.ApiVersion)&resource=$([uri]::EscapeDataString($armResource))$miSelector"
         $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
         $miHeaders = $null
         if ($miProbe.Status -eq 200) {
@@ -1316,7 +1357,8 @@ function Test-AzureLane {
         $miKind = 'imds'
         # HARD 2s + -NoProxy: 169.254.169.254 is link-local; on a non-Azure host the
         # connect must fail fast, and a proxy must never swallow it into a long hang.
-        $miProbe = Invoke-HttpProbe -Url $imdsUrl -Headers @{ Metadata = 'true' } -TimeoutSec $imdsTimeoutSec -NoProxy
+        $imdsSelector = if ($miClientId) { "&client_id=$([uri]::EscapeDataString($miClientId))" } else { '' }
+        $miProbe = Invoke-HttpProbe -Url ($imdsUrl + $imdsSelector) -Headers @{ Metadata = 'true' } -TimeoutSec $imdsTimeoutSec -NoProxy
         if ($miProbe.Status -eq 200) {
             $miReply = Test-ParsedJson $miProbe.Body
             $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
@@ -1524,6 +1566,7 @@ if ($DryRun) {
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source of its own'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
+    Write-Host '              loopback shapes are bound to their documented scheme and port per path (http://127.0.0.1:41xxx|localhost:42356|localhost:46808/msi/token, http://127.0.0.1:40342/metadata/identity/oauth2/token, http://localhost:50342/oauth2/token); AZURE_CLIENT_ID (when set) selects the user-assigned identity — client_id on IMDS and the App Service shape, clientid on the legacy MSI shape; Arc / Cloud Shell serve the system-assigned identity only'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'

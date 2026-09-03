@@ -578,7 +578,12 @@ function Invoke-HeliosAutoLogin {
         if ($hubProbeCache.ContainsKey('imds')) { return $hubProbeCache['imds'] }
         $imdsHasIdentity = $false
         try {
-            $imdsReply = Invoke-WebRequest -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            # AZURE_CLIENT_ID (when set) selects the user-assigned identity exactly as
+            # ManagedIdentityCredential does (review finding): without it IMDS answers for
+            # the system-assigned identity, a different principal. An identifier, not a secret.
+            $imdsProbeUrl = 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net'
+            if (Test-EnvValue 'AZURE_CLIENT_ID') { $imdsProbeUrl += "&client_id=$([uri]::EscapeDataString(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim()))" }
+            $imdsReply = Invoke-WebRequest -Uri $imdsProbeUrl -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
             if ([int]$imdsReply.StatusCode -eq 200) {
                 $imdsJson = $null
                 try { $imdsJson = ([string]$imdsReply.Content) | ConvertFrom-Json } catch { $imdsJson = $null }
@@ -593,7 +598,8 @@ function Invoke-HeliosAutoLogin {
     }
     function Get-HubCredentialKind {
         if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
-        if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { return 'workload identity' }
+        # All three names (review finding): WorkloadIdentityCredential needs AZURE_TENANT_ID as well — with only the client id and the token file DefaultAzureCredential skips the rung.
+        if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID')) { return 'workload identity' }
         if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
         if (Test-RawImdsManagedIdentity) { return 'managed identity' }
         return 'az-cli'
@@ -632,6 +638,36 @@ function Invoke-HeliosAutoLogin {
         if ($parsed.AbsolutePath -notin '', '/') { return '' }
         if ($parsed.Host -notmatch '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { return '' }
         return $Matches['vault']
+    }
+    # The endpoint variable is validated on EVERY azure-openai outcome (review finding):
+    # CreateAzureOpenAi reads endpointEnv (AZURE_OPENAI_ENDPOINT by default) before it
+    # uses a key and reports the provider unconfigured unless the value is an absolute
+    # http(s) URL — so a successful vault pull lights nothing until the endpoint is
+    # usable too. Returns the problems (names checked, values never echoed) and records
+    # the owner action each one needs; empty for pairs without azure-openai members.
+    function Get-AzureOpenAiEndpointProblems {
+        param([Parameter(Mandatory)]$Pair)
+        $problems = @()
+        foreach ($endpointName in @($Pair.EndpointEnvs)) {
+            if (-not $endpointName) {
+                $problems += 'an entry declares a blank endpointEnv, so the factory reads no endpoint variable at all'
+                Add-OwnerAction -Text "fix the azure-openai entry lighting $($Pair.Env) in ${aihubConfigLabel}: endpointEnv is declared blank — set it to a variable name, or remove the property to use AZURE_OPENAI_ENDPOINT"
+                continue
+            }
+            $endpointValue = [string][Environment]::GetEnvironmentVariable($endpointName)
+            if ([string]::IsNullOrWhiteSpace($endpointValue)) {
+                $problems += "$endpointName is unset"
+                Add-OwnerAction -Text "set $endpointName to the Azure OpenAI endpoint (absolute https://<resource>.openai.azure.com/ — infra output 'openAiEndpoint'; PowerShell: . .helios/azure.env.ps1, bash: source .helios/azure.env) for $($Pair.Lights); the API key is optional (Entra ID fallback)"
+                continue
+            }
+            $endpointUri = $null
+            if (-not [uri]::TryCreate($endpointValue.Trim(), [System.UriKind]::Absolute, [ref]$endpointUri) -or $endpointUri.Scheme -notin 'http', 'https') {
+                $problems += "$endpointName is not an absolute http(s) URL (value never echoed)"
+                Add-OwnerAction -Text "fix ${endpointName}: it is set but is not an absolute http(s) URL, so CreateAzureOpenAi reports $($Pair.Lights) unconfigured — use the resource endpoint https://<resource>.openai.azure.com/ (infra output 'openAiEndpoint')"
+            }
+            $endpointValue = ''
+        }
+        return $problems
     }
     # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
     # so they are reported (and, without a secret path, handed to the owner as the
@@ -1085,7 +1121,15 @@ function Invoke-HeliosAutoLogin {
                     [Environment]::SetEnvironmentVariable($pair.Env, $secretValue)   # literal name (review finding)
                     $secretValue = ''
                     $exportedNames.Add($pair.Env)
-                    Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
+                    # A key alone lights no azure-openai entry (review finding): the
+                    # endpoint must be usable too, and its repair is an owner action.
+                    $exportedEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair)
+                    if ($exportedEndpointProblems.Count -gt 0) {
+                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights); but CreateAzureOpenAi still reports the azure-openai entry unconfigured because $($exportedEndpointProblems -join '; ') — the endpoint repair is recorded as an owner action"
+                    }
+                    else {
+                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
+                    }
                 }
                 elseif ($pair.EntraFallbackOnly) {
                     # OPTIONAL for azure-openai (review findings): CreateAzureOpenAi
@@ -1101,26 +1145,7 @@ function Invoke-HeliosAutoLogin {
                     # An unset, blank-declared or malformed endpoint is the repair the
                     # owner actually needs, so it carries the owner action the key does
                     # not; auto-login never exports an endpoint, so it is never retired.
-                    $endpointProblems = @()
-                    foreach ($endpointName in @($pair.EndpointEnvs)) {
-                        if (-not $endpointName) {
-                            $endpointProblems += 'an entry declares a blank endpointEnv, so the factory reads no endpoint variable at all'
-                            Add-OwnerAction -Text "fix the azure-openai entry lighting $($pair.Env) in ${aihubConfigLabel}: endpointEnv is declared blank — set it to a variable name, or remove the property to use AZURE_OPENAI_ENDPOINT"
-                            continue
-                        }
-                        $endpointValue = [string][Environment]::GetEnvironmentVariable($endpointName)
-                        if ([string]::IsNullOrWhiteSpace($endpointValue)) {
-                            $endpointProblems += "$endpointName is unset"
-                            Add-OwnerAction -Text "set $endpointName to the Azure OpenAI endpoint (absolute https://<resource>.openai.azure.com/ — infra output 'openAiEndpoint'; PowerShell: . .helios/azure.env.ps1, bash: source .helios/azure.env) for $($pair.Lights); the API key is optional (Entra ID fallback)"
-                            continue
-                        }
-                        $endpointUri = $null
-                        if (-not [uri]::TryCreate($endpointValue.Trim(), [System.UriKind]::Absolute, [ref]$endpointUri) -or $endpointUri.Scheme -notin 'http', 'https') {
-                            $endpointProblems += "$endpointName is not an absolute http(s) URL (value never echoed)"
-                            Add-OwnerAction -Text "fix ${endpointName}: it is set but is not an absolute http(s) URL, so CreateAzureOpenAi reports $($pair.Lights) unconfigured — use the resource endpoint https://<resource>.openai.azure.com/ (infra output 'openAiEndpoint')"
-                        }
-                        $endpointValue = ''
-                    }
+                    $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair)
                     # The az lane proves the fallback only when DefaultAzureCredential
                     # would actually reach the az CLI cache (review finding): an
                     # environment service principal, workload identity or managed

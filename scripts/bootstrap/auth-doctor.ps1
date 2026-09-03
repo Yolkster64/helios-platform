@@ -595,7 +595,12 @@ function Test-RawImdsManagedIdentity {
     if ($null -ne $script:imdsManagedIdentity) { return $script:imdsManagedIdentity }
     $imdsHasIdentity = $false
     try {
-        $imdsReply = Invoke-WebRequest -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auth-doctor'
+        # AZURE_CLIENT_ID (when set) selects the user-assigned identity exactly as
+        # ManagedIdentityCredential does (review finding): without it IMDS answers for
+        # the system-assigned identity, a different principal. An identifier, not a secret.
+        $imdsProbeUrl = 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net'
+        if (Test-EnvValue 'AZURE_CLIENT_ID') { $imdsProbeUrl += "&client_id=$([uri]::EscapeDataString(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim()))" }
+        $imdsReply = Invoke-WebRequest -Uri $imdsProbeUrl -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auth-doctor'
         if ([int]$imdsReply.StatusCode -eq 200) {
             $imdsJson = $null
             try { $imdsJson = ([string]$imdsReply.Content) | ConvertFrom-Json } catch { $imdsJson = $null }
@@ -610,7 +615,8 @@ function Test-RawImdsManagedIdentity {
 }
 function Get-HubCredentialKind {
     if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
-    if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID')) { return 'workload identity' }
+    # All three names (review finding): WorkloadIdentityCredential needs AZURE_TENANT_ID as well — with only the client id and the token file DefaultAzureCredential skips the rung.
+    if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID')) { return 'workload identity' }
     if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
     if (Test-RawImdsManagedIdentity) { return 'managed identity' }
     return 'az-cli'
