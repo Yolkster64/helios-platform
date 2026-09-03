@@ -288,14 +288,41 @@ function Invoke-HeliosAutoLogin {
     # repair that can never light the lane. No apiKeySecretName at all means no
     # vault path exists for this provider, and the guidance omits it.
     $ghModelsSecretName = 'github-models-token'
-    if ($null -ne $aihubProviders -and $aihubProviders.PSObject.Properties['github-models']) {
-        $ghModelsProv = $aihubProviders.PSObject.Properties['github-models'].Value
-        if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
-            -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
-            $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
+    $ghModelsSkipReason = 'github-models provider is disabled or absent in the active config'
+    if ($null -ne $aihubProviders) {
+        # Discovery by TYPE (review finding): ProviderFactory dispatches on
+        # provider.type, so the GitHub Models lane may live under any key. The entry
+        # named github-models wins when several qualify; otherwise the first enabled
+        # one. A provider with a CUSTOM baseUrl is excluded from this GitHub-credential
+        # fallback (review finding): GITHUB_TOKEN and the gh keyring are GitHub
+        # credentials, and exporting one for a non-GitHub endpoint would hand it to
+        # that service — only the Key Vault pull applies to such a provider.
+        $ghModelsCandidates = @($aihubProviders.PSObject.Properties | Where-Object {
+                $v = $_.Value
+                $null -ne $v -and $v.PSObject.Properties['type'] -and
+                ([string]$v.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase) -and
+                -not ($v.PSObject.Properties['enabled'] -and $v.enabled -eq $false)
+            })
+        $ghModelsChosen = @(@($ghModelsCandidates | Where-Object { $_.Name -eq 'github-models' }) + @($ghModelsCandidates | Where-Object { $_.Name -ne 'github-models' })) | Select-Object -First 1
+        if ($null -ne $ghModelsChosen) {
+            $ghModelsProv = $ghModelsChosen.Value
+            if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
+                -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
+                $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
+            }
+            $ghModelsSecretName = if ($ghModelsProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghModelsProv.apiKeySecretName).Trim() } else { '' }
+            $ghModelsBaseUrl = if ($ghModelsProv.PSObject.Properties['baseUrl']) { ([string]$ghModelsProv.baseUrl).Trim() } else { '' }
+            $ghModelsPublicEndpoint = $true
+            if ($ghModelsBaseUrl) {
+                try { $ghModelsPublicEndpoint = ([uri]$ghModelsBaseUrl).Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) }
+                catch { $ghModelsPublicEndpoint = $false }
+            }
+            if ($ghModelsPublicEndpoint) { $ghModelsEnabled = $true }
+            else {
+                $ghModelsEnabled = $false
+                $ghModelsSkipReason = "the '$($ghModelsChosen.Name)' provider (type github-models) points at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull applies"
+            }
         }
-        $ghModelsSecretName = if ($ghModelsProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghModelsProv.apiKeySecretName).Trim() } else { '' }
-        $ghModelsEnabled = -not ($ghModelsProv.PSObject.Properties['enabled'] -and $ghModelsProv.enabled -eq $false)
     }
     $ghModelsVaultClause = if ($ghModelsSecretName) { ", or store Key Vault secret '$ghModelsSecretName' (the configured github-models apiKeySecretName)" } else { '' }
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
@@ -461,7 +488,7 @@ function Invoke-HeliosAutoLogin {
     $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$ghModelsVaultClause"
     $ghFallbackNeeded = $false
     if (-not $ghModelsEnabled) {
-        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'github-models provider is disabled or absent in the active config — no token fetched or exported for a lane the hub will not instantiate'
+        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail "$ghModelsSkipReason — no GitHub token fetched or exported for it"
     }
     elseif (-not (Test-EnvValue $ghModelsEnv) -and (Test-EnvValue 'GITHUB_TOKEN')) {
         # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the

@@ -248,21 +248,43 @@ function Test-EnvValue {
 # the repo default, as AIHubService.ResolveConfigPath does) and ProviderFactory reads
 # that same name — so the candidate walk must probe it too, not only fixed names.
 # Any read problem falls back to the default name; nothing here is fatal.
-function Get-ConfiguredGitHubModelsEnv {
+function Get-ConfiguredGitHubModelsEnvs {
+    # Enabled providers of TYPE github-models (review finding: ProviderFactory
+    # dispatches on provider.type, never on a canonical key), each contributing its
+    # apiKeyEnv — or the factory default GITHUB_MODELS_TOKEN when unset — but ONLY
+    # when the provider resolves to the public GitHub Models endpoint (no baseUrl,
+    # or a baseUrl on models.github.ai). A credential bound to a custom baseUrl
+    # belongs to THAT endpoint and must never be sent to api.github.com (review
+    # finding: the verifier would otherwise disclose an unrelated service credential
+    # to GitHub). Unreadable config → the default name; a parsed config with no
+    # qualifying provider → no candidate from config at all.
     $default = 'GITHUB_MODELS_TOKEN'
     $configPath = if (Test-EnvValue 'AIHUB_CONFIG') { ([string]$env:AIHUB_CONFIG).Trim() }
     else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
     try {
         $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
         $providers = Get-OptionalProperty $parsed 'providers'
-        if ($null -eq $providers) { return $default }
-        $gm = $providers.PSObject.Properties['github-models']
-        if ($null -eq $gm) { return $default }
-        $envName = [string](Get-OptionalProperty $gm.Value 'apiKeyEnv' '')
-        if ([string]::IsNullOrWhiteSpace($envName)) { return $default }
-        return $envName.Trim()
+        if ($null -eq $providers) { return @($default) }
+        $names = [System.Collections.Generic.List[string]]::new()
+        foreach ($prop in $providers.PSObject.Properties) {
+            $prov = $prop.Value
+            if ($null -eq $prov) { continue }
+            $provType = ([string](Get-OptionalProperty $prov 'type' '')).Trim()
+            if (-not $provType.Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            if ((Get-OptionalProperty $prov 'enabled' $true) -eq $false) { continue }
+            $baseUrl = ([string](Get-OptionalProperty $prov 'baseUrl' '')).Trim()
+            if ($baseUrl) {
+                $baseHost = ''
+                try { $baseHost = ([uri]$baseUrl).Host } catch { }
+                if (-not $baseHost.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            }
+            $envName = ([string](Get-OptionalProperty $prov 'apiKeyEnv' '')).Trim()
+            if (-not $envName) { $envName = $default }
+            if (-not $names.Contains($envName)) { $names.Add($envName) }
+        }
+        return @($names)
     }
-    catch { return $default }
+    catch { return @($default) }
 }
 
 function Get-GitHubTokenCandidates {
@@ -277,7 +299,7 @@ function Get-GitHubTokenCandidates {
     $candidates = [System.Collections.Generic.List[object]]::new()
     # Third slot is the CONFIGURED models env (GITHUB_MODELS_TOKEN by default) —
     # review finding: a renamed apiKeyEnv must still be probed.
-    foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN', (Get-ConfiguredGitHubModelsEnv)) | Select-Object -Unique)) {
+    foreach ($envName in @(@('GH_TOKEN', 'GITHUB_TOKEN') + @(Get-ConfiguredGitHubModelsEnvs) | Select-Object -Unique)) {
         if (Test-Path "env:$envName") {
             $value = [string](Get-Item "env:$envName").Value
             if (-not [string]::IsNullOrWhiteSpace($value)) {
@@ -855,7 +877,9 @@ function Test-AzureLane {
 if ($DryRun) {
     Write-Host ''
     Write-Host "REST connectivity probe plan (HTTP probes bounded at ${TimeoutSeconds}s; IMDS hard ${imdsTimeoutSec}s):"
-    Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> env $(Get-ConfiguredGitHubModelsEnv) (the configured github-models apiKeyEnv) -> gh auth token (only if gh is on PATH)"
+    $configuredModelsEnvs = @(Get-ConfiguredGitHubModelsEnvs)
+    $configuredModelsText = if ($configuredModelsEnvs.Count -gt 0) { "env $($configuredModelsEnvs -join ' -> env ') (each enabled github-models-type provider's apiKeyEnv; public endpoint only)" } else { '(no enabled github-models-type provider on the public endpoint — no config candidate)' }
+    Write-Host "  github   candidates in order: env GH_TOKEN -> env GITHUB_TOKEN -> $configuredModelsText -> gh auth token (only if gh is on PATH)"
     Write-Host "           each: GET $gitHubApi/rate_limit (Bearer, X-GitHub-Api-Version: 2022-11-28, User-Agent $userAgent)"
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
     Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'
