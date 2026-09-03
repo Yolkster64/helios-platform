@@ -217,17 +217,28 @@ function Invoke-HeliosAutoLogin {
         $aihubParseOk = ($aihubParsed -is [System.Management.Automation.PSCustomObject])
     }
     catch { }
+    $aihubProvidersShape = ''
     if ($aihubParseOk) {
         $providersProp = $aihubParsed.PSObject.Properties['providers']
         # An EXPLICIT null is not an omitted section (review finding): System.Text.Json
         # assigns null over AIHubOptions.Providers' initializer and CreateAll then fails
         # enumerating it — the hub cannot start on that file, so neither may this run.
         $aihubProvidersNull = [bool]($null -ne $providersProp -and $null -eq $providersProp.Value)
-        $aihubProvidersDeclared = [bool]($null -ne $providersProp -and $null -ne $providersProp.Value)
+        # Only a JSON OBJECT binds (review finding): AIHubOptions.Load deserializes the
+        # section as Dictionary<string, ProviderOptions>, so an array, string, or number
+        # there fails the hub exactly like null — and must abort here, before the az
+        # lane can mutate anything on behalf of a hub that cannot start.
+        if ($null -ne $providersProp -and $null -ne $providersProp.Value -and $providersProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+            $aihubProvidersShape = if ($providersProp.Value -is [System.Array]) { 'an array' } else { "a $($providersProp.Value.GetType().Name)" }
+        }
+        $aihubProvidersDeclared = [bool]($null -ne $providersProp -and $null -ne $providersProp.Value -and -not $aihubProvidersShape)
         $aihubProviders = if ($aihubProvidersDeclared) { $aihubParsed.providers } else { [pscustomobject]@{} }
     }
     if ($aihubProvidersNull) {
         throw "the active config ($aihubConfigPath) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object; aborting before any lane runs"
+    }
+    if ($aihubProvidersShape) {
+        throw "the active config ($aihubConfigPath) declares `"providers`" as $aihubProvidersShape, not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile); aborting before any lane runs"
     }
     # An EXPLICITLY selected profile that cannot be read is an internal failure
     # (review finding): the hub itself will fail to load that same file, so
@@ -256,7 +267,14 @@ function Invoke-HeliosAutoLogin {
         # non-interactive credential was available all along.
         $doctorArgs = @('-Apply', '-Json')
         if ($UseManagedIdentity) { $doctorArgs += '-UseManagedIdentity' }
-        $doctorLines = @(& pwsh -NoProfile -File $doctorPath @doctorArgs 2>$null | ForEach-Object { "$_" })
+        # The PowerShell application, resolved (review finding): an unqualified `pwsh`
+        # fails when the host executable's directory is not on PATH and, in a
+        # dot-sourcing caller, could resolve to a caller-defined function or alias.
+        # setup-everything.ps1 pattern: the PATH application first, else this process.
+        $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
+        if (-not $pwshExe) { throw 'cannot locate a PowerShell 7 executable (pwsh not on PATH, host process path unknown) — the az lane cannot be established; aborting instead of reporting success' }
+        $doctorLines = @(& $pwshExe -NoProfile -File $doctorPath @doctorArgs 2>$null | ForEach-Object { "$_" })
         $doctorExit = [int]$LASTEXITCODE
         $doctorReport = $null
         try { $doctorReport = ($doctorLines -join "`n") | ConvertFrom-Json } catch { }
@@ -994,13 +1012,53 @@ function Invoke-HeliosAutoLogin {
     # Blank-apiKeyEnv github-models entries (review finding): the hub reads no
     # variable for them, so there is nothing to export — CreateGitHubModels resolves
     # the entry's apiKeySecretName in-process and otherwise falls back only to
-    # GITHUB_TOKEN, which is therefore the one credential this run can vouch for.
-    foreach ($blank in @($blankEnvProviders | Where-Object { $_.Type -eq 'github-models' })) {
+    # GITHUB_TOKEN, which is therefore the one credential this run can vouch for —
+    # unless the vault already holds that secret (review finding): presence is proven
+    # metadata-only (`az keyvault secret list` returns names, never values) under the
+    # az lane this run established, exactly as auth-doctor's Get-BlankVaultChecks does,
+    # and a listed, enabled secret makes the provider usable in-process with no export
+    # and no owner action.
+    $blankGhModels = @($blankEnvProviders | Where-Object { $_.Type -eq 'github-models' })
+    $blankSecretNames = @()
+    $blankSecretBlocker = ''
+    $blankSecretVault = ''
+    if (@($blankGhModels | Where-Object { $_.SecretName }).Count -gt 0) {
+        $presenceUri = $null
+        if ($vaultUri) { try { $presenceUri = [uri]$vaultUri } catch { } }
+        if ($null -ne $presenceUri -and $presenceUri.Scheme -eq 'https' -and $presenceUri.Host -match '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { $blankSecretVault = $Matches['vault'] }
+        if (-not $vaultUri) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is unset, so the hub cannot reach any vault' }
+        elseif (-not $blankSecretVault) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is not an https Key Vault URI, so the hub cannot reach the vault' }
+        elseif (-not $azUsable) { $blankSecretBlocker = "the az lane is $azState, so the vault could not be inspected" }
+        elseif (-not $azCmd) { $blankSecretBlocker = 'az is not on PATH, so the vault could not be inspected' }
+        else {
+            $listLines = @(& $azCmd.Source keyvault secret list --vault-name $blankSecretVault --query '[?attributes.enabled].name' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+            $listExit = [int]$LASTEXITCODE
+            $listed = $null
+            if ($listExit -eq 0) { try { $listed = @(($listLines -join "`n") | ConvertFrom-Json) } catch { $listed = $null } }
+            if ($listExit -ne 0 -or $null -eq $listed) { $blankSecretBlocker = "az keyvault secret list against vault '$blankSecretVault' failed (exit ${listExit}: no RBAC grant, network, or wrong vault; output never echoed)" }
+            else { $blankSecretNames = @($listed | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
+        }
+    }
+    foreach ($blank in $blankGhModels) {
         $blankStep = "provider:$($blank.Name)"
         $blankWhy = 'declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (GITHUB_MODELS_TOKEN applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it'
-        $blankVaultNote = if ($blank.SecretName) { "; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI" } else { '' }
+        $blankPresence = ''
+        if ($blank.SecretName) {
+            $blankPresence = if ($blankSecretBlocker) { 'unverifiable' } elseif ($blankSecretNames -contains $blank.SecretName.ToLowerInvariant()) { 'present' } else { 'absent' }
+        }
+        $blankPresenceText = switch ($blankPresence) {
+            'present' { " (listed as enabled in vault '$blankSecretVault')" }
+            'absent' { " (NOT present, or disabled, in vault '$blankSecretVault')" }
+            'unverifiable' { " ($blankSecretBlocker)" }
+            default { '' }
+        }
+        $blankVaultNote = if ($blank.SecretName) { "; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$blankPresenceText" } else { '' }
         $blankSatisfied = $false
-        if (Test-EnvValue 'GITHUB_TOKEN') {
+        if ($blankPresence -eq 'present') {
+            $blankSatisfied = $true
+            Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote — CreateGitHubModels reads that secret in-process, so the provider is satisfied without an export"
+        }
+        elseif (Test-EnvValue 'GITHUB_TOKEN') {
             if ($null -eq $ghTokenVerdict) { $ghTokenVerdict = Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN' }
             switch ($ghTokenVerdict) {
                 'proven' {
@@ -1020,7 +1078,14 @@ function Invoke-HeliosAutoLogin {
             Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, is unset"
         }
         if (-not $blankSatisfied) {
-            Add-OwnerAction -Text "fix provider '$($blank.Name)' (type github-models) in ${aihubConfigPath}: its apiKeyEnv is explicitly blank, so the hub reads no variable for it$blankVaultNote — set apiKeyEnv to a variable name (or remove the property to use GITHUB_MODELS_TOKEN), or provide a GITHUB_TOKEN that carries models:read"
+            if ($blankPresence -eq 'absent') {
+                # The configured vault path is the primary repair (review finding): the
+                # secret's absence, not the config, is what leaves the provider unlit.
+                Add-OwnerAction -Text "store Key Vault secret '$($blank.SecretName)' in vault '$blankSecretVault' for provider '$($blank.Name)' (type github-models) — az keyvault secret set --vault-name $blankSecretVault --name $($blank.SecretName)   # owner supplies the value; the hub then resolves it in-process (its apiKeyEnv is explicitly blank, so no variable applies); or provide a GITHUB_TOKEN that carries models:read"
+            }
+            else {
+                Add-OwnerAction -Text "fix provider '$($blank.Name)' (type github-models) in ${aihubConfigPath}: its apiKeyEnv is explicitly blank, so the hub reads no variable for it$blankVaultNote — set apiKeyEnv to a variable name (or remove the property to use GITHUB_MODELS_TOKEN), or provide a GITHUB_TOKEN that carries models:read"
+            }
         }
     }
 

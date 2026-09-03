@@ -57,7 +57,11 @@ jobs:
           # DESTINATION path, so renaming a build input out of the matched paths
           # would read as irrelevant and skip the required build. With --no-renames
           # a rename is a delete+add and both sides are matched.
-          changed="$(git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA")"
+          # -z (review finding): the default output C-quotes pathnames that carry
+          # non-ASCII or special characters ("src/caf\303\251.cs"), so the anchored
+          # pattern below would miss them and skip the required build. NUL-terminated
+          # output is never quoted; tr turns it back into one path per line.
+          changed="$(git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" | tr '\0' '\n')"
           printf '%s\n' "$changed"
           pattern='^(src/|tests/|config/|scripts/build/|HELIOS\.sln$|Directory\.Packages\.props$|Directory\.Build\.props$|Directory\.Build\.targets$|nuget\.config$|\.github/workflows/dotnet-build\.yml$)|\.csproj$'
           # Here-string, not printf|grep -q (review finding): grep -q exits at the

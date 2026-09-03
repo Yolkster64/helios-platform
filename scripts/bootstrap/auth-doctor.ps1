@@ -208,11 +208,18 @@ function Get-AIHubConfigState {
     # assigns it over AIHubOptions.Providers' initializer and CreateAll fails
     # enumerating it — the hub cannot start on that file, so the main flow aborts too.
     $providersNull = $false
+    $providersShape = ''
     if ($null -ne $config) {
         $providersProp = $config.PSObject.Properties['providers']
         $providersNull = [bool]($null -ne $providersProp -and $null -eq $providersProp.Value)
+        # Only a JSON OBJECT binds (review finding): AIHubOptions.Load deserializes the
+        # section as Dictionary<string, ProviderOptions>, so an array, string, or number
+        # fails the hub exactly like null — the main flow aborts on it the same way.
+        if ($null -ne $providersProp -and $null -ne $providersProp.Value -and $providersProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+            $providersShape = if ($providersProp.Value -is [System.Array]) { 'an array' } else { "a $($providersProp.Value.GetType().Name)" }
+        }
     }
-    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull }
+    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull; ProvidersShape = $providersShape }
     return $script:aihubConfigState
 }
 
@@ -1206,6 +1213,9 @@ try {
     }
     if ($activeConfig.ProvidersNull) {
         throw "the active config ($($activeConfig.Path)) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object (no lane was diagnosed or repaired)"
+    }
+    if ($activeConfig.ProvidersShape) {
+        throw "the active config ($($activeConfig.Path)) declares `"providers`" as $($activeConfig.ProvidersShape), not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile) (no lane was diagnosed or repaired)"
     }
 
     $ghResult = Test-GhLane

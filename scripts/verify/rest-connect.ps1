@@ -200,6 +200,33 @@ function Test-TrustedAzureEndpoint {
     }
     return $parsedEndpoint.GetLeftPart([System.UriPartial]::Authority)
 }
+# Managed-identity endpoints are platform-local by construction (review finding): App
+# Service / Functions / Container Apps inject http://127.0.0.1:41xxx/msi/token or
+# http://localhost:42356/msi/token, Azure Arc http://127.0.0.1:40342/metadata/identity/oauth2/token,
+# Cloud Shell http://localhost:50342/oauth2/token, and IMDS is the link-local
+# 169.254.169.254. Anything else in IDENTITY_ENDPOINT / MSI_ENDPOINT — mistyped, stale,
+# or planted — would receive IDENTITY_HEADER / MSI_SECRET, so only a loopback or
+# link-local host is ever contacted; a rejected value is reported as chain evidence
+# and never counts as a credential source.
+function Test-TrustedManagedIdentityEndpoint {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Notes
+    )
+    $parsed = $null
+    if (-not [uri]::TryCreate($Value.Trim(), [System.UriKind]::Absolute, [ref]$parsed) -or $parsed.Scheme -notin 'http', 'https') {
+        $Notes.Add("managed-identity: ignored $Label — not an absolute http(s) URL (value never echoed); no identity header or secret was sent")
+        return ''
+    }
+    $endpointHost = $parsed.DnsSafeHost
+    $isLocal = ($endpointHost -eq 'localhost') -or ($endpointHost -eq '::1') -or ($endpointHost -eq '169.254.169.254') -or ($endpointHost -match '^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+    if (-not $isLocal) {
+        $Notes.Add("managed-identity: ignored $Label — host '$endpointHost' is not a platform-local endpoint (loopback or 169.254.169.254); no identity header or secret was sent to it")
+        return ''
+    }
+    return $parsed.GetLeftPart([System.UriPartial]::Path).TrimEnd('/')
+}
 function Resolve-AzureCloudEndpoints {
     $warnings = [System.Collections.Generic.List[string]]::new()
     $authority = Test-TrustedAzureEndpoint -Value ([string][Environment]::GetEnvironmentVariable('AZURE_AUTHORITY_HOST')) -KnownHosts $script:knownAzureAuthorityHosts -Label 'AZURE_AUTHORITY_HOST' -Warnings $warnings
@@ -984,21 +1011,31 @@ function Test-AzureLane {
     # Non-whitespace values only (review finding): an EMPTY IDENTITY_ENDPOINT must
     # not win the branch on mere existence — it would build a relative URL and
     # shadow a valid legacy MSI_ENDPOINT sitting right next to it.
+    # A declared endpoint is validated BEFORE any header exists (review finding): the
+    # identity header / secret is read only after the URL passed the local-host shape
+    # check, so a bad value never sees a credential-bearing request.
+    $miEndpointRejected = $false
     if (Test-EnvValue 'IDENTITY_ENDPOINT') {
         $miKind = 'identity-endpoint'
-        $miHeaders = @{}
-        if (Test-Path env:IDENTITY_HEADER) { $miHeaders['X-IDENTITY-HEADER'] = [string]$env:IDENTITY_HEADER }
-        $miBase = ([string]$env:IDENTITY_ENDPOINT).TrimEnd('/')
-        $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString($armResource))"
-        $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:IDENTITY_ENDPOINT) -Label 'IDENTITY_ENDPOINT' -Notes $chainNotes
+        if ($miBase) {
+            $miHeaders = @{}
+            if (Test-Path env:IDENTITY_HEADER) { $miHeaders['X-IDENTITY-HEADER'] = [string]$env:IDENTITY_HEADER }
+            $miUrl = "$miBase`?api-version=2019-08-01&resource=$([uri]::EscapeDataString($armResource))"
+            $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        }
+        else { $miEndpointRejected = $true }
     }
     elseif (Test-EnvValue 'MSI_ENDPOINT') {
         $miKind = 'msi-endpoint'
-        $miHeaders = @{ Metadata = 'true' }
-        if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
-        $miBase = ([string]$env:MSI_ENDPOINT).TrimEnd('/')
-        $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString($armResource))"
-        $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:MSI_ENDPOINT) -Label 'MSI_ENDPOINT' -Notes $chainNotes
+        if ($miBase) {
+            $miHeaders = @{ Metadata = 'true' }
+            if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
+            $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString($armResource))"
+            $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
+        }
+        else { $miEndpointRejected = $true }
     }
     else {
         $miKind = 'imds'
@@ -1021,6 +1058,10 @@ function Test-AzureLane {
             $chainNotes.Add("managed-identity ($miKind): endpoint 200 but no access_token field (raw body never echoed)")
         }
     }
+    elseif ($null -eq $miProbe) {
+        # A rejected declared endpoint: the validation note above is the evidence and
+        # nothing was sent, so there is no status to classify.
+    }
     else {
         $miStatus = if ($miProbe.Status -eq 0) { 'unreachable (expected off-Azure; failed fast)' } else { "HTTP $($miProbe.Status)" }
         if ($miKind -ne 'imds' -and $miProbe.Status -in 401, 403) {
@@ -1040,7 +1081,9 @@ function Test-AzureLane {
     # answer at that address (e.g. a container fabric's metadata firewall returning
     # 403 — measured) is just as permanently unusable: neither is a credential
     # source, and "retry later" cannot fix either.
-    if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT') -or
+    # A declared endpoint that failed the local-host shape check is not a source either
+    # (review finding): nothing was contacted, so it can neither succeed nor be retried.
+    if (((-not $miEndpointRejected) -and ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT'))) -or
         ($null -ne $miProbe -and $miProbe.Status -eq 200)) {
         $credentialSourcePresent = $true
     }
@@ -1213,7 +1256,7 @@ if ($DryRun) {
     foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
-    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set, else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
+    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 (the App Service / Container Apps / Arc / Cloud Shell shapes); any other host is ignored and no identity header or secret is sent — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
