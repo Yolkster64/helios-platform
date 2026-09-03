@@ -40,6 +40,9 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
   az lane        pwsh scripts/bootstrap/auth-doctor.ps1 -Apply -Json  → repaired/ready
                  or needs-owner (the one-time `az login --tenant ...` MFA +
                  setup-tenant.ps1 -OpsIdentity permanence path is printed verbatim).
+                 -UseManagedIdentity is forwarded (review finding): a classic
+                 IMDS-only VM exposes no IDENTITY_ENDPOINT / MSI_ENDPOINT, so the
+                 doctor tries `az login --identity` there only when told to.
   Key Vault      only when the az lane is usable AND AZURE_KEY_VAULT_URI holds a real
                  value (the vault provisioned by infra/main.bicep): openai-api-key →
                  OPENAI_API_KEY (codex CLI + openai providers/SDKs), anthropic-api-key
@@ -73,7 +76,10 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  A variable that enabled entries map to DIFFERENT Key Vault secrets
                  is a conflict: nothing is pulled into it (declaration order must
                  never choose a credential every sharer then reads) and the owner
-                 action names the split. A profile with no providers section is a
+                 action names the split — and stands even when the variable is
+                 already set, since that value is exactly what every sharer would
+                 read (the same rule covers a variable read by consumers of
+                 different credential families). A profile with no providers section is a
                  valid CLI-only profile (AIHubOptions.Providers starts empty), not a
                  read failure; an explicitly selected profile the hub cannot load
                  aborts before the az lane runs.
@@ -87,13 +93,22 @@ every report line.
 Emit one machine-readable rollup {script, generatedUtc, dotSourced, steps[],
 exportedNames[], ownerActions[], exitCode} instead of the human report.
 
+.PARAMETER UseManagedIdentity
+Forwarded to auth-doctor.ps1 -Apply as its -UseManagedIdentity opt-in: attempt
+`az login --identity` even when no IDENTITY_ENDPOINT / MSI_ENDPOINT is visible (a
+classic IMDS-only Azure VM exposes neither). Still non-interactive; without it the az
+lane on such a VM can only print the interactive login as an owner action, and the
+Key Vault stage stays blocked behind it.
+
 Exit contract: 0 = ran to completion (owner-gated lanes are reported, not failures);
 1 = internal failure. Dot-sourced, exit codes are not asserted (exiting would kill
 the caller's shell): completion is silent success and an internal failure RETHROWS.
 #>
 [CmdletBinding()]
 param(
-    [switch]$Json
+    [switch]$Json,
+
+    [switch]$UseManagedIdentity
 )
 
 # Everything lives in this function so StrictMode and ErrorActionPreference are
@@ -103,6 +118,7 @@ param(
 function Invoke-HeliosAutoLogin {
     param(
         [switch]$Json,
+        [switch]$UseManagedIdentity,
         [bool]$DotSourced,
         [Parameter(Mandatory)][string]$RepoRoot
     )
@@ -233,7 +249,14 @@ function Invoke-HeliosAutoLogin {
         # stdout ONLY: the -Json contract puts the report there, and merging stderr
         # (warnings, progress lines) would break the JSON parse (review finding —
         # the same lesson learn-fleet.ps1's capture already encodes).
-        $doctorLines = @(& pwsh -NoProfile -File $doctorPath -Apply -Json 2>$null | ForEach-Object { "$_" })
+        # The managed-identity opt-in is forwarded (review finding): on a classic
+        # IMDS-only VM neither IDENTITY_ENDPOINT nor MSI_ENDPOINT exists, so the doctor
+        # attempts `az login --identity` only when told to — without the switch the
+        # vault stage would sit blocked behind an interactive-login action while a
+        # non-interactive credential was available all along.
+        $doctorArgs = @('-Apply', '-Json')
+        if ($UseManagedIdentity) { $doctorArgs += '-UseManagedIdentity' }
+        $doctorLines = @(& pwsh -NoProfile -File $doctorPath @doctorArgs 2>$null | ForEach-Object { "$_" })
         $doctorExit = [int]$LASTEXITCODE
         $doctorReport = $null
         try { $doctorReport = ($doctorLines -join "`n") | ConvertFrom-Json } catch { }
@@ -452,12 +475,17 @@ function Invoke-HeliosAutoLogin {
             $readerText = (@($envReaders[$sharedEnv] | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
             $readerNames = (@($envReaders[$sharedEnv] | ForEach-Object { $_.Name }) -join ',')
             if (Test-EnvValue $sharedEnv) {
-                Add-Step -Step $sharedEnv -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: it is read by consumers of different credential families ($readerText), which cannot all accept one value — give them distinct apiKeyEnv names"
+                Add-Step -Step $sharedEnv -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: it is read by consumers of different credential families ($readerText), which cannot all accept one value — ProviderFactory hands this one value to every sharer, so give them distinct apiKeyEnv names"
             }
             else {
                 Add-Step -Step $sharedEnv -State 'needs-owner' -Detail "read by consumers of different credential families ($readerText) — no single value is valid for all of them, and an export would hand one service's credential to another through SecretResolver's environment-first rule; nothing is pulled or exported into it"
-                Add-OwnerAction -Text "give the consumers sharing $sharedEnv distinct apiKeyEnv names in ${aihubConfigLabel} ($readerNames) — they read credentials for different services"
             }
+            # The split action stands whether or not the variable is preset (review
+            # finding): a value already in the session is exactly the credential
+            # ProviderFactory then supplies to BOTH services, so satisfaction of the
+            # variable is not satisfaction of the defect — and the reconcile below
+            # never retires an action for an incompatible variable either.
+            Add-OwnerAction -Text "give the consumers sharing $sharedEnv distinct apiKeyEnv names in ${aihubConfigLabel} ($readerNames) — they read credentials for different services"
         }
         # Conflicting secret→variable mappings (review finding): two enabled entries
         # naming DIFFERENT Key Vault secrets for the SAME variable would let
@@ -481,11 +509,13 @@ function Invoke-HeliosAutoLogin {
             }
             else {
                 Add-Step -Step $conflict.Name -State 'needs-owner' -Detail "enabled providers map DIFFERENT Key Vault secrets to the same variable ($mapping) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer and could reach the wrong service; nothing was pulled into it"
-                # Same wording as auth-doctor's lane action (the step above carries the
-                # mapping), so the summary's unique filter collapses the two into one.
-                $conflictNames = @($conflict.Group | ForEach-Object { @($_.Consumers) } | Select-Object -Unique) -join ','
-                Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
             }
+            # Same wording as auth-doctor's lane action (the step above carries the
+            # mapping), so the summary's unique filter collapses the two into one. Added
+            # on both branches (review finding): a preset value is the very credential
+            # every sharer then reads, so it never retires the config repair.
+            $conflictNames = @($conflict.Group | ForEach-Object { @($_.Consumers) } | Select-Object -Unique) -join ','
+            Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
         }
         foreach ($entry in @($pairIndex.Values | Where-Object { -not $conflictingEnvSet.Contains($_.Env) -and -not $incompatibleEnvSet.Contains($_.Env) })) {
             # The agent CLIs read two of these env names directly — that fact is
@@ -1036,6 +1066,11 @@ function Invoke-HeliosAutoLogin {
     # vault-pulled or pre-set value is the deterministic path and counts as before.
     function Test-EnvSatisfied {
         param([Parameter(Mandatory)][string]$Name)
+        # A conflicting or incompatible variable is never satisfied (review finding):
+        # a value in it — preset or pulled — is exactly what ProviderFactory hands to
+        # every sharer, so the split action (this script's, and the doctor's imported
+        # copy, which the direct-key list would otherwise match) must survive.
+        if ($incompatibleEnvSet.Contains($Name) -or $conflictingEnvSet.Contains($Name)) { return $false }
         if ($ghModelsPublicEnvSet.Contains($Name)) {
             if ($ghModelsRejectedEnvs.Contains($Name)) { return $false }
             return ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($Name) -or
@@ -1118,7 +1153,7 @@ function Remove-HeliosAutoLoginScopeResidue {
 
 $autoLoginDotSourced = $MyInvocation.InvocationName -eq '.'
 try {
-    Invoke-HeliosAutoLogin -Json:$Json -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
+    Invoke-HeliosAutoLogin -Json:$Json -UseManagedIdentity:$UseManagedIdentity -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
     if (-not $autoLoginDotSourced) { exit 0 }
     Remove-HeliosAutoLoginScopeResidue
 }

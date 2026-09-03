@@ -49,7 +49,8 @@ acting unauthenticated. Report-first by default: nothing is mutated without
 
 **Auto-login** (`. scripts/bootstrap/auto-login.ps1`, dot-sourced) is the
 acquire-and-export companion: it delegates az repair to `auth-doctor -Apply`
-(non-interactive only), pulls `openai-api-key` / `anthropic-api-key` /
+(non-interactive only; `-UseManagedIdentity` is forwarded for classic IMDS-only
+VMs that expose no managed-identity endpoint variable), pulls `openai-api-key` / `anthropic-api-key` /
 `github-models-token` from the Key Vault at `AZURE_KEY_VAULT_URI` into
 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GITHUB_MODELS_TOKEN` (the exact names
 `config/aihub.json` declares — lighting the codex, claude, and gh-models lanes

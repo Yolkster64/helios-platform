@@ -3,7 +3,9 @@
 REST-level connectivity verifier and NON-INTERACTIVE token acquirer for the two control
 planes: GitHub REST (api.github.com) and Azure ARM (the active cloud's Resource Manager
 endpoint — management.azure.com for the public cloud, resolved from AZURE_AUTHORITY_HOST /
-ARM_ENDPOINT or `az cloud show` for sovereign clouds). Report-first:
+ARM_ENDPOINT or `az cloud show` for sovereign clouds; a lone override is completed from
+the known-cloud table, and a pair naming two clouds resolves to NO cloud — reported as
+needs-owner before any request is made). Report-first:
 every run diagnoses, mutates nothing gate-worthy, never starts an interactive flow, and
 exits 0 — needs-owner is a truthful reported state, never a failure.
 
@@ -150,8 +152,34 @@ $gitHubApi = 'https://api.github.com'
 # planted value would otherwise receive AZURE_CLIENT_SECRET (token POST) or every
 # bearer token (ARM probe). A custom cloud is approved explicitly through the az CLI
 # (`az cloud register` + `az cloud set`), whose values are accepted when HTTPS.
-$script:knownAzureAuthorityHosts = @('login.microsoftonline.com', 'login.microsoftonline.us', 'login.chinacloudapi.cn', 'login.partner.microsoftonline.cn', 'login.microsoftonline.de')
-$script:knownAzureArmHosts = @('management.azure.com', 'management.usgovcloudapi.net', 'management.chinacloudapi.cn', 'management.microsoftazure.de')
+# The two halves are ONE cloud (review finding): a token minted at one cloud's
+# authority is not valid at another cloud's Resource Manager, so a lone override is
+# completed from this table (AZURE_AUTHORITY_HOST=login.microsoftonline.us implies
+# management.usgovcloudapi.net) and a pair naming two clouds resolves to no cloud at
+# all — never padded with the public-cloud default, which would turn a valid
+# sovereign credential into a guaranteed failure with public-cloud login advice.
+$script:knownAzureClouds = @(
+    [pscustomobject]@{ Name = 'AzureCloud';        Authority = 'login.microsoftonline.com';        Arm = 'management.azure.com' },
+    [pscustomobject]@{ Name = 'AzureUSGovernment'; Authority = 'login.microsoftonline.us';         Arm = 'management.usgovcloudapi.net' },
+    [pscustomobject]@{ Name = 'AzureChinaCloud';   Authority = 'login.chinacloudapi.cn';           Arm = 'management.chinacloudapi.cn' },
+    [pscustomobject]@{ Name = 'AzureChinaCloud';   Authority = 'login.partner.microsoftonline.cn'; Arm = 'management.chinacloudapi.cn' },
+    [pscustomobject]@{ Name = 'AzureGermanCloud';  Authority = 'login.microsoftonline.de';         Arm = 'management.microsoftazure.de' }
+)
+$script:knownAzureAuthorityHosts = @($script:knownAzureClouds | ForEach-Object { $_.Authority } | Select-Object -Unique)
+$script:knownAzureArmHosts = @($script:knownAzureClouds | ForEach-Object { $_.Arm } | Select-Object -Unique)
+# The known cloud one validated origin belongs to ($null for an az-registered custom
+# host). Pass exactly one origin; the China cloud lists two authority hosts, and an
+# ARM-only lookup returns its first (current) authority.
+function Get-KnownAzureCloud {
+    param([string]$AuthorityOrigin = '', [string]$ArmOrigin = '')
+    $authorityHost = if ($AuthorityOrigin) { ([uri]$AuthorityOrigin).Host } else { '' }
+    $armHost = if ($ArmOrigin) { ([uri]$ArmOrigin).Host } else { '' }
+    foreach ($cloud in $script:knownAzureClouds) {
+        if ($authorityHost -and $cloud.Authority.Equals($authorityHost, [System.StringComparison]::OrdinalIgnoreCase)) { return $cloud }
+        if ($armHost -and $cloud.Arm.Equals($armHost, [System.StringComparison]::OrdinalIgnoreCase)) { return $cloud }
+    }
+    return $null
+}
 function Test-TrustedAzureEndpoint {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
@@ -176,15 +204,44 @@ function Resolve-AzureCloudEndpoints {
     $warnings = [System.Collections.Generic.List[string]]::new()
     $authority = Test-TrustedAzureEndpoint -Value ([string][Environment]::GetEnvironmentVariable('AZURE_AUTHORITY_HOST')) -KnownHosts $script:knownAzureAuthorityHosts -Label 'AZURE_AUTHORITY_HOST' -Warnings $warnings
     $arm = ''
+    $armLabel = ''
     foreach ($candidate in @('AZURE_RESOURCE_MANAGER_ENDPOINT', 'ARM_ENDPOINT')) {
         $value = ([string][Environment]::GetEnvironmentVariable($candidate)).Trim()
         if (-not $value) { continue }
+        $armLabel = $candidate
         $arm = Test-TrustedAzureEndpoint -Value $value -KnownHosts $script:knownAzureArmHosts -Label $candidate -Warnings $warnings
         break
     }
     $name = ''
-    $source = if ($authority -or $arm) { 'environment (AZURE_AUTHORITY_HOST / ARM_ENDPOINT, validated)' } else { '' }
-    if (-not $authority -or -not $arm) {
+    $source = ''
+    $unresolved = ''
+    # Pairing rule (review finding): an accepted environment override is always a
+    # known-cloud host, so its counterpart is DERIVED from the table rather than
+    # defaulted (a rejected override is warned about above and simply absent here);
+    # two overrides naming different clouds are a mixed pair and resolve to NO cloud
+    # — the lane reports that and sends no credential anywhere.
+    if ($authority -and $arm) {
+        $authorityCloud = Get-KnownAzureCloud -AuthorityOrigin $authority
+        $armCloud = Get-KnownAzureCloud -ArmOrigin $arm
+        $source = "environment (AZURE_AUTHORITY_HOST + $armLabel, validated)"
+        if ($authorityCloud.Name -ne $armCloud.Name) {
+            $unresolved = "AZURE_AUTHORITY_HOST names $($authorityCloud.Name) ($($authorityCloud.Authority)) but $armLabel names $($armCloud.Name) ($($armCloud.Arm)) — a mixed pair: a token minted at one cloud's authority is not valid at the other's Resource Manager, so no request is made with either"
+        }
+        else { $name = $authorityCloud.Name }
+    }
+    elseif ($authority) {
+        $cloud = Get-KnownAzureCloud -AuthorityOrigin $authority
+        $arm = "https://$($cloud.Arm)"
+        $name = $cloud.Name
+        $source = "environment (AZURE_AUTHORITY_HOST, validated; the $($cloud.Name) Resource Manager endpoint derived from it)"
+    }
+    elseif ($arm) {
+        $cloud = Get-KnownAzureCloud -ArmOrigin $arm
+        $authority = "https://$($cloud.Authority)"
+        $name = $cloud.Name
+        $source = "environment ($armLabel, validated; the $($cloud.Name) authority derived from it)"
+    }
+    else {
         $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($azCmd) {
             $cloudLines = @(& $azCmd.Source cloud show --query '{name:name,arm:endpoints.resourceManager,aad:endpoints.activeDirectory}' --output json --only-show-errors 2>$null)
@@ -195,21 +252,44 @@ function Resolve-AzureCloudEndpoints {
                     $cloudName = if ($cloud.PSObject.Properties['name'] -and $null -ne $cloud.name) { ([string]$cloud.name).Trim() } else { '' }
                     $cloudAad = if ($cloud.PSObject.Properties['aad'] -and $null -ne $cloud.aad) { ([string]$cloud.aad).Trim() } else { '' }
                     $cloudArm = if ($cloud.PSObject.Properties['arm'] -and $null -ne $cloud.arm) { ([string]$cloud.arm).Trim() } else { '' }
+                    if (-not $cloudName) { $cloudName = 'az-registered cloud' }
                     # The az CLI's registered cloud is the operator's explicit approval —
                     # any host, but HTTPS only.
-                    if (-not $authority -and $cloudAad) { $authority = Test-TrustedAzureEndpoint -Value $cloudAad -KnownHosts @() -Label "az cloud '$cloudName' activeDirectory endpoint" -AnyHttpsHost -Warnings $warnings }
-                    if (-not $arm -and $cloudArm) { $arm = Test-TrustedAzureEndpoint -Value $cloudArm -KnownHosts @() -Label "az cloud '$cloudName' resourceManager endpoint" -AnyHttpsHost -Warnings $warnings }
-                    if ($cloudName) { $name = $cloudName }
-                    if (-not $source) { $source = 'az cloud show (the active az cloud)' }
-                    elseif ($cloudName) { $source += " + az cloud show ($cloudName)" }
+                    if ($cloudAad) { $authority = Test-TrustedAzureEndpoint -Value $cloudAad -KnownHosts @() -Label "az cloud '$cloudName' activeDirectory endpoint" -AnyHttpsHost -Warnings $warnings }
+                    if ($cloudArm) { $arm = Test-TrustedAzureEndpoint -Value $cloudArm -KnownHosts @() -Label "az cloud '$cloudName' resourceManager endpoint" -AnyHttpsHost -Warnings $warnings }
+                    if ($authority -and $arm) {
+                        $name = $cloudName
+                        $source = 'az cloud show (the active az cloud)'
+                    }
+                    elseif ($authority -or $arm) {
+                        # Half a registered cloud is not a cloud (review finding): the
+                        # missing half is never padded with the public-cloud default.
+                        $unresolved = "az cloud '$cloudName' yields only one usable HTTPS endpoint of activeDirectory / resourceManager — half a cloud is not completed with the public-cloud default; re-register it with both endpoints (az cloud register) or select another cloud (az cloud set)"
+                        $source = 'az cloud show (the active az cloud)'
+                    }
                 }
             }
         }
     }
-    if (-not $authority) { $authority = 'https://login.microsoftonline.com' }
-    if (-not $arm) { $arm = 'https://management.azure.com' }
-    if (-not $name) { $name = if ($source) { 'environment-configured' } else { 'AzureCloud' } }
-    if (-not $source) { $source = 'public-cloud default (no valid AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)' }
+    if (-not $unresolved -and -not $authority -and -not $arm) {
+        $authority = 'https://login.microsoftonline.com'
+        $arm = 'https://management.azure.com'
+        $name = 'AzureCloud'
+        $source = 'public-cloud default (no valid AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)'
+    }
+    if ($unresolved) {
+        $warnings.Add("unresolved cloud — $unresolved")
+        return [pscustomobject]@{
+            Name             = 'unresolved'
+            Source           = $source
+            Authority        = ''
+            ArmResource      = ''
+            ArmScope         = ''
+            SubscriptionsUrl = ''
+            Unresolved       = $unresolved
+            Warnings         = $warnings.ToArray()
+        }
+    }
     $armBase = $arm.TrimEnd('/')
     [pscustomobject]@{
         Name             = $name
@@ -218,6 +298,7 @@ function Resolve-AzureCloudEndpoints {
         ArmResource      = "$armBase/"
         ArmScope         = "$armBase/.default"
         SubscriptionsUrl = "$armBase/subscriptions?api-version=2022-12-01"
+        Unresolved       = ''
         Warnings         = $warnings.ToArray()
     }
 }
@@ -765,6 +846,15 @@ function Test-AzureLane {
     # An ignored endpoint override is part of the lane's evidence (review finding): the
     # operator must see that their AZURE_AUTHORITY_HOST / ARM_ENDPOINT was NOT used.
     foreach ($cloudWarning in @($azureCloud.Warnings)) { $chainNotes.Add("cloud: $cloudWarning") }
+    if ($azureCloud.Unresolved) {
+        # No cloud, no request (review finding): a mixed or half endpoint pair would
+        # post AZURE_CLIENT_SECRET to one cloud's authority for another cloud's scope,
+        # or present a sovereign token to the public Resource Manager — every rung
+        # would fail and the terminal advice would prescribe a public-cloud login.
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'cloud-config' `
+            -Detail ("the Azure control-plane endpoints do not resolve to ONE cloud, so no credential source was tried and nothing was sent anywhere: $($chainNotes -join '; ')") `
+            -OwnerAction 'set AZURE_AUTHORITY_HOST and AZURE_RESOURCE_MANAGER_ENDPOINT (or ARM_ENDPOINT) to the SAME cloud — e.g. https://login.microsoftonline.us + https://management.usgovcloudapi.net for Azure Government — or unset both and select the cloud with: az cloud set --name <AzureCloud|AzureUSGovernment|AzureChinaCloud|registered-name>'
+    }
     $chainNotes.Add("cloud: $($azureCloud.Name) (authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource); from $($azureCloud.Source))")
     # 1. CI OIDC — AVAILABILITY evidence, not a completed login (review finding):
     #    GitHub sets ACTIONS_ID_TOKEN_REQUEST_URL the moment a job grants
@@ -1112,13 +1202,20 @@ if ($DryRun) {
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
     Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first)'
     Write-Host '           2. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_CLIENT_SECRET => client_credentials POST to'
-    Write-Host "              $($azureCloud.Authority)/<tenant>/oauth2/v2.0/token (scope $armScope)"
-    Write-Host "           cloud: $($azureCloud.Name) — authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource) (resolved from $($azureCloud.Source))"
+    if ($azureCloud.Unresolved) {
+        Write-Host '              <no authority: the cloud is UNRESOLVED, so the live run makes no Azure request at all and reports needs-owner>'
+        Write-Host "           cloud: UNRESOLVED (from $($azureCloud.Source)) — see the cloud warning below; fix the endpoint pair before any rung can run"
+    }
+    else {
+        Write-Host "              $($azureCloud.Authority)/<tenant>/oauth2/v2.0/token (scope $armScope)"
+        Write-Host "           cloud: $($azureCloud.Name) — authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource) (resolved from $($azureCloud.Source))"
+    }
     foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
+    Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set, else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
-    Write-Host "           first token => GET $armSubscriptionsUrl"
+    Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
     Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available and no rung ever held a token => ci-delegated (azure/login must run first; a held token that then failed transiently stays transient); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); declared managed-identity endpoint answering 401/403 => needs-owner (identity wiring, never a retry); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
