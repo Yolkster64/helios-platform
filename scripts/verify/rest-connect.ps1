@@ -589,6 +589,10 @@ function Test-AzureLane {
     # (transport/429/5xx) end as unavailable-retryable, never credential advice.
     $armForbidden = $null
     $sawAuthRejection = $false
+    # A DECLARED managed-identity endpoint answering 401/403 is a configuration
+    # failure (review finding): the identity header/secret or the endpoint wiring is
+    # wrong, and "retry later" cannot repair it — it gets its own terminal verdict.
+    $miAuthRejected = $false
     # No-candidate detection (review finding): "transient — retry later" is only
     # honest when a credential source actually EXISTED and failed. On a fresh
     # non-Azure host (no SP env vars, no managed-identity endpoint, no az CLI) no
@@ -732,7 +736,16 @@ function Test-AzureLane {
     }
     else {
         $miStatus = if ($miProbe.Status -eq 0) { 'unreachable (expected off-Azure; failed fast)' } else { "HTTP $($miProbe.Status)" }
-        $chainNotes.Add("managed-identity ($miKind): $miStatus")
+        if ($miKind -ne 'imds' -and $miProbe.Status -in 401, 403) {
+            # Only a DECLARED endpoint (IDENTITY_ENDPOINT / MSI_ENDPOINT) can reject
+            # the request for a configuration reason; raw IMDS non-200s stay what they
+            # are (a non-Azure host or a metadata firewall — not a credential source).
+            $miAuthRejected = $true
+            $chainNotes.Add("managed-identity ($miKind): endpoint answered $miStatus — the identity header/secret (IDENTITY_HEADER / MSI_SECRET) or the endpoint wiring is rejected; this is configuration, not an outage")
+        }
+        else {
+            $chainNotes.Add("managed-identity ($miKind): $miStatus")
+        }
     }
     # A managed-identity SOURCE exists when an endpoint env var declares one (App
     # Service / Functions hosts) or IMDS actually answered a token request with 200.
@@ -857,6 +870,14 @@ function Test-AzureLane {
                 'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
             -OwnerAction ("install the Azure CLI first (bash scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli), then: $azureOwnerAction")
     }
+    # 4b. A declared managed-identity endpoint REJECTED the request (401/403): the
+    #     host's identity wiring is wrong, and no retry or MFA login repairs that —
+    #     the exact wiring check is the owner step (review finding).
+    if ($miAuthRejected -and -not $sawAuthRejection) {
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'managed-identity' `
+            -Detail ("the declared managed-identity endpoint rejected the token request ($chainText) — retrying cannot help; the endpoint/header pair the host injects is stale or does not belong to an identity with access$oidcHeldNote") `
+            -OwnerAction 'verify the managed-identity wiring the host injects — IDENTITY_ENDPOINT + IDENTITY_HEADER (App Service / Functions / Container Apps) or MSI_ENDPOINT + MSI_SECRET — by redeploying with a system- or user-assigned identity that has access, or unset the stale endpoint variables so the chain can use another credential source'
+    }
     # 5. No definitive rejection anywhere = transient-only evidence (transport, 429,
     #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and
     #    would prompt needless credential churn.
@@ -894,7 +915,7 @@ if ($DryRun) {
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $armSubscriptionsUrl"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'
-    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available and no rung ever held a token => ci-delegated (azure/login must run first; a held token that then failed transiently stays transient); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
+    Write-Host '           exhausted: stashed 403 => needs-owner (RBAC grant); OIDC available and no rung ever held a token => ci-delegated (azure/login must run first; a held token that then failed transiently stays transient); certificate configured => needs-owner (auth-doctor -Apply, non-interactive, no MFA); no credential source at all => unavailable (setup guidance, retry cannot help); declared managed-identity endpoint answering 401/403 => needs-owner (identity wiring, never a retry); definitive rejection => needs-owner (MFA once + setup-tenant -OpsIdentity, reported never run); transient-only => unavailable (retry)'
     Write-Host '  exit     always 0 (report-first; needs-owner never gates); internal failure only => 1'
     Write-Host ''
     Write-Host 'Dry run - no token read, no network call made, nothing written.'

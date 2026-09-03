@@ -49,13 +49,18 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  (the bash twin). Env vars carrying a NON-EMPTY value are never
                  clobbered; an empty/whitespace value counts as unset (review
                  finding — matching the bash twin's nonempty rule).
-  gh-models      when GITHUB_MODELS_TOKEN is still effectively unset: a raw
-                 GITHUB_TOKEN satisfies the provider only when the wire PROVES
-                 models:read (X-OAuth-Scopes); otherwise `gh auth token` is read
-                 env-cleared and probed the same way — a proven token is exported,
-                 an unverifiable one (no scopes header, or an injecting transport)
-                 is exported with the scope/vault repair left standing, and a token
-                 proven to lack models:read (or rejected) is NOT exported at all.
+  gh-models      for EVERY enabled provider of type github-models on the public
+                 endpoint whose configured apiKeyEnv (GITHUB_MODELS_TOKEN when
+                 unset) is still effectively unset — a custom-baseUrl provider
+                 never receives a GitHub credential: a raw GITHUB_TOKEN satisfies
+                 the provider only when the wire PROVES models:read (X-OAuth-Scopes);
+                 otherwise `gh auth token` is read env-cleared, probed the same way,
+                 and exported to each such target — a proven token retires that
+                 target's repairs, an unverifiable one (no scopes header, or an
+                 injecting transport) is exported with the scope/vault repair left
+                 standing, and a token proven to lack models:read (or rejected) is
+                 NOT exported at all. A provider with no apiKeySecretName whose
+                 variable is still unset gets a direct-key owner action.
   summary        which env NAMES were set this run, which lanes remain owner-gated.
 
 Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
@@ -217,19 +222,47 @@ function Invoke-HeliosAutoLogin {
     if ($aihubConfigExplicit -and $null -eq $aihubProviders) {
         throw "AIHUB_CONFIG selects '$aihubConfigPath' but it is missing, unparseable, or has no providers section — fix the file or unset AIHUB_CONFIG; aborting instead of exporting the default profile's secrets"
     }
+    # Providers that read a key but declare NO apiKeySecretName (review finding): no
+    # vault path exists for them, so when their variable is still unset after every
+    # rung the only repair is to set it directly — and the summary must say so.
+    # azure-openai is deliberately not in this list: ProviderFactory falls back to
+    # Entra ID (DefaultAzureCredential) when its key is absent, so an unset key is a
+    # supported state there, not a defect.
+    $directKeyProviders = [System.Collections.Generic.List[object]]::new()
     if ($null -ne $aihubProviders) {
         $pairIndex = [ordered]@{}
         foreach ($provProp in $aihubProviders.PSObject.Properties) {
             $prov = $provProp.Value
+            if ($null -eq $prov) { continue }
             # ProviderFactory.CreateAll excludes disabled providers (review
             # finding): a lane the hub will not instantiate must not have its
             # credential pulled into the process.
             if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
+            $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim().ToLowerInvariant() } else { '' }
             $envName = ''
             $providerSecretName = ''
-            if ($prov.PSObject.Properties['apiKeyEnv']) { $envName = [string]$prov.apiKeyEnv }
-            if ($prov.PSObject.Properties['apiKeySecretName']) { $providerSecretName = [string]$prov.apiKeySecretName }
-            if ([string]::IsNullOrWhiteSpace($envName) -or [string]::IsNullOrWhiteSpace($providerSecretName)) { continue }
+            if ($prov.PSObject.Properties['apiKeyEnv']) { $envName = ([string]$prov.apiKeyEnv).Trim() }
+            if ($prov.PSObject.Properties['apiKeySecretName']) { $providerSecretName = ([string]$prov.apiKeySecretName).Trim() }
+            # The factory's per-type default applies when an entry declares no
+            # apiKeyEnv (review finding): CreateOpenAi/AnthropicAgent/CreateGitHubModels/
+            # CreateAzureOpenAi each resolve `ApiKeyEnv ?? <default>` with the entry's
+            # apiKeySecretName, so a secret-only entry is still a live vault pair.
+            if ([string]::IsNullOrWhiteSpace($envName)) {
+                $envName = switch ($provType) {
+                    'openai' { 'OPENAI_API_KEY' }
+                    'anthropic' { 'ANTHROPIC_API_KEY' }
+                    'github-models' { 'GITHUB_MODELS_TOKEN' }
+                    'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                    default { '' }
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # keyless types (ollama, azure-foundry-agent)
+            if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
+                if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { $_.Env -eq $envName }).Count) {
+                    $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
+                }
+                continue
+            }
             $pairKey = "$providerSecretName -> $envName"
             if (-not $pairIndex.Contains($pairKey)) {
                 $pairIndex[$pairKey] = [pscustomobject]@{
@@ -271,60 +304,43 @@ function Invoke-HeliosAutoLogin {
     elseif (@($vaultPairs).Count -eq 0) {
         Write-Report '  note: the active config declares no enabled vault-backed providers — nothing to pull from Key Vault'
     }
-    # The gh-fallback's target env also follows the config (review finding):
-    # ProviderFactory.CreateGitHubModels reads the CONFIGURED apiKeyEnv, so
-    # exporting a hardcoded name would light nothing after a rename. A DISABLED
-    # github-models provider disables the whole fallback (review finding): the
-    # hub will not instantiate that lane, so no credential is fetched for it.
-    $ghModelsEnv = 'GITHUB_MODELS_TOKEN'
-    # A parsed config enables this lane only when it DECLARES an enabled github-models
-    # provider (review finding): ProviderFactory.CreateAll instantiates nothing for an
-    # absent entry, so exporting a stored GitHub credential for it would light no lane.
-    # Only the unreadable-config fallback (the built-in triplet) keeps the lane on.
-    $ghModelsEnabled = ($null -eq $aihubProviders)
-    # The vault-repair guidance follows the provider's apiKeySecretName the same way
-    # (review finding): the config-driven pull reads ONLY that secret, so telling the
-    # owner to store the default name under a customized config would advertise a
-    # repair that can never light the lane. No apiKeySecretName at all means no
-    # vault path exists for this provider, and the guidance omits it.
-    $ghModelsSecretName = 'github-models-token'
-    $ghModelsSkipReason = 'github-models provider is disabled or absent in the active config'
-    if ($null -ne $aihubProviders) {
-        # Discovery by TYPE (review finding): ProviderFactory dispatches on
-        # provider.type, so the GitHub Models lane may live under any key. The entry
-        # named github-models wins when several qualify; otherwise the first enabled
-        # one. A provider with a CUSTOM baseUrl is excluded from this GitHub-credential
-        # fallback (review finding): GITHUB_TOKEN and the gh keyring are GitHub
-        # credentials, and exporting one for a non-GitHub endpoint would hand it to
-        # that service — only the Key Vault pull applies to such a provider.
-        $ghModelsCandidates = @($aihubProviders.PSObject.Properties | Where-Object {
-                $v = $_.Value
-                $null -ne $v -and $v.PSObject.Properties['type'] -and
-                ([string]$v.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase) -and
-                -not ($v.PSObject.Properties['enabled'] -and $v.enabled -eq $false)
-            })
-        $ghModelsChosen = @(@($ghModelsCandidates | Where-Object { $_.Name -eq 'github-models' }) + @($ghModelsCandidates | Where-Object { $_.Name -ne 'github-models' })) | Select-Object -First 1
-        if ($null -ne $ghModelsChosen) {
-            $ghModelsProv = $ghModelsChosen.Value
-            if ($ghModelsProv.PSObject.Properties['apiKeyEnv'] -and
-                -not [string]::IsNullOrWhiteSpace([string]$ghModelsProv.apiKeyEnv)) {
-                $ghModelsEnv = ([string]$ghModelsProv.apiKeyEnv).Trim()
+    # GitHub Models TARGETS (review findings): every enabled provider of TYPE
+    # github-models is one — ProviderFactory.CreateAll instantiates each entry,
+    # dispatching on provider.type, and CreateGitHubModels reads each entry's
+    # CONFIGURED apiKeyEnv (GITHUB_MODELS_TOKEN when unset), so a hardcoded name or a
+    # single "chosen" provider would leave a sibling unconfigured. A parsed config
+    # with no such provider yields no target (nothing to instantiate); only the
+    # unreadable-config fallback keeps the built-in target. A target whose baseUrl
+    # is a CUSTOM endpoint is kept for its Key Vault pull but never receives a
+    # GitHub credential (GITHUB_TOKEN / the gh keyring) — that would hand a GitHub
+    # token to a non-GitHub service. The per-target vault clause in repair guidance
+    # follows the entry's apiKeySecretName (a repair naming another secret can never
+    # light the lane; no secret name means no vault path and the clause is omitted).
+    $ghModelsTargets = [System.Collections.Generic.List[object]]::new()
+    if ($null -eq $aihubProviders) {
+        $ghModelsTargets.Add([pscustomobject]@{ Name = 'github-models'; Env = 'GITHUB_MODELS_TOKEN'; SecretName = 'github-models-token'; Public = $true; SkipReason = '' })
+    }
+    else {
+        foreach ($ghProp in $aihubProviders.PSObject.Properties) {
+            $ghProv = $ghProp.Value
+            if ($null -eq $ghProv -or -not $ghProv.PSObject.Properties['type'] -or
+                -not ([string]$ghProv.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            if ($ghProv.PSObject.Properties['enabled'] -and $ghProv.enabled -eq $false) { continue }
+            $ghEnv = if ($ghProv.PSObject.Properties['apiKeyEnv'] -and -not [string]::IsNullOrWhiteSpace([string]$ghProv.apiKeyEnv)) { ([string]$ghProv.apiKeyEnv).Trim() } else { 'GITHUB_MODELS_TOKEN' }
+            if (@($ghModelsTargets | Where-Object { $_.Env -eq $ghEnv }).Count) { continue }   # two entries sharing a variable are one target
+            $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
+            $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
+            $ghPublic = $true
+            if ($ghBaseUrl) {
+                try { $ghPublic = ([uri]$ghBaseUrl).Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) }
+                catch { $ghPublic = $false }
             }
-            $ghModelsSecretName = if ($ghModelsProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghModelsProv.apiKeySecretName).Trim() } else { '' }
-            $ghModelsBaseUrl = if ($ghModelsProv.PSObject.Properties['baseUrl']) { ([string]$ghModelsProv.baseUrl).Trim() } else { '' }
-            $ghModelsPublicEndpoint = $true
-            if ($ghModelsBaseUrl) {
-                try { $ghModelsPublicEndpoint = ([uri]$ghModelsBaseUrl).Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase) }
-                catch { $ghModelsPublicEndpoint = $false }
-            }
-            if ($ghModelsPublicEndpoint) { $ghModelsEnabled = $true }
-            else {
-                $ghModelsEnabled = $false
-                $ghModelsSkipReason = "the '$($ghModelsChosen.Name)' provider (type github-models) points at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull applies"
-            }
+            $ghSkip = if ($ghPublic) { '' } else { "the '$($ghProp.Name)' provider (type github-models) points at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnv directly) applies" }
+            $ghModelsTargets.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghPublic; SkipReason = $ghSkip })
         }
     }
-    $ghModelsVaultClause = if ($ghModelsSecretName) { ", or store Key Vault secret '$ghModelsSecretName' (the configured github-models apiKeySecretName)" } else { '' }
+    $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
+    $ghModelsPublicEnvs = @($ghModelsPublicTargets | ForEach-Object { $_.Env })
     $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
     # -CommandType Application (review finding): a dot-sourcing caller may carry an
     # `az` alias/function whose .Source is not an invocable path — resolve the real
@@ -433,7 +449,7 @@ function Invoke-HeliosAutoLogin {
     }
 
     # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
-    # Target env is $ghModelsEnv — the github-models provider's CONFIGURED apiKeyEnv
+    # Target envs are each public github-models target's CONFIGURED apiKeyEnv
     # (review finding), not a hardcoded name; a disabled provider skips the
     # fallback entirely.
 
@@ -477,121 +493,148 @@ function Invoke-HeliosAutoLogin {
         catch { return 'unverifiable' }
     }
 
-    # True only when a models:read PROOF exists for the credential feeding the
-    # lane (a raw GITHUB_TOKEN or the gh-rung export) — the reconcile filter
-    # retires the lane's scope/vault actions on this flag, never on mere presence.
+    # True only when GITHUB_TOKEN's models:read is PROVEN — it satisfies every public
+    # target at once (ProviderFactory falls back to it for each of them). The
+    # reconcile filter retires the lane's scope/vault actions on proof, never on
+    # mere presence.
     $ghModelsScopeProven = $false
-    # True when the gh rung exported a token whose scope could not be verified:
-    # that export is the best available credential, but it must not retire a
-    # repair action (review finding) until a run proves it.
-    $ghModelsUnprovenExport = $false
-    $ghModelsRepairAction = "grant models:read to the GitHub credential feeding $ghModelsEnv — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$ghModelsVaultClause"
-    $ghFallbackNeeded = $false
-    if (-not $ghModelsEnabled) {
-        Add-Step -Step $ghModelsEnv -State 'skipped' -Detail "$ghModelsSkipReason — no GitHub token fetched or exported for it"
-    }
-    elseif (-not (Test-EnvValue $ghModelsEnv) -and (Test-EnvValue 'GITHUB_TOKEN')) {
-        # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the
-        # configured env is unset (review finding) — the documented CI path — but
-        # only a token that actually carries models:read satisfies the provider.
-        switch (Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN') {
-            'proven' {
-                $ghModelsScopeProven = $true
-                Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and ProviderFactory.CreateGitHubModels falls back to it — ' +
-                    'the github-models provider is satisfied without an export')
-            }
-            'unverifiable' {
-                Add-Step -Step $ghModelsEnv -State 'ok' -Detail ('GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it, but its models:read ' +
-                    'permission is NOT verifiable here (fine-grained/Actions token exposes no scopes, or an injecting transport) — any vault ' +
-                    'repair stays listed as the deterministic path; if model calls 403, grant models: read')
-            }
-            'missing-scope' {
-                Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — the github-models provider would 403 on every call; trying the gh keyring next'
-                Add-OwnerAction -Env $ghModelsEnv -Text $ghModelsRepairAction
-                $ghFallbackNeeded = $true
-            }
-            default {
-                Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'GITHUB_TOKEN was rejected by api.github.com — it cannot satisfy the github-models provider; trying the gh keyring next'
-                $ghFallbackNeeded = $true
-            }
+    # Per-target tracking for the gh-keyring export (review finding): the SAME stored
+    # token goes to every public target still unset, so its one verdict applies to
+    # each env it was exported to. A proven export retires that env's repairs; an
+    # unverifiable one is the best available credential but must not retire a
+    # repair action until a run proves it.
+    $ghModelsProvenEnvs = [System.Collections.Generic.List[string]]::new()
+    $ghModelsUnprovenExportEnvs = [System.Collections.Generic.List[string]]::new()
+    $ghTokenVerdict = $null     # GITHUB_TOKEN is probed at most once per run
+    $ghKeyring = $null          # the gh keyring is read (env-cleared) and probed at most once per run
+    foreach ($target in $ghModelsTargets) {
+        $vaultClause = if ($target.SecretName) { ", or store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName)" } else { '' }
+        $repairAction = "grant models:read to the GitHub credential feeding $($target.Env) — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$vaultClause"
+        if (-not $target.Public) {
+            Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it"
+            continue
         }
-    }
-    elseif (-not (Test-EnvValue $ghModelsEnv)) {
-        $ghFallbackNeeded = $true
-    }
-    if ($ghFallbackNeeded) {
-        # First PATH hit only: Get-Command returns EVERY matching application when
-        # the name resolves more than once (a shim or a second install ahead of the
-        # real binary), and an array .Source would then be invoked as one bogus
-        # command name — measured as an internal failure, not a lane result.
-        $ghCmd = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $ghCmd) {
-            # Record the lane even when gh is absent — an unevaluated-looking steps
-            # list is ambiguous (review finding).
-            Add-Step -Step $ghModelsEnv -State 'unavailable' -Detail 'gh CLI not on PATH and Key Vault did not provide the token'
+        if (Test-EnvValue $target.Env) {
+            Add-Step -Step $target.Env -State 'skipped' -Detail "already holds a value in this session (preset or pulled from Key Vault) — the GitHub-credential fallback is not needed for provider '$($target.Name)'"
+            continue
         }
-        else {
-            # --hostname github.com (review finding): never export a GitHub
-            # Enterprise credential (GH_HOST context) into the github.com models lane.
-            # Env-cleared (review finding): gh gives GH_TOKEN/GITHUB_TOKEN precedence
-            # over its keyring, so with a stale env token set this would export that
-            # dead value instead of the STORED login. The shadowing variables are
-            # removed for this one call and restored immediately (values move only
-            # between env slots in-process; rest-connect.ps1 does the same).
-            $savedGhToken = $env:GH_TOKEN
-            $savedGithubToken = $env:GITHUB_TOKEN
-            try {
-                Remove-Item env:GH_TOKEN -ErrorAction SilentlyContinue
-                Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-                $ghLines = @(& $ghCmd.Source auth token --hostname github.com 2>$null)
-                $ghExit = [int]$LASTEXITCODE
-            }
-            finally {
-                if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
-                if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
-                $savedGhToken = ''
-                $savedGithubToken = ''
-            }
-            $ghToken = (@($ghLines) -join '').Trim()
-            if ($ghExit -eq 0 -and $ghToken) {
-                # Scope PROOF before the export counts (review finding): the stored
-                # gh login is probed exactly like GITHUB_TOKEN above. A token the
-                # wire proves to lack models:read is not exported at all (the
-                # provider would 403 on every call) and the repair action stands; an
-                # unverifiable one is exported as the best available credential but
-                # leaves every scope/vault repair listed until a run proves it.
-                Set-Item -Path "env:$ghModelsEnv" -Value $ghToken
-                $ghToken = ''
-                switch (Get-GitHubTokenModelsScope -EnvName $ghModelsEnv) {
-                    'proven' {
-                        $ghModelsScopeProven = $true
-                        $exportedNames.Add($ghModelsEnv)
-                        Add-Step -Step $ghModelsEnv -State 'exported' -Detail 'from `gh auth token` — X-OAuth-Scopes carries models:read; lights: gh-models provider'
-                    }
-                    'unverifiable' {
-                        $ghModelsUnprovenExport = $true
-                        $exportedNames.Add($ghModelsEnv)
-                        Add-Step -Step $ghModelsEnv -State 'exported' `
-                            -Detail ('from `gh auth token` — exported as the best available credential, but its models:read permission is NOT ' +
-                                'verifiable here (no X-OAuth-Scopes header, or an injecting transport); any scope/vault repair stays listed ' +
-                                'until a run proves it; if model calls 403: gh auth refresh -h github.com --scopes models:read')
-                    }
-                    'missing-scope' {
-                        Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
-                        Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported (the github-models provider would 403 on every call)'
-                        Add-OwnerAction -Env $ghModelsEnv -Text $ghModelsRepairAction
-                    }
-                    default {
-                        Remove-Item -Path "env:$ghModelsEnv" -ErrorAction SilentlyContinue
-                        Add-Step -Step $ghModelsEnv -State 'needs-owner' -Detail 'the stored gh login was rejected by api.github.com — NOT exported'
-                        Add-OwnerAction -Env $ghModelsEnv -Text "re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read$ghModelsVaultClause (lights $ghModelsEnv)"
-                    }
+        $needFallback = $true
+        if (Test-EnvValue 'GITHUB_TOKEN') {
+            # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the
+            # configured env is unset (review finding) — the documented CI path — but
+            # only a token that actually carries models:read satisfies the provider.
+            if ($null -eq $ghTokenVerdict) { $ghTokenVerdict = Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN' }
+            switch ($ghTokenVerdict) {
+                'proven' {
+                    $ghModelsScopeProven = $true
+                    $needFallback = $false
+                    Add-Step -Step $target.Env -State 'ok' -Detail ("GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and ProviderFactory.CreateGitHubModels falls back to it — provider '$($target.Name)' is satisfied without an export")
+                }
+                'unverifiable' {
+                    $needFallback = $false
+                    Add-Step -Step $target.Env -State 'ok' -Detail ("GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it for provider '$($target.Name)', but its models:read " +
+                        'permission is NOT verifiable here (fine-grained/Actions token exposes no scopes, or an injecting transport) — any vault ' +
+                        'or direct-key repair stays listed as the deterministic path; if model calls 403, grant models: read')
+                }
+                'missing-scope' {
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — provider '$($target.Name)' would 403 on every call; trying the gh keyring next"
+                    Add-OwnerAction -Env $target.Env -Text $repairAction
+                }
+                default {
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN was rejected by api.github.com — it cannot satisfy provider '$($target.Name)'; trying the gh keyring next"
                 }
             }
-            else {
-                Add-Step -Step $ghModelsEnv -State 'skipped' -Detail 'gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one'
+        }
+        if (-not $needFallback) { continue }
+        if ($null -eq $ghKeyring) {
+            # First PATH hit only: Get-Command returns EVERY matching application when
+            # the name resolves more than once (a shim or a second install ahead of the
+            # real binary), and an array .Source would then be invoked as one bogus
+            # command name — measured as an internal failure, not a lane result.
+            $ghKeyring = [pscustomobject]@{ Cmd = (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1); Token = ''; Exit = -1; Verdict = $null }
+            if ($ghKeyring.Cmd) {
+                # --hostname github.com (review finding): never export a GitHub
+                # Enterprise credential (GH_HOST context) into the github.com models lane.
+                # Env-cleared (review finding): gh gives GH_TOKEN/GITHUB_TOKEN precedence
+                # over its keyring, so with a stale env token set this would export that
+                # dead value instead of the STORED login. The shadowing variables are
+                # removed for this one call and restored immediately (values move only
+                # between env slots in-process; rest-connect.ps1 does the same).
+                $savedGhToken = $env:GH_TOKEN
+                $savedGithubToken = $env:GITHUB_TOKEN
+                try {
+                    Remove-Item env:GH_TOKEN -ErrorAction SilentlyContinue
+                    Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+                    $ghLines = @(& $ghKeyring.Cmd.Source auth token --hostname github.com 2>$null)
+                    $ghKeyring.Exit = [int]$LASTEXITCODE
+                }
+                finally {
+                    if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
+                    if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
+                    $savedGhToken = ''
+                    $savedGithubToken = ''
+                }
+                $ghKeyring.Token = (@($ghLines) -join '').Trim()
+                $ghLines = $null
             }
         }
+        if (-not $ghKeyring.Cmd) {
+            # Record the lane even when gh is absent — an unevaluated-looking steps
+            # list is ambiguous (review finding).
+            Add-Step -Step $target.Env -State 'unavailable' -Detail "gh CLI not on PATH and Key Vault did not provide the token for provider '$($target.Name)'"
+            continue
+        }
+        if ($ghKeyring.Exit -ne 0 -or -not $ghKeyring.Token) {
+            Add-Step -Step $target.Env -State 'skipped' -Detail "gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one for provider '$($target.Name)'"
+            continue
+        }
+        # Scope PROOF before the export counts (review finding): the stored gh login
+        # is probed exactly like GITHUB_TOKEN above, once — the verdict is the same
+        # for every target the same token reaches. A token the wire proves to lack
+        # models:read is not exported at all (the provider would 403 on every call)
+        # and the repair action stands; an unverifiable one is exported as the best
+        # available credential but leaves every scope/vault repair listed until a
+        # run proves it.
+        Set-Item -Path "env:$($target.Env)" -Value $ghKeyring.Token
+        if ($null -eq $ghKeyring.Verdict) { $ghKeyring.Verdict = Get-GitHubTokenModelsScope -EnvName $target.Env }
+        switch ($ghKeyring.Verdict) {
+            'proven' {
+                $ghModelsProvenEnvs.Add($target.Env)
+                $exportedNames.Add($target.Env)
+                Add-Step -Step $target.Env -State 'exported' -Detail "from `gh auth token` — X-OAuth-Scopes carries models:read; lights: provider '$($target.Name)'"
+            }
+            'unverifiable' {
+                $ghModelsUnprovenExportEnvs.Add($target.Env)
+                $exportedNames.Add($target.Env)
+                Add-Step -Step $target.Env -State 'exported' `
+                    -Detail ("from `gh auth token` — exported as the best available credential for provider '$($target.Name)', but its models:read permission is NOT " +
+                        'verifiable here (no X-OAuth-Scopes header, or an injecting transport); any scope/vault repair stays listed ' +
+                        'until a run proves it; if model calls 403: gh auth refresh -h github.com --scopes models:read')
+            }
+            'missing-scope' {
+                Remove-Item -Path "env:$($target.Env)" -ErrorAction SilentlyContinue
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported (provider '$($target.Name)' would 403 on every call)"
+                Add-OwnerAction -Env $target.Env -Text $repairAction
+            }
+            default {
+                Remove-Item -Path "env:$($target.Env)" -ErrorAction SilentlyContinue
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login was rejected by api.github.com — NOT exported for provider '$($target.Name)'"
+                Add-OwnerAction -Env $target.Env -Text "re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read$vaultClause (lights $($target.Env))"
+            }
+        }
+    }
+    if ($null -ne $ghKeyring) { $ghKeyring.Token = '' }
+
+    # Direct-key repairs (review finding): a provider that reads a key but declares
+    # no apiKeySecretName has no vault path, and a custom-endpoint github-models
+    # provider gets no GitHub credential either — when its variable is still unset
+    # after every rung, setting it directly is the only repair, and the summary must
+    # carry it instead of listing nothing. A public github-models target proven (or
+    # exported) through the GitHub credential is already served.
+    foreach ($direct in $directKeyProviders) {
+        if (Test-EnvValue $direct.Env) { continue }
+        if ($direct.Type -eq 'github-models' -and ($ghModelsPublicEnvs -contains $direct.Env) -and ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($direct.Env))) { continue }
+        Add-OwnerAction -Env $direct.Env -Text "set $($direct.Env) directly for provider '$($direct.Name)' (type $($direct.Type)) — the active config declares no apiKeySecretName for it, so no Key Vault pull exists: export it in the shell, or add apiKeySecretName to that provider and store the secret (lights $($direct.Env))"
     }
 
     # Owner actions were collected BEFORE the export steps ran (review finding): the
@@ -600,38 +643,46 @@ function Invoke-HeliosAutoLogin {
     # later in this same run, the pre-export action is already satisfied. The
     # summary's contract is "the only steps that need a human", so any action naming
     # a provider env var that NOW holds a value is dropped, with the drop reported.
-    # Derived from the config-driven pairs (plus the gh-rung's configured target)
-    # so the reconcile filter tracks config/aihub.json the same way the pulls do.
-    $exportResolvableEnvNames = @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsEnv | Select-Object -Unique)
+    # Derived from the config-driven pairs, the public github-models targets, and the
+    # direct-key providers, so the reconcile filter tracks config/aihub.json the same
+    # way the pulls do.
+    $exportResolvableEnvNames = @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsPublicEnvs + @($directKeyProviders | ForEach-Object { $_.Env }) | Select-Object -Unique)
+    # A public github-models env counts as satisfied via the provider's documented
+    # GITHUB_TOKEN fallback too (review finding) — a run that ends with a working
+    # github-models lane must not still demand a vault repair — but never on the
+    # strength of an unproven gh-rung export (review finding): a stored token that
+    # also lacks models:read would otherwise retire the very repair it needs. A
+    # vault-pulled or pre-set value is the deterministic path and counts as before.
+    function Test-EnvSatisfied {
+        param([Parameter(Mandatory)][string]$Name)
+        if ($ghModelsPublicEnvs -contains $Name) {
+            return ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($Name) -or
+                ((Test-EnvValue $Name) -and -not $ghModelsUnprovenExportEnvs.Contains($Name)))
+        }
+        return (Test-EnvValue $Name)
+    }
     $resolvedActionCount = 0
     $remainingOwnerActions = [System.Collections.Generic.List[string]]::new()
     foreach ($action in $ownerActions) {
         # Structural match (review finding): every action this script composes carries
         # the exact env var it retires on. A substring test let a satisfied 'API_KEY'
         # retire the unrelated OPENAI_API_KEY repair under a custom profile. The
-        # auth-doctor's imported free-text actions carry no env, so the variable they
-        # name is recovered by an exact-identifier match (bounded by the [A-Za-z0-9_]
+        # auth-doctor's imported free-text actions carry no env, so the variables they
+        # name are recovered by an exact-identifier match (bounded by the [A-Za-z0-9_]
         # class) — never a substring.
-        $candidateEnvNames = if ($null -ne $action.Env) { @($action.Env | Where-Object { $_ }) }
-        else {
-            @($exportResolvableEnvNames | Where-Object {
-                $action.Text -match ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)') })
-        }
-        $resolvedByExport = $false
-        foreach ($name in $candidateEnvNames) {
-            # The models env counts as satisfied via the provider's documented
-            # GITHUB_TOKEN fallback too (review finding) — a run that ends with a
-            # working github-models lane must not still demand a vault repair —
-            # but never on the strength of an unproven gh-rung export (review
-            # finding): a stored token that also lacks models:read would otherwise
-            # retire the very repair it needs. A vault-pulled or pre-set value is
-            # the deterministic path and counts as before.
-            $envSatisfied = if ($name -eq $ghModelsEnv) {
-                $ghModelsScopeProven -or ((Test-EnvValue $name) -and -not $ghModelsUnprovenExport)
-            }
-            else { Test-EnvValue $name }
-            if ($envSatisfied) { $resolvedByExport = $true; break }
-        }
+        # Outer @() on purpose: an if-expression unrolls its output, so a single name
+        # would otherwise land as a scalar string and .Count would not exist.
+        $candidateEnvNames = @(if ($null -ne $action.Env) { @($action.Env | Where-Object { $_ }) }
+            else {
+                @($exportResolvableEnvNames | Where-Object {
+                    $action.Text -match ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)') })
+            })
+        # ALL-variable semantics (review finding): an action is retired only when
+        # EVERY variable it names is satisfied — a compound doctor action covering
+        # KEY_A and KEY_B must survive the export of KEY_A alone, because KEY_B's
+        # provider stays unconfigured and that text is its only remaining repair.
+        $unsatisfied = @($candidateEnvNames | Where-Object { -not (Test-EnvSatisfied $_) })
+        $resolvedByExport = ($candidateEnvNames.Count -gt 0) -and ($unsatisfied.Count -eq 0)
         if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action.Text) }
     }
     $uniqueOwnerActions = @($remainingOwnerActions | Select-Object -Unique)
