@@ -67,8 +67,10 @@ identity, detail, ownerAction}):
                               --service-principal --certificate` + `az account
                               get-access-token` when az is on PATH, and reported as
                               available-but-needs-az otherwise.
-            3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER) or MSI_ENDPOINT when
-                              present; else the IMDS endpoint (169.254.169.254,
+            3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER), else MSI_ENDPOINT
+                              (+MSI_SECRET) — each honored only on a documented local
+                              token-endpoint shape, and a rejected IDENTITY_ENDPOINT
+                              falls through to MSI_ENDPOINT; else the IMDS endpoint (169.254.169.254,
                               Metadata:true) with a HARD 2-second no-proxy timeout so a
                               non-Azure host fails fast instead of hanging.
             4. az cached      `az account get-access-token --resource-type arm` (stderr
@@ -204,14 +206,17 @@ function Test-TrustedAzureEndpoint {
     }
     return $parsedEndpoint.GetLeftPart([System.UriPartial]::Authority)
 }
-# Managed-identity endpoints are platform-local by construction (review finding): App
-# Service / Functions / Container Apps inject http://127.0.0.1:41xxx/msi/token or
-# http://localhost:42356/msi/token, Azure Arc http://127.0.0.1:40342/metadata/identity/oauth2/token,
-# Cloud Shell http://localhost:50342/oauth2/token, and IMDS is the link-local
-# 169.254.169.254. Anything else in IDENTITY_ENDPOINT / MSI_ENDPOINT — mistyped, stale,
-# or planted — would receive IDENTITY_HEADER / MSI_SECRET, so only a loopback or
-# link-local host is ever contacted; a rejected value is reported as chain evidence
-# and never counts as a credential source.
+# Managed-identity endpoints have a DOCUMENTED shape (review findings): App Service /
+# Functions / Container Apps / Azure ML inject http://127.0.0.1:41xxx/msi/token or
+# http://localhost:42356/msi/token (the port is chosen per instance, the path is not),
+# Azure Arc http://127.0.0.1:40342/metadata/identity/oauth2/token, Cloud Shell
+# http://localhost:50342/oauth2/token, and IMDS is exactly
+# http://169.254.169.254/metadata/identity/oauth2/token. Anything else in
+# IDENTITY_ENDPOINT / MSI_ENDPOINT — mistyped, stale, or planted, including a loopback
+# listener on another path such as http://localhost:8080/capture — would receive
+# IDENTITY_HEADER / MSI_SECRET, so a value is contacted only when scheme, host AND
+# token path match one of those shapes (no userinfo, query or fragment); a rejected
+# value is reported as chain evidence and never counts as a credential source.
 function Test-TrustedManagedIdentityEndpoint {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
@@ -224,9 +229,23 @@ function Test-TrustedManagedIdentityEndpoint {
         return ''
     }
     $endpointHost = $parsed.DnsSafeHost
-    $isLocal = ($endpointHost -eq 'localhost') -or ($endpointHost -eq '::1') -or ($endpointHost -eq '169.254.169.254') -or ($endpointHost -match '^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
-    if (-not $isLocal) {
+    $isLoopback = ($endpointHost -eq 'localhost') -or ($endpointHost -eq '::1') -or ($endpointHost -match '^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+    $isImds = ($endpointHost -eq '169.254.169.254')
+    if (-not $isLoopback -and -not $isImds) {
         $Notes.Add("managed-identity: ignored $Label — host '$endpointHost' is not a platform-local endpoint (loopback or 169.254.169.254); no identity header or secret was sent to it")
+        return ''
+    }
+    # The token PATH is the shape (review finding): a loopback host alone admits any
+    # local listener, so only the documented endpoint paths are accepted, bare.
+    $tokenPath = $parsed.AbsolutePath.TrimEnd('/')
+    $knownTokenPaths = @('/msi/token', '/metadata/identity/oauth2/token', '/oauth2/token')
+    $pathKnown = [bool]@($knownTokenPaths | Where-Object { $tokenPath.Equals($_, [System.StringComparison]::OrdinalIgnoreCase) }).Count
+    if (-not $pathKnown -or $parsed.UserInfo -or $parsed.Query -or $parsed.Fragment) {
+        $Notes.Add("managed-identity: ignored $Label — local host but not a documented token endpoint (expected path /msi/token, /metadata/identity/oauth2/token or /oauth2/token with no userinfo, query or fragment; value never echoed); no identity header or secret was sent to it")
+        return ''
+    }
+    if ($isImds -and ($parsed.Scheme -ne 'http' -or -not $parsed.IsDefaultPort -or -not $tokenPath.Equals('/metadata/identity/oauth2/token', [System.StringComparison]::OrdinalIgnoreCase))) {
+        $Notes.Add("managed-identity: ignored $Label — 169.254.169.254 is only ever http://169.254.169.254/metadata/identity/oauth2/token (value never echoed); no identity header or secret was sent to it")
         return ''
     }
     return $parsed.GetLeftPart([System.UriPartial]::Path).TrimEnd('/')
@@ -493,24 +512,26 @@ function Get-ConfiguredGitHubModelsEnvs {
     # or a baseUrl on models.github.ai). A credential bound to a custom baseUrl
     # belongs to THAT endpoint and must never be sent to api.github.com (review
     # finding: the verifier would otherwise disclose an unrelated service credential
-    # to GitHub). Unreadable config → the default name; a parsed config with no
+    # to GitHub). An unreadable config — explicit or the repo default — contributes
+    # NO candidate (review finding: AIHubService.ResolveConfigPath / AIHubOptions.Load
+    # fail on the same file, so there is no hub to probe for); a parsed config with no
     # qualifying provider → no candidate from config at all.
     $default = 'GITHUB_MODELS_TOKEN'
     $explicitProfile = Test-EnvValue 'AIHUB_CONFIG'
     $configPath = if ($explicitProfile) { ([string]$env:AIHUB_CONFIG).Trim() }
     else { Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'config' 'aihub.json' }
-    # An EXPLICITLY selected profile the hub cannot load contributes NO candidate
-    # (review finding): the built-in name would be an invented profile's, and the
-    # dry-run walk must say why instead. Only the unreadable REPO DEFAULT keeps it.
+    # A profile the hub cannot load contributes NO candidate (review findings): the
+    # built-in name would be an invented profile's, and the dry-run walk says why.
     $script:configuredModelsNote = ''
     $script:nonGitHubReaderEnvs = [System.Collections.Generic.HashSet[string]]::new($script:EnvNameComparer)
     $unreadableExplicit = "(AIHUB_CONFIG selects '$configPath' but it is missing, unparseable, or not a JSON object — the hub cannot load it either; no config candidate)"
+    $unreadableDefault = "(the repo default '$configPath' is missing, unparseable, or not a JSON object — AIHubService.ResolveConfigPath / AIHubOptions.Load fail on it too, so no hub can start; no config candidate)"
     try {
         $parsed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
         # The hub binds the document to an object; anything else is unreadable to it too.
         if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
-            if ($explicitProfile) { $script:configuredModelsNote = $unreadableExplicit; return @() }
-            return @($default)
+            $script:configuredModelsNote = if ($explicitProfile) { $unreadableExplicit } else { $unreadableDefault }
+            return @()
         }
         # An absent providers section is an EMPTY table (review finding):
         # AIHubOptions.Providers starts empty, so the hub loads a CLI-only profile and
@@ -628,8 +649,8 @@ function Get-ConfiguredGitHubModelsEnvs {
         return @($names)
     }
     catch {
-        if ($explicitProfile) { $script:configuredModelsNote = $unreadableExplicit; return @() }
-        return @($default)
+        $script:configuredModelsNote = if ($explicitProfile) { $unreadableExplicit } else { $unreadableDefault }
+        return @()
     }
 }
 
@@ -1083,7 +1104,9 @@ function Test-AzureLane {
     # identity header / secret is read only after the URL passed the local-host shape
     # check, so a bad value never sees a credential-bearing request.
     $miEndpointRejected = $false
+    $miDeclared = $false
     if (Test-EnvValue 'IDENTITY_ENDPOINT') {
+        $miDeclared = $true
         $miKind = 'identity-endpoint'
         $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:IDENTITY_ENDPOINT) -Label 'IDENTITY_ENDPOINT' -Notes $chainNotes
         if ($miBase) {
@@ -1094,10 +1117,16 @@ function Test-AzureLane {
         }
         else { $miEndpointRejected = $true }
     }
-    elseif (Test-EnvValue 'MSI_ENDPOINT') {
+    # The legacy MSI_ENDPOINT is tried whenever the preferred endpoint is absent OR was
+    # rejected (review finding): a stale or planted IDENTITY_ENDPOINT next to a valid
+    # MSI_ENDPOINT must not discard the usable identity source — the rejection stays
+    # in the chain notes, and the legacy endpoint passes the same shape check first.
+    if ($null -eq $miProbe -and (Test-EnvValue 'MSI_ENDPOINT')) {
+        $miDeclared = $true
         $miKind = 'msi-endpoint'
         $miBase = Test-TrustedManagedIdentityEndpoint -Value ([string]$env:MSI_ENDPOINT) -Label 'MSI_ENDPOINT' -Notes $chainNotes
         if ($miBase) {
+            $miEndpointRejected = $false
             $miHeaders = @{ Metadata = 'true' }
             if (Test-Path env:MSI_SECRET) { $miHeaders['Secret'] = [string]$env:MSI_SECRET }
             $miUrl = "$miBase`?api-version=2017-09-01&resource=$([uri]::EscapeDataString($armResource))"
@@ -1105,7 +1134,7 @@ function Test-AzureLane {
         }
         else { $miEndpointRejected = $true }
     }
-    else {
+    if (-not $miDeclared) {
         $miKind = 'imds'
         # HARD 2s + -NoProxy: 169.254.169.254 is link-local; on a non-Azure host the
         # connect must fail fast, and a proxy must never swallow it into a long hang.
@@ -1334,7 +1363,7 @@ if ($DryRun) {
     foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
-    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 (the App Service / Container Apps / Arc / Cloud Shell shapes); any other host is ignored and no identity header or secret is sent — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
+    Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and a rejected IDENTITY_ENDPOINT still lets a valid MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"
     Write-Host '           200+parsed payload => ready (subscription count + first name/id); 401 => continue; 403 => RBAC diagnosis kept, chain continues'

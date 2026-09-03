@@ -94,8 +94,9 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  read (the same rule covers a variable read by consumers of
                  different credential families). A profile with no providers section is a
                  valid CLI-only profile (AIHubOptions.Providers starts empty), not a
-                 read failure; an explicitly selected profile the hub cannot load
-                 aborts before the az lane runs.
+                 read failure; an active config the hub cannot load — the explicit
+                 AIHUB_CONFIG profile and the repo default alike — aborts before the
+                 az lane runs (there is no built-in fallback mapping).
   summary        which env NAMES were set this run, which lanes remain owner-gated.
 
 Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
@@ -325,13 +326,16 @@ function Invoke-HeliosAutoLogin {
             }
         }
     }
-    # An EXPLICITLY selected profile that cannot be read is an internal failure
-    # (review finding): the hub itself will fail to load that same file, so
-    # silently exporting the built-in default mapping would configure a hub other
-    # than the one selected — and report success doing it. The fallback in step 2
-    # is reserved for the absent/unreadable REPO DEFAULT only.
-    if ($aihubConfigExplicit -and -not $aihubParseOk) {
-        throw "AIHUB_CONFIG selects '$aihubConfigPath' but it is missing, unparseable, or not a JSON object — fix the file or unset AIHUB_CONFIG; aborting before any lane runs instead of exporting the default profile's secrets"
+    # An active config that cannot be read is an internal failure whichever way it
+    # was selected (review findings): AIHubService.ResolveConfigPath throws when
+    # config/aihub.json is missing and AIHubOptions.Load throws when it does not
+    # parse, so no hub can start from it — running auth-doctor -Apply on its behalf
+    # and exporting a built-in mapping would report success for a configuration that
+    # cannot run. There is no fallback mapping; the file is the contract.
+    if (-not $aihubParseOk) {
+        $selectedBy = if ($aihubConfigExplicit) { "AIHUB_CONFIG selects '$aihubConfigPath' but it" } else { "the repo default config ($aihubConfigPath; AIHUB_CONFIG unset)" }
+        $unsetHint = if ($aihubConfigExplicit) { ' or unset AIHUB_CONFIG' } else { '' }
+        throw "$selectedBy is missing, unparseable, or not a JSON object — the hub cannot load it either (AIHubOptions.Load); fix the file$unsetHint; aborting before any lane runs"
     }
     if ($aihubParseOk -and -not $aihubProvidersDeclared) {
         Write-Report "  note: the active config ($aihubConfigPath) declares no providers section — the hub instantiates no API provider from it (CLI-only profile), so there is no credential to acquire for one"
@@ -715,20 +719,12 @@ function Invoke-HeliosAutoLogin {
     $ghTokenForeignNames = (@($ghTokenForeignReaders | ForEach-Object { $_.Name }) -join ',')
     # Never retired by an export (Env ''): the defect is the declaration, not a value.
     $ghTokenSplitAction = "give the consumer(s) reading GITHUB_TOKEN as their apiKeyEnv ($ghTokenForeignNames) a distinct variable name in ${aihubConfigLabel} — CreateGitHubModels falls back to GITHUB_TOKEN for every public github-models provider, so its value must be a GitHub credential, never that service's key"
-    if ($null -eq $aihubProviders -and @($vaultPairs).Count -eq 0) {
-        # Stated fallback, never silent — and ONLY for an unreadable REPO DEFAULT
-        # config (the explicit AIHUB_CONFIG case threw above). A config that
-        # parsed fine but declares zero enabled vault-backed providers is a
-        # deliberate profile (review finding): pulling the built-in triplet for it
-        # would export credentials for lanes that hub will never instantiate.
-        Write-Report '  note: config/aihub.json unreadable — falling back to the built-in secret/env mapping'
-        $vaultPairs = @(
-            [pscustomobject]@{ SecretName = 'openai-api-key'; Env = 'OPENAI_API_KEY'; Lights = 'codex CLI + openai/openai-codex providers & SDKs (fallback mapping)' }
-            [pscustomobject]@{ SecretName = 'anthropic-api-key'; Env = 'ANTHROPIC_API_KEY'; Lights = 'claude CLI + anthropic provider (fallback mapping)' }
-            [pscustomobject]@{ SecretName = 'github-models-token'; Env = 'GITHUB_MODELS_TOKEN'; Lights = 'gh-models provider (fallback mapping)' }
-        )
-    }
-    elseif (@($vaultPairs).Count -eq 0) {
+    # No built-in fallback mapping (review finding): an unreadable config aborted in
+    # step 0 because the hub cannot load it either, so the parsed table is the only
+    # source of pairs here — and a parsed config that declares zero enabled
+    # vault-backed providers is a deliberate profile: pulling a built-in triplet for
+    # it would export credentials for lanes that hub never instantiates.
+    if (@($vaultPairs).Count -eq 0) {
         Write-Report '  note: the active config declares no enabled vault-backed providers — nothing to pull from Key Vault'
     }
     # GitHub Models TARGETS (review findings): every enabled provider of TYPE
@@ -736,81 +732,76 @@ function Invoke-HeliosAutoLogin {
     # dispatching on provider.type, and CreateGitHubModels reads each entry's
     # CONFIGURED apiKeyEnv (GITHUB_MODELS_TOKEN when unset), so a hardcoded name or a
     # single "chosen" provider would leave a sibling unconfigured. A parsed config
-    # with no such provider yields no target (nothing to instantiate); only the
-    # unreadable-config fallback keeps the built-in target. A target whose baseUrl
+    # with no such provider yields no target (nothing to instantiate), and an
+    # unreadable config aborted in step 0, so there is no built-in target. A target whose baseUrl
     # is a CUSTOM endpoint is kept for its Key Vault pull but never receives a
     # GitHub credential (GITHUB_TOKEN / the gh keyring) — that would hand a GitHub
     # token to a non-GitHub service. The per-target vault clause in repair guidance
     # follows the entry's apiKeySecretName (a repair naming another secret can never
     # light the lane; no secret name means no vault path and the clause is omitted).
     $ghModelsTargets = [System.Collections.Generic.List[object]]::new()
-    if ($null -eq $aihubProviders) {
-        $ghModelsTargets.Add([pscustomobject]@{ Name = 'github-models'; Owners = @('github-models'); PublicOwners = @('github-models'); OtherReaders = @(); Env = 'GITHUB_MODELS_TOKEN'; SecretName = 'github-models-token'; Public = $true; Mixed = $false; SkipReason = '' })
+    # Pass 1 — one row per enabled github-models entry that reads a variable (a
+    # declared-blank apiKeyEnv has none to export into and is settled in step 3).
+    $ghModelsEntries = [System.Collections.Generic.List[object]]::new()
+    foreach ($ghProp in $aihubProviders.PSObject.Properties) {
+        $ghProv = $ghProp.Value
+        if ($null -eq $ghProv -or -not $ghProv.PSObject.Properties['type'] -or
+            -not ([string]$ghProv.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ($ghProv.PSObject.Properties['enabled'] -and $ghProv.enabled -eq $false) { continue }
+        $ghDeclared = Get-DeclaredApiKeyEnv $ghProv
+        if ($null -ne $ghDeclared -and $ghDeclared -eq '') { continue }
+        $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
+        $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
+        $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
+        # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
+        $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
+        $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note })
     }
-    else {
-        # Pass 1 — one row per enabled github-models entry that reads a variable (a
-        # declared-blank apiKeyEnv has none to export into and is settled in step 3).
-        $ghModelsEntries = [System.Collections.Generic.List[object]]::new()
-        foreach ($ghProp in $aihubProviders.PSObject.Properties) {
-            $ghProv = $ghProp.Value
-            if ($null -eq $ghProv -or -not $ghProv.PSObject.Properties['type'] -or
-                -not ([string]$ghProv.type).Trim().Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-            if ($ghProv.PSObject.Properties['enabled'] -and $ghProv.enabled -eq $false) { continue }
-            $ghDeclared = Get-DeclaredApiKeyEnv $ghProv
-            if ($null -ne $ghDeclared -and $ghDeclared -eq '') { continue }
-            $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
-            $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
-            $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
-            # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
-            $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
-            $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note })
+    # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
+    # known (review finding): a public entry listed before a custom-baseUrl entry
+    # sharing its apiKeyEnv used to win the dedupe, and the GitHub credential
+    # exported for the public one was then handed by ProviderFactory.CreateAll to
+    # the custom endpoint as well. A variable with MIXED ownership is one target
+    # that never receives a GitHub credential; only its Key Vault pull (or a
+    # direct export) applies, and the durable repair is distinct apiKeyEnv names.
+    foreach ($ghEnvName in @(Get-UniqueEnvNames -Names @($ghModelsEntries | ForEach-Object { $_.Env }))) {
+        $owners = @($ghModelsEntries | Where-Object { Test-EnvNameEquals $_.Env $ghEnvName })
+        $ownerNames = @($owners | ForEach-Object { $_.Name })
+        $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
+        $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
+        # Readers of OTHER keyed types (review finding, same class as the custom
+        # endpoint): an openai/anthropic/azure-openai entry sharing the variable
+        # would receive the GitHub credential too; a variable with conflicting
+        # secret mappings is already a reported defect and gets nothing either.
+        $foreignReaders = @()
+        if ($envReaders.ContainsKey($ghEnvName)) {
+            $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
         }
-        # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
-        # known (review finding): a public entry listed before a custom-baseUrl entry
-        # sharing its apiKeyEnv used to win the dedupe, and the GitHub credential
-        # exported for the public one was then handed by ProviderFactory.CreateAll to
-        # the custom endpoint as well. A variable with MIXED ownership is one target
-        # that never receives a GitHub credential; only its Key Vault pull (or a
-        # direct export) applies, and the durable repair is distinct apiKeyEnv names.
-        foreach ($ghEnvName in @(Get-UniqueEnvNames -Names @($ghModelsEntries | ForEach-Object { $_.Env }))) {
-            $owners = @($ghModelsEntries | Where-Object { Test-EnvNameEquals $_.Env $ghEnvName })
-            $ownerNames = @($owners | ForEach-Object { $_.Name })
-            $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
-            $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
-            # Readers of OTHER keyed types (review finding, same class as the custom
-            # endpoint): an openai/anthropic/azure-openai entry sharing the variable
-            # would receive the GitHub credential too; a variable with conflicting
-            # secret mappings is already a reported defect and gets nothing either.
-            $foreignReaders = @()
-            if ($envReaders.ContainsKey($ghEnvName)) {
-                $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
-            }
-            $isConflict = $conflictingEnvSet.Contains($ghEnvName)
-            $isIncompatible = $incompatibleEnvSet.Contains($ghEnvName)
-            # The vault clause follows the first apiKeySecretName declared among the
-            # sharers (a repair naming another secret can never light the lane).
-            $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
-            if (-not $targetSecret) { $targetSecret = '' }
-            $quotedPublic = (@($publicOwners | ForEach-Object { "'$_'" }) -join ', ')
-            $quotedCustom = (@($customOwners | ForEach-Object { "'$_'" }) -join ', ')
-            $customNotes = @($owners | Where-Object { -not $_.Public -and $_.Note } | ForEach-Object { "'$($_.Name)': $($_.Note)" })
-            if ($customNotes.Count -gt 0) { $quotedCustom += " ($($customNotes -join '; '))" }
-            $otherReaders = @()
-            if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
-            if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
-            if ($isConflict) { $otherReaders += 'entries with conflicting Key Vault secret mappings (see its step above)' }
-            if ($isIncompatible -and $foreignReaders.Count -eq 0 -and $customOwners.Count -eq 0) { $otherReaders += 'consumers of a different credential family (see its step above)' }
-            $isMixed = ($publicOwners.Count -gt 0 -and $otherReaders.Count -gt 0)
-            $isPublic = ($otherReaders.Count -eq 0)
-            $ghSkip = if ($isMixed) {
-                "$ghEnvName is read by public github-models provider(s) $quotedPublic and also by $($otherReaders -join '; ') — a GitHub credential exported into it would be handed by ProviderFactory.CreateAll to a non-GitHub endpoint too, so GITHUB_TOKEN and the gh keyring are never exported for it; only its Key Vault pull (or setting $ghEnvName directly) applies, and the durable fix is distinct apiKeyEnv names"
-            }
-            elseif (-not $isPublic) {
-                "provider(s) $quotedCustom (type github-models) point at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnvName directly) applies"
-            }
-            else { '' }
-            $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip })
+        $isConflict = $conflictingEnvSet.Contains($ghEnvName)
+        $isIncompatible = $incompatibleEnvSet.Contains($ghEnvName)
+        # The vault clause follows the first apiKeySecretName declared among the
+        # sharers (a repair naming another secret can never light the lane).
+        $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
+        if (-not $targetSecret) { $targetSecret = '' }
+        $quotedPublic = (@($publicOwners | ForEach-Object { "'$_'" }) -join ', ')
+        $quotedCustom = (@($customOwners | ForEach-Object { "'$_'" }) -join ', ')
+        $customNotes = @($owners | Where-Object { -not $_.Public -and $_.Note } | ForEach-Object { "'$($_.Name)': $($_.Note)" })
+        if ($customNotes.Count -gt 0) { $quotedCustom += " ($($customNotes -join '; '))" }
+        $otherReaders = @()
+        if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
+        if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
+        if ($isConflict) { $otherReaders += 'entries with conflicting Key Vault secret mappings (see its step above)' }
+        if ($isIncompatible -and $foreignReaders.Count -eq 0 -and $customOwners.Count -eq 0) { $otherReaders += 'consumers of a different credential family (see its step above)' }
+        $isMixed = ($publicOwners.Count -gt 0 -and $otherReaders.Count -gt 0)
+        $isPublic = ($otherReaders.Count -eq 0)
+        $ghSkip = if ($isMixed) {
+            "$ghEnvName is read by public github-models provider(s) $quotedPublic and also by $($otherReaders -join '; ') — a GitHub credential exported into it would be handed by ProviderFactory.CreateAll to a non-GitHub endpoint too, so GITHUB_TOKEN and the gh keyring are never exported for it; only its Key Vault pull (or setting $ghEnvName directly) applies, and the durable fix is distinct apiKeyEnv names"
         }
+        elseif (-not $isPublic) {
+            "provider(s) $quotedCustom (type github-models) point at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnvName directly) applies"
+        }
+        else { '' }
+        $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip })
     }
     $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
     $ghModelsPublicEnvs = @($ghModelsPublicTargets | ForEach-Object { $_.Env })
@@ -922,17 +913,45 @@ function Invoke-HeliosAutoLogin {
                     Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
                 }
                 elseif ($pair.EntraFallbackOnly) {
-                    # OPTIONAL for azure-openai (review finding): CreateAzureOpenAi
+                    # OPTIONAL for azure-openai (review findings): CreateAzureOpenAi
                     # builds its client on DefaultAzureCredential whenever no key
                     # resolves — the chain the az lane this run established feeds — so
                     # a secret that cannot be read leaves the provider usable through
-                    # Entra ID at its endpoint, and a mandatory secret-repair action
-                    # would demand a credential the hub does not need. The endpoint
-                    # variable is checked by NAME only; auto-login does not manage it.
-                    $endpointUnset = @($pair.EndpointEnvs | Where-Object { -not $_ -or -not (Test-EnvValue $_) } | ForEach-Object { if ($_) { $_ } else { '(blank endpointEnv)' } })
-                    $endpointNote = if ($endpointUnset.Count -gt 0) { "; its endpoint variable $($endpointUnset -join ' / ') is unset in this session, so the provider cannot instantiate until that is set (auth-doctor / rest-connect report endpoints)" } else { '' }
-                    $entraState = if ($endpointUnset.Count -gt 0) { 'skipped' } else { 'ok' }
-                    Add-Step -Step $pair.Env -State $entraState -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by the az lane this run established) when no key resolves, so no owner action$endpointNote"
+                    # Entra ID, and a mandatory secret-repair action would demand a
+                    # credential the hub does not need. Optional ONLY with a usable
+                    # endpoint, though: the factory reads endpointEnv
+                    # (AZURE_OPENAI_ENDPOINT by default) and reports the provider
+                    # unconfigured unless the value is an absolute http(s) URL — the
+                    # same rule applied here by name and shape (value never echoed).
+                    # An unset, blank-declared or malformed endpoint is the repair the
+                    # owner actually needs, so it carries the owner action the key does
+                    # not; auto-login never exports an endpoint, so it is never retired.
+                    $endpointProblems = @()
+                    foreach ($endpointName in @($pair.EndpointEnvs)) {
+                        if (-not $endpointName) {
+                            $endpointProblems += 'an entry declares a blank endpointEnv, so the factory reads no endpoint variable at all'
+                            Add-OwnerAction -Text "fix the azure-openai entry lighting $($pair.Env) in ${aihubConfigLabel}: endpointEnv is declared blank — set it to a variable name, or remove the property to use AZURE_OPENAI_ENDPOINT"
+                            continue
+                        }
+                        $endpointValue = [string][Environment]::GetEnvironmentVariable($endpointName)
+                        if ([string]::IsNullOrWhiteSpace($endpointValue)) {
+                            $endpointProblems += "$endpointName is unset"
+                            Add-OwnerAction -Text "set $endpointName to the Azure OpenAI endpoint (absolute https://<resource>.openai.azure.com/ — infra output 'openAiEndpoint'; PowerShell: . .helios/azure.env.ps1, bash: source .helios/azure.env) for $($pair.Lights); the API key is optional (Entra ID fallback)"
+                            continue
+                        }
+                        $endpointUri = $null
+                        if (-not [uri]::TryCreate($endpointValue.Trim(), [System.UriKind]::Absolute, [ref]$endpointUri) -or $endpointUri.Scheme -notin 'http', 'https') {
+                            $endpointProblems += "$endpointName is not an absolute http(s) URL (value never echoed)"
+                            Add-OwnerAction -Text "fix ${endpointName}: it is set but is not an absolute http(s) URL, so CreateAzureOpenAi reports $($pair.Lights) unconfigured — use the resource endpoint https://<resource>.openai.azure.com/ (infra output 'openAiEndpoint')"
+                        }
+                        $endpointValue = ''
+                    }
+                    if ($endpointProblems.Count -eq 0) {
+                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by the az lane this run established) when no key resolves, and its endpoint variable $($pair.EndpointEnvs -join ' / ') holds an absolute http(s) URL (name and shape checked only); no owner action"
+                    }
+                    else {
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID), but only with a usable endpoint: $($endpointProblems -join '; ') — the provider stays unconfigured until that is fixed"
+                    }
                 }
                 else {
                     # A FAILED read is not a 'skipped' (review finding): 'skipped'

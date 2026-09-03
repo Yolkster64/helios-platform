@@ -1303,6 +1303,13 @@ try {
     if ($activeConfig.Explicit -and $null -eq $activeConfig.Config) {
         throw "AIHUB_CONFIG selects '$($activeConfig.Path)' but it is missing, unparseable, or not a JSON object — the hub cannot load that profile either; fix the file or unset AIHUB_CONFIG (no lane was diagnosed or repaired)"
     }
+    # The repo default is no different for -Apply (review finding): AIHubService
+    # resolves the same config/aihub.json and AIHubOptions.Load fails on it, so no hub
+    # can start — the az profile is never mutated on behalf of a configuration that
+    # cannot run. A report-only run still diagnoses with the built-in names and says so.
+    if ($Apply -and $null -eq $activeConfig.Config) {
+        throw "-Apply refused: the repo default config ($($activeConfig.Path)) is missing, unparseable, or not a JSON object, so the hub cannot load it either (AIHubOptions.Load); fix the file — report-only runs still diagnose with the built-in names (no lane was repaired)"
+    }
     if ($activeConfig.ProvidersNull) {
         throw "the active config ($($activeConfig.Path)) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object (no lane was diagnosed or repaired)"
     }
