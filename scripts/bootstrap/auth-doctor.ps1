@@ -204,7 +204,15 @@ function Get-AIHubConfigState {
     # Explicit = AIHUB_CONFIG selected this file: the main flow aborts before any lane
     # when such a profile is unreadable (review finding) — the fallback names belong
     # to an unreadable REPO DEFAULT only, never to an invented custom profile.
-    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit }
+    # ProvidersNull = an EXPLICIT `"providers": null` (review finding): System.Text.Json
+    # assigns it over AIHubOptions.Providers' initializer and CreateAll fails
+    # enumerating it — the hub cannot start on that file, so the main flow aborts too.
+    $providersNull = $false
+    if ($null -ne $config) {
+        $providersProp = $config.PSObject.Properties['providers']
+        $providersNull = [bool]($null -ne $providersProp -and $null -eq $providersProp.Value)
+    }
+    $script:aihubConfigState = [pscustomobject]@{ Label = $label; Path = $path; Config = $config; Explicit = $explicit; ProvidersNull = $providersNull }
     return $script:aihubConfigState
 }
 
@@ -267,50 +275,94 @@ function Get-ProviderCredentialPairs {
     }
     return [pscustomobject]@{ Pairs = $pairs; Blank = $blank }
 }
-# Conflicting secret mappings across EVERY enabled keyed entry (review finding): an
-# openai entry naming secret A and an anthropic entry naming secret B for one
-# variable is invisible to a per-type view — each lane would see one secret and both
-# would report ready on a preset value ProviderFactory then hands to both services.
-# Built once from the whole providers table (blank-apiKeyEnv entries read no
-# variable and are excluded), cached, returned as a plain array of
-# { Env; Readers[{ Name; Type; SecretName }]; Secrets }.
-$script:aihubSecretConflicts = $null
-function Get-AIHubSecretConflicts {
-    if ($null -ne $script:aihubSecretConflicts) { return $script:aihubSecretConflicts }
-    $conflicts = [System.Collections.Generic.List[object]]::new()
+# The public GitHub Models endpoint is exactly the HTTPS origin of models.github.ai
+# (review finding); anything else is its own custom endpoint. Returns { Public; Host }.
+function Test-PublicModelsOrigin {
+    param([AllowEmptyString()][string]$BaseUrl = '')
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return [pscustomobject]@{ Public = $true; Host = 'models.github.ai' } }
+    $parsedOrigin = $null
+    if (-not [uri]::TryCreate($BaseUrl.Trim(), [System.UriKind]::Absolute, [ref]$parsedOrigin)) { return [pscustomobject]@{ Public = $false; Host = '' } }
+    $isPublic = ($parsedOrigin.Scheme -eq 'https' -and $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase))
+    return [pscustomobject]@{ Public = $isPublic; Host = $parsedOrigin.Host }
+}
+# Variable-level config defects across EVERY enabled consumer (review findings): built
+# once from the whole providers table PLUS the enabled CLI agents (a codex entry reads
+# the fixed OPENAI_API_KEY, a claude entry ANTHROPIC_API_KEY), cached, returned as a
+# plain array of { Kind; Env; Readers[{ Name; Type; Family; SecretName }]; Secrets }.
+#   conflict     — readers name DIFFERENT Key Vault secrets for one variable, so
+#                  declaration order would choose the credential every sharer reads.
+#   incompatible — readers belong to different credential FAMILIES (OpenAI, Anthropic,
+#                  Azure OpenAI, the public GitHub Models origin, each custom endpoint),
+#                  so no single value can be valid for all of them and a preset or
+#                  exported value would reach the wrong service. A per-type view sees
+#                  neither, and would report both lanes ready on such a value.
+$script:aihubVariableDefects = $null
+function Get-AIHubVariableDefects {
+    if ($null -ne $script:aihubVariableDefects) { return $script:aihubVariableDefects }
+    $defects = [System.Collections.Generic.List[object]]::new()
     $cfg = (Get-AIHubConfigState).Config
-    if ($null -ne $cfg -and $cfg.PSObject.Properties['providers'] -and $null -ne $cfg.providers) {
+    if ($null -ne $cfg) {
         $readers = [System.Collections.Generic.Dictionary[string, object]]::new($script:EnvNameComparer)
-        foreach ($prop in $cfg.providers.PSObject.Properties) {
-            $prov = $prop.Value
-            if ($null -eq $prov) { continue }
-            if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
-            $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim().ToLowerInvariant() } else { '' }
-            $typeDefault = switch ($provType) {
-                'openai' { 'OPENAI_API_KEY' }
-                'anthropic' { 'ANTHROPIC_API_KEY' }
-                'github-models' { 'GITHUB_MODELS_TOKEN' }
-                'azure-openai' { 'AZURE_OPENAI_API_KEY' }
-                default { '' }
+        if ($cfg.PSObject.Properties['providers'] -and $null -ne $cfg.providers) {
+            foreach ($prop in $cfg.providers.PSObject.Properties) {
+                $prov = $prop.Value
+                if ($null -eq $prov) { continue }
+                if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
+                $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).Trim().ToLowerInvariant() } else { '' }
+                $typeDefault = switch ($provType) {
+                    'openai' { 'OPENAI_API_KEY' }
+                    'anthropic' { 'ANTHROPIC_API_KEY' }
+                    'github-models' { 'GITHUB_MODELS_TOKEN' }
+                    'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                    default { '' }
+                }
+                if (-not $typeDefault) { continue }
+                $envProp = $prov.PSObject.Properties['apiKeyEnv']
+                $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
+                if (-not $envName) { continue }
+                $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
+                $family = $provType
+                if ($provType -eq 'github-models') {
+                    $baseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+                    $origin = Test-PublicModelsOrigin -BaseUrl $baseUrl
+                    $family = if ($origin.Public) { 'github' } else { "custom-endpoint:$($origin.Host)" }
+                }
+                if (-not $readers.ContainsKey($envName)) { $readers[$envName] = [System.Collections.Generic.List[object]]::new() }
+                $readers[$envName].Add([pscustomobject]@{ Name = $prop.Name; Type = $provType; Family = $family; SecretName = $secretName })
             }
-            if (-not $typeDefault) { continue }
-            $envProp = $prov.PSObject.Properties['apiKeyEnv']
-            $envName = if ($null -eq $envProp -or $null -eq $envProp.Value) { $typeDefault } else { ([string]$envProp.Value).Trim() }
-            if (-not $envName) { continue }
-            $secretName = if ($prov.PSObject.Properties['apiKeySecretName']) { ([string]$prov.apiKeySecretName).Trim() } else { '' }
-            if (-not $readers.ContainsKey($envName)) { $readers[$envName] = [System.Collections.Generic.List[object]]::new() }
-            $readers[$envName].Add([pscustomobject]@{ Name = $prop.Name; Type = $provType; SecretName = $secretName })
+        }
+        # CLI readers, discovered by configured command exactly like the lanes are.
+        if ($cfg.PSObject.Properties['cliAgents'] -and $null -ne $cfg.cliAgents) {
+            foreach ($agent in @($cfg.cliAgents)) {
+                if ($null -eq $agent) { continue }
+                if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+                $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+                $leaf = ''
+                if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+                $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
+                $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+                $cliReader = $null
+                if ($key -eq 'codex') { $cliReader = [pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; SecretName = ''; Env = 'OPENAI_API_KEY' } }
+                elseif ($key -in 'claude', 'claude-cli') { $cliReader = [pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; SecretName = ''; Env = 'ANTHROPIC_API_KEY' } }
+                if ($null -eq $cliReader) { continue }
+                if (-not $readers.ContainsKey($cliReader.Env)) { $readers[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
+                $readers[$cliReader.Env].Add($cliReader)
+            }
         }
         foreach ($envName in @($readers.Keys)) {
+            $families = @($readers[$envName] | ForEach-Object { $_.Family } | Select-Object -Unique)
             # Key Vault secret names are case-insensitive: folded before the distinct count.
             $secrets = @($readers[$envName] | ForEach-Object { $_.SecretName } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
-            if ($secrets.Count -gt 1) {
-                $conflicts.Add([pscustomobject]@{ Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
+            if ($families.Count -gt 1) {
+                $defects.Add([pscustomobject]@{ Kind = 'incompatible'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
+            }
+            elseif ($secrets.Count -gt 1) {
+                $defects.Add([pscustomobject]@{ Kind = 'conflict'; Env = $envName; Readers = @($readers[$envName]); Secrets = $secrets })
             }
         }
     }
-    $script:aihubSecretConflicts = $conflicts.ToArray()
-    return $script:aihubSecretConflicts
+    $script:aihubVariableDefects = $defects.ToArray()
+    return $script:aihubVariableDefects
 }
 # Config defects the API-key lanes report as owner actions, never as readiness:
 # blank-apiKeyEnv entries with no secret path, and conflicting secret mappings. Blank
@@ -333,9 +385,25 @@ function Get-ConfigDefectVerdict {
         $actions += "fix providers.{$($defectNames -join ',')}.apiKeyEnv in ${ConfigLabel}: set a variable name (or remove the property to use $DefaultEnv) and/or add apiKeySecretName"
     }
     foreach ($conflict in $Conflicts) {
-        $readerText = (@($conflict.Readers | ForEach-Object { "'$($_.Name)' (type $($_.Type))" }) -join ', ')
-        $details += "providers $readerText map different Key Vault secrets $(& $quote $conflict.Secrets) to the same variable $($conflict.Env) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer, across provider types (auto-login pulls none of them)"
-        $actions += "give providers.{$(@($conflict.Readers | ForEach-Object Name) -join ',')} distinct apiKeyEnv names in ${ConfigLabel} (or one shared apiKeySecretName)"
+        $readerText = (@($conflict.Readers | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
+        $readerNames = (@($conflict.Readers | ForEach-Object Name) -join ',')
+        if ($conflict.Kind -eq 'incompatible') {
+            # Same wording as auto-login's action, so a merged summary dedupes it.
+            $details += "$($conflict.Env) is read by consumers of different credential families ($readerText) — no single value is valid for all of them, so a preset or exported value would reach the wrong service through SecretResolver's environment-first rule (auto-login pulls and exports nothing into it)"
+            $actions += "give the consumers sharing $($conflict.Env) distinct apiKeyEnv names in ${ConfigLabel} ($readerNames) — they read credentials for different services"
+        }
+        else {
+            # The split applies to the entries that NAME the secrets; a CLI reader or a
+            # secretless entry on the same variable is affected but has no
+            # apiKeySecretName to change (same names as auto-login's action → dedupe).
+            $secretReaders = @($conflict.Readers | Where-Object { $_.SecretName })
+            $secretReaderText = (@($secretReaders | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
+            $secretReaderNames = (@($secretReaders | ForEach-Object Name) -join ',')
+            $otherReaders = @($conflict.Readers | Where-Object { -not $_.SecretName } | ForEach-Object { "'$($_.Name)' ($($_.Type))" })
+            $otherNote = if ($otherReaders.Count -gt 0) { "; $($otherReaders -join ', ') read(s) the same variable and would receive whichever value landed" } else { '' }
+            $details += "providers $secretReaderText map different Key Vault secrets $(& $quote $conflict.Secrets) to the same variable $($conflict.Env) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer (auto-login pulls none of them)$otherNote"
+            $actions += "give providers.{$secretReaderNames} distinct apiKeyEnv names in ${ConfigLabel} (or one shared apiKeySecretName)"
+        }
     }
     return [pscustomobject]@{ HasDefects = ($details.Count -gt 0); DefectDetail = ($details -join '; '); DefectAction = ($actions -join '; ') }
 }
@@ -415,13 +483,16 @@ function Get-ApiKeyLaneEvaluation {
         [Parameter(Mandatory)][string]$DefaultSecret,
         [Parameter(Mandatory)][string]$ConfigLabel,
         [Parameter(Mandatory)][string]$CliOnlySource,
-        [Parameter(Mandatory)][pscustomobject]$AzResult
+        [Parameter(Mandatory)][pscustomobject]$AzResult,
+        [string[]]$OwnerTypes = @()
     )
     $pairs = [System.Collections.Generic.List[object]]::new()
     $blank = [System.Collections.Generic.List[object]]::new()
-    # Conflicts come from the whole-config map (review finding: cross-type) and are
-    # reported by every lane that owns one of the readers.
-    $conflicts = @(Get-AIHubSecretConflicts | Where-Object { @($_.Readers | Where-Object { $_.Type -eq $Type }).Count -gt 0 })
+    # Variable defects come from the whole-config map (review findings: cross-type
+    # conflicts and incompatible families, CLI readers included) and are reported by
+    # every lane that owns one of the readers — the API type or this lane's CLI agent.
+    if ($OwnerTypes.Count -eq 0) { $OwnerTypes = @($Type) }
+    $conflicts = @(Get-AIHubVariableDefects | Where-Object { @($_.Readers | Where-Object { $_.Type -in $OwnerTypes }).Count -gt 0 })
     $nameSource = "fallback defaults; $ConfigLabel was unreadable"
     if ($null -ne $Providers) {
         $derived = Get-ProviderCredentialPairs -Entries @($Providers) -DefaultEnv $DefaultEnv
@@ -791,7 +862,8 @@ function Test-CodexLane {
     # variable never covers a sibling. The built-in pair applies only when the config
     # is unreadable or only the codex agent is enabled (the CLI honors OPENAI_API_KEY).
     $eval = Get-ApiKeyLaneEvaluation -Providers $openAiProviders -Type 'openai' -DefaultEnv 'OPENAI_API_KEY' -DefaultSecret 'openai-api-key' `
-        -ConfigLabel $configState.Label -CliOnlySource "fallback default; only the codex agent is enabled in $($configState.Label)" -AzResult $AzResult
+        -ConfigLabel $configState.Label -CliOnlySource "fallback default; only the codex agent is enabled in $($configState.Label)" -AzResult $AzResult `
+        -OwnerTypes @('openai', 'codex-cli')
     if ($eval.HasDefects) {
         return New-LaneResult -Lane 'openai-codex' -State 'needs-owner' -Method 'config' `
             -Detail $eval.DefectDetail -OwnerAction $eval.DefectAction
@@ -921,7 +993,8 @@ function Test-ClaudeLane {
     # each provider's credential independently. The built-in pair applies when the
     # config is unreadable or only the claude-cli agent is enabled (the CLI reads it).
     $eval = Get-ApiKeyLaneEvaluation -Providers $anthropicProviders -Type 'anthropic' -DefaultEnv 'ANTHROPIC_API_KEY' -DefaultSecret 'anthropic-api-key' `
-        -ConfigLabel $configLabel -CliOnlySource "fallback default; only the claude-cli agent is enabled in $configLabel" -AzResult $AzResult
+        -ConfigLabel $configLabel -CliOnlySource "fallback default; only the claude-cli agent is enabled in $configLabel" -AzResult $AzResult `
+        -OwnerTypes @('anthropic', 'claude-cli')
     if ($eval.HasDefects) {
         return New-LaneResult -Lane 'claude' -State 'needs-owner' -Method 'config' `
             -Detail $eval.DefectDetail -OwnerAction $eval.DefectAction
@@ -1027,15 +1100,27 @@ function Test-CopilotLane {
     }
     $presence = 'standalone copilot CLI (@github/copilot) is on PATH'
 
-    # copilot reuses the GitHub login (setup-ai-clis.ps1: GH_TOKEN/GITHUB_TOKEN are
-    # honored headlessly), so its auth state IS the gh lane's state.
+    # A headless token authenticates copilot on its own (review finding): setup-ai-clis.ps1
+    # documents GH_TOKEN / GITHUB_TOKEN as sufficient, so a host without gh must not be
+    # sent to `gh auth login`. Names checked only; wire validity is rest-connect's call.
+    $copilotTokenEnv = @('GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-EnvValue $_ } | Select-Object -First 1
+    if ($copilotTokenEnv) {
+        $ghLaneNote = if ($GhResult.state -in 'ready', 'repaired') { '' } else { "; the gh lane is $($GhResult.state), which does not gate copilot (a gh CLI session is not required)" }
+        return New-LaneResult -Lane 'copilot' -State 'ready' -Method 'env-token' `
+            -Detail ("$presence; $copilotTokenEnv is set (name checked only) and copilot honors it headlessly — wire validity is scripts/verify/rest-connect.ps1's call$ghLaneNote")
+    }
+
+    # Otherwise copilot reuses the GitHub login, so its auth state IS the gh lane's state.
     if ($GhResult.state -in 'ready', 'repaired') {
         return New-LaneResult -Lane 'copilot' -State 'ready' -Method 'github-login' `
             -Detail ("$presence; copilot reuses the GitHub login and the gh lane is $($GhResult.state) ($($GhResult.method))")
     }
-    $fix = if ($GhResult.ownerAction) { $GhResult.ownerAction } else { 'gh auth login --web   # device-code flow' }
+    $ghOnPath = [bool](Get-CliCommand -Name 'gh')
+    $fix = if ("$($GhResult.ownerAction)".Trim()) { "$($GhResult.ownerAction)" }
+    elseif ($ghOnPath) { 'gh auth login --web   # device-code flow' }
+    else { 'set GH_TOKEN (a GitHub token) for headless copilot; or: bash scripts/bootstrap/cloud-shell-setup.sh && gh auth login --web   # installs the GitHub CLI, then the device-code flow' }
     return New-LaneResult -Lane 'copilot' -State 'needs-owner' -Method 'github-login' `
-        -Detail ("$presence, but copilot reuses the GitHub login and the gh lane is $($GhResult.state) — one GitHub login fixes both lanes") `
+        -Detail ("$presence, but neither GH_TOKEN nor GITHUB_TOKEN is set and the gh lane is $($GhResult.state) — a headless token or one GitHub login fixes it") `
         -OwnerAction $fix
 }
 
@@ -1118,6 +1203,9 @@ try {
     $activeConfig = Get-AIHubConfigState
     if ($activeConfig.Explicit -and $null -eq $activeConfig.Config) {
         throw "AIHUB_CONFIG selects '$($activeConfig.Path)' but it is missing, unparseable, or not a JSON object — the hub cannot load that profile either; fix the file or unset AIHUB_CONFIG (no lane was diagnosed or repaired)"
+    }
+    if ($activeConfig.ProvidersNull) {
+        throw "the active config ($($activeConfig.Path)) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object (no lane was diagnosed or repaired)"
     }
 
     $ghResult = Test-GhLane

@@ -192,16 +192,26 @@ function Invoke-HeliosAutoLogin {
     # only when the file itself is missing, unparseable, or not a JSON object (the
     # hub binds the document to an object and fails the same way on anything else).
     $aihubParseOk = $false
+    $aihubParsed = $null
     $aihubProviders = $null
     $aihubProvidersDeclared = $false
+    $aihubProvidersNull = $false
     try {
         $aihubParsed = Get-Content -LiteralPath $aihubConfigPath -Raw | ConvertFrom-Json
         $aihubParseOk = ($aihubParsed -is [System.Management.Automation.PSCustomObject])
     }
     catch { }
     if ($aihubParseOk) {
-        $aihubProvidersDeclared = [bool]($aihubParsed.PSObject.Properties['providers'] -and $null -ne $aihubParsed.providers)
+        $providersProp = $aihubParsed.PSObject.Properties['providers']
+        # An EXPLICIT null is not an omitted section (review finding): System.Text.Json
+        # assigns null over AIHubOptions.Providers' initializer and CreateAll then fails
+        # enumerating it — the hub cannot start on that file, so neither may this run.
+        $aihubProvidersNull = [bool]($null -ne $providersProp -and $null -eq $providersProp.Value)
+        $aihubProvidersDeclared = [bool]($null -ne $providersProp -and $null -ne $providersProp.Value)
         $aihubProviders = if ($aihubProvidersDeclared) { $aihubParsed.providers } else { [pscustomobject]@{} }
+    }
+    if ($aihubProvidersNull) {
+        throw "the active config ($aihubConfigPath) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object; aborting before any lane runs"
     }
     # An EXPLICITLY selected profile that cannot be read is an internal failure
     # (review finding): the hub itself will fail to load that same file, so
@@ -297,6 +307,43 @@ function Invoke-HeliosAutoLogin {
         if ($null -eq $prop -or $null -eq $prop.Value) { return $null }
         return ([string]$prop.Value).Trim()
     }
+    # The public GitHub Models endpoint is exactly the HTTPS origin of models.github.ai
+    # (review finding): the factory rejects a non-http(s) URL outright, and an http://
+    # origin would carry the exported credential in cleartext — neither may receive a
+    # GitHub token. Returns { Public; Note; Host }.
+    function Test-PublicModelsOrigin {
+        param([AllowEmptyString()][string]$BaseUrl = '')
+        if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return [pscustomobject]@{ Public = $true; Note = ''; Host = 'models.github.ai' } }
+        $parsedOrigin = $null
+        if (-not [uri]::TryCreate($BaseUrl.Trim(), [System.UriKind]::Absolute, [ref]$parsedOrigin)) {
+            return [pscustomobject]@{ Public = $false; Note = 'not an absolute URL — ProviderFactory.CreateGitHubModels reports the provider unconfigured'; Host = '' }
+        }
+        $hostIsPublic = $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic) { return [pscustomobject]@{ Public = $true; Note = ''; Host = $parsedOrigin.Host } }
+        if ($parsedOrigin.Scheme -eq 'http' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it'; Host = $parsedOrigin.Host } }
+        if ($parsedOrigin.Scheme -notin 'http', 'https') { return [pscustomobject]@{ Public = $false; Note = "'$($parsedOrigin.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)"; Host = $parsedOrigin.Host } }
+        return [pscustomobject]@{ Public = $false; Note = ''; Host = $parsedOrigin.Host }
+    }
+    # Enabled CLI agents that read a FIXED variable (review finding): any enabled
+    # cliAgents entry whose command leaf is `codex` reads OPENAI_API_KEY and one running
+    # `claude` reads ANTHROPIC_API_KEY (the canonical name counts only for an entry
+    # declaring no command) — auth-doctor's discovery rule. Unreadable config → none.
+    function Get-CliOwnedEnvReaders {
+        $found = [System.Collections.Generic.List[object]]::new()
+        if (-not $aihubParseOk -or -not $aihubParsed.PSObject.Properties['cliAgents'] -or $null -eq $aihubParsed.cliAgents) { return $found.ToArray() }
+        foreach ($agent in @($aihubParsed.cliAgents)) {
+            if ($null -eq $agent) { continue }
+            if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+            $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+            $leaf = ''
+            if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+            $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
+            $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+            if ($key -eq 'codex') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; Env = 'OPENAI_API_KEY' }) }
+            elseif ($key -in 'claude', 'claude-cli') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; Env = 'ANTHROPIC_API_KEY' }) }
+        }
+        return $found.ToArray()
+    }
     # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
     # so they are reported (and, without a secret path, handed to the owner as the
     # config defect they are) instead of being silently defaulted.
@@ -316,6 +363,8 @@ function Invoke-HeliosAutoLogin {
     # Variables that enabled entries map to DIFFERENT Key Vault secrets (see below).
     $conflictingEnvs = @()
     $conflictingEnvSet = New-EnvNameSet
+    # Variables read by consumers of DIFFERENT credential families (see below).
+    $incompatibleEnvSet = New-EnvNameSet
     if ($null -ne $aihubProviders) {
         # Keyed "<secret> -> <variable>" under the OS name comparer (review finding);
         # Key Vault secret names are case-insensitive and are folded to lower case.
@@ -355,8 +404,16 @@ function Invoke-HeliosAutoLogin {
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # keyless types (ollama, azure-foundry-agent)
+            # Credential FAMILY (review finding): which service's key this reader expects —
+            # one per API type, 'github' for the public Models origin, one per custom host.
+            $provBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+            $readerFamily = if ($provType -eq 'github-models') {
+                $readerOrigin = Test-PublicModelsOrigin -BaseUrl $provBaseUrl
+                if ($readerOrigin.Public) { 'github' } else { "custom-endpoint:$($readerOrigin.Host)" }
+            }
+            else { $provType }
             if (-not $envReaders.ContainsKey($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
-            $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType })
+            $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Family = $readerFamily })
             if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
                 if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { Test-EnvNameEquals $_.Env $envName }).Count) {
                     $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
@@ -373,18 +430,49 @@ function Invoke-HeliosAutoLogin {
             }
             $pairIndex[$pairKey].Consumers.Add($provProp.Name)
         }
+        # CLI-owned variables join the reader map (review finding): an enabled codex
+        # agent reads the fixed OPENAI_API_KEY and an enabled claude agent reads
+        # ANTHROPIC_API_KEY (auth-doctor's CLI-half rule), so a Models entry pointed at
+        # either name shares it with a non-GitHub consumer and never gets the gh export.
+        foreach ($cliReader in @(Get-CliOwnedEnvReaders)) {
+            if (-not $envReaders.ContainsKey($cliReader.Env)) { $envReaders[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
+            $envReaders[$cliReader.Env].Add([pscustomobject]@{ Name = $cliReader.Name; Type = $cliReader.Type; Family = $cliReader.Family })
+        }
+        # Incompatible sharing (review finding): a variable read by consumers of
+        # DIFFERENT credential families (OpenAI, Anthropic, Azure OpenAI, the public
+        # GitHub Models origin, each custom endpoint) can never hold one value valid for
+        # all of them — a vault export into it would hand one service's key to another
+        # through SecretResolver's environment-first rule, whatever the secret mappings
+        # say. Nothing is pulled or exported into such a variable; the repair is
+        # distinct names (worded like auth-doctor's action, so the summary dedupes).
+        foreach ($sharedEnv in @($envReaders.Keys)) {
+            $families = @($envReaders[$sharedEnv] | ForEach-Object { $_.Family } | Select-Object -Unique)
+            if ($families.Count -lt 2) { continue }
+            [void]$incompatibleEnvSet.Add($sharedEnv)
+            $readerText = (@($envReaders[$sharedEnv] | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
+            $readerNames = (@($envReaders[$sharedEnv] | ForEach-Object { $_.Name }) -join ',')
+            if (Test-EnvValue $sharedEnv) {
+                Add-Step -Step $sharedEnv -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: it is read by consumers of different credential families ($readerText), which cannot all accept one value — give them distinct apiKeyEnv names"
+            }
+            else {
+                Add-Step -Step $sharedEnv -State 'needs-owner' -Detail "read by consumers of different credential families ($readerText) — no single value is valid for all of them, and an export would hand one service's credential to another through SecretResolver's environment-first rule; nothing is pulled or exported into it"
+                Add-OwnerAction -Text "give the consumers sharing $sharedEnv distinct apiKeyEnv names in ${aihubConfigLabel} ($readerNames) — they read credentials for different services"
+            }
+        }
         # Conflicting secret→variable mappings (review finding): two enabled entries
         # naming DIFFERENT Key Vault secrets for the SAME variable would let
         # declaration order choose the credential — the first pull populates the
         # variable, the never-clobber rule skips the rest, and SecretResolver's
         # environment-first rule then hands that one value to every sharer, which
         # may send it to the wrong service. Nothing is pulled into such a variable;
-        # the repair is distinct apiKeyEnv names (or one shared secret).
+        # the repair is distinct apiKeyEnv names (or one shared secret). A variable
+        # already reported as incompatible is not reported twice.
         # Group-Object is case-insensitive unless told otherwise — the OS rule applies
         # to the variable names; secret names are folded (Key Vault ignores case).
         $conflictGroups = @($pairIndex.Values | Group-Object -Property Env -CaseSensitive:(-not $IsWindows) |
             Where-Object { @($_.Group | ForEach-Object { $_.SecretName.ToLowerInvariant() } | Select-Object -Unique).Count -gt 1 })
         foreach ($conflict in $conflictGroups) {
+            if ($incompatibleEnvSet.Contains([string]$conflict.Name)) { continue }
             $conflictingEnvs += [string]$conflict.Name
             [void]$conflictingEnvSet.Add([string]$conflict.Name)
             $mapping = (@($conflict.Group | ForEach-Object { "'$($_.SecretName)' <- $(@($_.Consumers) -join ', ')" }) -join ' vs ')
@@ -399,7 +487,7 @@ function Invoke-HeliosAutoLogin {
                 Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
             }
         }
-        foreach ($entry in @($pairIndex.Values | Where-Object { -not $conflictingEnvSet.Contains($_.Env) })) {
+        foreach ($entry in @($pairIndex.Values | Where-Object { -not $conflictingEnvSet.Contains($_.Env) -and -not $incompatibleEnvSet.Contains($_.Env) })) {
             # The agent CLIs read two of these env names directly — that fact is
             # not in config, so it rides along as a fixed hint.
             $cliHint = switch ($entry.Env) {
@@ -484,23 +572,9 @@ function Invoke-HeliosAutoLogin {
             $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
             $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName']) { ([string]$ghProv.apiKeySecretName).Trim() } else { '' }
             $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
-            # Public means the exact HTTPS origin (review finding): the factory rejects a
-            # non-http(s) URL outright, and an http:// origin would carry the exported
-            # credential in cleartext — neither may receive a GitHub token.
-            $ghPublic = $true
-            $ghBaseUrlNote = ''
-            if ($ghBaseUrl) {
-                $ghPublic = $false
-                $ghParsedUrl = $null
-                if ([uri]::TryCreate($ghBaseUrl, [System.UriKind]::Absolute, [ref]$ghParsedUrl)) {
-                    $ghHostIsPublic = $ghParsedUrl.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
-                    if ($ghParsedUrl.Scheme -eq 'https' -and $ghHostIsPublic) { $ghPublic = $true }
-                    elseif ($ghParsedUrl.Scheme -eq 'http' -and $ghHostIsPublic) { $ghBaseUrlNote = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it' }
-                    elseif ($ghParsedUrl.Scheme -notin 'http', 'https') { $ghBaseUrlNote = "'$($ghParsedUrl.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)" }
-                }
-                else { $ghBaseUrlNote = 'not an absolute URL — ProviderFactory.CreateGitHubModels reports the provider unconfigured' }
-            }
-            $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghPublic; Note = $ghBaseUrlNote })
+            # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
+            $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
+            $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note })
         }
         # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
         # known (review finding): a public entry listed before a custom-baseUrl entry
@@ -523,6 +597,7 @@ function Invoke-HeliosAutoLogin {
                 $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
             }
             $isConflict = $conflictingEnvSet.Contains($ghEnvName)
+            $isIncompatible = $incompatibleEnvSet.Contains($ghEnvName)
             # The vault clause follows the first apiKeySecretName declared among the
             # sharers (a repair naming another secret can never light the lane).
             $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
@@ -535,6 +610,7 @@ function Invoke-HeliosAutoLogin {
             if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
             if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
             if ($isConflict) { $otherReaders += 'entries with conflicting Key Vault secret mappings (see its step above)' }
+            if ($isIncompatible -and $foreignReaders.Count -eq 0 -and $customOwners.Count -eq 0) { $otherReaders += 'consumers of a different credential family (see its step above)' }
             $isMixed = ($publicOwners.Count -gt 0 -and $otherReaders.Count -gt 0)
             $isPublic = ($otherReaders.Count -eq 0)
             $ghSkip = if ($isMixed) {
@@ -923,7 +999,7 @@ function Invoke-HeliosAutoLogin {
     # the generic direct-key action for the same variable.
     foreach ($mixedTarget in @($ghModelsTargets | Where-Object { $_.Mixed })) {
         if (Test-EnvValue $mixedTarget.Env) { continue }
-        if ($conflictingEnvSet.Contains($mixedTarget.Env)) { continue }   # the conflict action above already names the split
+        if ($conflictingEnvSet.Contains($mixedTarget.Env) -or $incompatibleEnvSet.Contains($mixedTarget.Env)) { continue }   # the conflict / incompatible action above already names the split
         $mixedVaultClause = if ($mixedTarget.SecretName) { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" } else { '' }
         $mixedPublic = (@($mixedTarget.PublicOwners | ForEach-Object { "'$_'" }) -join ', ')
         Add-OwnerAction -Env $mixedTarget.Env -Text "give the providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigLabel} (public github-models: $mixedPublic; also read by: $($mixedTarget.OtherReaders -join '; ')) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
@@ -937,7 +1013,7 @@ function Invoke-HeliosAutoLogin {
     # exported) through the GitHub credential is already served.
     foreach ($direct in $directKeyProviders) {
         if (Test-EnvValue $direct.Env) { continue }
-        if ($ghModelsMixedEnvSet.Contains($direct.Env)) { continue }   # the mixed-ownership action above carries this variable's repair
+        if ($ghModelsMixedEnvSet.Contains($direct.Env) -or $incompatibleEnvSet.Contains($direct.Env)) { continue }   # the mixed-ownership / incompatible action above carries this variable's repair
         if ($direct.Type -eq 'github-models' -and $ghModelsPublicEnvSet.Contains($direct.Env) -and ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($direct.Env))) { continue }
         Add-OwnerAction -Env $direct.Env -Text "set $($direct.Env) directly for provider '$($direct.Name)' (type $($direct.Type)) — the active config declares no apiKeySecretName for it, so no Key Vault pull exists: export it in the shell, or add apiKeySecretName to that provider and store the secret (lights $($direct.Env))"
     }

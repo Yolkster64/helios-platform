@@ -145,15 +145,45 @@ $gitHubApi = 'https://api.github.com'
 # AZURE_RESOURCE_MANAGER_ENDPOINT / ARM_ENDPOINT), then the az CLI's active cloud
 # (`az cloud show` reads local config only — no network, no login), then the public
 # cloud. The chosen cloud and its source are reported in the dry-run walk.
+# Trusted endpoint shapes (review finding): an environment override is honored only as
+# an HTTPS URL on a known Azure authority / Resource Manager host — a mistyped or
+# planted value would otherwise receive AZURE_CLIENT_SECRET (token POST) or every
+# bearer token (ARM probe). A custom cloud is approved explicitly through the az CLI
+# (`az cloud register` + `az cloud set`), whose values are accepted when HTTPS.
+$script:knownAzureAuthorityHosts = @('login.microsoftonline.com', 'login.microsoftonline.us', 'login.chinacloudapi.cn', 'login.partner.microsoftonline.cn', 'login.microsoftonline.de')
+$script:knownAzureArmHosts = @('management.azure.com', 'management.usgovcloudapi.net', 'management.chinacloudapi.cn', 'management.microsoftazure.de')
+function Test-TrustedAzureEndpoint {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$KnownHosts,
+        [Parameter(Mandatory)][string]$Label,
+        [switch]$AnyHttpsHost,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Warnings
+    )
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $parsedEndpoint = $null
+    if (-not [uri]::TryCreate($Value.Trim(), [System.UriKind]::Absolute, [ref]$parsedEndpoint) -or $parsedEndpoint.Scheme -ne 'https') {
+        $Warnings.Add("ignored $Label — not an absolute https:// URL (value never echoed); no credential is sent to it")
+        return ''
+    }
+    if (-not $AnyHttpsHost -and -not ($KnownHosts | Where-Object { $parsedEndpoint.Host.Equals($_, [System.StringComparison]::OrdinalIgnoreCase) })) {
+        $Warnings.Add("ignored $Label — host '$($parsedEndpoint.Host)' is not a known Azure endpoint ($($KnownHosts -join ', ')); approve a custom cloud through 'az cloud register' + 'az cloud set' instead")
+        return ''
+    }
+    return $parsedEndpoint.GetLeftPart([System.UriPartial]::Authority)
+}
 function Resolve-AzureCloudEndpoints {
-    $authority = ([string][Environment]::GetEnvironmentVariable('AZURE_AUTHORITY_HOST')).Trim()
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $authority = Test-TrustedAzureEndpoint -Value ([string][Environment]::GetEnvironmentVariable('AZURE_AUTHORITY_HOST')) -KnownHosts $script:knownAzureAuthorityHosts -Label 'AZURE_AUTHORITY_HOST' -Warnings $warnings
     $arm = ''
     foreach ($candidate in @('AZURE_RESOURCE_MANAGER_ENDPOINT', 'ARM_ENDPOINT')) {
         $value = ([string][Environment]::GetEnvironmentVariable($candidate)).Trim()
-        if ($value) { $arm = $value; break }
+        if (-not $value) { continue }
+        $arm = Test-TrustedAzureEndpoint -Value $value -KnownHosts $script:knownAzureArmHosts -Label $candidate -Warnings $warnings
+        break
     }
     $name = ''
-    $source = if ($authority -or $arm) { 'environment (AZURE_AUTHORITY_HOST / ARM_ENDPOINT)' } else { '' }
+    $source = if ($authority -or $arm) { 'environment (AZURE_AUTHORITY_HOST / ARM_ENDPOINT, validated)' } else { '' }
     if (-not $authority -or -not $arm) {
         $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($azCmd) {
@@ -165,9 +195,11 @@ function Resolve-AzureCloudEndpoints {
                     $cloudName = if ($cloud.PSObject.Properties['name'] -and $null -ne $cloud.name) { ([string]$cloud.name).Trim() } else { '' }
                     $cloudAad = if ($cloud.PSObject.Properties['aad'] -and $null -ne $cloud.aad) { ([string]$cloud.aad).Trim() } else { '' }
                     $cloudArm = if ($cloud.PSObject.Properties['arm'] -and $null -ne $cloud.arm) { ([string]$cloud.arm).Trim() } else { '' }
+                    # The az CLI's registered cloud is the operator's explicit approval —
+                    # any host, but HTTPS only.
+                    if (-not $authority -and $cloudAad) { $authority = Test-TrustedAzureEndpoint -Value $cloudAad -KnownHosts @() -Label "az cloud '$cloudName' activeDirectory endpoint" -AnyHttpsHost -Warnings $warnings }
+                    if (-not $arm -and $cloudArm) { $arm = Test-TrustedAzureEndpoint -Value $cloudArm -KnownHosts @() -Label "az cloud '$cloudName' resourceManager endpoint" -AnyHttpsHost -Warnings $warnings }
                     if ($cloudName) { $name = $cloudName }
-                    if (-not $authority -and $cloudAad) { $authority = $cloudAad }
-                    if (-not $arm -and $cloudArm) { $arm = $cloudArm }
                     if (-not $source) { $source = 'az cloud show (the active az cloud)' }
                     elseif ($cloudName) { $source += " + az cloud show ($cloudName)" }
                 }
@@ -177,7 +209,7 @@ function Resolve-AzureCloudEndpoints {
     if (-not $authority) { $authority = 'https://login.microsoftonline.com' }
     if (-not $arm) { $arm = 'https://management.azure.com' }
     if (-not $name) { $name = if ($source) { 'environment-configured' } else { 'AzureCloud' } }
-    if (-not $source) { $source = 'public-cloud default (no AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)' }
+    if (-not $source) { $source = 'public-cloud default (no valid AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)' }
     $armBase = $arm.TrimEnd('/')
     [pscustomobject]@{
         Name             = $name
@@ -186,6 +218,7 @@ function Resolve-AzureCloudEndpoints {
         ArmResource      = "$armBase/"
         ArmScope         = "$armBase/.default"
         SubscriptionsUrl = "$armBase/subscriptions?api-version=2022-12-01"
+        Warnings         = $warnings.ToArray()
     }
 }
 $azureCloud = Resolve-AzureCloudEndpoints
@@ -312,6 +345,29 @@ $script:EnvNameComparer = if ($IsWindows) { [System.StringComparer]::OrdinalIgno
 # the repo default, as AIHubService.ResolveConfigPath does) and ProviderFactory reads
 # that same name — so the candidate walk must probe it too, not only fixed names.
 # Any read problem falls back to the default name; nothing here is fatal.
+# Enabled CLI agents that read a FIXED variable (review finding): an entry whose
+# command leaf is `codex` reads OPENAI_API_KEY, one running `claude` reads
+# ANTHROPIC_API_KEY (the canonical name counts only for an entry declaring no
+# command) — auth-doctor's discovery rule. A Models entry pointed at either name shares
+# it with a non-GitHub consumer, so that variable is never a GitHub candidate.
+function Get-CliOwnedEnvNames {
+    param([AllowNull()]$Config)
+    $names = [System.Collections.Generic.List[string]]::new()
+    if ($null -eq $Config -or -not $Config.PSObject.Properties['cliAgents'] -or $null -eq $Config.cliAgents) { return $names.ToArray() }
+    foreach ($agent in @($Config.cliAgents)) {
+        if ($null -eq $agent) { continue }
+        if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+        $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { ([string]$agent.command).Trim() } else { '' }
+        $leaf = ''
+        if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+        $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
+        $key = if ($leaf) { $leaf.ToLowerInvariant() } elseif (-not $cmd) { $agentName.ToLowerInvariant() } else { '' }
+        if ($key -eq 'codex') { $names.Add('OPENAI_API_KEY') }
+        elseif ($key -in 'claude', 'claude-cli') { $names.Add('ANTHROPIC_API_KEY') }
+    }
+    return $names.ToArray()
+}
+
 function Get-ConfiguredGitHubModelsEnvs {
     # Enabled providers of TYPE github-models (review finding: ProviderFactory
     # dispatches on provider.type, never on a canonical key), each contributing its
@@ -341,6 +397,13 @@ function Get-ConfiguredGitHubModelsEnvs {
         # An absent providers section is an EMPTY table (review finding):
         # AIHubOptions.Providers starts empty, so the hub loads a CLI-only profile and
         # instantiates no github-models provider from it — no candidate, not the default.
+        # An EXPLICIT null is different (review finding): the hub fails enumerating it,
+        # so there is no hub to probe for and the walk says so.
+        $providersProp = $parsed.PSObject.Properties['providers']
+        if ($null -ne $providersProp -and $null -eq $providersProp.Value) {
+            $script:configuredModelsNote = "(the active config '$configPath' declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate it and the hub fails to start; no config candidate)"
+            return @()
+        }
         $providers = Get-OptionalProperty $parsed 'providers'
         if ($null -eq $providers) { return @() }
         # Pass 1 — every enabled KEYED entry (github-models, openai, anthropic,
@@ -381,6 +444,12 @@ function Get-ConfiguredGitHubModelsEnvs {
                 }
             }
             $entries.Add([pscustomobject]@{ Env = $envName; PublicModels = $isPublicModels })
+        }
+        # CLI-owned variables (review finding): an enabled codex agent reads the fixed
+        # OPENAI_API_KEY and an enabled claude agent ANTHROPIC_API_KEY, so a Models
+        # entry pointed at either name shares it with a non-GitHub consumer.
+        foreach ($cliOwned in @(Get-CliOwnedEnvNames -Config $parsed)) {
+            $entries.Add([pscustomobject]@{ Env = $cliOwned; PublicModels = $false })
         }
         # Pass 2 — a variable is a candidate only when EVERY enabled entry reading it
         # is a PUBLIC github-models provider (review findings, mixed and cross-type
@@ -693,6 +762,10 @@ function Invoke-ArmProbe {
 
 function Test-AzureLane {
     $chainNotes = [System.Collections.Generic.List[string]]::new()
+    # An ignored endpoint override is part of the lane's evidence (review finding): the
+    # operator must see that their AZURE_AUTHORITY_HOST / ARM_ENDPOINT was NOT used.
+    foreach ($cloudWarning in @($azureCloud.Warnings)) { $chainNotes.Add("cloud: $cloudWarning") }
+    $chainNotes.Add("cloud: $($azureCloud.Name) (authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource); from $($azureCloud.Source))")
     # 1. CI OIDC — AVAILABILITY evidence, not a completed login (review finding):
     #    GitHub sets ACTIONS_ID_TOKEN_REQUEST_URL the moment a job grants
     #    `id-token: write`, including in jobs that never run azure/login. So its
@@ -1041,6 +1114,7 @@ if ($DryRun) {
     Write-Host '           2. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_CLIENT_SECRET => client_credentials POST to'
     Write-Host "              $($azureCloud.Authority)/<tenant>/oauth2/v2.0/token (scope $armScope)"
     Write-Host "           cloud: $($azureCloud.Name) — authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource) (resolved from $($azureCloud.Source))"
+    foreach ($cloudWarning in @($azureCloud.Warnings)) { Write-Host "           cloud warning: $cloudWarning" }
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set, else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
