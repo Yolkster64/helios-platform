@@ -72,7 +72,10 @@ identity, detail, ownerAction}):
                               => the file's assertion posted once as a jwt-bearer
                               client_assertion to the same token endpoint (read into
                               memory, never echoed) — WorkloadIdentityCredential's rung.
-            3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER), else MSI_ENDPOINT
+            3. managed id     IDENTITY_ENDPOINT (+IDENTITY_HEADER; the Azure Arc shape on
+                              40342 instead uses its own two-step handshake — Metadata
+                              request, then the WWW-Authenticate realm's local .key file
+                              as Basic authorization), else MSI_ENDPOINT
                               (+MSI_SECRET) — each honored only on a documented local
                               token-endpoint shape (host, scheme, port AND path; the
                               user-assigned identity is selected with AZURE_CLIENT_ID
@@ -485,10 +488,12 @@ function Invoke-HttpProbe {
         # it would neither reach 169.254.169.254 nor fail fast.
         if ($NoProxy) { $request['NoProxy'] = $true }
         $response = Invoke-WebRequest @request
-        [pscustomobject]@{ Status = [int]$response.StatusCode; Body = [string]$response.Content; Transport = '' }
+        # Response headers are returned too (review finding): the Azure Arc managed-identity
+        # handshake carries its challenge in WWW-Authenticate, and nothing else reads them.
+        [pscustomobject]@{ Status = [int]$response.StatusCode; Body = [string]$response.Content; Transport = ''; Headers = $response.Headers }
     }
     catch {
-        [pscustomobject]@{ Status = 0; Body = ''; Transport = $_.Exception.Message }
+        [pscustomobject]@{ Status = 0; Body = ''; Transport = $_.Exception.Message; Headers = @{} }
     }
 }
 
@@ -1160,8 +1165,14 @@ function Test-AzureLane {
     # -PathType Leaf (review finding): a directory at that path passes a bare
     # Test-Path, and the epilogue would then advertise auth-doctor -Apply — which
     # requires a leaf itself and skips the certificate — as a working repair.
+    # Remembered, not just noted (review finding): with no other rung holding a token
+    # the terminal branch would otherwise prescribe installing / logging into az, or a
+    # bare retry, and setup-everything.ps1 harvests ownerAction alone — so the mount
+    # repair would vanish from the consolidated guidance. Rung 2c below returns it.
+    $spCertFileProblem = ''
     if ($spCertReady -and -not (Test-Path -LiteralPath ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim() -PathType Leaf)) {
-        $chainNotes.Add('env-service-principal-cert: AZURE_CLIENT_CERTIFICATE_PATH is set but no FILE exists at that path (a directory does not count) — the certificate flow cannot run until the file is present (path checked only, contents never read)')
+        $spCertFileProblem = 'AZURE_CLIENT_CERTIFICATE_PATH is set but no FILE exists at that path (a directory does not count; path checked only, contents never read)'
+        $chainNotes.Add("env-service-principal-cert: $spCertFileProblem — the certificate flow cannot run until the file is present")
         $spCertReady = $false
     }
     if ($spSecretReady) {
@@ -1354,24 +1365,99 @@ function Test-AzureLane {
         $miHeaderValue = [Environment]::GetEnvironmentVariable($miCandidate.HeaderEnv)
         if ($null -ne $miHeaderValue) { $miHeaders[$miCandidate.HeaderName] = [string]$miHeaderValue }
         $miHeaderValue = $null
+        # Azure Arc speaks a DIFFERENT protocol on the same shape (review finding): the
+        # 40342 endpoint answers a Metadata request with 401 + `WWW-Authenticate: Basic
+        # realm=<local secret file>`, and the token is fetched on a second request whose
+        # Authorization is that file's contents — it never reads IDENTITY_HEADER. Probing
+        # it with the App Service protocol reports Arc rejected while
+        # DefaultAzureCredential authenticates fine, so the two flows are separated here.
+        $miIsArc = $miBase.EndsWith('/metadata/identity/oauth2/token', [System.StringComparison]::OrdinalIgnoreCase)
+        if ($miIsArc) { $miKind = 'arc-endpoint' }
         $miSelector = ''
-        if ($miClientId) {
+        if ($miClientId -and $miIsArc) {
+            $chainNotes.Add("managed-identity ($miKind): AZURE_CLIENT_ID is set, but the Azure Arc endpoint serves the system-assigned identity only — no user-assigned selector exists, so any token it returns is that identity's, not the configured client's")
+        }
+        elseif ($miClientId) {
             if ($miBase.EndsWith('/msi/token', [System.StringComparison]::OrdinalIgnoreCase)) {
                 $miSelector = "&$($miCandidate.Selector)=$([uri]::EscapeDataString($miClientId))"
             }
             else {
-                $chainNotes.Add("managed-identity ($miKind): AZURE_CLIENT_ID is set, but this endpoint shape (Arc / Cloud Shell) serves the system-assigned identity only — no user-assigned selector exists, so any token it returns is that identity's, not the configured client's")
+                $chainNotes.Add("managed-identity ($miKind): AZURE_CLIENT_ID is set, but this endpoint shape (Cloud Shell) serves the system-assigned identity only — no user-assigned selector exists, so any token it returns is that identity's, not the configured client's")
             }
         }
-        $miUrl = "$miBase`?api-version=$($miCandidate.ApiVersion)&resource=$([uri]::EscapeDataString($armResource))$miSelector"
+        if ($miIsArc) {
+            # Arc's own api-version and header set; the identity header is never sent here.
+            $miHeaders = @{ Metadata = 'true' }
+        }
+        # An Arc challenge 401 is the PROTOCOL, not a rejected credential: when the
+        # handshake stops early the specific reason is already recorded below, and the
+        # generic "identity header/secret rejected" note (and the terminal verdict it
+        # arms) would prescribe re-wiring IDENTITY_HEADER, which Arc never reads.
+        $miSkipOutcomeNote = $false
+        $miApiVersion = if ($miIsArc) { '2019-11-01' } else { $miCandidate.ApiVersion }
+        $miUrl = "$miBase`?api-version=$miApiVersion&resource=$([uri]::EscapeDataString($armResource))$miSelector"
         $miProbe = Invoke-HttpProbe -Url $miUrl -Headers $miHeaders -TimeoutSec $TimeoutSeconds -NoProxy
         $miHeaders = $null
+        if ($miIsArc -and $miProbe.Status -eq 401) {
+            # Step two of the Arc handshake. The realm is accepted ONLY as an absolute
+            # path under the documented Arc token directories with a .key extension, so a
+            # rogue challenge cannot make this read an arbitrary file; the contents go
+            # straight into one Authorization header and are never echoed or stored.
+            # Enumerated, not indexed: the header collection's shape varies across
+            # PowerShell / .NET versions, and the name compares case-insensitively.
+            $miChallenge = ''
+            try {
+                foreach ($headerEntry in $miProbe.Headers.GetEnumerator()) {
+                    if (([string]$headerEntry.Key).Equals('WWW-Authenticate', [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $miChallenge = (@($headerEntry.Value) -join ' ')
+                        break
+                    }
+                }
+            }
+            catch { $miChallenge = '' }
+            $miKeyPath = ''
+            if ($miChallenge -match '(?i)realm\s*=\s*"?([^",]+)"?') { $miKeyPath = $Matches[1].Trim() }
+            $arcTokenDirs = @('/var/opt/azcmagent/tokens/', 'C:\ProgramData\AzureConnectedMachineAgent\Tokens\')
+            $miKeyTrusted = $false
+            if ($miKeyPath -and $miKeyPath.EndsWith('.key', [System.StringComparison]::OrdinalIgnoreCase) -and [System.IO.Path]::IsPathRooted($miKeyPath)) {
+                $miKeyNormalized = $miKeyPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar).Replace('\', [System.IO.Path]::DirectorySeparatorChar)
+                foreach ($arcDir in $arcTokenDirs) {
+                    $arcDirNormalized = $arcDir.Replace('/', [System.IO.Path]::DirectorySeparatorChar).Replace('\', [System.IO.Path]::DirectorySeparatorChar)
+                    if ($miKeyNormalized.StartsWith($arcDirNormalized, [System.StringComparison]::OrdinalIgnoreCase)) { $miKeyTrusted = $true; break }
+                }
+            }
+            if (-not $miKeyPath) {
+                $chainNotes.Add("managed-identity ($miKind): the Arc endpoint answered 401 without a parseable 'WWW-Authenticate: Basic realm=<file>' challenge — the handshake cannot continue and nothing further was sent")
+                $miSkipOutcomeNote = $true
+            }
+            elseif (-not $miKeyTrusted) {
+                $chainNotes.Add("managed-identity ($miKind): the Arc challenge named a key file outside the documented agent token directories ($($arcTokenDirs -join ', ')) or without a .key extension — refused; no file was read and no second request was made")
+                $miSkipOutcomeNote = $true
+            }
+            elseif (-not (Test-Path -LiteralPath $miKeyPath -PathType Leaf)) {
+                $chainNotes.Add("managed-identity ($miKind): the Arc challenge named a key file that does not exist (path checked only) — the himds agent may not have provisioned it for this user; no second request was made")
+                $miSkipOutcomeNote = $true
+            }
+            else {
+                $arcSecret = ''
+                try { $arcSecret = ([string](Get-Content -LiteralPath $miKeyPath -Raw -ErrorAction Stop)).Trim() } catch { $arcSecret = '' }
+                if (-not $arcSecret) {
+                    $chainNotes.Add("managed-identity ($miKind): the Arc key file is empty or unreadable by this user (contents never echoed) — the second request was not made")
+                $miSkipOutcomeNote = $true
+                }
+                else {
+                    $miProbe = Invoke-HttpProbe -Url $miUrl -Headers @{ Metadata = 'true'; Authorization = "Basic $arcSecret" } -TimeoutSec $TimeoutSeconds -NoProxy
+                    $arcSecret = ''
+                }
+            }
+        }
         if ($miProbe.Status -eq 200) {
             $miReply = Test-ParsedJson $miProbe.Body
             $miToken = [string](Get-OptionalProperty $miReply 'access_token' '')
             if ($miToken) { break }
         }
-        if (Add-ManagedIdentityOutcomeNote -Kind $miKind -Probe $miProbe) { $miAuthRejected = $true }
+        if ($miSkipOutcomeNote) { $miSkipOutcomeNote = $false }
+        elseif (Add-ManagedIdentityOutcomeNote -Kind $miKind -Probe $miProbe) { $miAuthRejected = $true }
     }
     if (-not $miDeclared) {
         $miKind = 'imds'
@@ -1511,6 +1597,15 @@ function Test-AzureLane {
                 'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it') `
             -OwnerAction 'add an azure/login@v2 step (client-id / tenant-id / subscription-id of the federated credential from scripts/bootstrap/azure-oidc-setup.ps1) before this probe in the workflow job — the job already has id-token: write, so no secret is needed'
     }
+    # 2c. The configured certificate's FILE is unusable and nothing else held a token
+    #     (review finding): definitive — mounting or fixing the path is the repair, not
+    #     an az install, another workload identity, or a retry.
+    if ($spCertFileProblem -and -not $tokenHeld) {
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
+            -Identity 'the configured service principal (AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_CERTIFICATE_PATH)' `
+            -Detail ("the configured certificate credential cannot run: $spCertFileProblem ($chainText) — retrying cannot help; the certificate the platform is expected to mount is absent") `
+            -OwnerAction 'fix AZURE_CLIENT_CERTIFICATE_PATH: point it at the PEM/PFX file holding the service principal certificate (and mount it into this container / host), or unset AZURE_CLIENT_CERTIFICATE_PATH so the chain falls through to a managed identity or the az cache; then re-run'
+    }
     # 3b. The configured workload identity's token file is unusable and nothing else
     #     held a token (review finding): definitive — the mount / path is the repair,
     #     not a retry and not an MFA login.
@@ -1595,6 +1690,7 @@ if ($DryRun) {
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
     Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source once a non-blank assertion is read; a missing / empty file is a definitive owner step (fix the mount), never retry advice'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
+    Write-Host '              the Arc shape (40342/metadata/identity/oauth2/token) runs its documented two-step handshake: Metadata request, then Basic authorization read from the WWW-Authenticate realm file, accepted only under the agent token directories with a .key extension (contents never echoed)'
     Write-Host '              loopback shapes are bound to their documented scheme and port per path (http://127.0.0.1:41xxx|localhost:42356|localhost:46808/msi/token, http://127.0.0.1:40342/metadata/identity/oauth2/token, http://localhost:50342/oauth2/token); AZURE_CLIENT_ID (when set) selects the user-assigned identity — client_id on IMDS and the App Service shape, clientid on the legacy MSI shape; Arc / Cloud Shell serve the system-assigned identity only'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'
     Write-Host "           first token => GET $(if ($azureCloud.Unresolved) { '<unresolved cloud — no ARM endpoint>' } else { $armSubscriptionsUrl })"

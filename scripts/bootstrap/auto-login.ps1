@@ -753,7 +753,13 @@ function Invoke-HeliosAutoLogin {
             else { $declaredEnv }
             if ($null -ne $declaredEnv -and $declaredEnv -eq '') {
                 # Declared blank (review finding): reported below (github-models in step 3).
-                $blankEnvProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName })
+                # The ORIGIN travels with the entry (review finding): a blank github-models
+                # entry pointed at a custom baseUrl must never be endorsed by GITHUB_TOKEN
+                # further down — CreateGitHubModels would hand that GitHub credential to the
+                # custom endpoint, which this script never allows for the keyed path either.
+                $blankBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+                $blankOrigin = if ($provType -eq 'github-models') { Test-PublicModelsOrigin -BaseUrl $blankBaseUrl } else { [pscustomobject]@{ Public = $true; Note = ''; Host = '' } }
+                $blankEnvProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; OriginNote = $blankOrigin.Note })
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # guard only: every keyed type has a default
@@ -1493,6 +1499,15 @@ function Invoke-HeliosAutoLogin {
             $blankSatisfied = $true
             Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote — CreateGitHubModels reads that secret in-process, so the provider is satisfied without an export"
         }
+        elseif (-not $blank.Public) {
+            # A GitHub credential never reaches a custom Models endpoint (review finding):
+            # CreateGitHubModels falls back to GITHUB_TOKEN for this entry too, so marking
+            # it ok on that token would send it to the configured origin. Only its own
+            # vault secret or a directly-set variable can light it.
+            $blankCustomText = if ($blank.OriginHost) { "points at custom endpoint '$($blank.OriginHost)'" } else { 'points at a custom baseUrl' }
+            if ($blank.OriginNote) { $blankCustomText += " ($($blank.OriginNote))" }
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; the entry $blankCustomText, so GITHUB_TOKEN is NOT accepted as its fallback — a GitHub credential is never sent to a non-GitHub endpoint (the same rule the keyed path applies)"
+        }
         elseif ((Test-EnvValue 'GITHUB_TOKEN') -and $ghTokenForeignReaders.Count -gt 0) {
             # Same ownership rule as the public targets (review finding): the hub's
             # only fallback for this entry holds another service's key.
@@ -1521,7 +1536,7 @@ function Invoke-HeliosAutoLogin {
         if (-not $blankSatisfied) {
             # The GITHUB_TOKEN alternative is offered only while that variable is the
             # GitHub family's (review finding): owned by another consumer it is not one.
-            $ghTokenAlternative = if ($ghTokenForeignReaders.Count -gt 0) { '' } else { ', or provide a GITHUB_TOKEN that carries models:read' }
+            $ghTokenAlternative = if ($ghTokenForeignReaders.Count -gt 0 -or -not $blank.Public) { '' } else { ', or provide a GITHUB_TOKEN that carries models:read' }
             if ($blankPresence -eq 'absent') {
                 # The configured vault path is the primary repair (review finding): the
                 # secret's absence, not the config, is what leaves the provider unlit.
