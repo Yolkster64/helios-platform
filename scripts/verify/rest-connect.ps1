@@ -48,7 +48,8 @@ identity, detail, ownerAction}):
           code).
 
   azure   Automatic-first chain; interactive login is NEVER run, only ever reported:
-            1. CI OIDC        ACTIONS_ID_TOKEN_REQUEST_URL present (name check only)
+            1. CI OIDC        GITHUB_ACTIONS=true + non-blank ACTIONS_ID_TOKEN_REQUEST_URL
+                              + non-blank ACTIONS_ID_TOKEN_REQUEST_TOKEN (names only)
                               => OIDC is AVAILABLE — evidence, not a completed login
                               (the variable exists the moment a job grants id-token:
                               write, even when azure/login never runs). The chain
@@ -1096,9 +1097,21 @@ function Test-AzureLane {
     #    rung), and only when no rung holds one does the lane end ci-delegated with
     #    the azure/login prerequisite stated. The OIDC exchange itself is still never
     #    duplicated (or raced) here.
-    $ciOidcAvailable = Test-Path env:ACTIONS_ID_TOKEN_REQUEST_URL
+    # A USABLE Actions OIDC environment (review finding): the URL variable alone can be
+    # empty, stale, or inherited on a non-Actions host, and a false "available" would
+    # end the lane ci-delegated ("the job already has id-token: write") instead of the
+    # real no-credential setup action. All three must hold — GITHUB_ACTIONS = true, a
+    # non-blank ACTIONS_ID_TOKEN_REQUEST_URL and a non-blank
+    # ACTIONS_ID_TOKEN_REQUEST_TOKEN (names / emptiness only; values never read).
+    $inActionsJob = ([string][Environment]::GetEnvironmentVariable('GITHUB_ACTIONS')).Trim().Equals('true', [System.StringComparison]::OrdinalIgnoreCase)
+    $oidcUrlSet = Test-EnvValue 'ACTIONS_ID_TOKEN_REQUEST_URL'
+    $oidcTokenSet = Test-EnvValue 'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+    $ciOidcAvailable = $inActionsJob -and $oidcUrlSet -and $oidcTokenSet
     if ($ciOidcAvailable) {
-        $chainNotes.Add('ci-oidc: ACTIONS_ID_TOKEN_REQUEST_URL present — OIDC is available to this job (azure/login owns the exchange; never duplicated here)')
+        $chainNotes.Add('ci-oidc: GITHUB_ACTIONS job with ACTIONS_ID_TOKEN_REQUEST_URL + ACTIONS_ID_TOKEN_REQUEST_TOKEN set — OIDC is available to this job (azure/login owns the exchange; never duplicated here)')
+    }
+    elseif ($oidcUrlSet -or $oidcTokenSet -or (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_URL)) {
+        $chainNotes.Add("ci-oidc: OIDC request variables present but not a usable Actions environment (GITHUB_ACTIONS $(if ($inActionsJob) { 'true' } else { 'not true' }); ACTIONS_ID_TOKEN_REQUEST_URL $(if ($oidcUrlSet) { 'set' } else { 'blank' }); ACTIONS_ID_TOKEN_REQUEST_TOKEN $(if ($oidcTokenSet) { 'set' } else { 'blank' })) — not counted as a credential source")
     }
 
     $azCmd = Get-CliCommand -Name 'az'
@@ -1195,19 +1208,26 @@ function Test-AzureLane {
     #     echoed. It is a credential source in its own right, so an application
     #     container without az is not told to install the CLI.
     $wiReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and (Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE')
+    # The token FILE is validated before the source counts (review finding): a
+    # configured-but-unreadable file is a definitive wiring problem — no retry repairs
+    # a missing mount — so it is remembered as its own owner step below, and the
+    # source is recorded only once a non-blank assertion was actually read.
+    $wiFileProblem = ''
     if ($wiReady) {
-        $credentialSourcePresent = $true
         $wiPath = ([string]$env:AZURE_FEDERATED_TOKEN_FILE).Trim()
         if (-not (Test-Path -LiteralPath $wiPath -PathType Leaf)) {
-            $chainNotes.Add('workload-identity: AZURE_FEDERATED_TOKEN_FILE is set but no FILE exists at that path (a directory does not count; path checked only) — the federated exchange cannot run')
+            $wiFileProblem = 'AZURE_FEDERATED_TOKEN_FILE is set but no FILE exists at that path (a directory does not count; path checked only)'
+            $chainNotes.Add("workload-identity: $wiFileProblem — the federated exchange cannot run")
         }
         else {
             $assertion = ''
             try { $assertion = ([string](Get-Content -LiteralPath $wiPath -Raw -ErrorAction Stop)).Trim() } catch { $assertion = '' }
             if (-not $assertion) {
-                $chainNotes.Add('workload-identity: AZURE_FEDERATED_TOKEN_FILE is empty or unreadable (contents never echoed) — the federated exchange cannot run')
+                $wiFileProblem = 'AZURE_FEDERATED_TOKEN_FILE is empty or unreadable (contents never echoed)'
+                $chainNotes.Add("workload-identity: $wiFileProblem — the federated exchange cannot run")
             }
             else {
+                $credentialSourcePresent = $true
                 $wiClientId = [string]$env:AZURE_CLIENT_ID     # appId — an identifier, not a secret
                 $wiTenantId = [string]$env:AZURE_TENANT_ID
                 $body = ('grant_type=client_credentials&client_id={0}&client_assertion_type={1}&client_assertion={2}&scope={3}' -f
@@ -1487,9 +1507,18 @@ function Test-AzureLane {
         # lives only in the detail text vanishes from the advertised action list.
         return New-LaneResult -Lane 'azure' -State 'ci-delegated' -Source 'ci-oidc' `
             -Identity 'the workflow federated identity' `
-            -Detail ("OIDC is AVAILABLE (ACTIONS_ID_TOKEN_REQUEST_URL present) but no chain entry held a usable ARM token: $chainText — " +
+            -Detail ("OIDC is AVAILABLE (a GITHUB_ACTIONS job with ACTIONS_ID_TOKEN_REQUEST_URL + ACTIONS_ID_TOKEN_REQUEST_TOKEN set) but no chain entry held a usable ARM token: $chainText — " +
                 'the azure/login step performs the OIDC exchange and must run before this probe; this probe never duplicates it') `
             -OwnerAction 'add an azure/login@v2 step (client-id / tenant-id / subscription-id of the federated credential from scripts/bootstrap/azure-oidc-setup.ps1) before this probe in the workflow job — the job already has id-token: write, so no secret is needed'
+    }
+    # 3b. The configured workload identity's token file is unusable and nothing else
+    #     held a token (review finding): definitive — the mount / path is the repair,
+    #     not a retry and not an MFA login.
+    if ($wiFileProblem -and -not $tokenHeld) {
+        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'workload-identity' `
+            -Identity 'the configured workload identity (AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_FEDERATED_TOKEN_FILE)' `
+            -Detail ("the configured workload identity cannot run: $wiFileProblem ($chainText) — retrying cannot help; the token file the platform projects is missing or empty") `
+            -OwnerAction 'fix AZURE_FEDERATED_TOKEN_FILE: point it at the projected service-account token file the platform mounts (AKS workload identity: /var/run/secrets/azure/tokens/azure-identity-token) and make sure the mount exists, or unset AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE so the chain falls through to a managed identity or the az cache; then re-run'
     }
     $oidcHeldNote = if ($ciOidcAvailable -and $tokenHeld) {
         ' — OIDC is also available to this job, but a credential source already yielded a token here (azure/login has evidently run), so adding another azure/login step is not the remedy'
@@ -1550,7 +1579,7 @@ if ($DryRun) {
     Write-Host '           401 => next candidate; all 401 => needs-owner (gh auth login --web); transient-only => unavailable (retry, never rotate)'
     Write-Host '           no candidate at all => unavailable (Invoke-WebRequest is built in — only the token can be missing)'
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
-    Write-Host '  azure    1. ACTIONS_ID_TOKEN_REQUEST_URL present => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first)'
+    Write-Host '  azure    1. GITHUB_ACTIONS=true + non-blank ACTIONS_ID_TOKEN_REQUEST_URL + ACTIONS_ID_TOKEN_REQUEST_TOKEN => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first); an incomplete set is a note, never a source'
     Write-Host '           2. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_CLIENT_SECRET => client_credentials POST to'
     if ($azureCloud.Unresolved) {
         Write-Host '              <no authority: the cloud is UNRESOLVED, so the live run makes no Azure request at all and reports needs-owner>'
@@ -1564,7 +1593,7 @@ if ($DryRun) {
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '           an override counts only as the canonical https origin of a known cloud host (default port, no userinfo, path, query or fragment); a rejected AZURE_RESOURCE_MANAGER_ENDPOINT still lets ARM_ENDPOINT be tried'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
-    Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source of its own'
+    Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source once a non-blank assertion is read; a missing / empty file is a definitive owner step (fix the mount), never retry advice'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '              loopback shapes are bound to their documented scheme and port per path (http://127.0.0.1:41xxx|localhost:42356|localhost:46808/msi/token, http://127.0.0.1:40342/metadata/identity/oauth2/token, http://localhost:50342/oauth2/token); AZURE_CLIENT_ID (when set) selects the user-assigned identity — client_id on IMDS and the App Service shape, clientid on the legacy MSI shape; Arc / Cloud Shell serve the system-assigned identity only'
     Write-Host '           4. az account get-access-token --resource-type arm (exit code gates; AADSTS50078 lands here)'

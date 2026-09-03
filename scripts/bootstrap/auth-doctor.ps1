@@ -815,8 +815,12 @@ function Get-ApiKeyLaneEvaluation {
 # the configured value the same way instead of resolving the bare leaf, so a
 # path-qualified command the hub can run is never reported missing (and a bare name
 # is looked up exactly as configured).
+# -Aliases (review finding): the reader map treats `claude` / `claude-cli` as the same
+# CLI, so the lane discovery accepts the same leaf names — the configured command is
+# still what gets resolved and probed.
 function Get-AIHubCliAgentCommand {
-    param([Parameter(Mandatory)][string]$Command)
+    param([Parameter(Mandatory)][string]$Command, [string[]]$Aliases = @())
+    $leafNames = @($Command) + @($Aliases)
     $cfg = (Get-AIHubConfigState).Config
     if ($null -eq $cfg -or -not $cfg.PSObject.Properties['cliAgents'] -or $null -eq $cfg.cliAgents) { return '' }
     foreach ($agent in @($cfg.cliAgents)) {
@@ -825,7 +829,7 @@ function Get-AIHubCliAgentCommand {
         $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
         $leaf = ''
         if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
-        if ($leaf -and $leaf.Equals($Command, [System.StringComparison]::OrdinalIgnoreCase)) { return $cmd }
+        if ($leaf -and @($leafNames | Where-Object { $leaf.Equals($_, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $cmd }
     }
     return ''
 }
@@ -858,7 +862,8 @@ function Resolve-CliAgentExecutable {
 # or missing command, so an entry named 'codex' without one is unconfigured — its
 # name never makes it an enabled executable; the command is read untrimmed, as run.
 function Test-AIHubCliAgentEnabled {
-    param([Parameter(Mandatory)][string]$Command)
+    param([Parameter(Mandatory)][string]$Command, [string[]]$Aliases = @())
+    $leafNames = @($Command) + @($Aliases)
     $cfg = (Get-AIHubConfigState).Config
     if ($null -eq $cfg) { return $true }
     if (-not $cfg.PSObject.Properties['cliAgents'] -or $null -eq $cfg.cliAgents) { return $false }
@@ -868,7 +873,7 @@ function Test-AIHubCliAgentEnabled {
         $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
         $leaf = ''
         if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
-        if ($leaf -and $leaf.Equals($Command, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+        if ($leaf -and @($leafNames | Where-Object { $leaf.Equals($_, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
     }
     return $false
 }
@@ -1142,15 +1147,22 @@ function Test-AzLane {
                 -Detail ("$reason; a managed-identity endpoint is present (IDENTITY_ENDPOINT/MSI_ENDPOINT, or -UseManagedIdentity was given) — automatic non-interactive repair is available") `
                 -OwnerAction 'pwsh scripts/bootstrap/auth-doctor.ps1 -Apply'
         }
-        Write-Report '  az: applying az login --identity (managed identity; system-assigned/default)'
-        # System-assigned/default identity only: selecting a user-assigned identity
-        # needs its client id under a flag name that varies across az versions, so it
-        # is never guessed here.
-        $mi = Invoke-Probe -Executable $azCmd.Source -Arguments @('login', '--identity', '--output', 'none')
+        # AZURE_CLIENT_ID (when set) selects the user-assigned identity (review finding):
+        # `az login --identity --client-id <id>` is the documented form; without the
+        # selector az asks for the system-assigned identity — a different principal from
+        # the one the hub's DefaultAzureCredential targets. An identifier, not a secret.
+        $miArgs = @('login', '--identity')
+        $miIdentityText = 'system-assigned/default identity'
+        if (Test-EnvValue 'AZURE_CLIENT_ID') {
+            $miArgs += @('--client-id', ([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim())
+            $miIdentityText = 'user-assigned identity selected by AZURE_CLIENT_ID (--client-id)'
+        }
+        Write-Report "  az: applying az login --identity ($miIdentityText)"
+        $mi = Invoke-Probe -Executable $azCmd.Source -Arguments ($miArgs + @('--output', 'none'))
         $verify = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'get-access-token', '--output', 'none')
         if ($mi.ExitCode -eq 0 -and $verify.ExitCode -eq 0) {
             return New-LaneResult -Lane 'az' -State 'repaired' -Method 'managed-identity' `
-                -Detail 'az login --identity succeeded and a live token refresh verifies it'
+                -Detail "az login --identity ($miIdentityText) succeeded and a live token refresh verifies it"
         }
         $reason += ("; managed-identity repair failed (exit $($mi.ExitCode), raw output never echoed)")
     }
@@ -1324,7 +1336,7 @@ function Test-ClaudeLane {
     # asks for nothing: with no enabled anthropic-type provider AND the claude-cli
     # agent off, a credential demand would surface as a false owner step downstream.
     $anthropicProviders = Get-AIHubEnabledProvidersOfType -Type 'anthropic'
-    $claudeAgentEnabled = Test-AIHubCliAgentEnabled -Command 'claude'
+    $claudeAgentEnabled = Test-AIHubCliAgentEnabled -Command 'claude' -Aliases @('claude-cli')   # the reader map's aliases (review finding)
     $configState = Get-AIHubConfigState
     $configLabel = $configState.Label
     if ($null -ne $anthropicProviders -and $anthropicProviders.Count -eq 0 -and -not $claudeAgentEnabled) {
@@ -1364,7 +1376,7 @@ function Test-ClaudeLane {
         }
         else {
             $cliState = 'unverifiable'
-            $claudeCmd = Resolve-CliAgentExecutable -Configured (Get-AIHubCliAgentCommand -Command 'claude') -Fallback 'claude'
+            $claudeCmd = Resolve-CliAgentExecutable -Configured (Get-AIHubCliAgentCommand -Command 'claude' -Aliases @('claude-cli')) -Fallback 'claude'
             $cliDetail = if ($claudeCmd.Found) { 'ANTHROPIC_API_KEY is unset and a cached claude login cannot be probed headlessly — probing would launch an interactive session (connect-all.ps1 rule)' + $(if ($claudeCmd.Note) { " ($($claudeCmd.Note))" } else { '' }) }
             elseif ($claudeCmd.Configured -match '[\\/]') { "ANTHROPIC_API_KEY is unset and $($claudeCmd.Note)" }
             else { 'ANTHROPIC_API_KEY is unset and no claude CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs it)' }
