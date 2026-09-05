@@ -181,6 +181,7 @@ $script:knownAzureClouds = @(
 # Populated by Get-GitHubTokenCandidates / Get-ConfiguredGitHubModelsEnvs; declared
 # here so a lane that never reaches the candidate walk still reads an empty list.
 $script:candidateNotes = [System.Collections.Generic.List[string]]::new()
+$script:paddedEnvSources = [System.Collections.Generic.List[string]]::new()   # env candidates refused for surrounding whitespace (review finding)
 $script:nonGitHubReaderEnvs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $script:knownAzureAuthorityHosts = @($script:knownAzureClouds | ForEach-Object { $_.Authority } | Select-Object -Unique)
 $script:knownAzureArmHosts = @($script:knownAzureClouds | ForEach-Object { $_.Arm } | Select-Object -Unique)
@@ -787,6 +788,7 @@ function Get-GitHubTokenCandidates {
     # lane function returns — they are never interpolated into any reported string.
     $candidates = [System.Collections.Generic.List[object]]::new()
     $script:candidateNotes = [System.Collections.Generic.List[string]]::new()
+    $script:paddedEnvSources = [System.Collections.Generic.List[string]]::new()
     # Third slot is the CONFIGURED models env (GITHUB_MODELS_TOKEN by default) —
     # review finding: a renamed apiKeyEnv must still be probed. The configured list
     # is resolved FIRST so the non-GitHub reader set it records is complete before
@@ -804,9 +806,19 @@ function Get-GitHubTokenCandidates {
         # Literal name through the .NET API (review finding): the env: drive would
         # expand wildcard characters in a config-derived name.
         $value = [string][Environment]::GetEnvironmentVariable($envName)
-        if (-not [string]::IsNullOrWhiteSpace($value)) {
-            $candidates.Add([pscustomobject]@{ Source = "env:$envName"; Token = $value.Trim() })
+        if ([string]::IsNullOrWhiteSpace($value)) { continue }
+        # Literal VALUE too (review finding): SecretResolver.Resolve hands the hub the
+        # variable unchanged, so a value with surrounding whitespace / control characters
+        # (a secret loader's trailing newline) is exactly what ApiKeyCredential would
+        # receive — and header construction fails on it. Probing a trimmed copy would
+        # certify a credential the hub never sends, so the padded value is not probed at
+        # all; its repair (re-export it exactly) is definitive, never "retry later".
+        if ($value -ne $value.Trim()) {
+            $script:candidateNotes.Add("env:$envName carries surrounding whitespace / control characters (a secret loader's trailing newline?) — SecretResolver.Resolve hands it to the provider unchanged, so the hub's request would fail; not probed")
+            $script:paddedEnvSources.Add($envName)
+            continue
         }
+        $candidates.Add([pscustomobject]@{ Source = "env:$envName"; Token = $value })
     }
     $ghCmd = Get-CliCommand -Name 'gh'
     if ($ghCmd) {
@@ -885,7 +897,19 @@ function Test-GitHubLane {
     }
 
     $candidates = Get-GitHubTokenCandidates
+    # A padded variable is a definitive wiring defect (review finding): the value is
+    # present but unusable as the hub reads it, and only re-exporting it exactly repairs
+    # that — so it is an owner step whether or not another candidate exists.
+    $paddedNames = @($script:paddedEnvSources | Select-Object -Unique)
+    $paddedAction = if ($paddedNames.Count -gt 0) {
+        "re-export $($paddedNames -join ' / ') exactly, without the surrounding whitespace / trailing newline the value carries (bash: NAME=`$(printf '%s' `"`$NAME`"); pwsh: `$env:NAME = `$env:NAME.Trim()) — SecretResolver hands the variable to the provider unchanged"
+    } else { '' }
     if (@($candidates).Count -eq 0) {
+        if ($paddedAction) {
+            return New-LaneResult -Lane 'github' -State 'needs-owner' -Source 'none' `
+                -Detail ("the only candidate token(s) present carry surrounding whitespace / control characters and were not probed: $($script:candidateNotes -join '; ') — re-exporting the value exactly is an owner step") `
+                -OwnerAction $paddedAction
+        }
         # unavailable is ONLY "no candidate token present": Invoke-WebRequest is built
         # into PowerShell 7, so there is no missing-HTTP-client case on this lane.
         return New-LaneResult -Lane 'github' -State 'unavailable' -Source 'none' `
@@ -982,6 +1006,13 @@ function Test-GitHubLane {
     # candidate credential is bad, but transport failures / 429 / 5xx are transient —
     # rotating a healthy token on those would destroy a working credential for nothing.
     if (-not $sawDefinitiveRejection) {
+        if ($paddedAction) {
+            # The padded variable is definitive even when every probed candidate was only
+            # transient: retrying cannot strip the newline from the value the hub reads.
+            return New-LaneResult -Lane 'github' -State 'needs-owner' -Source 'none' `
+                -Detail ("no probed candidate got a definitive answer (transient: $chainText), but a configured variable carries surrounding whitespace and was not probed — re-exporting it exactly is the owner step") `
+                -OwnerAction $paddedAction
+        }
         return New-LaneResult -Lane 'github' -State 'unavailable' -Source 'none' `
             -Detail ("no candidate got a definitive answer from api.github.com — every attempt was transient " +
                 "(transport/429/5xx): $chainText — retry later; do NOT rotate credentials on this evidence")
@@ -994,7 +1025,7 @@ function Test-GitHubLane {
     $loginAction = if ($ghOnPath) { 'gh auth login --web   # device-code flow' } else { 'bash scripts/bootstrap/cloud-shell-setup.sh && gh auth login --web   # step 1 installs the GitHub CLI (or https://cli.github.com); then the device-code flow' }
     return New-LaneResult -Lane 'github' -State 'needs-owner' -Source 'none' `
         -Detail ("every candidate token failed the direct REST probe: $chainText — a rotated token in the rejected variable, or a fresh device-code login, is an owner step") `
-        -OwnerAction ((@($rotateAction, $loginAction) | Where-Object { $_ }) -join '; or: ')
+        -OwnerAction ((@($paddedAction, $rotateAction, $loginAction) | Where-Object { $_ }) -join '; or: ')
 }
 
 # --- azure lane -------------------------------------------------------------------------
@@ -1326,6 +1357,18 @@ function Test-AzureLane {
             # request for a configuration reason; raw IMDS non-200s stay what they are
             # (a non-Azure host or a metadata firewall — not a credential source).
             $chainNotes.Add("managed-identity ($Kind): endpoint answered $miStatus — the identity header/secret (IDENTITY_HEADER / MSI_SECRET) or the endpoint wiring is rejected; this is configuration, not an outage")
+            return $true
+        }
+        if ($Kind -ne 'imds' -and $Probe.Status -eq 400) {
+            # Identity selection refused (review finding): a declared endpoint answers 400
+            # when the requested identity — the client_id selector taken from
+            # AZURE_CLIENT_ID — is not assigned to this host, or the resource is refused.
+            # That is configuration too: a retry cannot assign an identity, so it must
+            # end in the wiring verdict, never in "transient — retry later".
+            $selectorNote = if (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID'))) {
+                ' — AZURE_CLIENT_ID is set (name checked only) and its user-assigned identity is not assigned to this host, or the resource was refused: assign that identity, or unset AZURE_CLIENT_ID to use the system-assigned one; configuration, not an outage'
+            } else { ' — the endpoint refused the token request parameters (identity / resource); configuration, not an outage' }
+            $chainNotes.Add("managed-identity ($Kind): endpoint answered HTTP 400 to the identity selection$selectorNote")
             return $true
         }
         $chainNotes.Add("managed-identity ($Kind): $miStatus")
@@ -1669,13 +1712,18 @@ function Test-AzureLane {
                 'retrying cannot help; install the Azure CLI (scripts/bootstrap/cloud-shell-setup.sh) and log in once, or set AZURE_CLIENT_ID/AZURE_TENANT_ID plus a credential for a workload identity') `
             -OwnerAction ("bash scripts/bootstrap/cloud-shell-setup.sh && $azureOwnerAction   # step 1 installs the Azure CLI (or https://aka.ms/azure-cli)")
     }
-    # 4b. A declared managed-identity endpoint REJECTED the request (401/403): the
-    #     host's identity wiring is wrong, and no retry or MFA login repairs that —
-    #     the exact wiring check is the owner step (review finding).
+    # 4b. A declared managed-identity endpoint REJECTED the request (401/403, or 400 to
+    #     the identity selection): the host's identity wiring is wrong, and no retry or
+    #     MFA login repairs that — the exact wiring check is the owner step (review
+    #     findings). A 400 with AZURE_CLIENT_ID set names the selector as the first fix.
     if ($miAuthRejected -and -not $sawAuthRejection) {
+        $miWiringAction = 'verify the managed-identity wiring the host injects — IDENTITY_ENDPOINT + IDENTITY_HEADER (App Service / Functions / Container Apps) or MSI_ENDPOINT + MSI_SECRET — by redeploying with a system- or user-assigned identity that has access, or unset the stale endpoint variables so the chain can use another credential source'
+        if ($chainText -like '*HTTP 400 to the identity selection*' -and -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID'))) {
+            $miWiringAction = 'assign the user-assigned identity named by AZURE_CLIENT_ID to this host (az vm identity assign / az webapp identity assign --identities <resource-id>), or unset AZURE_CLIENT_ID so the endpoint issues the system-assigned identity; the endpoint answered HTTP 400 to that identity selection, so retrying cannot help; then: ' + $miWiringAction
+        }
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'managed-identity' `
-            -Detail ("the declared managed-identity endpoint rejected the token request ($chainText) — retrying cannot help; the endpoint/header pair the host injects is stale or does not belong to an identity with access$oidcHeldNote") `
-            -OwnerAction 'verify the managed-identity wiring the host injects — IDENTITY_ENDPOINT + IDENTITY_HEADER (App Service / Functions / Container Apps) or MSI_ENDPOINT + MSI_SECRET — by redeploying with a system- or user-assigned identity that has access, or unset the stale endpoint variables so the chain can use another credential source'
+            -Detail ("the declared managed-identity endpoint rejected the token request ($chainText) — retrying cannot help; the endpoint/header pair the host injects is stale, the selected identity is not assigned, or the identity has no access$oidcHeldNote") `
+            -OwnerAction $miWiringAction
     }
     # 5. No definitive rejection anywhere = transient-only evidence (transport, 429,
     #    5xx, garbage bodies): MFA/workload-identity advice cannot fix an outage and
@@ -1708,6 +1756,7 @@ if ($DryRun) {
     Write-Host "           200 above the anonymous 60/hr cap => ready (stop; GET $gitHubApi/user for identity; 401/403 there still ready)"
     Write-Host '           200 at/below the cap => Authorization likely stripped in transit; not attributed, next candidate'
     Write-Host '           401 => next candidate; all 401 => needs-owner (gh auth login --web); transient-only => unavailable (retry, never rotate)'
+    Write-Host '           env value with surrounding whitespace / control characters => NOT probed (the hub reads it literally) => needs-owner (re-export it exactly)'
     Write-Host '           no candidate at all => unavailable (Invoke-WebRequest is built in — only the token can be missing)'
     Write-Host '           note: the REST probe is the ground truth — gh auth status can exit 1 for a fully REST-valid token'
     Write-Host '  azure    1. GITHUB_ACTIONS=true + non-blank ACTIONS_ID_TOKEN_REQUEST_URL + ACTIONS_ID_TOKEN_REQUEST_TOKEN => OIDC available (evidence, not a completed login) — chain continues; nothing usable => ci-delegated (azure/login must run first); an incomplete set is a note, never a source'

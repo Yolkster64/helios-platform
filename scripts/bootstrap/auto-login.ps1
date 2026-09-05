@@ -1291,6 +1291,14 @@ function Invoke-HeliosAutoLogin {
         elseif ($target.SecretName) { ", or fix its apiKeySecretName first ('$($target.SecretName)' is not a valid Key Vault secret name — see its provider step above)" }
         else { '' }
         $repairAction = "grant models:read to the GitHub credential feeding $($target.Env) — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$vaultClause"
+        # A HELD value shadows the vault (review finding): SecretResolver.Resolve prefers
+        # the non-blank variable, so storing the secret repairs nothing until the held
+        # value is unset — the held-value branch says so; the unset-target branches
+        # (GITHUB_TOKEN / keyring) keep the plain clause because their target is empty.
+        $heldVaultClause = if ($target.SecretName -and $target.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or unset $($target.Env) first and store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName) — the hub prefers the non-blank variable, so the held value would keep shadowing the vault" }
+        elseif ($target.SecretName) { ", or fix its apiKeySecretName first ('$($target.SecretName)' is not a valid Key Vault secret name — see its provider step above) and then unset $($target.Env) so the stored secret is read" }
+        else { '' }
+        $heldRepairAction = "grant models:read to the credential held by $($target.Env) — gh auth refresh -h github.com --scopes models:read (then re-export $($target.Env)), or a PAT that includes models:read$heldVaultClause"
         if (-not $target.Public) {
             Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it"
             continue
@@ -1321,8 +1329,8 @@ function Invoke-HeliosAutoLogin {
                 }
                 'missing-scope' {
                     $ghModelsRejectedEnvs.Add($target.Env)
-                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; the value is left untouched (never clobbered)"
-                    Add-OwnerAction -Env $target.Env -Text $repairAction
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; the value is left untouched (never clobbered) and, while it is set, it shadows any Key Vault secret the hub could otherwise read"
+                    Add-OwnerAction -Env $target.Env -Text $heldRepairAction
                 }
                 default {
                     $ghModelsRejectedEnvs.Add($target.Env)
