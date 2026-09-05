@@ -9,8 +9,8 @@ infra/main.bicep with NO stored cloud credential anywhere:
 
   * app registration "helios-github-deploy" + service principal — no client secret
     is ever created, so there is nothing to leak or rotate;
-  * federated credentials trusting GitHub's OIDC issuer for exactly three subjects:
-    the repo's main branch, pull requests, and the "production" environment;
+  * federated credentials trusting GitHub's OIDC issuer for exactly two subjects:
+    the repo's main branch and the "production" environment;
   * Contributor scoped to the resource group ONLY (least privilege: the workflow
     deploys one template into one RG — nothing subscription-wide, and the identity
     cannot create resource groups or assign roles);
@@ -28,18 +28,21 @@ tenant's default user setting) AND assign roles on the scopes below (Owner or Us
 Access Administrator on the resource group).
 
 .EXAMPLE
-pwsh scripts/bootstrap/azure-oidc-setup.ps1
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 -Tenant <id> -Subscription <id> -ResourceGroup <rg> -KeyVault <vault>
+# Read-only plan. Add -Apply only after reviewing the targets and permissions.
 
 .EXAMPLE
-pwsh scripts/bootstrap/azure-oidc-setup.ps1 -ResourceGroup my-rg -Repo me/fork -Subscription <id>
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 -ResourceGroup my-rg -Repo me/fork -Tenant <id> -Subscription <id> -KeyVault <vault>
 #>
 [CmdletBinding()]
 param(
     [string]$AppName = 'helios-github-deploy',
     [string]$Repo = 'Yolkster64/helios-platform',
-    [string]$Subscription = '784565d3-c82a-4dba-b947-fc354c08a89d',
-    [string]$ResourceGroup = 'rg-helios-ai',
-    [string]$KeyVault = 'kv-helios-jcut',
+    [string]$Tenant = '',
+    [string]$Subscription = '',
+    [string]$ResourceGroup = '',
+    [string]$KeyVault = '',
+    [switch]$Apply,
     [string]$EnvironmentName = 'production'
 )
 
@@ -59,18 +62,35 @@ function Invoke-Az {
     if ($null -ne $out) { ($out | Out-String).Trim() } else { '' }
 }
 
-& az account show --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw 'not logged in — run az login (or scripts/bootstrap/connect-azure.ps1) first.'
+# Graph uses the active tenant. Verify it without rewriting the shared az profile.
+foreach ($target in @($Tenant, $Subscription, $ResourceGroup, $KeyVault)) {
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        throw 'Explicit -Tenant, -Subscription, -ResourceGroup and -KeyVault are required.'
+    }
 }
-Invoke-Az @('account', 'set', '--subscription', $Subscription) | Out-Null
+$activeSubscription = Invoke-Az @('account', 'show', '--query', 'id', '--output', 'tsv')
 $tenantId = Invoke-Az @('account', 'show', '--query', 'tenantId', '--output', 'tsv')
-
-# The role scope must exist before we grant on it; the RG is created by the stack
-# bring-up (scripts/bootstrap/azure-up.ps1), not by CI.
-& az group show --name $ResourceGroup --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw "resource group $ResourceGroup not found in subscription $Subscription — deploy the stack first (scripts/bootstrap/azure-up.ps1) or pass -ResourceGroup."
+$accountState = Invoke-Az @('account', 'show', '--query', 'state', '--output', 'tsv')
+if ($activeSubscription -ine $Subscription -or $tenantId -ine $Tenant -or $accountState -cne 'Enabled') {
+    throw 'Active Azure subscription/tenant must match the explicit target and be Enabled. Review az account list and select the intended account first.'
+}
+$rgScope = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup"
+$rgId = Invoke-Az @('group', 'show', '--name', $ResourceGroup, '--subscription', $Subscription, '--query', 'id', '--output', 'tsv')
+$vaultId = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'id', '--output', 'tsv')
+$vaultTenant = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'properties.tenantId', '--output', 'tsv')
+$vaultRbac = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'properties.enableRbacAuthorization', '--output', 'tsv')
+if ($rgId -ine $rgScope -or $vaultId -ine "$rgScope/providers/Microsoft.KeyVault/vaults/$KeyVault" -or $vaultTenant -ine $Tenant -or $vaultRbac -ine 'true') {
+    throw 'Resource-group/vault identity, tenant or RBAC mode does not match the intended target.'
+}
+$appCount = Invoke-Az @('ad', 'app', 'list', '--display-name', $AppName, '--query', 'length(@)', '--output', 'tsv')
+if ($appCount -cnotin @('0','1')) { throw 'App registration lookup is ambiguous; choose a unique -AppName.' }
+Write-Host "Azure OIDC plan`nTenant: $tenantId`nSubscription: $Subscription`nResource group: $rgId`nKey Vault: $vaultId`nApp: $AppName"
+Write-Host "Trust: repo:${Repo}:ref:refs/heads/main`nTrust: repo:${Repo}:environment:$EnvironmentName"
+Write-Host "Grants: Contributor on $rgId; Key Vault Secrets Officer on $vaultId"
+Write-Host 'Also removes the legacy github-pull-request federated credential if present.'
+if (-not $Apply) {
+    Write-Host 'Plan only. No account, identity, permission or resource changes. Review before adding -Apply.'
+    return
 }
 
 # --- App registration (idempotent) ------------------------------------------------
@@ -82,10 +102,7 @@ if (-not $appId) {
 }
 else {
     Write-Host "App registration $AppName exists (appId $appId)."
-    $dupCount = [int](Invoke-Az @('ad', 'app', 'list', '--display-name', $AppName, '--query', 'length(@)', '--output', 'tsv'))
-    if ($dupCount -gt 1) {
-        Write-Warning "$dupCount app registrations named $AppName; using appId $appId."
-    }
+
 }
 
 # --- Service principal (idempotent) -----------------------------------------------
@@ -143,7 +160,7 @@ if ($LASTEXITCODE -eq 0) {
 function Set-RoleGrant {
     param([string]$Role, [string]$Scope)
     $existing = Invoke-Az @('role', 'assignment', 'list', '--assignee', $spId,
-        '--role', $Role, '--scope', $Scope, '--query', '[0].id', '--output', 'tsv')
+        '--role', $Role, '--scope', $Scope, '--subscription', $Subscription, '--query', '[0].id', '--output', 'tsv')
     if ($existing) {
         Write-Host "'$Role' on $Scope already assigned."
         return
@@ -155,7 +172,7 @@ function Set-RoleGrant {
         # (PrincipalNotFound), so retry with backoff instead of failing once.
         & az role assignment create --assignee-object-id $spId `
             --assignee-principal-type ServicePrincipal `
-            --role $Role --scope $Scope --output none
+            --role $Role --scope $Scope --subscription $Subscription --output none
         if ($LASTEXITCODE -eq 0) { return }
         Write-Host "  retry $attempt/5 (Entra/RBAC replication)..."
         Start-Sleep -Seconds ($attempt * 5)
@@ -163,20 +180,8 @@ function Set-RoleGrant {
     throw "failed to assign '$Role' on $Scope after 5 attempts."
 }
 
-$rgScope = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup"
 Set-RoleGrant -Role 'Contributor' -Scope $rgScope
-
-$vaultId = & az keyvault show --name $KeyVault --resource-group $ResourceGroup --query id --output tsv 2>$null
-if ($LASTEXITCODE -ne 0) { $vaultId = '' }
-if ($vaultId) {
-    Set-RoleGrant -Role 'Key Vault Secrets Officer' -Scope $vaultId
-}
-else {
-    Write-Warning ("Key Vault $KeyVault not found in $ResourceGroup — skipping the Key Vault " +
-        'Secrets Officer grant. Re-run this script once the vault exists if deploys pass ' +
-        'provider API keys (main.bicep writes them as vault secrets, which needs data-plane ' +
-        'RBAC on an RBAC-mode vault).')
-}
+Set-RoleGrant -Role 'Key Vault Secrets Officer' -Scope $vaultId
 
 # --- Wiring instructions (identifiers only — never secrets) -----------------------
 Write-Host ''

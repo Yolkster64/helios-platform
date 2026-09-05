@@ -25,15 +25,18 @@
 # Access Administrator on the resource group).
 #
 # Usage:
-#   scripts/bootstrap/azure-oidc-setup.sh                 # defaults below
-#   scripts/bootstrap/azure-oidc-setup.sh -g my-rg --repo me/fork --subscription <id>
+#   scripts/bootstrap/azure-oidc-setup.sh --tenant <id> --subscription <id> \
+#     --resource-group <rg> --key-vault <vault>       # read-only plan
+#   Add --apply only after reviewing the target and planned permissions.
 set -euo pipefail
 
 app_name="helios-github-deploy"
 repo="Yolkster64/helios-platform"
-subscription="784565d3-c82a-4dba-b947-fc354c08a89d"
-resource_group="rg-helios-ai"
-key_vault="kv-helios-jcut"
+tenant=""
+subscription=""
+resource_group=""
+key_vault=""
+apply=false
 environment="production"
 issuer="https://token.actions.githubusercontent.com"
 audience="api://AzureADTokenExchange"
@@ -42,6 +45,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--app-name) app_name="${2:?--app-name needs a value}"; shift 2 ;;
     --repo) repo="${2:?--repo needs a value}"; shift 2 ;;
+    --apply) apply=true; shift ;;
+    --tenant) tenant="${2:?--tenant needs a value}"; shift 2 ;;
     --subscription) subscription="${2:?--subscription needs a value}"; shift 2 ;;
     -g|--resource-group) resource_group="${2:?--resource-group needs a value}"; shift 2 ;;
     --key-vault) key_vault="${2:?--key-vault needs a value}"; shift 2 ;;
@@ -50,19 +55,50 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! az account show --output none 2>/dev/null; then
-  echo "error: not logged in — run az login (or scripts/bootstrap/connect-azure.sh) first." >&2
-  exit 1
+# A plan must not change the shared CLI account, identity, resources or permissions.
+# Require the selected account to match: Graph/Entra commands use its active tenant.
+for target in tenant subscription resource_group key_vault; do
+  if [[ -z "${!target}" ]]; then
+    echo "error: explicit --tenant, --subscription, --resource-group and --key-vault are required." >&2
+    exit 2
+  fi
+done
+if ! command -v az >/dev/null 2>&1; then
+  echo "error: Azure CLI is not installed; install it, then authenticate interactively." >&2
+  exit 2
 fi
-az account set --subscription "$subscription"
+active_subscription="$(az account show --query id --output tsv)"
 tenant_id="$(az account show --query tenantId --output tsv)"
-
-# The role scope must exist before we grant on it; the RG is created by the stack
-# bring-up (scripts/bootstrap/azure-up.sh), not by CI.
-if ! az group show --name "$resource_group" --output none 2>/dev/null; then
-  echo "error: resource group $resource_group not found in subscription $subscription." >&2
-  echo "       Deploy the stack first (scripts/bootstrap/azure-up.sh) or pass -g <rg>." >&2
-  exit 1
+account_state="$(az account show --query state --output tsv)"
+if [[ "${active_subscription,,}" != "${subscription,,}" || "${tenant_id,,}" != "${tenant,,}" || "$account_state" != "Enabled" ]]; then
+  echo "error: the active Azure subscription/tenant must match the explicit target and be Enabled." >&2
+  echo "       Review az account list, authenticate to the intended tenant and select its subscription first." >&2
+  exit 2
+fi
+rg_scope="/subscriptions/${subscription}/resourceGroups/${resource_group}"
+rg_id="$(az group show --name "$resource_group" --subscription "$subscription" --query id --output tsv)"
+vault_id="$(az keyvault show --name "$key_vault" --resource-group "$resource_group" --subscription "$subscription" --query id --output tsv)"
+vault_tenant="$(az keyvault show --name "$key_vault" --resource-group "$resource_group" --subscription "$subscription" --query properties.tenantId --output tsv)"
+vault_rbac="$(az keyvault show --name "$key_vault" --resource-group "$resource_group" --subscription "$subscription" --query properties.enableRbacAuthorization --output tsv)"
+expected_vault="${rg_scope}/providers/Microsoft.KeyVault/vaults/${key_vault}"
+if [[ "${rg_id,,}" != "${rg_scope,,}" || "${vault_id,,}" != "${expected_vault,,}" || "${vault_tenant,,}" != "${tenant,,}" || "${vault_rbac,,}" != "true" ]]; then
+  echo "error: resource-group/vault identity, tenant or RBAC mode does not match the intended target." >&2
+  exit 2
+fi
+# Duplicate display names must not silently select an arbitrary deploy principal.
+app_count="$(az ad app list --display-name "$app_name" --query 'length(@)' --output tsv)"
+if [[ "$app_count" != "0" && "$app_count" != "1" ]]; then
+  echo "error: app registration lookup is ambiguous; choose a unique --app-name." >&2
+  exit 2
+fi
+printf 'Azure OIDC plan\nTenant: %s\nSubscription: %s\nResource group: %s\nKey Vault: %s\nApp: %s\n' \
+  "$tenant_id" "$subscription" "$rg_id" "$vault_id" "$app_name"
+printf 'Trust: repo:%s:ref:refs/heads/main\nTrust: repo:%s:environment:%s\n' "$repo" "$repo" "$environment"
+printf 'Grants: Contributor on %s; Key Vault Secrets Officer on %s\n' "$rg_id" "$vault_id"
+echo 'Also removes the legacy github-pull-request federated credential if present.'
+if [[ "$apply" != true ]]; then
+  echo 'Plan only. No account, identity, permission or resource changes. Review before adding --apply.'
+  exit 0
 fi
 
 # --- App registration (idempotent) ------------------------------------------------
@@ -73,10 +109,7 @@ if [[ -z "$app_id" ]]; then
     --query appId --output tsv)"
 else
   echo "App registration $app_name exists (appId $app_id)."
-  dup_count="$(az ad app list --display-name "$app_name" --query "length(@)" --output tsv)"
-  if [[ "$dup_count" -gt 1 ]]; then
-    echo "warning: $dup_count app registrations named $app_name; using appId $app_id." >&2
-  fi
+
 fi
 
 # --- Service principal (idempotent) -----------------------------------------------
@@ -132,7 +165,7 @@ fi
 # --- Role assignments (idempotent, retried) ---------------------------------------
 ensure_role() { # role scope
   local role="$1" scope="$2" attempt
-  if [[ -n "$(az role assignment list --assignee "$sp_id" --role "$role" --scope "$scope" \
+  if [[ -n "$(az role assignment list --assignee "$sp_id" --role "$role" --scope "$scope" --subscription "$subscription" \
         --query "[0].id" --output tsv)" ]]; then
     echo "'$role' on $scope already assigned."
     return 0
@@ -144,7 +177,7 @@ ensure_role() { # role scope
     # (PrincipalNotFound), so retry with backoff instead of failing once.
     if az role assignment create --assignee-object-id "$sp_id" \
          --assignee-principal-type ServicePrincipal \
-         --role "$role" --scope "$scope" --output none; then
+         --role "$role" --scope "$scope" --subscription "$subscription" --output none; then
       return 0
     fi
     echo "  retry $attempt/5 (Entra/RBAC replication)..." >&2
@@ -154,19 +187,8 @@ ensure_role() { # role scope
   return 1
 }
 
-rg_scope="/subscriptions/${subscription}/resourceGroups/${resource_group}"
 ensure_role "Contributor" "$rg_scope"
-
-vault_id="$(az keyvault show --name "$key_vault" --resource-group "$resource_group" \
-  --query id --output tsv 2>/dev/null || true)"
-if [[ -n "$vault_id" ]]; then
-  ensure_role "Key Vault Secrets Officer" "$vault_id"
-else
-  echo "warning: Key Vault $key_vault not found in $resource_group — skipping the" >&2
-  echo "         Key Vault Secrets Officer grant. Re-run this script once the vault" >&2
-  echo "         exists if deploys pass provider API keys (main.bicep writes them as" >&2
-  echo "         vault secrets, which needs data-plane RBAC on an RBAC-mode vault)." >&2
-fi
+ensure_role "Key Vault Secrets Officer" "$vault_id"
 
 # --- Wiring instructions (identifiers only — never secrets) -----------------------
 echo

@@ -94,11 +94,28 @@ credential anywhere** — no client secret exists to leak or rotate:
 - Contributor scoped to the resource group only, plus Key Vault Secrets
   Officer scoped to the provider-key vault only (least privilege).
 
-Order matters: run `scripts/bootstrap/azure-up.sh` first (device-code login →
-resource group → `infra/main.bicep` deployment), because the OIDC script
-refuses to run until the resource group exists. It finishes by printing the
-three GitHub Actions variables to set (step 2 above). It is safe to re-run;
-every step checks for the existing object first.
+Both entrypoints require the intended tenant, subscription, existing resource group,
+and RBAC-enabled Key Vault. They check the active account and the returned resource
+identities before any mutation. They do not select a subscription for you.
+
+```bash
+bash scripts/bootstrap/azure-oidc-setup.sh \
+  --tenant <tenant-id> --subscription <subscription-id> \
+  --resource-group <resource-group> --key-vault <vault-name>
+```
+
+```powershell
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 `
+  -Tenant <tenant-id> -Subscription <subscription-id> `
+  -ResourceGroup <resource-group> -KeyVault <vault-name>
+```
+
+These commands print a read-only plan. Review the account, resource identities,
+federated subjects and role scopes before explicitly adding `--apply` / `-Apply`.
+A missing vault, wrong tenant, disabled subscription or ambiguous app registration
+stops setup. Creating a missing resource group or vault is a separate infrastructure
+plan, validation/what-if and apply decision. After applying the reviewed identity
+plan, set the three printed GitHub Actions variables (step 2 above).
 
 Then rehearse: run "Helios Platform Deploy" via `workflow_dispatch` **from
 `main`** (the federated subject is branch-scoped) with `what_if=true` for a
