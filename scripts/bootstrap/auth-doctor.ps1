@@ -250,13 +250,20 @@ function Get-AIHubConfigState {
         # Typed MEMBERS bind too (review finding): System.Text.Json rejects a JSON
         # string where AIHubOptions declares a bool or an int, a non-integer number for
         # an int, and null for a non-nullable bool / int; a string member accepts a
-        # string or null, except provider.type (CreateAll dereferences it) and
-        # learning.localPath (Load dereferences it). Same rules as auto-login's step 0.
+        # string or null, except the strings the hub dereferences without a fallback:
+        # provider.type (CreateAll), learning.localPath (Load), an ENABLED cliAgents
+        # entry's name (the hub keys its provider map on it) and, when learning is
+        # enabled, learning.mode / tableEndpointEnv (CreateLearningStore). Same rules
+        # as auto-login's step 0 (review findings).
         $memberSchemas = @{
-            provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
-            cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-            learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+            provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+            cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+            cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+            learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+            learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
         }
+        # enabled absent → the hub's default (cliAgents true, learning false); exactly true → enabled.
+        $memberEnabled = { param($obj, [bool]$default) $p = $obj.PSObject.Properties['enabled']; if ($null -eq $p) { $default } else { ($p.Value -is [bool] -and $p.Value) } }
         $memberProblem = {
             param($obj, [hashtable]$schema, [string]$path)
             foreach ($m in $obj.PSObject.Properties) {
@@ -291,13 +298,13 @@ function Get-AIHubConfigState {
                 $cliIndex = 0
                 foreach ($element in @($sectionProp.Value)) {
                     if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $sectionShape = "cliAgents[$cliIndex] as $(& $shapeOf $element), not an object"; break }
-                    $sectionShape = & $memberProblem $element $memberSchemas.cliAgent "cliAgents[$cliIndex]"
+                    $sectionShape = & $memberProblem $element $(if (& $memberEnabled $element $true) { $memberSchemas.cliAgentEnabled } else { $memberSchemas.cliAgent }) "cliAgents[$cliIndex]"
                     if ($sectionShape) { break }
                     $cliIndex++
                 }
             }
             elseif ($rule.Name -eq 'learning') {
-                $sectionShape = & $memberProblem $sectionProp.Value $memberSchemas.learning 'learning'
+                $sectionShape = & $memberProblem $sectionProp.Value $(if (& $memberEnabled $sectionProp.Value $false) { $memberSchemas.learningEnabled } else { $memberSchemas.learning }) 'learning'
             }
             elseif ($rule.Name -eq 'routing') {
                 $chainProp = $sectionProp.Value.PSObject.Properties['defaultChain']

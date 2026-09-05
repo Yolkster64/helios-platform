@@ -275,13 +275,29 @@ function Invoke-HeliosAutoLogin {
     # where AIHubOptions declares a bool or an int ("enabled": "false",
     # "timeoutSeconds": "300"), a non-integer number for an int, and null for a
     # non-nullable bool / int; a string member accepts a string or null, except the
-    # two the hub dereferences unconditionally (provider type in CreateAll,
-    # learning.localPath in Load). Checked with the serializer's own contract —
-    # property names case-insensitive, unknown members ignored — before any repair.
+    # strings the hub dereferences without a fallback (review findings): provider
+    # type (CreateAll), learning.localPath (Load), an ENABLED cliAgents entry's name
+    # (the hub keys its provider map on it — a null key throws in the constructor),
+    # and, when learning is enabled, learning.mode and learning.tableEndpointEnv
+    # (CreateLearningStore lowercases the mode and reads the endpoint variable by
+    # that name). A disabled entry / section is never constructed, so its strings
+    # stay nullable. Checked with the serializer's own contract — property names
+    # case-insensitive, unknown members ignored — before any repair.
     $memberSchemas = @{
-        provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
-        cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-        learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+        provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+        cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+        cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+        learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+        learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+    }
+    # Enabled = the member is absent or exactly true (AIHubOptions defaults
+    # CliAgentOptions.Enabled to true and LearningOptions.Enabled to false; a
+    # non-bool value is caught by the schema itself).
+    function Test-JsonMemberEnabled {
+        param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][bool]$Default)
+        $enabledProp = $Object.PSObject.Properties['enabled']
+        if ($null -eq $enabledProp) { return $Default }
+        return ($enabledProp.Value -is [bool] -and $enabledProp.Value)
     }
     function Get-JsonMemberProblem {
         param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
@@ -358,14 +374,16 @@ function Invoke-HeliosAutoLogin {
                 if ($null -eq $cliElement -or $cliElement -isnot [System.Management.Automation.PSCustomObject]) {
                     throw "the active config ($aihubConfigPath) declares cliAgents[$cliIndex] as $(Get-JsonShapeName $cliElement), not an object — AIHubOptions binds each element as a CliAgentOptions object and ProviderFactory.CreateAll dereferences every one, so the hub fails to load or start on the file; remove the element or declare an object; aborting before any lane runs"
                 }
-                $memberProblem = Get-JsonMemberProblem -Object $cliElement -Schema $memberSchemas.cliAgent -Path "cliAgents[$cliIndex]"
+                $cliSchema = if (Test-JsonMemberEnabled -Object $cliElement -Default $true) { $memberSchemas.cliAgentEnabled } else { $memberSchemas.cliAgent }
+                $memberProblem = Get-JsonMemberProblem -Object $cliElement -Schema $cliSchema -Path "cliAgents[$cliIndex]"
                 if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
                 $cliIndex++
             }
         }
         $learningProp = $aihubParsed.PSObject.Properties['learning']
         if ($null -ne $learningProp) {
-            $memberProblem = Get-JsonMemberProblem -Object $learningProp.Value -Schema $memberSchemas.learning -Path 'learning'
+            $learningSchema = if (Test-JsonMemberEnabled -Object $learningProp.Value -Default $false) { $memberSchemas.learningEnabled } else { $memberSchemas.learning }
+            $memberProblem = Get-JsonMemberProblem -Object $learningProp.Value -Schema $learningSchema -Path 'learning'
             if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
         }
         $routingProp = $aihubParsed.PSObject.Properties['routing']
@@ -648,6 +666,31 @@ function Invoke-HeliosAutoLogin {
     # http(s) URL — so a successful vault pull lights nothing until the endpoint is
     # usable too. Returns the problems (names checked, values never echoed) and records
     # the owner action each one needs; empty for pairs without azure-openai members.
+    # A custom Models baseUrl the factory REJECTS (review finding): CreateGitHubModels
+    # returns an unconfigured agent for a baseUrl that is not an absolute http(s) URL,
+    # so a key exported for that entry lights nothing until the config is fixed — the
+    # repair is the baseUrl, named once (the text is shared by every path that meets
+    # the same entry so the summary dedupes). baseUrl is config, never a secret.
+    function Add-GitHubModelsBaseUrlAction {
+        param([Parameter(Mandatory)][string]$Name, [AllowEmptyString()][string]$BaseUrl = '', [AllowEmptyString()][string]$Note = '')
+        Add-OwnerAction -Text "fix providers.$Name.baseUrl in ${aihubConfigLabel}: '$BaseUrl' is $Note — set an absolute https URL (the public origin is https://models.github.ai/inference; omit baseUrl to use it)"
+    }
+    function Test-GitHubModelsOriginRejected {
+        param([AllowNull()]$Origin)
+        return ($null -ne $Origin -and -not $Origin.Public -and $Origin.Note -like '*ProviderFactory.CreateGitHubModels reports the provider unconfigured*')
+    }
+    function Get-GitHubModelsOriginProblems {
+        param([Parameter(Mandatory)]$Pair)
+        $problems = @()
+        foreach ($member in @($Pair.Members | Where-Object { $_.Type -eq 'github-models' })) {
+            $origin = Test-PublicModelsOrigin -BaseUrl $member.BaseUrl
+            if (Test-GitHubModelsOriginRejected $origin) {
+                $problems += "providers.$($member.Name).baseUrl is $($origin.Note)"
+                Add-GitHubModelsBaseUrlAction -Name $member.Name -BaseUrl $member.BaseUrl -Note $origin.Note
+            }
+        }
+        return $problems
+    }
     function Get-AzureOpenAiEndpointProblems {
         param([Parameter(Mandatory)]$Pair)
         $problems = @()
@@ -762,7 +805,7 @@ function Invoke-HeliosAutoLogin {
                 # custom endpoint, which this script never allows for the keyed path either.
                 $blankBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
                 $blankOrigin = if ($provType -eq 'github-models') { Test-PublicModelsOrigin -BaseUrl $blankBaseUrl } else { [pscustomobject]@{ Public = $true; Note = ''; Host = '' } }
-                $blankEnvProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; OriginNote = $blankOrigin.Note })
+                $blankEnvProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; BaseUrl = $blankBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $blankOrigin); OriginNote = $blankOrigin.Note })
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # guard only: every keyed type has a default
@@ -806,7 +849,10 @@ function Invoke-HeliosAutoLogin {
                 $endpointProp = $prov.PSObject.Properties['endpointEnv']
                 $memberEndpointEnv = if ($null -eq $endpointProp -or $null -eq $endpointProp.Value) { 'AZURE_OPENAI_ENDPOINT' } else { [string]$endpointProp.Value }
             }
-            $pairIndex[$pairKey].Members.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; EndpointEnv = $memberEndpointEnv })
+            # github-models members carry their baseUrl too (review finding): the export
+            # lights the entry only when CreateGitHubModels accepts that URL.
+            $memberBaseUrl = if ($provType -eq 'github-models' -and $prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+            $pairIndex[$pairKey].Members.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; EndpointEnv = $memberEndpointEnv; BaseUrl = $memberBaseUrl })
         }
         # CLI-owned variables join the reader map (review findings): an enabled codex
         # agent reads the fixed OPENAI_API_KEY, an enabled claude agent ANTHROPIC_API_KEY
@@ -895,6 +941,7 @@ function Invoke-HeliosAutoLogin {
                 SecretName        = $entry.SecretName
                 Env               = $entry.Env
                 Lights            = (($entry.Consumers -join ', ') + $cliHint + ' — per config/aihub.json')
+                Members           = @($entry.Members)
                 EntraFallbackOnly = ($entraMembers.Count -gt 0 -and $otherReadersOfEnv.Count -eq 0)
                 EndpointEnvs      = @($entraMembers | ForEach-Object { $_.EndpointEnv } | Select-Object -Unique)
             }
@@ -981,7 +1028,7 @@ function Invoke-HeliosAutoLogin {
         $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
         # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
         $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
-        $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note })
+        $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note; BaseUrl = $ghBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $ghOrigin) })
     }
     # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
     # known (review finding): a public entry listed before a custom-baseUrl entry
@@ -1027,7 +1074,7 @@ function Invoke-HeliosAutoLogin {
             "provider(s) $quotedCustom (type github-models) point at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnvName directly) applies"
         }
         else { '' }
-        $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip })
+        $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip; RejectedOwners = @($owners | Where-Object { $_.Rejected }) })
     }
     $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
     $ghModelsPublicEnvs = @($ghModelsPublicTargets | ForEach-Object { $_.Env })
@@ -1132,9 +1179,12 @@ function Invoke-HeliosAutoLogin {
                     $exportedNames.Add($pair.Env)
                     # A key alone lights no azure-openai entry (review finding): the
                     # endpoint must be usable too, and its repair is an owner action.
-                    $exportedEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair)
+                    # The same for a github-models entry whose custom baseUrl the
+                    # factory rejects (review finding): the pull succeeded, the entry
+                    # stays unconfigured, and the baseUrl repair is the owner action.
+                    $exportedEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair) + @(Get-GitHubModelsOriginProblems -Pair $pair)
                     if ($exportedEndpointProblems.Count -gt 0) {
-                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights); but CreateAzureOpenAi still reports the azure-openai entry unconfigured because $($exportedEndpointProblems -join '; ') — the endpoint repair is recorded as an owner action"
+                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights); but ProviderFactory still reports an entry unconfigured because $($exportedEndpointProblems -join '; ') — the repair is recorded as an owner action"
                     }
                     else {
                         Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
@@ -1300,7 +1350,12 @@ function Invoke-HeliosAutoLogin {
         else { '' }
         $heldRepairAction = "grant models:read to the credential held by $($target.Env) — gh auth refresh -h github.com --scopes models:read (then re-export $($target.Env)), or a PAT that includes models:read$heldVaultClause"
         if (-not $target.Public) {
-            Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it"
+            # A rejected custom baseUrl is a config defect, not just a credential-family
+            # boundary (review finding): without this action auto-login could finish
+            # having named no repair for an entry the factory will never light.
+            foreach ($rejected in @($target.RejectedOwners)) { Add-GitHubModelsBaseUrlAction -Name $rejected.Name -BaseUrl $rejected.BaseUrl -Note $rejected.Note }
+            $rejectedText = if (@($target.RejectedOwners).Count -gt 0) { '; CreateGitHubModels reports ' + ((@($target.RejectedOwners | ForEach-Object { "'$($_.Name)'" })) -join ', ') + ' unconfigured until its baseUrl is fixed (owner action listed)' } else { '' }
+            Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it$rejectedText"
             continue
         }
         if (Test-EnvValue $target.Env) {
@@ -1560,7 +1615,9 @@ function Invoke-HeliosAutoLogin {
             # vault secret or a directly-set variable can light it.
             $blankCustomText = if ($blank.OriginHost) { "points at custom endpoint '$($blank.OriginHost)'" } else { 'points at a custom baseUrl' }
             if ($blank.OriginNote) { $blankCustomText += " ($($blank.OriginNote))" }
-            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; the entry $blankCustomText, so GITHUB_TOKEN is NOT accepted as its fallback — a GitHub credential is never sent to a non-GitHub endpoint (the same rule the keyed path applies)"
+            # A rejected baseUrl gets its config repair here too (review finding).
+            if ($blank.Rejected) { Add-GitHubModelsBaseUrlAction -Name $blank.Name -BaseUrl $blank.BaseUrl -Note $blank.OriginNote }
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; the entry $blankCustomText, so GITHUB_TOKEN is NOT accepted as its fallback — a GitHub credential is never sent to a non-GitHub endpoint (the same rule the keyed path applies)$(if ($blank.Rejected) { '; CreateGitHubModels reports it unconfigured until its baseUrl is fixed (owner action listed)' })"
         }
         elseif ((Test-EnvValue 'GITHUB_TOKEN') -and $ghTokenForeignReaders.Count -gt 0) {
             # Same ownership rule as the public targets (review finding): the hub's

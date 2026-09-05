@@ -556,9 +556,14 @@ function Get-CliOwnedEnvNames {
 # null, except provider.type and learning.localPath, which the hub dereferences.
 # Same rules as auto-login.ps1's step 0 and auth-doctor's Get-AIHubConfigState.
 $script:aihubMemberSchemas = @{
-    provider = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
-    cliAgent = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-    learning = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+    provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+    cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+    # An ENABLED entry's name is required (the hub keys its provider map on it) and,
+    # when learning is enabled, mode / tableEndpointEnv are dereferenced by
+    # CreateLearningStore (review findings) — the same rule as auto-login / auth-doctor.
+    cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+    learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+    learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
 }
 function Get-AIHubRoutingProblem {
     param([Parameter(Mandatory)]$Routing)
@@ -585,6 +590,13 @@ function Get-AIHubRoutingProblem {
         }
     }
     return ''
+}
+# enabled absent → the hub's default (cliAgents true, learning false); exactly true → enabled.
+function Test-AIHubMemberEnabled {
+    param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][bool]$Default)
+    $enabledProp = $Object.PSObject.Properties['enabled']
+    if ($null -eq $enabledProp) { return $Default }
+    return ($enabledProp.Value -is [bool] -and $enabledProp.Value)
 }
 function Get-AIHubMemberProblem {
     param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
@@ -662,13 +674,13 @@ function Get-ConfiguredGitHubModelsEnvs {
                 $cliIndex = 0
                 foreach ($element in @($sectionValue)) {
                     if ($null -eq $element -or $element -isnot [System.Management.Automation.PSCustomObject]) { $badElement = "cliAgents[$cliIndex] is $(if ($null -eq $element) { 'null' } else { 'a non-object' })"; break }
-                    $badElement = Get-AIHubMemberProblem -Object $element -Schema $script:aihubMemberSchemas.cliAgent -Path "cliAgents[$cliIndex]"
+                    $badElement = Get-AIHubMemberProblem -Object $element -Schema $(if (Test-AIHubMemberEnabled -Object $element -Default $true) { $script:aihubMemberSchemas.cliAgentEnabled } else { $script:aihubMemberSchemas.cliAgent }) -Path "cliAgents[$cliIndex]"
                     if ($badElement) { break }
                     $cliIndex++
                 }
             }
             elseif ($shape -eq $rule.Wanted -and $rule.Name -eq 'learning') {
-                $badElement = Get-AIHubMemberProblem -Object $sectionValue -Schema $script:aihubMemberSchemas.learning -Path 'learning'
+                $badElement = Get-AIHubMemberProblem -Object $sectionValue -Schema $(if (Test-AIHubMemberEnabled -Object $sectionValue -Default $false) { $script:aihubMemberSchemas.learningEnabled } else { $script:aihubMemberSchemas.learning }) -Path 'learning'
             }
             elseif ($shape -eq $rule.Wanted -and $rule.Name -eq 'routing') {
                 # Nested routing members too (review finding): defaultChain binds a
