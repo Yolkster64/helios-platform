@@ -1095,20 +1095,20 @@ function Test-AzLane {
     }
 
     # 2. Service principal from the environment — fully non-interactive.
-    #    Credential candidates in preference order (review finding): a certificate
-    #    is preferred over a shared secret, but only a certificate whose file exists
-    #    is a candidate at all, and a certificate az rejects must not throw away a
-    #    valid secret sitting next to it — every candidate is tried before the later
-    #    rungs get a turn. Path existence only; certificate contents are never read.
+    #    Follow EnvironmentCredential selection: a secret takes precedence over a
+    #    certificate; a rejected selected credential must not fall through to another
+    #    principal. Path existence only; certificate contents are never read.
     $spCandidates = [System.Collections.Generic.List[string]]::new()
     $certPathValue = ''
     if ($spReady) {
         $certPathValue = ([string]$env:AZURE_CLIENT_CERTIFICATE_PATH).Trim()
-        if (-not [string]::IsNullOrWhiteSpace($certPathValue)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_SECRET)) {
+            $spCandidates.Add('AZURE_CLIENT_SECRET')
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($certPathValue)) {
             if (Test-Path -LiteralPath $certPathValue -PathType Leaf) { $spCandidates.Add('AZURE_CLIENT_CERTIFICATE_PATH') }
             else { $reason += '; AZURE_CLIENT_CERTIFICATE_PATH is set but no file exists at that path (path checked only) — certificate login skipped' }
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$env:AZURE_CLIENT_SECRET)) { $spCandidates.Add('AZURE_CLIENT_SECRET') }
     }
     if ($spCandidates.Count -gt 0) {
         $credOrder = @($spCandidates) -join ', then '
@@ -1146,7 +1146,9 @@ function Test-AzLane {
             $spFailures.Add("$credEnvName was rejected$spAad, exit $($login.ExitCode)")
         }
         $reason += ('; service-principal repair failed — ' + (@($spFailures) -join '; ') + ' — raw output never echoed')
-        # Fall through: the next automatic rung may still work.
+        return New-LaneResult -Lane 'az' -State 'needs-owner' -Method 'service-principal' `
+            -Detail "$reason; the selected environment credential failed; a certificate, managed identity or cached login cannot mask it" `
+            -OwnerAction 'repair the selected Azure environment credential, or explicitly remove it before choosing another identity; values must remain outside logs'
     }
 
     # 3. Managed identity — also fully non-interactive. IDENTITY_ENDPOINT covers App

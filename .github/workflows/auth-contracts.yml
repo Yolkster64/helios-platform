@@ -8,6 +8,7 @@ on:
       - 'scripts/bootstrap/auto-login.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
+      - 'scripts/verify/tests/test_auth_boundaries.ps1'
       - '.github/workflows/auth-contracts.yml'
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - 'scripts/bootstrap/auto-login.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
+      - 'scripts/verify/tests/test_auth_boundaries.ps1'
       - '.github/workflows/auth-contracts.yml'
 
 permissions:
@@ -35,3 +37,4 @@ jobs:
         run: |
           ./scripts/verify/tests/test_auth_continuation.ps1
           ./scripts/verify/tests/test_auth_readiness.ps1
+          ./scripts/verify/tests/test_auth_boundaries.ps1

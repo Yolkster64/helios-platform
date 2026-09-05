@@ -256,7 +256,10 @@ function Test-TrustedManagedIdentityEndpoint {
         return ''
     }
     $endpointHost = $parsed.DnsSafeHost
-    $isLoopback = ($endpointHost -eq 'localhost') -or ($endpointHost -eq '::1') -or ($endpointHost -match '^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+    $endpointAddress = $null
+    $isLoopback = ($endpointHost -eq 'localhost') -or
+        ([System.Net.IPAddress]::TryParse($endpointHost, [ref]$endpointAddress) -and
+            [System.Net.IPAddress]::IsLoopback($endpointAddress))
     $isImds = ($endpointHost -eq '169.254.169.254')
     if (-not $isLoopback -and -not $isImds) {
         $Notes.Add("managed-identity: ignored $Label — host '$endpointHost' is not a platform-local endpoint (loopback or 169.254.169.254); no identity header or secret was sent to it")
@@ -297,6 +300,34 @@ function Test-TrustedManagedIdentityEndpoint {
         }
     }
     return $parsed.GetLeftPart([System.UriPartial]::Path).TrimEnd('/')
+}
+function Get-TrustedArcKeyPath {
+    param([string]$Path, [string[]]$TokenDirectories)
+    # Reject links/reparse points in EVERY component, including the token directory
+    # and its ancestors. A leaf-only ResolveLinkTarget misses directory escapes.
+    # Failure to inspect a component is a refusal, never permission to read it.
+    try {
+        if (-not [System.IO.Path]::IsPathFullyQualified($Path)) { return '' }
+        $full = [System.IO.Path]::GetFullPath($Path)
+        if (-not $full.EndsWith('.key', [System.StringComparison]::OrdinalIgnoreCase)) { return '' }
+        $comparison = if ($IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+        $contained = $false
+        foreach ($directory in $TokenDirectories) {
+            if (-not [System.IO.Path]::IsPathFullyQualified($directory)) { continue }
+            $prefix = [System.IO.Path]::GetFullPath($directory).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+            if ($full.StartsWith($prefix, $comparison)) { $contained = $true; break }
+        }
+        if (-not $contained) { return '' }
+        $current = [System.IO.Path]::GetPathRoot($full)
+        foreach ($part in $full.Substring($current.Length).Split([System.IO.Path]::DirectorySeparatorChar, [System.StringSplitOptions]::RemoveEmptyEntries)) {
+            $current = Join-Path $current $part
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return '' }
+        }
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { return '' }
+        return $full
+    }
+    catch { return '' }
 }
 function Resolve-AzureCloudEndpoints {
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -376,6 +407,11 @@ function Resolve-AzureCloudEndpoints {
         $arm = 'https://management.azure.com'
         $name = 'AzureCloud'
         $source = 'public-cloud default (no valid AZURE_AUTHORITY_HOST / ARM_ENDPOINT; az absent or its cloud unreadable)'
+    }
+    # The current hub's token probe and ArmClient use public ARM. A successful
+    # sovereign-cloud probe would not verify that runtime, so fail before OAuth.
+    if (-not $unresolved -and ($authority.TrimEnd('/') -ne 'https://login.microsoftonline.com' -or $arm.TrimEnd('/') -ne 'https://management.azure.com')) {
+        $unresolved = 'the selected cloud is unsupported by the current hub: its token probe and ArmClient target public Azure; configure matching runtime cloud support before verification'
     }
     if ($unresolved) {
         $warnings.Add("unresolved cloud — $unresolved")
@@ -1136,8 +1172,8 @@ function Test-AzureLane {
         # or present a sovereign token to the public Resource Manager — every rung
         # would fail and the terminal advice would prescribe a public-cloud login.
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'cloud-config' `
-            -Detail ("the Azure control-plane endpoints do not resolve to ONE cloud, so no credential source was tried and nothing was sent anywhere: $($chainNotes -join '; ')") `
-            -OwnerAction 'set AZURE_AUTHORITY_HOST and AZURE_RESOURCE_MANAGER_ENDPOINT (or ARM_ENDPOINT) to the SAME cloud — e.g. https://login.microsoftonline.us + https://management.usgovcloudapi.net for Azure Government — or unset both and select the cloud with: az cloud set --name <AzureCloud|AzureUSGovernment|AzureChinaCloud|registered-name>'
+            -Detail ("the Azure control-plane endpoints do not resolve to a cloud supported by this hub, so no credential source was tried and nothing was sent anywhere: $($chainNotes -join '; ')") `
+            -OwnerAction 'align the selected cloud with the hub runtime before retrying; current ArmClient/token-probe support is public Azure only; sovereign deployments require matching runtime cloud support, not a public-cloud sign-in'
     }
     $chainNotes.Add("cloud: $($azureCloud.Name) (authority $($azureCloud.Authority), ARM $($azureCloud.ArmResource); from $($azureCloud.Source))")
     # 1. CI OIDC — AVAILABILITY evidence, not a completed login (review finding):
@@ -1426,10 +1462,8 @@ function Test-AzureLane {
         $chainNotes.Add("managed-identity ($Kind): $miStatus")
         return $false
     }
-    # Every DECLARED endpoint is tried in order until one yields a token (review
-    # findings): a preferred IDENTITY_ENDPOINT that fails the shape check OR answers
-    # without a token (unreachable, non-200, 200 without access_token) must not silence
-    # a working legacy MSI_ENDPOINT. IMDS is probed only when neither is declared.
+    # Select one declared implementation before probing. A failed IDENTITY_ENDPOINT
+    # cannot be rescued by MSI_ENDPOINT or a cached CLI principal.
     $miDeclared = $false
     $miUsableDeclared = $false   # at least one declared endpoint passed the shape check
     $miKind = ''
@@ -1448,6 +1482,7 @@ function Test-AzureLane {
         [pscustomobject]@{ Kind = 'identity-endpoint'; Env = 'IDENTITY_ENDPOINT'; HeaderEnv = 'IDENTITY_HEADER'; HeaderName = 'X-IDENTITY-HEADER'; ApiVersion = '2019-08-01'; Metadata = $false; Selector = 'client_id' }
         [pscustomobject]@{ Kind = 'msi-endpoint'; Env = 'MSI_ENDPOINT'; HeaderEnv = 'MSI_SECRET'; HeaderName = 'Secret'; ApiVersion = '2017-09-01'; Metadata = $true; Selector = 'clientid' }
     )
+    $miCandidates = @($miCandidates | Where-Object { Test-EnvValue $_.Env } | Select-Object -First 1)
     foreach ($miCandidate in $miCandidates) {
         if (-not (Test-EnvValue $miCandidate.Env)) { continue }
         $miDeclared = $true
@@ -1552,22 +1587,13 @@ function Test-AzureLane {
                 $miSkipOutcomeNote = $true
             }
             else {
-                # A link is followed only while it STAYS inside the token directory
-                # (review finding): otherwise a symlink planted there would smuggle the
-                # traversal past the canonical prefix test above.
-                $miKeyFinal = $miKeyResolved
-                try {
-                    $miLinkTarget = (Get-Item -LiteralPath $miKeyResolved -Force -ErrorAction Stop).ResolveLinkTarget($true)
-                    if ($null -ne $miLinkTarget) { $miKeyFinal = [System.IO.Path]::GetFullPath($miLinkTarget.FullName) }
-                }
-                catch { $miKeyFinal = $miKeyResolved }
-                $miLinkTrusted = $false
-                foreach ($arcDirFull in $arcDirsFull) {
-                    if ($miKeyFinal.StartsWith($arcDirFull, [System.StringComparison]::OrdinalIgnoreCase)) { $miLinkTrusted = $true; break }
-                }
+                # Reject every linked/reparse component before reading. Lexical
+                # containment and a leaf-only link check cannot establish containment.
+                $miKeyFinal = Get-TrustedArcKeyPath -Path $miKeyResolved -TokenDirectories $arcTokenDirs
+                $miLinkTrusted = -not [string]::IsNullOrWhiteSpace($miKeyFinal)
                 $arcSecret = ''
                 if (-not $miLinkTrusted) {
-                    $chainNotes.Add("managed-identity ($miKind): the Arc key file resolves through a link to a path outside the documented agent token directories — refused; the file was not read and no second request was made")
+                    $chainNotes.Add("managed-identity ($miKind): the Arc key path is outside the token directory, contains a link/reparse point, or could not be inspected — refused; the file was not read and no second request was made")
                     $miSkipOutcomeNote = $true
                 }
                 else { try { $arcSecret = ([string](Get-Content -LiteralPath $miKeyFinal -Raw -ErrorAction Stop)).Trim() } catch { $arcSecret = '' } }
@@ -1608,6 +1634,12 @@ function Test-AzureLane {
             -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
         # Token selection is complete; ARM errors cannot select a different principal.
         return $arm.Lane
+    }
+    if ($miDeclared) {
+        $miState = if ($miAuthRejected -or -not $miUsableDeclared) { 'needs-owner' } else { 'unavailable' }
+        return New-LaneResult -Lane 'azure' -State $miState -Source "managed-identity ($miKind)" `
+            -Detail ("selected managed identity did not yield a token; no alternate endpoint or CLI identity was tried: " + ($chainNotes -join '; ')) `
+            -OwnerAction 'verify the selected managed-identity endpoint and identity assignment on this host; retry transient failures without changing credentials'
     }
     # A managed-identity SOURCE exists when a declared endpoint passed the shape check
     # (App Service / Functions / Arc / Cloud Shell hosts) or IMDS actually answered a

@@ -150,8 +150,8 @@ function Invoke-HeliosAutoLogin {
     # whose variable is recovered by an exact-identifier match at reconcile time.
     $ownerActions = [System.Collections.Generic.List[object]]::new()
     function Add-OwnerAction {
-        param([Parameter(Mandatory)][string]$Text, [AllowNull()][AllowEmptyString()][string]$Env = '', [switch]$Imported)
-        $ownerActions.Add([pscustomobject]@{ Text = $Text.Trim(); Env = $(if ($Imported) { $null } else { [string]$Env }) })
+        param([Parameter(Mandatory)][string]$Text, [AllowNull()][AllowEmptyString()][string]$Env = '', [switch]$Imported, [switch]$RepositorySecret)
+        $ownerActions.Add([pscustomobject]@{ Text = $Text.Trim(); Env = $(if ($RepositorySecret) { '' } elseif ($Imported) { $null } else { [string]$Env }) })
     }
 
     function Write-Report {
@@ -480,7 +480,11 @@ function Invoke-HeliosAutoLogin {
             foreach ($lane in @($doctorReport.lanes)) {
                 $laneState = if ($lane.PSObject.Properties['state']) { [string]$lane.state } else { '' }
                 if ($lane.lane -ne 'az' -and $laneState -ne 'disabled' -and $lane.PSObject.Properties['ownerAction'] -and "$($lane.ownerAction)".Trim()) {
-                    Add-OwnerAction -Text "$($lane.ownerAction)" -Imported
+                    # Repository-secret actions concern Actions storage, not the
+                    # process environment populated by this script. Never retire
+                    # them after an unrelated provider uses the same variable name.
+                    $repositorySecret = ([string]$lane.ownerAction -match '(?i)\bgh\s+secret\s+set\b') -or ($lane.lane -in @('slack', 'linear', 'github-admin', 'copilot-dispatch'))
+                    Add-OwnerAction -Text "$($lane.ownerAction)" -Imported -RepositorySecret:$repositorySecret
                 }
             }
         }
@@ -1644,8 +1648,7 @@ function Invoke-HeliosAutoLogin {
                     Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and CreateGitHubModels falls back to it — satisfied without an export"
                 }
                 'unverifiable' {
-                    $blankSatisfied = $true
-                    Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN holds a value and CreateGitHubModels falls back to it, but its models:read permission is NOT verifiable here — if model calls 403, grant models:read"
+                    Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN holds a value but its models:read permission is not verifiable here; the provider repair remains open until permission is proven"
                 }
                 'stripped' {
                     # Never satisfied (review finding): the only fallback the hub has for
