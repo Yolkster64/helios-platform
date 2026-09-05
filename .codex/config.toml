@@ -1,0 +1,11 @@
+# Project-scoped MCP registration; loaded only after the user trusts this checkout.
+# Relative cwd resolves from this .codex directory. Build HELIOS.sln first.
+[mcp_servers.helios]
+command = "dotnet"
+args = ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release", "--no-build", "--no-restore", "--no-launch-profile"]
+cwd = ".."
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+
+[mcp_servers.helios.env]
+HELIOS_REPO_ROOT = "."

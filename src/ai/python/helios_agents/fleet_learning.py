@@ -11,9 +11,9 @@ Each appended JSONL line mirrors the C# ``RoutingOutcome`` record
 (src/ai/HELIOS.AIHub/Learning/LearningStore.cs) field for field, using its
 exact ``JsonPropertyName`` names and casing::
 
-    {"timestamp": ..., "taskType": ..., "provider": ..., "model": "",
-     "success": ..., "latencyMs": ..., "costUsd": 0.0, "quality": null,
-     "pool": ..., "source": "fleet-lane"}
+    {"outcomeId": null, "timestamp": ..., "taskType": ..., "provider": ...,
+     "model": "", "success": ..., "latencyMs": ..., "costUsd": 0.0,
+     "quality": null, "pool": ..., "source": "fleet-lane"}
 
 - ``provider`` is ``pool:<poolName>`` and ``pool`` the bare pool name, both
   resolved from the task's board through the manifest's ``pools`` entries
@@ -144,6 +144,7 @@ def _record(task: dict[str, Any], pool: str) -> dict[str, Any]:
     """One learning-store record; key order mirrors the C# declaration."""
     timestamp = str(task.get("finishedAt") or task.get("claimedAt") or "") or _utc_now()
     return {
+        "outcomeId": None,
         "timestamp": timestamp,
         "taskType": _lane_of(task),
         "provider": POOL_PROVIDER_PREFIX + pool,

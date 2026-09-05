@@ -2,7 +2,7 @@
   "mcpServers": {
     "helios": {
       "command": "dotnet",
-      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
+      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release", "--no-build", "--no-restore", "--no-launch-profile"],
       "env": {
         "HELIOS_REPO_ROOT": "."
       }

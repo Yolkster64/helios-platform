@@ -64,6 +64,7 @@ Prerequisites: Claude Code and the .NET 10 SDK. Start from the HELIOS repository
 
 ```bash
 dotnet build HELIOS.sln -c Release
+python3 scripts/verify/mcp-health.py
 claude --plugin-dir ./plugins/helios-operator
 ```
 

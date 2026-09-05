@@ -40,7 +40,8 @@ __pycache__/
 .Python
 
 ## Editor and IDE
-.vscode/
+.vscode/*
+!.vscode/mcp.json
 .idea/
 *.swp
 *.swo

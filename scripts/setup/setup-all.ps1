@@ -14,6 +14,7 @@ convention: PowerShell wraps, it never reimplements):
   c. scripts/bootstrap/setup-ai-clis.ps1               (-VerifyOnly unless -Fix)
   d. config/fleet/fleet-topology.json                  (parses + pools listed)
   e. .mcp.json                                         (parses + server project exists)
+  f. scripts/verify/mcp-health.py                       (bounded stdio discovery; no tool calls)
 
 The result is a single INVENTORY table: component / status (ready | needs-attention) /
 detail / next command to fix. Exit 0 when everything is ready, 2 otherwise.
@@ -385,6 +386,28 @@ if (Test-Path -LiteralPath $mcpPath) {
 $components += New-Component -Name 'mcp-registration' -Ready $mcpReady -Detail $mcpDetail `
     -FixCommand 'dotnet build HELIOS.sln -c Release   # builds src/mcp/HELIOS.Mcp; then re-check .mcp.json paths'
 Write-ChildOutput @($mcpDetail)
+
+# --- f. Running MCP transport (separate from registration and provider readiness) --
+$mcpRuntimeReady = $false
+$mcpRuntimeDetail = 'Python or dotnet unavailable for the MCP handshake'
+$mcpPython = Resolve-HeliosTool -Name 'python3' -RepoRoot $repoRoot
+if (-not $mcpPython.Found) { $mcpPython = Resolve-HeliosTool -Name 'python' -RepoRoot $repoRoot }
+$mcpDotnet = Resolve-HeliosTool -Name 'dotnet' -RepoRoot $repoRoot
+if ($mcpPython.Found -and $mcpDotnet.Found) {
+    $mcpProbe = Invoke-Step -Executable $mcpPython.Path -Arguments @(
+        (Join-Path $repoRoot 'scripts/verify/mcp-health.py'),
+        '--repo-root', $repoRoot, '--dotnet', $mcpDotnet.Path, '--timeout', '30')
+    try {
+        $mcpEvidence = ($mcpProbe.Output -join "`n") | ConvertFrom-Json
+        $mcpRuntimeReady = $mcpProbe.ExitCode -eq 0 -and
+            $mcpEvidence.ready -is [bool] -and $mcpEvidence.ready
+        $mcpRuntimeDetail = [string]$mcpEvidence.detail
+    }
+    catch { $mcpRuntimeDetail = 'MCP probe returned no valid readiness report' }
+}
+$components += New-Component -Name 'mcp-runtime' -Ready $mcpRuntimeReady -Detail $mcpRuntimeDetail `
+    -FixCommand 'dotnet build HELIOS.sln -c Release; python3 scripts/verify/mcp-health.py'
+Write-ChildOutput @($mcpRuntimeDetail)
 
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })
