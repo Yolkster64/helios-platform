@@ -62,7 +62,11 @@ identity, detail, ownerAction}):
                               (login.microsoftonline.com for the public cloud; scope
                               <ARM endpoint>/.default; body built
                               in memory, response token held in a local variable only,
-                              never logged). With AZURE_CLIENT_CERTIFICATE_PATH instead
+                              never logged). If this selected credential cannot obtain
+                              a token, stop as DefaultAzureCredential does: rejections
+                              need repair; transient failures remain retryable without
+                              masking the failure with a later credential source.
+                              With AZURE_CLIENT_CERTIFICATE_PATH instead
                               of a secret, the JWT client assertion is never hand-rolled
                               here — the flow is delegated to `az login
                               --service-principal --certificate` + `az account
@@ -1196,9 +1200,8 @@ function Test-AzureLane {
     # diagnostic run must never do (see the cert rung below).
     $spSecretReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and
         (Test-EnvValue 'AZURE_CLIENT_SECRET')
-    # Cert availability is INDEPENDENT of the secret (review finding): during
-    # credential rotation a stale secret with a valid certificate is a normal state,
-    # and the cert path must still be reported after the secret exchange fails.
+    # Inspect certificate availability independently, but a configured secret takes
+    # precedence. Selecting the certificate requires unsetting the secret first.
     $spCertReady = (Test-EnvValue 'AZURE_CLIENT_ID') -and
         (Test-EnvValue 'AZURE_TENANT_ID') -and (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH')
     # A set-but-missing certificate FILE cannot run the flow either (review
@@ -1230,6 +1233,7 @@ function Test-AzureLane {
         $tokenProbe = Invoke-HttpProbe -Url $tokenUrl -Method 'Post' -Body $body `
             -ContentType 'application/x-www-form-urlencoded' -TimeoutSec $TimeoutSeconds
         $body = ''   # done with the credential material
+        $spToken = ''
         if ($tokenProbe.Status -eq 200) {
             $tokenReply = Test-ParsedJson $tokenProbe.Body
             $spToken = [string](Get-OptionalProperty $tokenReply 'access_token' '')
@@ -1248,9 +1252,9 @@ function Test-AzureLane {
         else {
             $spStatus = if ($tokenProbe.Status -eq 0) { "transport failure ($($tokenProbe.Transport))" } else { "HTTP $($tokenProbe.Status)" }
             $chainNotes.Add("env-service-principal: token endpoint $spStatus (raw error body never echoed)")
-            # 400/401 from the token endpoint = the SP credential itself was rejected
+            # 400/401/403 from the token endpoint = the SP credential was rejected
             # (invalid_client and friends) — a definitive rejection, unlike 5xx/transport.
-            if ($tokenProbe.Status -in 400, 401) {
+            if ($tokenProbe.Status -in 400, 401, 403) {
                 # TERMINAL (review finding): Azure.Identity's DefaultAzureCredential stops at
                 # a configured EnvironmentCredential that FAILS authentication — only an
                 # unavailable credential falls through — so while these three variables
@@ -1260,8 +1264,15 @@ function Test-AzureLane {
                 return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal' `
                     -Identity "service principal $clientId" `
                     -Detail ("the configured service principal (AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET) was rejected by the token endpoint ($spStatus; raw error body never echoed) — DefaultAzureCredential stops at a configured credential that fails authentication and never tries managed identity or the az cache, so the hub fails here whatever the later rungs hold; chain so far: $($chainNotes -join '; ')") `
-                    -OwnerAction 'rotate the secret of the app behind AZURE_CLIENT_ID (az ad app credential reset --id <AZURE_CLIENT_ID> --append) and re-export AZURE_CLIENT_SECRET from the new value (never on argv or in a file), or unset AZURE_CLIENT_SECRET / AZURE_CLIENT_CERTIFICATE_PATH so DefaultAzureCredential falls through to managed identity or the az cache'
+                    -OwnerAction 'repair the selected AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET credential, or deliberately unset AZURE_CLIENT_SECRET when choosing another credential mode; a later login cannot override this selected environment credential'
             }
+        }
+        if (-not $spToken) {
+            # Deployed-credential continuation also stops on transport/service
+            # failures and malformed token responses. They are retryable, but a
+            # later MI/CLI token cannot prove the selected SDK credential ready.
+            return New-LaneResult -Lane 'azure' -State 'unavailable' -Source 'env-service-principal' `
+                -Detail ("the selected environment service principal did not obtain a token ($($chainNotes -join '; ')); DefaultAzureCredential stops here, so later sources were not tried; check service/transport health and retry without rotating credentials on this evidence")
         }
     }
     # 2b. Federated workload identity (review finding): AKS / Container Apps with a
@@ -1805,7 +1816,7 @@ if ($DryRun) {
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '           an override counts only as the canonical https origin of a known cloud host (default port, no userinfo, path, query or fragment); a rejected AZURE_RESOURCE_MANAGER_ENDPOINT still lets ARM_ENDPOINT be tried'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
-    Write-Host '           2/2b: a 400/401 from the token endpoint => needs-owner IMMEDIATELY (DefaultAzureCredential stops at a configured credential that fails authentication; managed identity and the az cache are never consulted) — transport failures / 5xx fall through to the next rung'
+    Write-Host '           2/2b: a 400/401 from the token endpoint => needs-owner IMMEDIATELY; env SP also treats 403 as rejection. Env SP transport / 5xx / malformed responses => unavailable without falling through (retry the selected credential; do not rotate on transient evidence)'
     Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source once a non-blank assertion is read; a missing / empty file is a definitive owner step (fix the mount), never retry advice'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '              the Arc shape (40342/metadata/identity/oauth2/token) runs its documented two-step handshake: Metadata request, then Basic authorization read from the WWW-Authenticate realm file, accepted only under the agent token directories with a .key extension (contents never echoed)'
