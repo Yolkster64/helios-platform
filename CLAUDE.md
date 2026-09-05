@@ -38,11 +38,20 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
 - Local PowerShell: `scripts/ai-integration/Connect-ClaudeFoundry.ps1` verifies the
   current Azure CLI session, resolves the Foundry resource, sets Claude Foundry
   environment variables, and can launch `claude` with `-Launch`.
-- GitHub automation: `.github/workflows/claude-foundry.yml` supports owner-only
-  `@claude` PR review and manual review/implementation through Microsoft Foundry.
+- GitHub automation: `.github/workflows/claude-foundry.yml` is owner-dispatched from
+  `main` and supports read-only review plus implementation-to-draft-PR through
+  Microsoft Foundry.
+- Claude uses a **dedicated least-privilege Entra/OIDC identity**, not the deployment
+  identity. Bootstrap it with `scripts/bootstrap/claude-foundry-oidc-setup.ps1`.
+  The canonical GitHub variables are `CLAUDE_AZURE_CLIENT_ID`,
+  `CLAUDE_AZURE_TENANT_ID`, `CLAUDE_AZURE_SUBSCRIPTION_ID`, and
+  `ANTHROPIC_FOUNDRY_RESOURCE`.
+- The dedicated principal receives only `Cognitive Services User` on the selected
+  Foundry account. No client secret is created. The existing HELIOS deployment identity
+  remains a compatibility fallback only.
 - The implementation lane deliberately separates authority: Claude's Azure-authenticated
-  job has a read-only GitHub token and emits a patch; a second job has GitHub write
-  permission but no Azure OIDC token and can only publish a validated draft PR.
+  job has a read-only GitHub token and emits a patch; validation/publishing jobs have no
+  Azure OIDC token and can only publish a validated draft PR.
 - Project permission denials live in `.claude/settings.json`. Never use a bypass-permission
   mode in CI.
 - Full operator setup: `docs/architecture/CLAUDE_CODE_GITHUB_FOUNDRY.md`.
