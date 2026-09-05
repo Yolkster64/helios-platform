@@ -902,7 +902,11 @@ function Get-VaultPullHint {
         return "fix $target in ${ConfigLabel}: '$SecretName' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
     }
     $builtIn = @{ 'openai-api-key' = 'OPENAI_API_KEY'; 'anthropic-api-key' = 'ANTHROPIC_API_KEY'; 'github-models-token' = 'GITHUB_MODELS_TOKEN' }
-    if ($builtIn.ContainsKey($SecretName) -and $builtIn[$SecretName] -eq $EnvName) {
+    # OS-aware name compare (review finding): on Linux/macOS `openai_api_key` is a
+    # different variable from OPENAI_API_KEY — the bash loader exports only the
+    # built-in uppercase name, so the config-aware pull is the only repair that lands
+    # in the configured variable.
+    if ($builtIn.ContainsKey($SecretName) -and (Test-EnvNameEquals $builtIn[$SecretName] $EnvName)) {
         return "source scripts/bootstrap/load-env-from-keyvault.sh (bash) or pwsh: . scripts/bootstrap/auto-login.ps1 — pulls $SecretName into $EnvName"
     }
     return "pwsh: . scripts/bootstrap/auto-login.ps1 (config-aware; pulls $SecretName into $EnvName — load-env-from-keyvault.sh knows only the built-in names)"

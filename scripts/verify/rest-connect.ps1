@@ -1250,7 +1250,18 @@ function Test-AzureLane {
             $chainNotes.Add("env-service-principal: token endpoint $spStatus (raw error body never echoed)")
             # 400/401 from the token endpoint = the SP credential itself was rejected
             # (invalid_client and friends) — a definitive rejection, unlike 5xx/transport.
-            if ($tokenProbe.Status -in 400, 401) { $sawAuthRejection = $true }
+            if ($tokenProbe.Status -in 400, 401) {
+                # TERMINAL (review finding): Azure.Identity's DefaultAzureCredential stops at
+                # a configured EnvironmentCredential that FAILS authentication — only an
+                # unavailable credential falls through — so while these three variables
+                # are set the hub never reaches managed identity or the az cache. A healthy
+                # later rung must therefore not report the lane ready; rotation is the repair.
+                $sawAuthRejection = $true
+                return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal' `
+                    -Identity "service principal $clientId" `
+                    -Detail ("the configured service principal (AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_CLIENT_SECRET) was rejected by the token endpoint ($spStatus; raw error body never echoed) — DefaultAzureCredential stops at a configured credential that fails authentication and never tries managed identity or the az cache, so the hub fails here whatever the later rungs hold; chain so far: $($chainNotes -join '; ')") `
+                    -OwnerAction 'rotate the secret of the app behind AZURE_CLIENT_ID (az ad app credential reset --id <AZURE_CLIENT_ID> --append) and re-export AZURE_CLIENT_SECRET from the new value (never on argv or in a file), or unset AZURE_CLIENT_SECRET / AZURE_CLIENT_CERTIFICATE_PATH so DefaultAzureCredential falls through to managed identity or the az cache'
+            }
         }
     }
     # 2b. Federated workload identity (review finding): AKS / Container Apps with a
@@ -1312,7 +1323,16 @@ function Test-AzureLane {
                 else {
                     $wiStatus = if ($tokenProbe.Status -eq 0) { "transport failure ($($tokenProbe.Transport))" } else { "HTTP $($tokenProbe.Status)" }
                     $chainNotes.Add("workload-identity: token endpoint $wiStatus (raw error body never echoed)")
-                    if ($tokenProbe.Status -in 400, 401) { $sawAuthRejection = $true }
+                    if ($tokenProbe.Status -in 400, 401) {
+                        # TERMINAL too (review finding): WorkloadIdentityCredential is a
+                        # configured credential; its authentication failure stops
+                        # DefaultAzureCredential before managed identity and the az cache.
+                        $sawAuthRejection = $true
+                        return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'workload-identity' `
+                            -Identity "workload identity (client $wiClientId)" `
+                            -Detail ("the configured workload identity (AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_FEDERATED_TOKEN_FILE) was rejected by the token endpoint ($wiStatus; raw error body never echoed) — DefaultAzureCredential stops at a configured credential that fails authentication and never tries managed identity or the az cache; chain so far: $($chainNotes -join '; ')") `
+                            -OwnerAction 'fix the federated credential of the app behind AZURE_CLIENT_ID (issuer / subject / audience must match the assertion in AZURE_FEDERATED_TOKEN_FILE — az ad app federated-credential list --id <AZURE_CLIENT_ID>) or the AZURE_TENANT_ID pairing, or unset AZURE_FEDERATED_TOKEN_FILE so DefaultAzureCredential falls through to managed identity or the az cache'
+                    }
                 }
             }
         }
@@ -1785,6 +1805,7 @@ if ($DryRun) {
     Write-Host '           a lone AZURE_AUTHORITY_HOST / ARM override is completed from the known-cloud table; a pair naming two clouds (or half an az-registered cloud) => needs-owner before any rung, nothing sent'
     Write-Host '           an override counts only as the canonical https origin of a known cloud host (default port, no userinfo, path, query or fragment); a rejected AZURE_RESOURCE_MANAGER_ENDPOINT still lets ARM_ENDPOINT be tried'
     Write-Host '              (with AZURE_CLIENT_CERTIFICATE_PATH instead: delegated to az login --service-principal --certificate)'
+    Write-Host '           2/2b: a 400/401 from the token endpoint => needs-owner IMMEDIATELY (DefaultAzureCredential stops at a configured credential that fails authentication; managed identity and the az cache are never consulted) — transport failures / 5xx fall through to the next rung'
     Write-Host '           2b. AZURE_CLIENT_ID+AZURE_TENANT_ID+AZURE_FEDERATED_TOKEN_FILE => the file''s assertion posted once as a jwt-bearer client_assertion to the same token endpoint (read into memory, never echoed) — WorkloadIdentityCredential''s rung, a credential source once a non-blank assertion is read; a missing / empty file is a definitive owner step (fix the mount), never retry advice'
     Write-Host '           3. IDENTITY_ENDPOINT/MSI_ENDPOINT if set — honored only as an absolute http(s) URL on a loopback host or 169.254.169.254 AND on a documented token path (/msi/token, /metadata/identity/oauth2/token, /oauth2/token — the App Service / Container Apps / Arc / Cloud Shell / IMDS shapes); any other host or path is ignored and no identity header or secret is sent, and an IDENTITY_ENDPOINT that is rejected or yields no token still lets MSI_ENDPOINT be tried — else IMDS 169.254.169.254 (Metadata:true, hard 2s, no proxy)'
     Write-Host '              the Arc shape (40342/metadata/identity/oauth2/token) runs its documented two-step handshake: Metadata request, then Basic authorization read from the WWW-Authenticate realm file, accepted only under the agent token directories with a .key extension (contents never echoed)'
