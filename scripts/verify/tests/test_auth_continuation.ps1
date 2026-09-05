@@ -36,7 +36,7 @@ function Invoke-ArmProbe {
 $azureCloud = [pscustomobject]@{ Warnings=@(); Unresolved=$false; Name='AzureCloud'; Authority='https://login.microsoftonline.com'; ArmResource='https://management.azure.com'; Source='offline fixture' }
 $armScope = 'https://management.azure.com/.default'
 $TimeoutSeconds = 1
-$script:ProbeBody = '{"error":"inert-secret-must-not-leak"}'
+$script:ProbeBody = '{"error":"dummy-secret-must-not-leak"}'
 $script:ProbeStatus = 400
 $script:ProbeCalls = 0
 
@@ -50,7 +50,7 @@ try {
     foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $null) }
     $env:AZURE_CLIENT_ID = 'inert-client'
     $env:AZURE_TENANT_ID = 'inert-tenant'
-    $env:AZURE_CLIENT_SECRET = 'inert-secret-must-not-leak'
+    $env:AZURE_CLIENT_SECRET = 'dummy-secret-must-not-leak'
     # A later managed identity is deliberately present. It must not be probed.
     $env:IDENTITY_ENDPOINT = 'http://127.0.0.1:42333/msi/token'
     $env:IDENTITY_HEADER = 'inert-header'
@@ -62,7 +62,7 @@ try {
             throw "HTTP $status did not preserve the selected credential failure."
         }
         if ($script:ProbeCalls -ne 1) { throw "HTTP $status attempted another credential." }
-        if (($result | ConvertTo-Json -Depth 5) -like '*inert-secret-must-not-leak*') { throw 'Secret/body leaked into evidence.' }
+        if (($result | ConvertTo-Json -Depth 5) -like '*dummy-secret-must-not-leak*') { throw 'Secret/body leaked into evidence.' }
     }
     $script:ProbeStatus = 200; $script:ProbeBody = '{"access_token":"inert-access-token"}'
     if ((Test-AzureLane).state -ne 'ready') { throw 'Successful selected credential no longer reports ready.' }
