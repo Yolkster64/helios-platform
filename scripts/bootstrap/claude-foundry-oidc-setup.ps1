@@ -214,7 +214,8 @@ elseif ($VerifyOnly -and -not $roleAssignment) {
     throw "The dedicated Claude service principal is missing '$roleName' on the Foundry account."
 }
 
-if (-not $SkipGitHubVariables) {
+# VerifyOnly is strictly non-mutating: it never writes repository variables.
+if (-not $VerifyOnly -and -not $SkipGitHubVariables) {
     if (Test-Command 'gh') {
         & gh auth status *> $null
         if ($LASTEXITCODE -eq 0) {
