@@ -76,10 +76,29 @@ not inference requests. Do not route governed tasks through a legacy fallback
 chain until provider/model, credential mode, classification and egress rules have
 been agreed and tested. Keep provider activation distinct from connector setup.
 
-SharePoint publication additionally needs a verified governed site and document
-library. Personal OneDrive access does not establish that destination. Enterprise
-control setup needs authorized repository-admin access; a 404 alone cannot
-distinguish an absent repository from an inaccessible one.
+## Established SharePoint evidence destination
+
+On 2026-09-05, the existing [JOH-36 control-plane record](https://linear.app/641974/issue/JOH-36/deploy-helios-cloud-only-control-plane-and-online-visualization)
+identified [HELIOS_CONTROL_PLANE_CURRENT.md](https://heli0s-my.sharepoint.com/personal/jmore_heli0s_onmicrosoft_com/Documents/Helios/Governance/Architecture/Integration-Fabric/HELIOS_CONTROL_PLANE_CURRENT.md)
+as its status index. Direct folder enumeration and file metadata lookup succeeded:
+
+- Host: `heli0s-my.sharepoint.com`
+- Site path: `/personal/jmore_heli0s_onmicrosoft_com`
+- Document library: `Documents`
+- Drive-relative folder: `Helios/Governance/Architecture/Integration-Fabric`
+- Existing status index: `HELIOS_CONTROL_PLANE_CURRENT.md`
+
+This is a recovered, previously linked project destination, not an inferred
+replacement for a team site. The separate `heli0s.sharepoint.com/sites/helios`
+lookup still returns 404. Keyword search missed these Markdown/JSON artifacts;
+use the existing link and folder listing to rediscover them. Folder and metadata
+access do not prove file-content retrieval, write permission, a runtime Graph
+identity, or a deployed SharePoint worker. The raw download attempt returned 403;
+preserve the current file until its contents can be read before any update.
+
+Enterprise control setup still needs authorized repository-admin access; a 404
+alone cannot distinguish an absent repository from an inaccessible one. The
+GitHub app's repository access does not establish administration rights.
 
 Implementation references: [Linear error handling](https://linear.app/developers/graphql),
 [Slack incoming webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/),
