@@ -66,6 +66,31 @@ try {
     }
     $script:ProbeStatus = 200; $script:ProbeBody = '{"access_token":"inert-access-token"}'
     if ((Test-AzureLane).state -ne 'ready') { throw 'Successful selected credential no longer reports ready.' }
+
+    # Rung 2b (workload identity) follows the same continuation policy: the federated
+    # assertion is the selected credential, so its rejection or transient failure is
+    # never masked by the managed identity that is still deliberately present.
+    $env:AZURE_CLIENT_SECRET = $null
+    $assertionFile = Join-Path ([IO.Path]::GetTempPath()) ("helios-inert-assertion-" + [Guid]::NewGuid().ToString('N') + '.jwt')
+    Set-Content -LiteralPath $assertionFile -Value 'inert-assertion-must-not-leak' -NoNewline
+    $env:AZURE_FEDERATED_TOKEN_FILE = $assertionFile
+    try {
+        $script:ProbeBody = '{"error":"inert-assertion-must-not-leak"}'
+        foreach ($status in @(400,401,403,0,429,500,200)) {
+            $script:ProbeStatus = $status; $script:ProbeCalls = 0
+            $result = Test-AzureLane
+            $expected = if ($status -in 400,401,403) { 'needs-owner' } else { 'unavailable' }
+            if ($result.state -ne $expected -or $result.source -ne 'workload-identity') {
+                throw "Workload identity HTTP $status did not preserve the selected credential failure."
+            }
+            if ($script:ProbeCalls -ne 1) { throw "Workload identity HTTP $status attempted another credential." }
+            if (($result | ConvertTo-Json -Depth 5) -like '*inert-assertion-must-not-leak*') { throw 'Assertion/body leaked into evidence.' }
+        }
+        $script:ProbeStatus = 200; $script:ProbeBody = '{"access_token":"inert-access-token"}'
+        if ((Test-AzureLane).state -ne 'ready') { throw 'Successful workload identity no longer reports ready.' }
+    } finally {
+        Remove-Item -LiteralPath $assertionFile -Force -ErrorAction SilentlyContinue
+    }
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 }
@@ -77,4 +102,4 @@ if ($hint.StartsWith('source ')) { throw 'Unix lowercase mapping advertised the 
 if (-not (Get-VaultPullHint -SecretName openai-api-key -EnvName OPENAI_API_KEY).StartsWith('source ')) { throw 'Built-in exact mapping lost its loader.' }
 $script:EnvNameComparer = [StringComparer]::OrdinalIgnoreCase
 if (-not (Get-VaultPullHint -SecretName openai-api-key -EnvName openai_api_key).StartsWith('source ')) { throw 'Windows case-insensitive mapping changed.' }
-Write-Output 'Passed 11 offline authentication continuation and environment-name cases.'
+Write-Output 'Passed 19 offline authentication continuation and environment-name cases.'
