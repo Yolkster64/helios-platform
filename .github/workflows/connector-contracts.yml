@@ -1,0 +1,36 @@
+name: Connector Contracts
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/connectors/**'
+      - 'scripts/verify/tests/test_connectors.py'
+      - 'config/connectors.json'
+      - '.github/workflows/linear-sync.yml'
+      - '.github/workflows/notify-slack.yml'
+      - '.github/workflows/connector-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/connectors/**'
+      - 'scripts/verify/tests/test_connectors.py'
+      - 'config/connectors.json'
+      - '.github/workflows/linear-sync.yml'
+      - '.github/workflows/notify-slack.yml'
+      - '.github/workflows/connector-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-connectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate connector behavior without credentials or network
+        run: |
+          bash -n scripts/connectors/linear-sync.sh
+          python3 scripts/verify/tests/test_connectors.py

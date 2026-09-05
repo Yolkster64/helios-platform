@@ -115,7 +115,7 @@ pattern as model keys.
 
 ### Implemented wiring (this PR)
 
-The Actions-level wiring is live now, driven by one declarative file —
+The Actions-level wiring is implemented, driven by one declarative file —
 `config/connectors.json` (env-var names and routing only, never values):
 
 - **`notify-slack.yml`** listens via `workflow_run` to `.NET Build & Test`,
@@ -126,8 +126,10 @@ The Actions-level wiring is live now, driven by one declarative file —
   label into the configured Linear team (`[GH-<n>]`-prefixed, link-back comment
   on the GitHub issue; close/reopen is noted on the Linear side). One-directional:
   GitHub remains the source of truth.
-- **Graceful-skip contract**: with `SLACK_WEBHOOK_URL` / `LINEAR_API_KEY` unset,
-  both workflows exit green with a clear notice — they can never be the red check.
-  Enable with `gh secret set SLACK_WEBHOOK_URL` and `gh secret set LINEAR_API_KEY`.
+- **Readiness contract**: disabled connectors skip. Enabled connectors with
+  missing credentials or API failures fail their own workflow. Slack recovery
+  detection uses GitHub run history; Linear validates GraphQL errors and mutation
+  receipts. Code and live delivery are separate acceptance checks; see
+  [connector activation](CONNECTOR_ACTIVATION.md).
 - PR4's HELIOS.Connectors consumes the same `config/connectors.json`, so enabling
   the service later changes no routing decisions, only who executes them.
