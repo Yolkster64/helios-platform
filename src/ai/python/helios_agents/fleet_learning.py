@@ -11,10 +11,12 @@ Each appended JSONL line mirrors the C# ``RoutingOutcome`` record
 (src/ai/HELIOS.AIHub/Learning/LearningStore.cs) field for field, using its
 exact ``JsonPropertyName`` names and casing::
 
-    {"timestamp": ..., "taskType": ..., "provider": ..., "model": "",
-     "success": ..., "latencyMs": ..., "costUsd": 0.0, "quality": null,
-     "pool": ..., "source": "fleet-lane"}
+    {"outcomeId": ..., "timestamp": ..., "taskType": ..., "provider": ...,
+     "model": "", "success": ..., "latencyMs": ..., "costUsd": 0.0,
+     "quality": null, "pool": ..., "source": "fleet-lane"}
 
+- ``outcomeId`` is a deterministic UUIDv5 of ``runId``, board, and task id,
+  so retries and dual-store fan-out see the same stable identity.
 - ``provider`` is ``pool:<poolName>`` and ``pool`` the bare pool name, both
   resolved from the task's board through the manifest's ``pools`` entries
   (``board`` -> ``pool``); a board the manifest does not know falls back to
@@ -41,10 +43,7 @@ Idempotency / dedupe
 Running :func:`collect` twice over the same run must not double-append. The
 mechanism is a sidecar index next to the outcomes file
 (``<outcomes>.fleet-collected.json``) holding one ``[runId, board, taskId]``
-triple per collected task. A sidecar rather than scanning existing records
-because the emitted records deliberately mirror ``RoutingOutcome`` exactly
-and therefore carry no runId/taskId — the records themselves cannot witness
-what was already collected. The board name is part of the key because
+triple per collected task. The board name is part of the key because
 cross-pool handoffs may legitimately reuse a task id on another pool's
 board. Records are appended before the index is persisted, so a crash
 between the two re-appends at most one batch (at-least-once), never loses
@@ -60,6 +59,7 @@ import calendar
 import json
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -140,10 +140,11 @@ def _latency_ms(task: dict[str, Any]) -> float:
     return max(0.0, (finished - claimed) * 1000.0)
 
 
-def _record(task: dict[str, Any], pool: str) -> dict[str, Any]:
+def _record(task: dict[str, Any], pool: str, outcome_id: str) -> dict[str, Any]:
     """One learning-store record; key order mirrors the C# declaration."""
     timestamp = str(task.get("finishedAt") or task.get("claimedAt") or "") or _utc_now()
     return {
+        "outcomeId": outcome_id,
         "timestamp": timestamp,
         "taskType": _lane_of(task),
         "provider": POOL_PROVIDER_PREFIX + pool,
@@ -204,7 +205,11 @@ def collect(run_dir: str | Path, outcomes_path: str | Path) -> dict[str, Any]:
             if key in index:
                 skipped += 1
                 continue
-            collected.append(_record(task, pool))
+            outcome_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"helios:fleet:{run_id}:{board_name}:{task_id}",
+            ))
+            collected.append(_record(task, pool, outcome_id))
             index.add(key)
             per_pool[pool] = per_pool.get(pool, 0) + 1
 
