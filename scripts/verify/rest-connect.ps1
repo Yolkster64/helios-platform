@@ -1418,12 +1418,30 @@ function Test-AzureLane {
             $miKeyPath = ''
             if ($miChallenge -match '(?i)realm\s*=\s*"?([^",]+)"?') { $miKeyPath = $Matches[1].Trim() }
             $arcTokenDirs = @('/var/opt/azcmagent/tokens/', 'C:\ProgramData\AzureConnectedMachineAgent\Tokens\')
+            # CANONICAL containment (review finding): a textual prefix test accepts
+            # /var/opt/azcmagent/tokens/../../../../home/victim/service.key — it satisfies
+            # both the prefix and the .key suffix, and Get-Content then resolves the
+            # traversal and ships that file out as Basic authorization. The realm comes
+            # from whoever answers the loopback endpoint, so the path is collapsed with
+            # GetFullPath FIRST and every test runs on the canonical result; a symlink
+            # inside the directory is resolved and re-checked below before any read.
             $miKeyTrusted = $false
-            if ($miKeyPath -and $miKeyPath.EndsWith('.key', [System.StringComparison]::OrdinalIgnoreCase) -and [System.IO.Path]::IsPathRooted($miKeyPath)) {
-                $miKeyNormalized = $miKeyPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar).Replace('\', [System.IO.Path]::DirectorySeparatorChar)
-                foreach ($arcDir in $arcTokenDirs) {
-                    $arcDirNormalized = $arcDir.Replace('/', [System.IO.Path]::DirectorySeparatorChar).Replace('\', [System.IO.Path]::DirectorySeparatorChar)
-                    if ($miKeyNormalized.StartsWith($arcDirNormalized, [System.StringComparison]::OrdinalIgnoreCase)) { $miKeyTrusted = $true; break }
+            $miKeyResolved = ''
+            $arcDirsFull = [System.Collections.Generic.List[string]]::new()
+            foreach ($arcDir in $arcTokenDirs) {
+                try {
+                    $arcDirFull = [System.IO.Path]::GetFullPath($arcDir)
+                    if (-not $arcDirFull.EndsWith([string][System.IO.Path]::DirectorySeparatorChar)) { $arcDirFull += [System.IO.Path]::DirectorySeparatorChar }
+                    $arcDirsFull.Add($arcDirFull)
+                }
+                catch { }
+            }
+            if ($miKeyPath -and [System.IO.Path]::IsPathRooted($miKeyPath)) {
+                try { $miKeyResolved = [System.IO.Path]::GetFullPath($miKeyPath) } catch { $miKeyResolved = '' }
+            }
+            if ($miKeyResolved -and $miKeyResolved.EndsWith('.key', [System.StringComparison]::OrdinalIgnoreCase)) {
+                foreach ($arcDirFull in $arcDirsFull) {
+                    if ($miKeyResolved.StartsWith($arcDirFull, [System.StringComparison]::OrdinalIgnoreCase)) { $miKeyTrusted = $true; break }
                 }
             }
             if (-not $miKeyPath) {
@@ -1431,20 +1449,38 @@ function Test-AzureLane {
                 $miSkipOutcomeNote = $true
             }
             elseif (-not $miKeyTrusted) {
-                $chainNotes.Add("managed-identity ($miKind): the Arc challenge named a key file outside the documented agent token directories ($($arcTokenDirs -join ', ')) or without a .key extension — refused; no file was read and no second request was made")
+                $chainNotes.Add("managed-identity ($miKind): the Arc challenge named a key file that, once canonicalized, is outside the documented agent token directories ($($arcTokenDirs -join ', ')) or does not end .key — refused; no file was read and no second request was made")
                 $miSkipOutcomeNote = $true
             }
-            elseif (-not (Test-Path -LiteralPath $miKeyPath -PathType Leaf)) {
+            elseif (-not (Test-Path -LiteralPath $miKeyResolved -PathType Leaf)) {
                 $chainNotes.Add("managed-identity ($miKind): the Arc challenge named a key file that does not exist (path checked only) — the himds agent may not have provisioned it for this user; no second request was made")
                 $miSkipOutcomeNote = $true
             }
             else {
-                $arcSecret = ''
-                try { $arcSecret = ([string](Get-Content -LiteralPath $miKeyPath -Raw -ErrorAction Stop)).Trim() } catch { $arcSecret = '' }
-                if (-not $arcSecret) {
-                    $chainNotes.Add("managed-identity ($miKind): the Arc key file is empty or unreadable by this user (contents never echoed) — the second request was not made")
-                $miSkipOutcomeNote = $true
+                # A link is followed only while it STAYS inside the token directory
+                # (review finding): otherwise a symlink planted there would smuggle the
+                # traversal past the canonical prefix test above.
+                $miKeyFinal = $miKeyResolved
+                try {
+                    $miLinkTarget = (Get-Item -LiteralPath $miKeyResolved -Force -ErrorAction Stop).ResolveLinkTarget($true)
+                    if ($null -ne $miLinkTarget) { $miKeyFinal = [System.IO.Path]::GetFullPath($miLinkTarget.FullName) }
                 }
+                catch { $miKeyFinal = $miKeyResolved }
+                $miLinkTrusted = $false
+                foreach ($arcDirFull in $arcDirsFull) {
+                    if ($miKeyFinal.StartsWith($arcDirFull, [System.StringComparison]::OrdinalIgnoreCase)) { $miLinkTrusted = $true; break }
+                }
+                $arcSecret = ''
+                if (-not $miLinkTrusted) {
+                    $chainNotes.Add("managed-identity ($miKind): the Arc key file resolves through a link to a path outside the documented agent token directories — refused; the file was not read and no second request was made")
+                    $miSkipOutcomeNote = $true
+                }
+                else { try { $arcSecret = ([string](Get-Content -LiteralPath $miKeyFinal -Raw -ErrorAction Stop)).Trim() } catch { $arcSecret = '' } }
+                if (-not $arcSecret -and $miLinkTrusted) {
+                    $chainNotes.Add("managed-identity ($miKind): the Arc key file is empty or unreadable by this user (contents never echoed) — the second request was not made")
+                    $miSkipOutcomeNote = $true
+                }
+                elseif (-not $arcSecret) { }
                 else {
                     $miProbe = Invoke-HttpProbe -Url $miUrl -Headers @{ Metadata = 'true'; Authorization = "Basic $arcSecret" } -TimeoutSec $TimeoutSeconds -NoProxy
                     $arcSecret = ''

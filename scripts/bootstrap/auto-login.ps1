@@ -63,7 +63,10 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  target's repairs, an unverifiable one (no scopes header, or an
                  injecting transport) is exported with the scope/vault repair left
                  standing, and a token proven to lack models:read (or rejected) is
-                 NOT exported at all. A provider with no apiKeySecretName whose
+                 NOT exported at all. A transport that STRIPS Authorization (the
+                 authenticated probe answers 200 at the anonymous 60/hr cap) proves
+                 no token at all: nothing is exported or accepted, and one owner
+                 action names the transport — no other token repairs it. A provider with no apiKeySecretName whose
                  variable is still unset gets a direct-key owner action. A variable
                  shared by a public AND a custom-baseUrl provider is mixed-owned and
                  never receives a GitHub credential either (the durable fix is
@@ -1209,8 +1212,14 @@ function Invoke-HeliosAutoLogin {
     # Classic PATs expose their granted scopes in the X-OAuth-Scopes response
     # header; fine-grained/Actions tokens do not, and an injecting transport makes
     # per-token proof impossible (rest-connect.ps1 doctrine) — both read as
-    # 'unverifiable', never a false 'proven'. The token value exists only in the
-    # request header and is never printed.
+    # 'unverifiable', never a false 'proven'. A transport that STRIPS the header
+    # instead (review finding) makes the credentialed request anonymous: GitHub
+    # answers a legitimate 200 AT the 60/hr anonymous cap, which proves nothing
+    # about the token and means every Models call from here would be
+    # unauthenticated too — rest-connect.ps1's per-candidate cap rule — so the
+    # authenticated rate.limit must be numeric and above 60 before any positive
+    # verdict; the at-cap case is the distinct 'stripped' verdict. The token value
+    # exists only in the request header and is never printed.
     function Get-GitHubTokenModelsScope {
         param([Parameter(Mandatory)][string]$EnvName)
         $ghHeaders = @{ Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
@@ -1234,6 +1243,17 @@ function Invoke-HeliosAutoLogin {
             # delete a freshly exported credential and demand a re-login over an outage.
             if ([int]$resp.StatusCode -eq 401) { return 'invalid' }
             if ([int]$resp.StatusCode -ne 200) { return 'unverifiable' }
+            # The authenticated payload must be a real rate-limit body with a numeric
+            # limit ABOVE the anonymous cap (review finding): every authenticated
+            # GitHub limit starts at 1000/hr, so a parseable 200 at 60/hr means the
+            # Authorization header never reached GitHub — stripped in transit, not a
+            # verdict on this token, and not a transport GitHub Models can use.
+            $authParsed = $null
+            try { $authParsed = $resp.Content | ConvertFrom-Json } catch { }
+            $authLimit = 0
+            if ($null -eq $authParsed -or -not $authParsed.PSObject.Properties['rate'] -or
+                -not [int]::TryParse([string]$authParsed.rate.limit, [ref]$authLimit)) { return 'unverifiable' }
+            if ($authLimit -le 60) { return 'stripped' }
             $scopeKey = @($resp.Headers.Keys | Where-Object { $_ -ieq 'X-OAuth-Scopes' }) | Select-Object -First 1
             $scopesText = if ($scopeKey) { (@($resp.Headers[$scopeKey]) -join ',') } else { '' }
             if ([string]::IsNullOrWhiteSpace($scopesText)) { return 'unverifiable' }
@@ -1260,6 +1280,10 @@ function Invoke-HeliosAutoLogin {
     $ghModelsRejectedEnvs = [System.Collections.Generic.List[string]]::new()
     $ghTokenVerdict = $null     # GITHUB_TOKEN is probed at most once per run
     $ghKeyring = $null          # the gh keyring is read (env-cleared) and probed at most once per run
+    # One action for the stripping transport (review finding): the same intermediary
+    # sits in front of every GitHub Models call this shell makes, so the repair is
+    # the transport, never another token — stated once, retired by no export.
+    $ghStrippedAction = 'route api.github.com through a transport that forwards the Authorization header — the authenticated probe from this shell answered 200 at the anonymous 60/hr cap, so an intermediary (proxy / TLS-inspecting gateway) strips Authorization in transit; every GitHub Models call from here would be unauthenticated too, and no other token can repair that: exempt api.github.com (and models.github.ai) from the intermediary, or run the hub from a network that passes the header through'
     foreach ($target in $ghModelsTargets) {
         # Entries sharing one variable are one target; the label names them all.
         $targetLabel = if (@($target.Owners).Count -gt 1) { 'providers ' + ((@($target.Owners | ForEach-Object { "'$_'" })) -join ', ') } else { "provider '" + $target.Name + "'" }
@@ -1286,6 +1310,14 @@ function Invoke-HeliosAutoLogin {
                 'unverifiable' {
                     $ghModelsUnprovenExportEnvs.Add($target.Env)
                     Add-Step -Step $target.Env -State 'ok' -Detail "$heldSource; its models:read permission is NOT verifiable here (no X-OAuth-Scopes header, or an injecting transport) — kept as-is and no fallback attempted, but any scope/vault repair stays listed until a run proves it"
+                }
+                'stripped' {
+                    # Not a verdict on the value (review finding): the header never
+                    # reached GitHub, so the value is left untouched, counts as unusable
+                    # for the reconcile filter, and the transport is the one repair.
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource, but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so $targetLabel would call GitHub Models unauthenticated from this shell; the value is left untouched (never clobbered) and no fallback is attempted (another token cannot repair the transport)"
+                    Add-OwnerAction -Text $ghStrippedAction
                 }
                 'missing-scope' {
                     $ghModelsRejectedEnvs.Add($target.Env)
@@ -1325,6 +1357,13 @@ function Invoke-HeliosAutoLogin {
                     Add-Step -Step $target.Env -State 'ok' -Detail ("GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it for $targetLabel, but its models:read " +
                         'permission is NOT verifiable here (fine-grained/Actions token exposes no scopes, or an injecting transport) — any vault ' +
                         'or direct-key repair stays listed as the deterministic path; if model calls 403, grant models: read')
+                }
+                'stripped' {
+                    # The fallback would be unauthenticated on the wire (review finding):
+                    # not satisfied, and the keyring rung below cannot help either — its
+                    # probe crosses the same transport and is refused the same way.
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN holds a value, but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so CreateGitHubModels' fallback to it would call GitHub Models unauthenticated for $targetLabel; not accepted (another token cannot repair the transport)"
+                    Add-OwnerAction -Text $ghStrippedAction
                 }
                 'missing-scope' {
                     Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; trying the gh keyring next"
@@ -1405,6 +1444,13 @@ function Invoke-HeliosAutoLogin {
                 [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
                 Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported ($targetLabel would 403 on every call)"
                 Add-OwnerAction -Env $target.Env -Text $repairAction
+            }
+            'stripped' {
+                # Nothing is retained (review finding): an export would put a credential
+                # into the hub that the transport turns into anonymous calls.
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login's probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so NOT exported for $targetLabel (GitHub Models calls from this shell would be unauthenticated; another token cannot repair the transport)"
+                Add-OwnerAction -Text $ghStrippedAction
             }
             default {
                 [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
@@ -1526,6 +1572,12 @@ function Invoke-HeliosAutoLogin {
                     $blankSatisfied = $true
                     Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN holds a value and CreateGitHubModels falls back to it, but its models:read permission is NOT verifiable here — if model calls 403, grant models:read"
                 }
+                'stripped' {
+                    # Never satisfied (review finding): the only fallback the hub has for
+                    # this entry would reach GitHub Models unauthenticated.
+                    Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, holds a value but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so the fallback would call GitHub Models unauthenticated; not accepted"
+                    Add-OwnerAction -Text $ghStrippedAction
+                }
                 'missing-scope' { Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, is REST-valid but its X-OAuth-Scopes lack models:read" }
                 default { Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, was rejected by api.github.com" }
             }
@@ -1536,7 +1588,7 @@ function Invoke-HeliosAutoLogin {
         if (-not $blankSatisfied) {
             # The GITHUB_TOKEN alternative is offered only while that variable is the
             # GitHub family's (review finding): owned by another consumer it is not one.
-            $ghTokenAlternative = if ($ghTokenForeignReaders.Count -gt 0 -or -not $blank.Public) { '' } else { ', or provide a GITHUB_TOKEN that carries models:read' }
+            $ghTokenAlternative = if ($ghTokenForeignReaders.Count -gt 0 -or -not $blank.Public -or $ghTokenVerdict -eq 'stripped') { '' } else { ', or provide a GITHUB_TOKEN that carries models:read' }
             if ($blankPresence -eq 'absent') {
                 # The configured vault path is the primary repair (review finding): the
                 # secret's absence, not the config, is what leaves the provider unlit.
