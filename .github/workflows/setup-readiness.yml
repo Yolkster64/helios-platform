@@ -1,0 +1,31 @@
+name: Setup readiness contract
+
+on:
+  pull_request:
+    paths:
+      - '.devcontainer/**'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/verify/tests/**'
+      - '.github/workflows/setup-readiness.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/verify/tests/**'
+      - '.github/workflows/setup-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test setup reporting with inert child scripts
+        run: python3 scripts/verify/tests/test_setup_readiness.py
+      - name: Test devcontainer initialization with inert build commands
+        run: python3 scripts/verify/tests/test_devcontainer_setup.py
