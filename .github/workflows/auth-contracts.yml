@@ -5,14 +5,18 @@ on:
     paths:
       - 'scripts/verify/rest-connect.ps1'
       - 'scripts/bootstrap/auth-doctor.ps1'
+      - 'scripts/bootstrap/auto-login.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
+      - 'scripts/verify/tests/test_auth_readiness.ps1'
       - '.github/workflows/auth-contracts.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/verify/rest-connect.ps1'
       - 'scripts/bootstrap/auth-doctor.ps1'
+      - 'scripts/bootstrap/auto-login.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
+      - 'scripts/verify/tests/test_auth_readiness.ps1'
       - '.github/workflows/auth-contracts.yml'
 
 permissions:
@@ -28,4 +32,6 @@ jobs:
           persist-credentials: false
       - name: Verify credential continuation and environment-name semantics
         shell: pwsh
-        run: ./scripts/verify/tests/test_auth_continuation.ps1
+        run: |
+          ./scripts/verify/tests/test_auth_continuation.ps1
+          ./scripts/verify/tests/test_auth_readiness.ps1

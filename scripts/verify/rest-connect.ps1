@@ -866,7 +866,7 @@ function Get-GitHubTokenCandidates {
             if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
         }
         $ghToken = (@($tokenLines) -join '').Trim()
-        $alreadyCandidate = @($candidates | Where-Object { $_.Token -eq $ghToken }).Count -gt 0
+        $alreadyCandidate = @($candidates | Where-Object { [string]::Equals($_.Token, $ghToken, [StringComparison]::Ordinal) }).Count -gt 0
         if ($ghExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($ghToken) -and -not $alreadyCandidate) {
             $candidates.Add([pscustomobject]@{ Source = 'gh-cli'; Token = $ghToken })
         }
@@ -1048,12 +1048,9 @@ function Test-GitHubLane {
 }
 
 # --- azure lane -------------------------------------------------------------------------
-# Probes ARM with an acquired token. Returns {Outcome; Lane}: 'ready' (Lane = the ready
-# result), 'forbidden' (Lane = a needs-owner RBAC diagnosis the CALLER stashes and only
-# uses if no later chain entry succeeds — review finding: an early 403 must not stop a
-# later authorized candidate), 'auth-rejected' (definitive 401 — the caller marks the
-# rejection flag), or 'transient' (transport/5xx/garbage — never grounds for credential
-# advice). The token parameter exists only for the Authorization header — never logged.
+# Probes ARM with the selected token. Every outcome carries a terminal Lane:
+# success, RBAC failure, token rejection, or retryable/unverifiable response.
+# Once a credential acquires a token, ARM cannot select another principal.
 function Invoke-ArmProbe {
     param(
         [Parameter(Mandatory)][string]$Token,
@@ -1080,7 +1077,7 @@ function Invoke-ArmProbe {
         }
         if ($null -eq $parsed -or -not ($armValue -is [array])) {
             $ChainNotes.Add("$Source ARM answered 200 but the body is not a parseable subscriptions payload with a 'value' array (intermediary?) — not treated as connectivity proof")
-            return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
+            return [pscustomobject]@{ Outcome = 'transient'; Lane = (New-LaneResult -Lane azure -State unavailable -Source $Source -Identity $Identity -Detail ($ChainNotes -join '; ') -OwnerAction 'retry the selected identity after checking ARM connectivity; no later principal was used') }
         }
         $subs = @($armValue)
         $subCount = $subs.Count
@@ -1102,10 +1099,9 @@ function Invoke-ArmProbe {
     if ($probe.Status -eq 403) {
         # AUTHORIZATION, not authentication (review finding): the token is real and
         # ARM recognized the principal — it just lacks an RBAC role, and re-login can
-        # never fix that. The diagnosis is deferred: a later chain entry may still be
-        # authorized (second review finding), so the caller stashes this and returns
-        # it only if nothing later succeeds.
-        $ChainNotes.Add("$Source acquired a token but ARM answered 403 — principal lacks an RBAC role (diagnosis kept; chain continues)")
+        # never fix that. Token acquisition already selected the identity, so this
+        # result is terminal even if another principal could access ARM.
+        $ChainNotes.Add("$Source acquired a token but ARM answered 403 — principal lacks an RBAC role (selected identity; no fallback)")
         return [pscustomobject]@{
             Outcome = 'forbidden'
             Lane    = (New-LaneResult -Lane 'azure' -State 'needs-owner' -Source $Source -Identity $Identity `
@@ -1118,7 +1114,7 @@ function Invoke-ArmProbe {
     }
     if ($probe.Status -eq 401) {
         $ChainNotes.Add("$Source acquired a token but ARM answered HTTP 401 — the token itself was rejected")
-        return [pscustomobject]@{ Outcome = 'auth-rejected'; Lane = $null }
+        return [pscustomobject]@{ Outcome = 'auth-rejected'; Lane = (New-LaneResult -Lane azure -State 'needs-owner' -Source $Source -Identity $Identity -Detail ($ChainNotes -join '; ') -OwnerAction 'verify the selected identity, tenant and ARM token audience; no later principal was used') }
     }
     elseif ($probe.Status -eq 0) {
         $ChainNotes.Add("$Source acquired a token but the ARM probe hit a transport failure ($($probe.Transport))")
@@ -1126,7 +1122,7 @@ function Invoke-ArmProbe {
     else {
         $ChainNotes.Add("$Source acquired a token but ARM answered HTTP $($probe.Status)")
     }
-    return [pscustomobject]@{ Outcome = 'transient'; Lane = $null }
+    return [pscustomobject]@{ Outcome = 'transient'; Lane = (New-LaneResult -Lane azure -State unavailable -Source $Source -Identity $Identity -Detail ($ChainNotes -join '; ') -OwnerAction 'retry the selected identity after checking ARM connectivity; no later principal was used') }
 }
 
 function Test-AzureLane {
@@ -1244,9 +1240,8 @@ function Test-AzureLane {
                 $tokenHeld = $true
                 $arm = Invoke-ArmProbe -Token $spToken -Source 'env-service-principal' `
                     -Identity "service principal $clientId" -ChainNotes $chainNotes
-                if ($arm.Outcome -eq 'ready') { return $arm.Lane }
-                if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
-                if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+                # Token selection is complete; ARM errors cannot select a different principal.
+                return $arm.Lane
             }
             else {
                 $chainNotes.Add('env-service-principal: token endpoint 200 but no access_token field (raw body never echoed)')
@@ -1327,9 +1322,8 @@ function Test-AzureLane {
                         $tokenHeld = $true
                         $arm = Invoke-ArmProbe -Token $wiToken -Source 'workload-identity' `
                             -Identity "workload identity (client $wiClientId, federated assertion from AZURE_FEDERATED_TOKEN_FILE)" -ChainNotes $chainNotes
-                        if ($arm.Outcome -eq 'ready') { return $arm.Lane }
-                        if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
-                        if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+                        # Token selection is complete; ARM errors cannot select a different principal.
+                        return $arm.Lane
                     }
                     else {
                         $chainNotes.Add('workload-identity: token endpoint 200 but no access_token field (raw body never echoed)')
@@ -1612,9 +1606,8 @@ function Test-AzureLane {
         $tokenHeld = $true
         $arm = Invoke-ArmProbe -Token $miToken -Source "managed-identity ($miKind)" `
             -Identity 'managed identity (principal not re-queried here)' -ChainNotes $chainNotes
-        if ($arm.Outcome -eq 'ready') { return $arm.Lane }
-        if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
-        if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+        # Token selection is complete; ARM errors cannot select a different principal.
+        return $arm.Lane
     }
     # A managed-identity SOURCE exists when a declared endpoint passed the shape check
     # (App Service / Functions / Arc / Cloud Shell hosts) or IMDS actually answered a
@@ -1648,9 +1641,8 @@ function Test-AzureLane {
                 $tokenHeld = $true
                 $arm = Invoke-ArmProbe -Token $azToken -Source 'az-cli-cache' `
                     -Identity 'the cached az login (whoever scripts/bootstrap/connect-account.ps1 pins)' -ChainNotes $chainNotes
-                if ($arm.Outcome -eq 'ready') { return $arm.Lane }
-                if ($arm.Outcome -eq 'forbidden' -and $null -eq $armForbidden) { $armForbidden = $arm.Lane }
-                if ($arm.Outcome -eq 'auth-rejected') { $sawAuthRejection = $true }
+                # Token selection is complete; ARM errors cannot select a different principal.
+                return $arm.Lane
             }
             else {
                 $chainNotes.Add('az-cli-cache: exit 0 but no accessToken field in the JSON (raw output never echoed)')

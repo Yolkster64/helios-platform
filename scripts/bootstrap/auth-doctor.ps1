@@ -699,12 +699,13 @@ function Get-BlankVaultChecks {
     if (-not $blocker -and $listed.Count -gt 0) {
         $hubCredential = Get-HubCredentialKind
         if ($hubCredential -ne 'az-cli') {
-            $accountProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'show', '--query', '{type:user.type,name:user.name}', '--output', 'json', '--only-show-errors')
+            $accountProbe = Invoke-Probe -Executable $azCmd.Source -Arguments @('account', 'show', '--query', '{type:user.type,name:user.name,tenantId:tenantId}', '--output', 'json', '--only-show-errors')
             $account = $null
             if ($accountProbe.ExitCode -eq 0) { try { $account = (@($accountProbe.Output) -join '') | ConvertFrom-Json } catch { $account = $null } }
             $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
             $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
-            $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+            $accountTenant = if ($null -ne $account -and $account.PSObject.Properties['tenantId'] -and $null -ne $account.tenantId) { [string]$account.tenantId } else { '' }
+            $samePrincipal = ($hubCredential -ne 'managed identity') -and ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase) -and -not [string]::IsNullOrWhiteSpace($accountTenant) -and $accountTenant.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_TENANT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
             if (-not $samePrincipal) {
                 $principalGap = "listed as enabled in vault '$vaultName' for the cached az identity, but the hub's DefaultAzureCredential authenticates as the $hubCredential" + $(if ($hubCredential -eq 'managed identity') { " ($(Get-HubManagedIdentitySource))" } else { ' (AZURE_CLIENT_ID)' }) + ' — access for that principal is not proven from here'
                 $principalHint = "grant that principal 'Key Vault Secrets User' on vault '$vaultName' (az role assignment create — owner-gated), or run pwsh scripts/bootstrap/auth-doctor.ps1 -Apply so az logs in as the same service principal, then re-run"
@@ -1569,13 +1570,9 @@ function Get-ConnectorSecretLane {
                 -OwnerAction $OwnerAction
         }
         default {
-            if ($localSet) {
-                return New-LaneResult -Lane $Lane -State 'ready' -Method 'env-token' -Gates $false `
-                    -Detail ("$localText ($Declared); $repoText — whether $Workflow can run is unverifiable from here: verify per the CONNECTIONS_SETUP.md owner checklist$suffixText")
-            }
-            return New-LaneResult -Lane $Lane -State 'needs-owner' -Method 'repo-secret' -Gates $false `
-                -Detail ("$localText ($Declared); $repoText — if $Workflow is meant to run ($Purpose), store the repository secret$suffixText") `
-                -OwnerAction $OwnerAction
+            return New-LaneResult -Lane $Lane -State 'unavailable' -Method 'repo-secret' -Gates $false `
+                -Detail ("$localText ($Declared); $repoText — whether $Workflow can run is unverified$suffixText") `
+                -OwnerAction "verify repository secret $Name metadata with an authorized GitHub session; if confirmed absent, follow the CONNECTIONS_SETUP.md owner checklist"
         }
     }
 }

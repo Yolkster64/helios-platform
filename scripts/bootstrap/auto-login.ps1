@@ -636,13 +636,14 @@ function Invoke-HeliosAutoLogin {
     function Test-HubPrincipalIsAzLogin {
         param([Parameter(Mandatory)][string]$Kind)
         if ($Kind -eq 'managed identity' -or -not $azCmd) { return $false }
-        $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+        $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name,tenantId:tenantId}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
         if ([int]$LASTEXITCODE -ne 0) { return $false }
         $account = $null
         try { $account = ($accountLines -join '') | ConvertFrom-Json } catch { return $false }
         $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
         $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
-        return ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+        $accountTenant = if ($null -ne $account -and $account.PSObject.Properties['tenantId'] -and $null -ne $account.tenantId) { [string]$account.tenantId } else { '' }
+        return ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase) -and -not [string]::IsNullOrWhiteSpace($accountTenant) -and $accountTenant.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_TENANT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
     }
     # The canonical Key Vault ORIGIN only (review finding): SecretResolver builds its
     # SecretClient from AZURE_KEY_VAULT_URI as written, so https://<vault>.vault.azure.net:444/
@@ -805,7 +806,8 @@ function Invoke-HeliosAutoLogin {
                 # custom endpoint, which this script never allows for the keyed path either.
                 $blankBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
                 $blankOrigin = if ($provType -eq 'github-models') { Test-PublicModelsOrigin -BaseUrl $blankBaseUrl } else { [pscustomobject]@{ Public = $true; Note = ''; Host = '' } }
-                $blankEnvProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; BaseUrl = $blankBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $blankOrigin); OriginNote = $blankOrigin.Note })
+                $blankEndpointEnv = if ($prov.PSObject.Properties['endpointEnv'] -and $null -ne $prov.endpointEnv) { [string]$prov.endpointEnv } else { 'AZURE_OPENAI_ENDPOINT' }
+                $blankEnvProviders.Add([pscustomobject]@{ EndpointEnv = $blankEndpointEnv; Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; BaseUrl = $blankBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $blankOrigin); OriginNote = $blankOrigin.Note })
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # guard only: every keyed type has a default
@@ -955,6 +957,14 @@ function Invoke-HeliosAutoLogin {
         foreach ($blank in @($blankEnvProviders | Where-Object { $_.Type -ne 'github-models' })) {
             $blankStep = "provider:$($blank.Name)"
             $blankWhy = "declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (the $($blank.Type) default applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it"
+            if ($blank.Type -eq 'azure-openai') {
+                $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair ([pscustomobject]@{
+                    Env = $blankStep; Lights = $blankStep; EndpointEnvs = @($blank.EndpointEnv)
+                }))
+                if ($endpointProblems.Count -gt 0) {
+                    Add-Step -Step "$blankStep`:endpoint" -State 'needs-owner' -Detail ($endpointProblems -join '; ')
+                }
+            }
             if ($blank.SecretName -and $blank.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
                 # An invalid NAME is a config defect before any vault question (review
                 # finding): the hub requests the string exactly as written.
