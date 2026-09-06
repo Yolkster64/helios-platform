@@ -5,7 +5,7 @@ One tool surface for every agent. The HELIOS MCP server (stdio) exposes the mult
 `helios_ai_status`, `helios_providers_list`, `helios_optimal_provider_get`,
 `helios_task_routing_get`, `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
 `helios_infra_validate`, `helios_azure_inventory_get`, `helios_auth_status_get`,
-`helios_fleet_plan_get`, `helios_foundry_agent_list`,
+`helios_fleet_plan_get`, `helios_fabric_plan_get`, `helios_foundry_agent_list`,
 `helios_foundry_agent_create`,
 `helios_operator_profile_get`, `helios_operator_profile_save`,
 `helios_operator_context_sync`, `helios_operator_next_steps_get`) to any MCP
@@ -170,6 +170,10 @@ fix hint, and it repairs nothing (repair is `scripts/bootstrap/auth-doctor.ps1`)
 configured provider chain (`config/fleet/fleet-topology.json`) against the hub's learned
 routing and only reports — learned chains are NEVER auto-applied, and a missing topology
 or empty learning history returns a message / engine `none` instead of failing;
+`helios_fabric_plan_get` is a purely local advisory read of
+`config/fabric/helios-fabric.v1.json`: it reports HC-029 checklist readiness, dependency
+and rename gates, and next actions; it never performs Slack/Linear/SharePoint writes,
+repository rename, OIDC/WIF changes, Azure what-if, deployment, or rollback actions;
 `helios_foundry_agent_list` is a read against the Azure AI Foundry project
 (DefaultAzureCredential) that reports `configured: false` with a fix hint when
 `AZURE_FOUNDRY_PROJECT_ENDPOINT` is unset instead of failing.

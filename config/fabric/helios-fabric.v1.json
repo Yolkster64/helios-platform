@@ -1,0 +1,199 @@
+{
+  "$schema": "../schemas/helios-fabric.v1.schema.json",
+  "$comment": "HC-029 executable Fabric activation contract. This file stores targets, gates, and receipt pointers only; no secret values are allowed.",
+  "version": 1,
+  "migrationIssue": "HC-029",
+  "sourcePullRequest": {
+    "repository": "M0nado/helios-platform",
+    "number": 184,
+    "mergeSha": "pending",
+    "requiredChecks": [
+      {
+        "name": "CI - Code Validation & Testing",
+        "result": "pending",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+      },
+      {
+        "name": "PR Pipeline",
+        "result": "pending",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+      },
+      {
+        "name": "Infra Validation",
+        "result": "pending",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+      }
+    ]
+  },
+  "safetyState": {
+    "productionEnabled": false,
+    "applyDefault": false,
+    "secretValuesInRepository": false,
+    "activeUiFramework": "WinUI 3"
+  },
+  "mcp": {
+    "requiredTool": "helios_fabric_plan_get",
+    "verificationMethod": "stdio-jsonrpc-tools-list",
+    "catalogReceiptPath": "docs/migration/yolkster-control-cutover/FABRIC-TOPOLOGY-AND-CHECKSUMS.md#mcp-tool-catalog"
+  },
+  "connectors": {
+    "slack": {
+      "workspaceId": "T0BAFGSNY5P",
+      "conversationId": "D0BB80HRZFA",
+      "receiptPath": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#slack-receipt"
+    },
+    "linear": {
+      "teamKey": "JOH",
+      "issueKey": "JOH-208",
+      "receiptPath": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#linear-receipt"
+    },
+    "sharePoint": {
+      "documentRoot": "Helios/Governance",
+      "receiptPath": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#sharepoint-receipt"
+    }
+  },
+  "azureActivation": {
+    "requiresRepositoryRename": true,
+    "renameTarget": "Yolkster64/helios-control",
+    "oidcStatus": "blocked-by-rename",
+    "adoWifStatus": "blocked-by-rename",
+    "whatIf": {
+      "apply": false,
+      "planHash": null,
+      "receiptPath": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#development-what-if-receipt",
+      "lastRunUtc": null
+    }
+  },
+  "checklist": [
+    {
+      "id": "record-pr184-merge-evidence",
+      "title": "Record M0nado/helios-platform#184 merge SHA and required-check evidence.",
+      "status": "pending",
+      "category": "evidence",
+      "owner": "repo-owner",
+      "requiresRename": false,
+      "dependsOn": [],
+      "externalAction": true,
+      "notes": "Copy the merge SHA, check names, and run URLs into the PR-184 receipt section."
+    },
+    {
+      "id": "validate-fabric-schema",
+      "title": "Validate the Fabric schema against the contract instance.",
+      "status": "done",
+      "category": "schema",
+      "owner": "copilot",
+      "requiresRename": false,
+      "dependsOn": [],
+      "externalAction": false,
+      "receiptRef": "scripts/validation/validate_helios_fabric_contract.py",
+      "notes": "Validated in CI by .github/workflows/fabric-contract.yml."
+    },
+    {
+      "id": "verify-mcp-fabric-tool",
+      "title": "Verify helios_fabric_plan_get through stdio JSON-RPC and capture catalog evidence.",
+      "status": "done",
+      "category": "mcp",
+      "owner": "copilot",
+      "requiresRename": false,
+      "dependsOn": [
+        "validate-fabric-schema"
+      ],
+      "externalAction": false,
+      "receiptRef": "docs/mcp/CLIENT_SETUP.md",
+      "notes": "Catalog parity is checked by scripts/verify/stack-smoke.ps1 and archived in the Fabric workflow."
+    },
+    {
+      "id": "slack-workspace-bind",
+      "title": "Connect Slack workspace T0BAFGSNY5P and conversation D0BB80HRZFA with a message receipt.",
+      "status": "pending",
+      "category": "connectors",
+      "owner": "repo-owner",
+      "requiresRename": false,
+      "dependsOn": [
+        "validate-fabric-schema"
+      ],
+      "externalAction": true,
+      "notes": "Retain Slack channel/conversation message permalink or timestamp in the checklist receipt."
+    },
+    {
+      "id": "linear-joh-208-sync",
+      "title": "Keep JOH-208 and HC-029 synchronized idempotently.",
+      "status": "pending",
+      "category": "connectors",
+      "owner": "repo-owner",
+      "requiresRename": false,
+      "dependsOn": [
+        "validate-fabric-schema"
+      ],
+      "externalAction": true,
+      "notes": "Capture GitHub->Linear sync evidence and comment-back receipt."
+    },
+    {
+      "id": "publish-sharepoint-packet",
+      "title": "Publish Fabric runbook/checklist/topology/checksums to SharePoint and re-read uploaded files.",
+      "status": "pending",
+      "category": "sharepoint",
+      "owner": "repo-owner",
+      "requiresRename": false,
+      "dependsOn": [
+        "validate-fabric-schema"
+      ],
+      "externalAction": true,
+      "notes": "Upload the docs packet, then verify each uploaded file hash still matches local checksums."
+    },
+    {
+      "id": "configure-github-azure-oidc",
+      "title": "Configure GitHub OIDC for Azure only after repository rename to helios-control.",
+      "status": "blocked",
+      "category": "azure",
+      "owner": "repo-owner",
+      "requiresRename": true,
+      "dependsOn": [
+        "record-pr184-merge-evidence"
+      ],
+      "externalAction": true,
+      "notes": "Use repo:Yolkster64/helios-control:environment:azure-dev subject and keep deployment authority in protected environments."
+    },
+    {
+      "id": "configure-ado-wif",
+      "title": "Configure Azure DevOps Entra-issued WIF as validation/evidence mirror after rename.",
+      "status": "blocked",
+      "category": "azure",
+      "owner": "repo-owner",
+      "requiresRename": true,
+      "dependsOn": [
+        "configure-github-azure-oidc"
+      ],
+      "externalAction": true,
+      "notes": "ADO remains validation/evidence mirror only, never production deployment authority."
+    },
+    {
+      "id": "run-development-what-if",
+      "title": "Run development Azure what-if with apply=false and retain canonical plan hash.",
+      "status": "blocked",
+      "category": "validation",
+      "owner": "repo-owner",
+      "requiresRename": true,
+      "dependsOn": [
+        "configure-github-azure-oidc"
+      ],
+      "externalAction": true,
+      "notes": "Store the SHA-256 hash and command transcript in the checklist receipt."
+    },
+    {
+      "id": "smoke-and-rollback-rehearsal",
+      "title": "Complete correlated end-to-end smoke tests and rollback rehearsal.",
+      "status": "pending",
+      "category": "validation",
+      "owner": "repo-owner",
+      "requiresRename": false,
+      "dependsOn": [
+        "slack-workspace-bind",
+        "linear-joh-208-sync",
+        "run-development-what-if"
+      ],
+      "externalAction": true,
+      "notes": "Capture smoke run IDs, rollback transcript, and final PASS/BLOCKED verdict."
+    }
+  ]
+}
