@@ -304,3 +304,6 @@ finally {
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 Write-Host "Passed $($script:cases) offline connect-github-app cases."
+# The suite's own status is the verdict: the child processes above exit 2 on purpose
+# and would otherwise leave $LASTEXITCODE = 2 for a CI step's trailing exit check.
+exit 0
