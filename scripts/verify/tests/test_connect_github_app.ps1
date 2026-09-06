@@ -190,7 +190,7 @@ exit 0
 
     function Invoke-Flow([hashtable]$Splat) {
         $script:browserOpened = $false
-        $output = Invoke-ConnectGitHubApp @Splat 6>$null
+        $output = Invoke-ConnectGitHubApp @Splat 6>&1
         $lines = @($output | ForEach-Object { "$_" })
         $json = ($lines | Where-Object { $_ -match '^\{' -or $_ -match '^\s' -or $_ -match '^\}' }) -join "`n"
         $code = [int]($lines | Select-Object -Last 1)
@@ -210,6 +210,20 @@ exit 0
     Assert-True ($run.Object.transport -eq 'injected') 'Report transport field must say injected.'
     Assert-True (((Get-Content -LiteralPath $log -Raw) -notmatch 'ARGV:variable') -and ((Get-Content -LiteralPath $log -Raw) -notmatch 'ARGV:api')) 'A credentialed gh probe ran over an injecting transport.'
     Assert-True (-not $script:browserOpened) 'No browser may open over an injecting transport.'
+
+    # Unanswered control (no network / timeout): nothing is proven, so the script refuses
+    # the same way instead of treating the transport as clean.
+    Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+    $script:rateLimitAnswer = $null
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
+    Assert-True ($run.ExitCode -eq 2) 'Unprobed transport must exit 2.'
+    Assert-True ((Get-Lane $run.Object 'transport').state -eq 'needs-owner') 'Unprobed transport lane must need the owner.'
+    Assert-True ((Get-Lane $run.Object 'transport').detail -match '^unprobed') 'Unprobed transport must be named.'
+    Assert-True ((Get-Lane $run.Object 'transport').ownerAction -match 'retry when api.github.com is reachable') 'Unprobed transport must ask for a retry.'
+    Assert-True ((Get-Lane $run.Object 'app-registered').state -eq 'skipped') 'Lanes must be skipped over an unproven transport.'
+    Assert-True ($run.Object.transport -eq 'unprobed') 'Report transport field must say unprobed.'
+    Assert-True (((Get-Content -LiteralPath $log -Raw) -notmatch 'ARGV:variable') -and ((Get-Content -LiteralPath $log -Raw) -notmatch 'ARGV:api')) 'A credentialed gh probe ran over an unproven transport.'
+    Assert-True (-not $script:browserOpened) 'No browser may open over an unproven transport.'
 
     # Clean transport, nothing registered: verify-only reports needs-owner and changes nothing.
     Remove-Item -LiteralPath $log -Force
@@ -262,6 +276,14 @@ exit 0
     $env:GH_SHIM_AUTH_EXIT = '1'
     $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
     Assert-True ($run.ExitCode -eq 2 -and $run.Object.failedPrecondition -match 'not logged in') 'A logged-out gh must be a failed precondition.'
+    # Child-process contract: run as a real process (the trailer, not the function), -Json
+    # prints exactly one object on stdout and the exit code is the report's exitCode.
+    $childOut = @(& ([Environment]::ProcessPath) -NoProfile -File (Join-Path $root 'scripts/bootstrap/connect-github-app.ps1') -VerifyOnly -Json -Repository 'owner/repo' 2>$null | ForEach-Object { "$_" })
+    $childExit = [int]$LASTEXITCODE
+    $childObject = ($childOut -join "`n") | ConvertFrom-Json
+    Assert-True ($childExit -eq 2) "A child -Json run must exit with the report code (got $childExit)."
+    Assert-True ($childObject.exitCode -eq 2 -and $childObject.failedPrecondition -match 'not logged in') 'A child -Json run must print the one report object on stdout.'
+    Assert-True (@($childOut | Where-Object { $_ -match '^\d+$' }).Count -eq 0) 'A child -Json run must not print the exit code as a line.'
     $env:GH_SHIM_AUTH_EXIT = ''
     $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'not-a-repo' }
     Assert-True ($run.ExitCode -eq 2 -and $run.Object.failedPrecondition -match 'owner/name') 'A malformed repository must be a failed precondition.'

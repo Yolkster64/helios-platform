@@ -38,7 +38,10 @@ answer above the 60/hour anonymous cap proves an injecting transport (the agent
 container: every GitHub Authorization header is rewritten to the proxy's own
 restricted token), and there a manifest conversion, a JWT probe or a `gh secret set`
 would all be meaningless or refused - the lane reports it and the script stops with
-exit 2. Run it from your own machine, Cloud Shell or a Codespace.
+exit 2. A control that does not answer at all (no network, a timeout) proves nothing
+either way, so the script refuses just the same (transport `unprobed`, exit 2) instead
+of continuing over an unproven transport. Run it from your own machine, Cloud Shell
+or a Codespace.
 
 Report lanes (one row each, one object under -Json): transport, app-registered,
 variables-stored, secret-stored, app-installed, governance-dispatched.
@@ -195,7 +198,10 @@ function New-ReportObject {
 function Write-Precondition {
     param([Parameter(Mandatory)][string]$Message, [string[]]$Fix = @(), [string]$Repository = '', [string]$Mode = '')
     if ($script:jsonMode) {
-        New-ReportObject -ExitCode 2 -Repository $Repository -Mode $Mode -FailedPrecondition $Message -Fix $Fix | ConvertTo-Json -Depth 5
+        # The report travels on the host stream like the text output, so the pipeline carries
+        # only the exit code: the trailer captures the function's value and a child process
+        # still prints the object on stdout.
+        New-ReportObject -ExitCode 2 -Repository $Repository -Mode $Mode -FailedPrecondition $Message -Fix $Fix | ConvertTo-Json -Depth 5 | Write-Host
         return 2
     }
     Write-Report "connect-github-app: FAILED PRECONDITION - $Message"
@@ -210,7 +216,7 @@ function Write-Summary {
     $ownerCount = @($script:lanes | Where-Object { $_.state -eq 'needs-owner' }).Count
     $exitCode = if ($failedCount -gt 0 -or $script:replay.Count -gt 0) { 1 } elseif ($ownerCount -gt 0) { 2 } else { 0 }
     if ($script:jsonMode) {
-        New-ReportObject -ExitCode $exitCode -Repository $Repository -Mode $Mode | ConvertTo-Json -Depth 5
+        New-ReportObject -ExitCode $exitCode -Repository $Repository -Mode $Mode | ConvertTo-Json -Depth 5 | Write-Host
         return $exitCode
     }
     Write-Report ''
@@ -614,15 +620,25 @@ function Invoke-ConnectGitHubApp {
     }
 
     # Transport control first: over an injecting proxy every credentialed answer below
-    # would describe the proxy's identity, not the owner's.
-    if (Test-TransportInjected) {
-        Add-Lane -Name 'transport' -State 'needs-owner' -Detail 'transport-injected: anonymous /rate_limit answers above the 60/hr cap, so GitHub credentials are rewritten in transit here' -OwnerAction $ownerMachineHint
+    # would describe the proxy's identity, not the owner's. A control that did not
+    # answer proves nothing, and an unproven transport is refused the same way - fail
+    # closed, never "ready" by default.
+    $injected = Test-TransportInjected
+    if ($injected -or $script:transportState -ne 'clean') {
+        if ($injected) {
+            Add-Lane -Name 'transport' -State 'needs-owner' -Detail 'transport-injected: anonymous /rate_limit answers above the 60/hr cap, so GitHub credentials are rewritten in transit here' -OwnerAction $ownerMachineHint
+            $skipDetail = 'not probed over an injecting transport'
+        }
+        else {
+            Add-Lane -Name 'transport' -State 'needs-owner' -Detail 'unprobed: api.github.com did not answer the anonymous /rate_limit control, so a clean transport cannot be proven' -OwnerAction "retry when api.github.com is reachable; $ownerMachineHint"
+            $skipDetail = 'not probed: the transport control did not answer'
+        }
         foreach ($lane in 'app-registered', 'variables-stored', 'secret-stored', 'app-installed', 'governance-dispatched') {
-            Add-Lane -Name $lane -State 'skipped' -Detail 'not probed over an injecting transport'
+            Add-Lane -Name $lane -State 'skipped' -Detail $skipDetail
         }
         return (Write-Summary -Repository $Repository -Mode $mode)
     }
-    Add-Lane -Name 'transport' -State 'ready' -Detail "anonymous /rate_limit at the anonymous cap ($($script:transportState))"
+    Add-Lane -Name 'transport' -State 'ready' -Detail 'anonymous /rate_limit at the anonymous cap (clean)'
 
     # --- Existing registration (verify-first) ---
     $stored = [ordered]@{}

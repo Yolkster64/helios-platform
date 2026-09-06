@@ -299,6 +299,31 @@ try {
         Assert-True ($LASTEXITCODE -eq 2 -and ((($twinOut -join "`n") | ConvertFrom-Json).failedPrecondition -match 'tenant id')) 'Twin malformed tenant must be a failed precondition naming the rule.'
     }
 
+    # --- Dot-sourced contract ---------------------------------------------------------------------
+    # Nothing but the report on the pipeline; the code in $connectDevicesExit and $LASTEXITCODE
+    # (the counterpart of the bash twin's sourced `return` status).
+    Reset-Shims -Gh 'expired' -Az 'expired'
+    $global:LASTEXITCODE = 0
+    $devicesScript = Join-Path $root 'scripts/bootstrap/connect-devices.ps1'
+    $dotOut = . $devicesScript -VerifyOnly -Json -SkipChain 6>&1
+    $dotLines = @($dotOut | ForEach-Object { "$_" })
+    Assert-True ($connectDevicesExit -eq 2) 'A dot-sourced run must leave the exit code in $connectDevicesExit.'
+    Assert-True ($LASTEXITCODE -eq 2) 'A dot-sourced run must leave the exit code in $LASTEXITCODE.'
+    Assert-True ($dotLines.Count -gt 0 -and $dotLines[-1] -notmatch '^\d+$') 'A dot-sourced run must put nothing but the report on the pipeline.'
+    $dotJson = ($dotLines | Where-Object { $_ -match '^\{' -or $_ -match '^\s' -or $_ -match '^\}' }) -join "`n"
+    Assert-True (@(($dotJson | ConvertFrom-Json).lanes | Where-Object { $_.name -eq 'github-login' })[0].state -eq 'needs-owner') 'The dot-sourced JSON report must still parse to the lane table.'
+
+    # --- Child-process contract ---------------------------------------------------------------
+    # Run as a real process (the trailer, not the function): -Json prints exactly one object on
+    # stdout and the process exit code is the report's exitCode.
+    Reset-Shims -Gh 'expired' -Az 'expired'
+    $childOut = @(& ([Environment]::ProcessPath) -NoProfile -File $devicesScript -VerifyOnly -Json -SkipChain 2>$null | ForEach-Object { "$_" })
+    $childExit = [int]$LASTEXITCODE
+    $childObject = ($childOut -join "`n") | ConvertFrom-Json
+    Assert-True ($childExit -eq 2) "A child -Json run must exit with the report code (got $childExit)."
+    Assert-True ($childObject.exitCode -eq 2 -and @($childObject.lanes | Where-Object { $_.name -eq 'github-login' })[0].state -eq 'needs-owner') 'A child -Json run must print the one report object on stdout.'
+    Assert-True (@($childOut | Where-Object { $_ -match '^\d+$' }).Count -eq 0) 'A child -Json run must not print the exit code as a line.'
+
     # --- No model identifiers in the shipped files ------------------------------------------------
     $forbidden = @(('claude', 'fable'), ('claude', 'opus'), ('claude', 'sonnet'), ('gpt', '5')) | ForEach-Object { $_ -join '[ -]' }
     foreach ($file in 'scripts/bootstrap/connect-devices.ps1', 'scripts/bootstrap/connect-devices.sh', 'scripts/verify/tests/test_connect_devices.ps1') {

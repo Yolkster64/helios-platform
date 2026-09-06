@@ -51,6 +51,8 @@ it can be, and this script does it:
 Exit code 0 = every lane ready (or skipped by a switch); 1 = a chained script failed
 (replay list printed); 2 = a login lane needs the owner (expired / refused / timed
 out) or a precondition is missing. -Json prints exactly one object.
+Dot-sourced, the script cannot `exit` (that would close your shell): it puts nothing
+on the pipeline and leaves the same code in $connectDevicesExit and $LASTEXITCODE.
 
 .PARAMETER VerifyOnly
 Probe both lanes read-only, print the plan (the two commands that would run, the
@@ -164,7 +166,10 @@ function New-ReportObject {
 function Write-Precondition {
     param([Parameter(Mandatory)][string]$Message, [string[]]$Fix = @(), [string]$Mode = '', [string]$Repository = '', [string]$Tenant = '')
     if ($script:jsonMode) {
-        New-ReportObject -ExitCode 2 -Mode $Mode -Repository $Repository -Tenant $Tenant -FailedPrecondition $Message -Fix $Fix | ConvertTo-Json -Depth 5
+        # The report travels on the host stream like the text output, so the pipeline carries
+        # only the exit code: the trailer captures the function's value and a child process
+        # still prints the object on stdout.
+        New-ReportObject -ExitCode 2 -Mode $Mode -Repository $Repository -Tenant $Tenant -FailedPrecondition $Message -Fix $Fix | ConvertTo-Json -Depth 5 | Write-Host
         return 2
     }
     Write-Report "connect-devices: FAILED PRECONDITION - $Message"
@@ -179,7 +184,7 @@ function Write-Summary {
     $ownerCount = @($script:lanes | Where-Object { $_.state -eq 'needs-owner' }).Count
     $exitCode = if ($failedCount -gt 0 -or $script:replay.Count -gt 0) { 1 } elseif ($ownerCount -gt 0) { 2 } else { 0 }
     if ($script:jsonMode) {
-        New-ReportObject -ExitCode $exitCode -Mode $Mode -Repository $Repository -Tenant $Tenant | ConvertTo-Json -Depth 5
+        New-ReportObject -ExitCode $exitCode -Mode $Mode -Repository $Repository -Tenant $Tenant | ConvertTo-Json -Depth 5 | Write-Host
         return $exitCode
     }
     Write-Report ''
@@ -615,7 +620,11 @@ function Invoke-ConnectDevices {
 
 # Dot-sourced (`. scripts/bootstrap/connect-devices.ps1`) the script must `return`, not
 # `exit` - `exit` would close the caller's shell - and only then can it export into it.
+# It puts nothing on the pipeline (a -Json consumer keeps exactly one parseable object)
+# and leaves the 0/1/2 code where the caller can read it: $connectDevicesExit in the
+# caller's scope (that is where a dot-sourced script runs) and $LASTEXITCODE, the
+# counterpart of the bash twin's `return` status when sourced.
 $connectDevicesDotSourced = ($MyInvocation.InvocationName -eq '.')
 $connectDevicesExit = Invoke-ConnectDevices @PSBoundParameters -DotSourced:$connectDevicesDotSourced
-if ($connectDevicesDotSourced) { return }
+if ($connectDevicesDotSourced) { $global:LASTEXITCODE = $connectDevicesExit; return }
 exit $connectDevicesExit
