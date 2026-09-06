@@ -12,6 +12,9 @@ cd src/ai/python && python3 -m pytest tests # Python spoke (dependency-free; [ml
 bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
 ```
 
+GUI changes under `src/gui/**` are compiled separately on `windows-latest` by
+`.github/workflows/gui-windows.yml` via `src/gui/HELIOS.Shell.sln`.
+
 **`HELIOS.sln` deliberately excludes `src/core/HELIOS.Platform`** — the core project does
 not compile today (~323 errors). Do not add it back until it builds. The two seam files
 `Core/AI/Interfaces/IAgent.cs` and `Core/AI/Router/IRouter.cs` are source-linked into
@@ -47,13 +50,19 @@ HELIOS.AIHub; keep them dependency-free (System.* usings only).
   `CLAUDE_AZURE_TENANT_ID`, `CLAUDE_AZURE_SUBSCRIPTION_ID`, and
   `ANTHROPIC_FOUNDRY_RESOURCE`.
 - The dedicated principal receives only `Cognitive Services User` on the selected
-  Foundry account. No client secret is created. The existing HELIOS deployment identity
-  remains a compatibility fallback only.
+  Foundry account for direct Claude model invocation. Use the Foundry-native `Foundry User`
+  role instead if broader Foundry project capabilities are required. No client secret is
+  created. The existing HELIOS deployment identity remains a compatibility fallback only.
 - The implementation lane deliberately separates authority: Claude's Azure-authenticated
   job has a read-only GitHub token and emits a patch; validation/publishing jobs have no
   Azure OIDC token and can only publish a validated draft PR.
 - Project permission denials live in `.claude/settings.json`. Never use a bypass-permission
   mode in CI.
+- **Fabric Control** in `src/gui/HELIOS.Shell/Views/FabricControlPage.xaml` is the desktop
+  operator surface for GitHub, Claude, Azure OIDC, Foundry, Key Vault/OpenAI/Codex,
+  Hermes/AIHub, and collaboration-broker readiness. It never renders secret values or
+  performs cloud writes; it exposes only readiness, governed links, and bootstrap/verify
+  commands.
 - Full operator setup: `docs/architecture/CLAUDE_CODE_GITHUB_FOUNDRY.md`.
 
 ## Multi-LLM hub
