@@ -48,8 +48,23 @@ steps:
       versionSpec: '3.12'
       addToPath: true
 
+  - script: python -m pip install --disable-pip-version-check jsonschema
+    displayName: Install JSON Schema validator
+
   - script: python scripts/fabric/plan_helios_fabric.py --mode validate
     displayName: Validate Fabric contract
+
+  - script: |
+      python - <<'PY'
+      import json
+      from pathlib import Path
+      from jsonschema import Draft202012Validator
+
+      schema = json.loads(Path("config/schemas/helios-fabric.schema.json").read_text(encoding="utf-8"))
+      instance = json.loads(Path("config/fabric/helios-fabric.v1.json").read_text(encoding="utf-8"))
+      Draft202012Validator(schema).validate(instance)
+      PY
+    displayName: Validate Fabric instance against Draft 2020-12 schema
 
   - script: >-
       python scripts/fabric/plan_helios_fabric.py

@@ -47,8 +47,23 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install JSON Schema validator
+        run: python -m pip install --disable-pip-version-check jsonschema
+
       - name: Validate Fabric contract
         run: python scripts/fabric/plan_helios_fabric.py --mode validate
+
+      - name: Validate Fabric instance against Draft 2020-12 schema
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(Path("config/schemas/helios-fabric.schema.json").read_text(encoding="utf-8"))
+          instance = json.loads(Path("config/fabric/helios-fabric.v1.json").read_text(encoding="utf-8"))
+          Draft202012Validator(schema).validate(instance)
+          PY
 
       - name: Build sanitized Fabric plan
         run: >-
