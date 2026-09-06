@@ -73,7 +73,21 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         self._validate_mutation(
             "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))",
             "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)",
-            "explicitly guard non-what-if deploys to workflow_dispatch",
+            "explicitly guard non-what-if deploys to push or workflow_dispatch",
+        )
+
+    def test_fails_when_deploy_guard_is_bypassed_with_true_or(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))",
+            "if: true || (steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if)))",
+            "explicitly guard non-what-if deploys to push or workflow_dispatch",
+        )
+
+    def test_fails_when_seal_step_skips_preflight_failures(self) -> None:
+        self._validate_mutation(
+            "if: always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'",
+            "if: always() && steps.creds.outputs.configured == 'true' && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')",
+            "custody preparation succeeded",
         )
 
     def test_fails_when_raw_output_is_tee_d_to_record(self) -> None:

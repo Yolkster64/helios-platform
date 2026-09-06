@@ -35,6 +35,10 @@ def _find_step(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
     fail(f"missing workflow step: {name}")
 
 
+def _normalize_if(expression: str) -> str:
+    return "".join(expression.split())
+
+
 def _ensure_action(step: dict[str, Any], expected_prefix: str, message: str) -> None:
     uses = str(step.get("uses", ""))
     _require(uses.startswith(expected_prefix + "@"), message)
@@ -77,9 +81,10 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
 
     ensure_rg = _find_step(steps, "Ensure resource group for deploy")
     ensure_rg_if = str(ensure_rg.get("if", ""))
-    expected_ensure_rg_if = "steps.creds.outputs.configured == 'true' && github.event_name == 'push'"
-    _require(" ".join(ensure_rg_if.split()) == expected_ensure_rg_if,
-             "resource-group creation must be limited to configured push deploys")
+    _require(
+        _normalize_if(ensure_rg_if) == _normalize_if("steps.creds.outputs.configured == 'true' && github.event_name == 'push'"),
+        "resource-group creation must be limited to push deploys only",
+    )
 
     what_if = _find_step(steps, "What-if (sanitized custody record)")
     what_if_if = str(what_if.get("if", ""))
@@ -88,6 +93,12 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
              "what-if step must be restricted to workflow_dispatch + what_if=true")
     _require("--result-format ResourceIdOnly" in what_if_run,
              "what-if custody must use ResourceIdOnly output to avoid sensitive payload capture")
+    _require("--no-pretty-print" in what_if_run,
+             "what-if custody must disable pretty printing for machine-readable JSON")
+    _require(".changes[]?" in what_if_run and ".properties.changes[]?" not in what_if_run,
+             "what-if custody must count changes from the root changes array")
+    _require("stderrPreview" not in what_if_run,
+             "what-if custody record must not persist free-form stderr previews")
     _require("record-what-if-" in what_if_run,
              "what-if must write a dedicated custody record")
     _require("exit \"$rc\"" in what_if_run,
@@ -96,12 +107,16 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     deploy = _find_step(steps, "Deploy Helios Infra (sanitized custody record)")
     deploy_if = str(deploy.get("if", ""))
     deploy_run = str(deploy.get("run", ""))
-    _require("github.event_name == 'push'" in deploy_if and "github.event_name == 'workflow_dispatch'" in deploy_if and "!inputs.what_if" in deploy_if,
-             "deploy step must explicitly guard non-what-if deploys to workflow_dispatch")
+    _require(
+        _normalize_if(deploy_if) == _normalize_if("steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))"),
+        "deploy step must explicitly guard non-what-if deploys to push or workflow_dispatch",
+    )
     _require("record-deploy-" in deploy_run,
              "deploy step must write a dedicated custody record")
     _require("--query" in deploy_run and "provisioningState" in deploy_run,
              "deploy custody must capture allowlisted deployment fields only")
+    _require("stderrPreview" not in deploy_run,
+             "deploy custody record must not persist free-form stderr previews")
     _require("exit \"$rc\"" in deploy_run,
              "deploy step must preserve az CLI exit codes")
 
@@ -109,8 +124,8 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     seal_if = str(seal.get("if", ""))
     seal_run = str(seal.get("run", ""))
     _require(
-        "always()" in seal_if and "steps.custody.conclusion" in seal_if,
-        "manifest sealing must run after custody setup, including preflight failures",
+        _normalize_if(seal_if) == _normalize_if("always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'"),
+        "manifest sealing must run whenever custody preparation succeeded",
     )
     _require("sha256sum" in seal_run and "manifest.json" in seal_run,
              "manifest sealing must checksum records and include manifest")
