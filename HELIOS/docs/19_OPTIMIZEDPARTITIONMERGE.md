@@ -2,6 +2,7 @@
 
 ## Purpose
 Bring back the original HELIOS partition idea and merge it with the newer semantic partition model into one optimized layout.
+This document is advisory planning guidance only and does not authorize or perform disk, encryption, registry, or licensing operations.
 
 ## Design principle
 Use physical partitioning where it improves control, security, and performance. Use logical folders where rigid partitions would waste space.

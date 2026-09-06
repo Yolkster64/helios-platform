@@ -15,10 +15,13 @@ public class ContextMenuExtension : IContextMenu
 {
     private string? _selectedFile;
     private const uint IDCMD_OPEN_HELIOS = 0;
+    private const uint CMF_DEFAULTONLY = 0x00000001;
+    private const uint GCS_HELPTEXTA = 0x00000001;
+    private const uint GCS_HELPTEXTW = 0x00000005;
 
     public int QueryContextMenu(IntPtr hMenu, uint indexMenu, uint idCmdFirst, uint idCmdLast, uint uFlags)
     {
-        if ((uFlags & 0x0100) != 0) // Check if we should add menu items
+        if ((uFlags & CMF_DEFAULTONLY) != 0)
             return 0;
 
         // Add "Open with HELIOS" menu item
@@ -37,8 +40,9 @@ public class ContextMenuExtension : IContextMenu
             pici,
             typeof(CMINVOKECOMMANDINFO))!;
 
-        uint verb = (uint)(int)invoke.lpVerb;
-        if (LOWORD(verb) == IDCMD_OPEN_HELIOS)
+        var verbValue = unchecked((ulong)invoke.lpVerb.ToInt64());
+        var isNumericVerb = ((verbValue >> 16) == 0);
+        if (isNumericVerb && LOWORD((uint)verbValue) == IDCMD_OPEN_HELIOS)
         {
             LaunchWithHelios(_selectedFile);
             return 0;
@@ -52,10 +56,19 @@ public class ContextMenuExtension : IContextMenu
         if (idCmd != (UIntPtr)IDCMD_OPEN_HELIOS)
             return 1;
 
-        string description = "Open file with HELIOS Platform";
-        if (uFlags == 4) // GCS_HELPTEXT
+        const string description = "Open file with HELIOS Platform";
+        if (uFlags == GCS_HELPTEXTW && pszName != IntPtr.Zero)
         {
-            Marshal.Copy(description.ToCharArray(), 0, pszName, Math.Min(description.Length, (int)cchMax));
+            var maxChars = Math.Max(0, (int)cchMax - 1);
+            var helpText = description[..Math.Min(description.Length, maxChars)] + '\0';
+            Marshal.Copy(helpText.ToCharArray(), 0, pszName, helpText.Length);
+        }
+        else if (uFlags == GCS_HELPTEXTA && pszName != IntPtr.Zero)
+        {
+            var bytes = System.Text.Encoding.ASCII.GetBytes(description);
+            var count = Math.Min(bytes.Length, Math.Max(0, (int)cchMax - 1));
+            Marshal.Copy(bytes, 0, pszName, count);
+            Marshal.WriteByte(pszName, count, 0);
         }
 
         return 0;
@@ -73,9 +86,13 @@ public class ContextMenuExtension : IContextMenu
             var startInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = System.IO.Path.Combine(heliosPath, "HELIOS.Platform.exe"),
-                Arguments = $"--open \"{filePath}\"",
                 UseShellExecute = true
             };
+            if (!string.IsNullOrWhiteSpace(filePath))
+            {
+                startInfo.ArgumentList.Add("--open");
+                startInfo.ArgumentList.Add(filePath);
+            }
 
             System.Diagnostics.Process.Start(startInfo);
         }
@@ -122,8 +139,8 @@ public interface IContextMenu
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
 public struct CMINVOKECOMMANDINFO
 {
-    public IntPtr cbSize;
-    public IntPtr fMask;
+    public uint cbSize;
+    public uint fMask;
     public IntPtr hwnd;
     public IntPtr lpVerb;
     public IntPtr lpParameters;
@@ -137,7 +154,8 @@ public struct CMINVOKECOMMANDINFO
 public static class ShellContextMenuHelper
 {
     [DllImport("user32.dll")]
-    private static extern IntPtr InsertMenuA(IntPtr hMenu, uint uPosition, uint uFlags, UIntPtr uIDNewItem, string lpNewItem);
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool InsertMenuW(IntPtr hMenu, uint uPosition, uint uFlags, UIntPtr uIDNewItem, string lpNewItem);
 
     private const uint MF_BYPOSITION = 0x400;
     private const uint MF_STRING = 0x0;
@@ -146,8 +164,7 @@ public static class ShellContextMenuHelper
     {
         try
         {
-            InsertMenuA(hMenu, position, MF_BYPOSITION | MF_STRING, (UIntPtr)id, text);
-            return true;
+            return InsertMenuW(hMenu, position, MF_BYPOSITION | MF_STRING, (UIntPtr)id, text);
         }
         catch
         {

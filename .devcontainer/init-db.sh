@@ -1,12 +1,9 @@
-#!/bin/bash
-# Database initialization script for PostgreSQL
-# This script runs inside the postgres service container
-
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 echo "Initializing Helios Platform database..."
 
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<-EOSQL
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<-EOSQL
     -- Create extensions
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS "pg_trgm";
@@ -48,9 +45,9 @@ psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<-EOSQL
     CREATE INDEX IF NOT EXISTS idx_wiki_pages_author ON wiki_pages(author_id);
     CREATE INDEX IF NOT EXISTS idx_wiki_versions_page ON wiki_versions(page_id);
     
-    GRANT ALL PRIVILEGES ON DATABASE helios_dev TO devuser;
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO devuser;
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO devuser;
+    GRANT ALL PRIVILEGES ON DATABASE "$POSTGRES_DB" TO "$POSTGRES_USER";
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$POSTGRES_USER";
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$POSTGRES_USER";
 EOSQL
 
 echo "Database initialization complete!"
