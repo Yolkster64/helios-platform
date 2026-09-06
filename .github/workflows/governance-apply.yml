@@ -136,7 +136,7 @@ jobs:
 
   apply:
     name: Apply (main / dispatch)
-    if: github.event_name != 'pull_request'
+    if: always()
     # One group for every apply, never cancelled: two reconciliations racing on the
     # same repository could interleave their GET-diff-then-apply passes.
     concurrency:
@@ -154,13 +154,13 @@ jobs:
       pages: read
     uses: ./.github/workflows/governance-run.yml
     with:
-      run_mode: apply
+      run_mode: ${{ github.event_name == 'pull_request' && 'plan' || 'apply' }}
       # A push to main IS the apply (the merged truth goes live) and so is the daily
       # schedule (it exists to catch merges that raised no push event); a dispatch
       # applies only when asked, so apply=false doubles as a plan run with the real
       # token.
-      apply: ${{ github.event_name == 'push' || github.event_name == 'schedule' || inputs.apply == true }}
-      scope: ${{ inputs.scope || 'all' }}
+      apply: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.apply == true) }}
+      scope: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || 'all' }}
     # The owner's PAT when stored, else empty (same idiom as copilot-dispatch.yml);
     # the runner falls back to the workflow token by itself. Passed by name only,
     # never echoed.
