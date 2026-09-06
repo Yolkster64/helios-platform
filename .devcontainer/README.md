@@ -80,9 +80,9 @@ The compose file is intentionally database-only. It keeps the existing `postgres
 
 `init-db.sh` only runs when Docker initializes an empty `postgres-data` volume. It creates the current local dev schema; it does **not** migrate an existing volume.
 
-## Validation commands
+## Validation commands to run from the container
 
-These are the repository gates the devcontainer is meant to support:
+The automated regression coverage committed in this PR directly exercises `.devcontainer/tests`, `scripts/verify/tests/test-code-checks.ps1`, Dockerfile/Compose validation, and first-run PostgreSQL initialization. I also manually ran the repository gates below from this branch:
 
 ```bash
 cd /workspaces/<repo-name>

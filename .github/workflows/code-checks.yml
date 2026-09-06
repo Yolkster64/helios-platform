@@ -68,6 +68,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          Import-Module Pester -MinimumVersion 5.4.0
           Invoke-Pester -Path scripts/verify/tests/test-code-checks.ps1 -Output Detailed -CI
 
       - name: Publish summary
