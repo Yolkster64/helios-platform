@@ -105,7 +105,7 @@ jobs:
           if ('${{ github.event_name }}' -eq 'pull_request') {
             $base = '${{ github.event.pull_request.base.sha }}'
             $head = '${{ github.event.pull_request.head.sha }}'
-            git diff --name-only $base $head | Tee-Object -Variable changedFiles
+            git diff --name-only "${base}...${head}" | Tee-Object -Variable changedFiles
           } elseif ('${{ github.event_name }}' -eq 'push') {
             $before = '${{ github.event.before }}'
             $after = '${{ github.sha }}'
