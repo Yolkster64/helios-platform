@@ -108,6 +108,49 @@ function Get-FirstLine {
     if ($line) { $line.Trim() } else { '(no output)' }
 }
 
+# Pure, no-network read of the persisted board-config artifact so the board-setup
+# component (step f) has an offline contract test (scripts/verify/tests/test_setup_all_board.ps1)
+# the same way the auth lanes do. Returns { Ready = [bool]; Detail = [string] }; a missing,
+# malformed, or incomplete file is reported as not-ready rather than throwing.
+function Get-BoardSetupReadiness {
+    param([Parameter(Mandatory)][string]$ConfigPath)
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'scripts/config/board-config.json not found' }
+    }
+    try {
+        $board = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{ Ready = $false; Detail = "does not parse: $($_.Exception.Message)" }
+    }
+    $boardConfig = if ($board.PSObject.Properties['boardConfiguration']) { $board.boardConfiguration } else { $null }
+    if (-not $boardConfig) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'parses but declares no boardConfiguration' }
+    }
+    $boardName = if ($boardConfig.PSObject.Properties['name']) { [string]$boardConfig.name } else { '' }
+    $boardOrg = if ($boardConfig.PSObject.Properties['organization']) { [string]$boardConfig.organization } else { '' }
+    $projectNumber = if ($boardConfig.PSObject.Properties['projectNumber']) { $boardConfig.projectNumber } else { $null }
+    if ([string]::IsNullOrWhiteSpace($boardName) -or $null -eq $projectNumber) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'boardConfiguration is missing a name or projectNumber' }
+    }
+    # Sum the persisted custom fields across every tier so the detail lines up with what
+    # setup-custom-fields.ps1 provisions and validate-board.ps1 checks.
+    $fieldCount = 0
+    if ($board.PSObject.Properties['customFields']) {
+        foreach ($tier in $board.customFields.PSObject.Properties) {
+            $tierValue = $tier.Value
+            if ($tierValue.PSObject.Properties['fields']) {
+                $fieldCount += @($tierValue.fields).Count
+            }
+        }
+    }
+    $ownerText = if ([string]::IsNullOrWhiteSpace($boardOrg)) { '(owner unset)' } else { $boardOrg }
+    return [pscustomobject]@{
+        Ready  = $true
+        Detail = "'$boardName' owner=$ownerText project #$projectNumber; $fieldCount custom fields persisted"
+    }
+}
+
 # -Json promises "nothing else on stdout", and from an external caller's viewpoint
 # Write-Host lands on stdout too — so all progress printing is gated on -not $Json.
 function Write-Section {
@@ -397,47 +440,10 @@ Write-Section '-- f. Board setup (scripts/config/board-config.json) --'
 # persisted board-config artifact exists and describes a board, so the operator knows
 # whether the board layout is captured before running those credentialed steps.
 $boardConfigPath = Join-Path $repoRoot 'scripts' 'config' 'board-config.json'
-$boardReady = $false
-$boardDetail = 'scripts/config/board-config.json not found'
-if (Test-Path -LiteralPath $boardConfigPath) {
-    try {
-        $board = Get-Content -Raw -LiteralPath $boardConfigPath | ConvertFrom-Json
-        $boardConfig = if ($board.PSObject.Properties['boardConfiguration']) { $board.boardConfiguration } else { $null }
-        if ($boardConfig) {
-            $boardName = if ($boardConfig.PSObject.Properties['name']) { [string]$boardConfig.name } else { '' }
-            $boardOrg = if ($boardConfig.PSObject.Properties['organization']) { [string]$boardConfig.organization } else { '' }
-            $projectNumber = if ($boardConfig.PSObject.Properties['projectNumber']) { $boardConfig.projectNumber } else { $null }
-            if (-not [string]::IsNullOrWhiteSpace($boardName) -and $null -ne $projectNumber) {
-                # Sum the persisted custom fields across every tier so the detail lines up
-                # with what setup-custom-fields.ps1 provisions and validate-board.ps1 checks.
-                $fieldCount = 0
-                if ($board.PSObject.Properties['customFields']) {
-                    foreach ($tier in $board.customFields.PSObject.Properties) {
-                        $tierValue = $tier.Value
-                        if ($tierValue.PSObject.Properties['fields']) {
-                            $fieldCount += @($tierValue.fields).Count
-                        }
-                    }
-                }
-                $boardReady = $true
-                $ownerText = if ([string]::IsNullOrWhiteSpace($boardOrg)) { '(owner unset)' } else { $boardOrg }
-                $boardDetail = "'$boardName' owner=$ownerText project #$projectNumber; $fieldCount custom fields persisted"
-            }
-            else {
-                $boardDetail = 'boardConfiguration is missing a name or projectNumber'
-            }
-        }
-        else {
-            $boardDetail = 'parses but declares no boardConfiguration'
-        }
-    }
-    catch {
-        $boardDetail = "does not parse: $($_.Exception.Message)"
-    }
-}
-$components += New-Component -Name 'board-setup' -Ready $boardReady -Detail $boardDetail `
+$boardReadiness = Get-BoardSetupReadiness -ConfigPath $boardConfigPath
+$components += New-Component -Name 'board-setup' -Ready $boardReadiness.Ready -Detail $boardReadiness.Detail `
     -FixCommand 'pwsh scripts/board-setup/setup-board.ps1   # provision custom fields, then validate-board.ps1 for a read-only GraphQL verify'
-Write-ChildOutput @($boardDetail)
+Write-ChildOutput @($boardReadiness.Detail)
 
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })

@@ -1,0 +1,38 @@
+name: Setup Fabric Contracts
+
+# Offline contract for the unified setup-all control-fabric orchestrator (absorption E1).
+# Mirrors auth-contracts.yml: it runs the pure, no-network readiness checks that
+# scripts/setup/setup-all.ps1 factors out, so a change to the orchestrator or its board
+# leg cannot silently break the persisted board-config contract. No secrets, no login
+# flows, and no PR event context is interpolated into any run block.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/verify/tests/test_setup_all_board.ps1'
+      - 'scripts/config/board-config.json'
+      - '.github/workflows/setup-fabric-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/verify/tests/test_setup_all_board.ps1'
+      - 'scripts/config/board-config.json'
+      - '.github/workflows/setup-fabric-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-setup-fabric:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify board-setup readiness contract (offline)
+        shell: pwsh
+        run: |
+          ./scripts/verify/tests/test_setup_all_board.ps1
