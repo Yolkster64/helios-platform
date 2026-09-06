@@ -2,20 +2,20 @@
 
 This directory has two deliberately separate entrypoints:
 
-1. `/home/runner/work/helios-platform/helios-platform/.devcontainer/devcontainer.json` — the supported VS Code / Codespaces devcontainer.
-2. `/home/runner/work/helios-platform/helios-platform/.devcontainer/docker-compose.yml` — an optional local PostgreSQL sidecar, not a second full workspace container.
+1. `.devcontainer/devcontainer.json` — the supported VS Code / Codespaces devcontainer.
+2. `.devcontainer/docker-compose.yml` — an optional local PostgreSQL sidecar, not a second full workspace container.
 
 That split keeps one canonical toolchain while still offering an opt-in local database.
 
 ## What the devcontainer includes
 
 - .NET 8 SDK base image for the portable `HELIOS.sln` build.
-- Dev Container features for Azure CLI, GitHub CLI, Node.js 22, PowerShell 7, Python 3.11, and Terraform.
+- Dev Container features for Azure CLI, GitHub CLI, **Node.js 22** (pinned for current repository tooling), PowerShell 7, Python 3.11, and Terraform.
 - A small Dockerfile layer with `cmake`, `postgresql-client`, `shellcheck`, `sqlite3`, and other repo-level utilities.
 - Port forwarding for `helios-ai-api` on `5170`.
 - Persistent caches for NuGet, pip, and npm under the container user's home directory.
 
-The workspace opens at `/workspaces/<repo-name>`. The post-create step runs `/home/runner/work/helios-platform/helios-platform/.devcontainer/onCreateCommand.sh`, which:
+The workspace opens at `/workspaces/<repo-name>`. The post-create step runs `.devcontainer/onCreateCommand.sh`, which:
 
 - resolves the repo root from the script location;
 - optionally builds the native C++ spoke when `cmake` is available;
@@ -32,15 +32,15 @@ In VS Code, choose **Reopen in Container** from the repository root.
 If you prefer the Dev Container CLI:
 
 ```bash
-devcontainer up --workspace-folder /home/runner/work/helios-platform/helios-platform
-devcontainer exec --workspace-folder /home/runner/work/helios-platform/helios-platform bash
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . bash
 ```
 
 ## Optional local PostgreSQL sidecar
 
 The compose file is intentionally database-only. It keeps the existing `postgres-data` named volume and binds the database to loopback instead of all host interfaces.
 
-1. Create an untracked env file at `/home/runner/work/helios-platform/helios-platform/.devcontainer/local.env`:
+1. Create an untracked env file at `.devcontainer/local.env`:
 
    ```dotenv
    HELIOS_DEV_POSTGRES_PASSWORD=choose-a-local-dev-password
@@ -54,9 +54,9 @@ The compose file is intentionally database-only. It keeps the existing `postgres
 
    ```bash
    docker compose \
-     --env-file /home/runner/work/helios-platform/helios-platform/.devcontainer/local.env \
+     --env-file .devcontainer/local.env \
      --profile database \
-     -f /home/runner/work/helios-platform/helios-platform/.devcontainer/docker-compose.yml \
+     -f .devcontainer/docker-compose.yml \
      up -d postgres
    ```
 
@@ -64,8 +64,8 @@ The compose file is intentionally database-only. It keeps the existing `postgres
 
    ```bash
    docker compose \
-     --env-file /home/runner/work/helios-platform/helios-platform/.devcontainer/local.env \
-     -f /home/runner/work/helios-platform/helios-platform/.devcontainer/docker-compose.yml \
+     --env-file .devcontainer/local.env \
+     -f .devcontainer/docker-compose.yml \
      ps
    ```
 
@@ -83,13 +83,13 @@ The compose file is intentionally database-only. It keeps the existing `postgres
 These are the repository gates the devcontainer is meant to support:
 
 ```bash
-cd /home/runner/work/helios-platform/helios-platform
+cd /workspaces/<repo-name>
 dotnet build HELIOS.sln -c Release
 dotnet test tests/HELIOS.AIHub.Tests -c Release
-cd /home/runner/work/helios-platform/helios-platform/src/ai/python && python3 -m pytest tests
-bicep build /home/runner/work/helios-platform/helios-platform/infra/main.bicep --stdout
-python3 /home/runner/work/helios-platform/helios-platform/scripts/validation/validate_yolkster_cutover.py
-python3 -m unittest discover -s /home/runner/work/helios-platform/helios-platform/.devcontainer/tests
+cd src/ai/python && python3 -m pytest tests
+bicep build infra/main.bicep --stdout
+python3 scripts/validation/validate_yolkster_cutover.py
+python3 -m unittest discover -s .devcontainer/tests
 ```
 
 ## Limitations and safety notes

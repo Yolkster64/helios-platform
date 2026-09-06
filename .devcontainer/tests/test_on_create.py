@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/runner/work/helios-platform/helios-platform")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_SOURCE = REPO_ROOT / ".devcontainer" / "onCreateCommand.sh"
 
 
