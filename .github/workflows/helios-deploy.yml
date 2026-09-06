@@ -121,7 +121,6 @@ jobs:
             modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
             delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
           fi
-          stderr_preview="$(sed -E 's/([A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|KEY)[A-Za-z0-9_]*)=[^[:space:]]+/\1=[REDACTED]/Ig' "$stderr_file" | tail -n 20)"
           jq -n \
             --arg phase "what-if" \
             --arg deploymentName "$deployment_name" \
@@ -130,10 +129,9 @@ jobs:
             --argjson createCount "$create_count" \
             --argjson modifyCount "$modify_count" \
             --argjson deleteCount "$delete_count" \
-            --arg stderrPreview "$stderr_preview" \
             --arg stdoutDigestSha256 "$(sha256sum "$stdout_file" | awk '{print $1}')" \
             --arg stderrDigestSha256 "$(sha256sum "$stderr_file" | awk '{print $1}')" \
-            '{phase:$phase, deploymentName:$deploymentName, timestamp:$timestamp, exitCode:$exitCode, summary:{create:$createCount, modify:$modifyCount, delete:$deleteCount}, stderrPreview:$stderrPreview, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
+            '{phase:$phase, deploymentName:$deploymentName, timestamp:$timestamp, exitCode:$exitCode, summary:{create:$createCount, modify:$modifyCount, delete:$deleteCount}, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
             > "$record"
           if [ "$rc" -ne 0 ]; then
             echo "::error::Azure what-if failed (exit $rc). See sanitized custody artifact for diagnostics."
@@ -159,16 +157,14 @@ jobs:
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
-          stderr_preview="$(sed -E 's/([A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|KEY)[A-Za-z0-9_]*)=[^[:space:]]+/\1=[REDACTED]/Ig' "$stderr_file" | tail -n 20)"
           jq -n \
             --arg phase "deploy" \
             --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --argjson exitCode "$rc" \
-            --arg stderrPreview "$stderr_preview" \
             --arg stdoutDigestSha256 "$(sha256sum "$stdout_file" | awk '{print $1}')" \
             --arg stderrDigestSha256 "$(sha256sum "$stderr_file" | awk '{print $1}')" \
             --slurpfile result "$stdout_file" \
-            '{phase:$phase, timestamp:$timestamp, exitCode:$exitCode, result:($result[0] // {}), stderrPreview:$stderrPreview, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
+            '{phase:$phase, timestamp:$timestamp, exitCode:$exitCode, result:($result[0] // {}), stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
             > "$record"
           if [ "$rc" -ne 0 ]; then
             echo "::error::Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics."
