@@ -141,7 +141,11 @@ jobs:
           permissions_block = workflow.split('permissions:', 1)[1].split('concurrency:', 1)[0]
           assert 'contents: read' in permissions_block
           assert 'write' not in permissions_block
-          assert 'azure/login' not in workflow
-          assert 'az deployment' not in workflow
-          assert 'pull_request_target' not in workflow
+          forbidden_patterns = (
+              'azure' + '/login',
+              'az ' + 'deployment',
+              'pull_request' + '_target',
+          )
+          for forbidden in forbidden_patterns:
+              assert forbidden not in workflow
           PY
