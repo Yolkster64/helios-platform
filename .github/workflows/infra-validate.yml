@@ -76,14 +76,19 @@ jobs:
   bicep-validate:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
+      - name: Mark non-applicable PR as pass
+        if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'false'
+        run: echo "No infra paths changed in this PR; bicep validation is non-applicable for this diff."
+
       - name: Checkout
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         uses: actions/checkout@v4
 
       # az bicep runs entirely offline — no login or subscription needed,
       # so this job is deterministic on forks and PRs.
       - name: Bicep build (compile + lint)
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: |
           az bicep install
           az bicep build --file infra/main.bicep --stdout > /dev/null
@@ -97,17 +102,23 @@ jobs:
   arm-freshness:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
+      - name: Mark non-applicable PR as pass
+        if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'false'
+        run: echo "No infra paths changed in this PR; ARM freshness validation is non-applicable for this diff."
+
       - name: Checkout
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         uses: actions/checkout@v4
 
       - name: Regenerate ARM template from Bicep
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: |
           az bicep install
           az bicep build --file infra/main.bicep --outfile /tmp/main.generated.json
 
       - name: Compare against committed infra/arm/main.json
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: |
           python3 - <<'EOF'
           import json, sys
@@ -149,19 +160,27 @@ jobs:
   terraform-validate:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
+      - name: Mark non-applicable PR as pass
+        if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'false'
+        run: echo "No infra paths changed in this PR; Terraform validation is non-applicable for this diff."
+
       - name: Checkout
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         uses: actions/checkout@v4
 
       - name: Setup Terraform
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform fmt
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: terraform -chdir=infra/terraform fmt -check -recursive
 
       - name: Terraform init (no backend)
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: terraform -chdir=infra/terraform init -backend=false
 
       - name: Terraform validate
+        if: github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false'
         run: terraform -chdir=infra/terraform validate

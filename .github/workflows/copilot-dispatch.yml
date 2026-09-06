@@ -30,10 +30,20 @@ concurrency:
 jobs:
   assign-coding-agent:
     name: Assign Copilot coding agent
-    if: github.event_name == 'issues' && github.event.label.name == 'copilot'
     runs-on: ubuntu-latest
     steps:
+      - name: PR event no-op
+        if: github.event_name != 'issues'
+        run: |
+          echo "Pull request event: issue-assignment lane not applicable."
+
+      - name: Non-copilot label no-op
+        if: github.event_name == 'issues' && github.event.label.name != 'copilot'
+        run: |
+          echo "Issue label is not 'copilot': assignment lane not applicable."
+
       - name: Assign via suggestedActors
+        if: github.event_name == 'issues' && github.event.label.name == 'copilot'
         env:
           GH_TOKEN: ${{ secrets.COPILOT_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -82,10 +92,20 @@ jobs:
 
   request-review:
     name: Request Copilot review
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
+      - name: Issue event no-op
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Issue event: pull-request-review lane not applicable."
+
+      - name: Draft PR no-op
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == true
+        run: |
+          echo "Draft PR: review request lane not applicable."
+
       - name: Request Copilot as reviewer
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         env:
           GH_TOKEN: ${{ secrets.COPILOT_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
