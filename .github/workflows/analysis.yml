@@ -63,14 +63,21 @@ jobs:
           PY
       
       - name: Upload Report
+        if: ${{ always() && hashFiles('analysis-report.txt') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: analysis-report
           path: analysis-report.txt
+          if-no-files-found: error
       
       - name: Publish analysis summary
+        if: ${{ always() }}
         run: |
           {
             echo "## Component analysis"
-            cat analysis-report.txt
+            if [ -f analysis-report.txt ]; then
+              cat analysis-report.txt
+            else
+              echo "analysis-report.txt was not generated because an earlier step failed."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
