@@ -69,6 +69,13 @@ class DeployCustodyValidatorTests(unittest.TestCase):
     def test_fails_when_cli_exit_code_is_not_preserved(self) -> None:
         self._validate_mutation("          exit \"$rc\"", "          echo \"$rc\"", "preserve az CLI exit codes")
 
+    def test_fails_when_deploy_dispatch_guard_is_broadened(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))",
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)",
+            "explicitly guard non-what-if deploys to workflow_dispatch",
+        )
+
     def test_fails_when_raw_output_is_tee_d_to_record(self) -> None:
         self._validate_mutation(
             "            --output json > \"$stdout_file\" 2>\"$stderr_file\"",

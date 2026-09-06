@@ -99,8 +99,8 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     deploy = _find_step(steps, "Deploy Helios Infra (sanitized custody record)")
     deploy_if = str(deploy.get("if", ""))
     deploy_run = str(deploy.get("run", ""))
-    _require("github.event_name == 'push' || !inputs.what_if" in deploy_if,
-             "deploy step must keep push-or-not-what-if gating")
+    _require("github.event_name == 'push'" in deploy_if and "github.event_name == 'workflow_dispatch'" in deploy_if and "!inputs.what_if" in deploy_if,
+             "deploy step must explicitly guard non-what-if deploys to workflow_dispatch")
     _require("record-deploy-" in deploy_run,
              "deploy step must write a dedicated custody record")
     _require("--query" in deploy_run and "provisioningState" in deploy_run,

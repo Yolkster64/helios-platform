@@ -142,7 +142,7 @@ jobs:
 
       - name: Deploy Helios Infra (sanitized custody record)
         id: deploy
-        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
+        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))
         run: |
           set -euo pipefail
           deployment_name="helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
