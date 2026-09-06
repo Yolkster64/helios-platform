@@ -1,0 +1,43 @@
+name: Integration Contract Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'scripts/validation/validate_integration_contracts.py'
+      - 'scripts/validation/tests/test_integration_contracts.py'
+      - '.github/workflows/integration-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'scripts/validation/validate_integration_contracts.py'
+      - 'scripts/validation/tests/test_integration_contracts.py'
+      - '.github/workflows/integration-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate event and authority contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate checked-in contracts
+        run: python3 scripts/validation/validate_integration_contracts.py
+
+      - name: Run compatibility regressions
+        run: >-
+          python3 -m unittest discover
+          -s scripts/validation/tests
+          -p 'test_integration_contracts.py'
+          -v
+
+      - name: Compile validator
+        run: python3 -m compileall -q scripts/validation
