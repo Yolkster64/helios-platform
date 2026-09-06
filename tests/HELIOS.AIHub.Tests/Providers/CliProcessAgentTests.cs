@@ -31,6 +31,42 @@ public class CliProcessAgentTests
     }
 
     [Fact]
+    public async Task ChatAsync_ClosesChildStdin_SoStdinDrainingClisDoNotHang()
+    {
+        if (!File.Exists("/bin/sh"))
+        {
+            return; // POSIX-only fixture script.
+        }
+
+        // Mirrors `codex exec` under a non-interactive host: it drains stdin to EOF before
+        // answering. With the hub's stdin inherited that read blocks for the whole
+        // timeout; with stdin redirected and closed it sees EOF at once.
+        var scriptDir = Directory.CreateTempSubdirectory("helios-cli-stdin-");
+        var script = Path.Combine(scriptDir.FullName, "drain-stdin.sh");
+        await File.WriteAllTextAsync(script, "#!/bin/sh\ncat >/dev/null\necho stdin-eof\n");
+        try
+        {
+            var agent = new CliProcessAgent(new CliAgentOptions
+            {
+                Name = "stdin-agent",
+                Command = "sh",
+                ArgsTemplate = "{prompt}",
+                TimeoutSeconds = 20,
+            });
+
+            var result = await agent.ChatAsync(new ChatRequest(script));
+
+            Assert.True(result.Success, result.Error);
+            Assert.Equal("stdin-eof", result.Text);
+            Assert.True(result.Latency < TimeSpan.FromSeconds(10), $"blocked on stdin for {result.Latency}");
+        }
+        finally
+        {
+            scriptDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ChatAsync_TimesOut_AndReportsCleanFailure()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
