@@ -215,19 +215,31 @@ foreach ($target in $targets) {
     elseif ($listing.Names -contains $target.Name) { 'present' }
     else { 'absent' }
     $present = Test-EnvValue -Name $target.Name
-    $verb = if ($target.Kind -eq 'variable') { 'variable' } else { 'secret' }
-    $command = "gh $verb set $($target.Name) --repo $Repository   # value from env $($target.Name) via stdin"
-    # The replay must paste on the host that printed it: printenv is a Unix tool, and on
-    # Windows pwsh the variable itself is the pipe source (gh trims the trailing newline
-    # the pipeline adds; the value still never touches argv).
-    $replay = if ($IsWindows) { "`$env:$($target.Name) | gh $verb set $($target.Name) --repo $Repository" }
-    else { "printenv $($target.Name) | gh $verb set $($target.Name) --repo $Repository" }
+    $value = [Environment]::GetEnvironmentVariable($target.Name)
+    $isVariable = ($target.Kind -eq 'variable')
+    $verb = if ($isVariable) { 'variable' } else { 'secret' }
+    if ($isVariable) {
+        $command = "gh variable set $($target.Name) --repo $Repository --body <value from env $($target.Name)>"
+        $replay = if ($IsWindows) { "gh variable set $($target.Name) --repo $Repository --body `$env:$($target.Name)" }
+        else { "gh variable set $($target.Name) --repo $Repository --body `$(printenv $($target.Name))" }
+    }
+    else {
+        $command = "gh secret set $($target.Name) --repo $Repository   # value from env $($target.Name) via stdin"
+        $replay = if ($IsWindows) { "`$env:$($target.Name) | gh secret set $($target.Name) --repo $Repository" }
+        else { "printenv $($target.Name) | gh secret set $($target.Name) --repo $Repository" }
+    }
     $plan = if (-not $present) { "skip (env $($target.Name) empty)" } else { 'set' }
     $result = ''
 
     if ($Apply -and $present) {
         Write-Report "  [$($target.Name)] applying: $command"
-        $outcome = Invoke-GhWithStdin -Arguments @($verb, 'set', $target.Name, '--repo', $Repository) -Value ([Environment]::GetEnvironmentVariable($target.Name))
+        $outcome = if ($isVariable) {
+            $raw = @(& $gh.Source variable set $target.Name --repo $Repository --body $value 2>&1 | ForEach-Object { "$_" })
+            [pscustomobject]@{ ExitCode = [int]$LASTEXITCODE; StdErr = ($raw -join "`n") }
+        }
+        else {
+            Invoke-GhWithStdin -Arguments @($verb, 'set', $target.Name, '--repo', $Repository) -Value $value
+        }
         if ($outcome.ExitCode -eq 0) {
             Write-Report "  [$($target.Name)] applied."
             $result = 'applied'
