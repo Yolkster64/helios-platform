@@ -293,7 +293,7 @@ jobs:
             - Approve if all checks pass
             - Request changes if issues found
             
-            [AI Integration Docs](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${context.payload.pull_request?.head?.sha || context.sha}/ai-integration/README.md)
+            [AI Integration Docs](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${context.sha}/ai-integration/README.md)
             `;
 
             const existing = await github.paginate(github.rest.issues.listComments, {

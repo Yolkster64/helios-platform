@@ -163,7 +163,7 @@ class AiCodeReviewChangedFilesTests(unittest.TestCase):
         self.assertIn("steps.comment-scope.outputs.same_repo != 'true'", text)
         self.assertIn("EVENT_PATH: ${{ github.event_path }}", text)
         self.assertIn("REPO: ${{ github.repository }}", text)
-        self.assertIn("context.payload.pull_request?.head?.sha || context.sha", text)
+        self.assertIn("blob/${context.sha}/ai-integration/README.md", text)
         self.assertNotIn("/blob/main/ai-integration/README.md", text)
         self.assertNotIn("github.event.pull_request.base.sha", text)
         self.assertNotIn("github.event.pull_request.head.sha", text)
