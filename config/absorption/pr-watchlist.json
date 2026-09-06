@@ -122,20 +122,22 @@
     {
       "pr": 224,
       "title": "Govern Azure activation path: MI to Key Vault secret binding, v2 audience hardening, and immutable plan/deploy custody",
-      "status": "candidate",
+      "status": "absorbed",
       "epic": "E5",
       "why": "MI-to-Key-Vault binding and custody discipline extend our OIDC + Key Vault stack.",
       "absorb": ["custody/audit pattern", "audience hardening checks"],
-      "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"]
+      "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"],
+      "absorbedInto": "helios-deploy.yml audience/immutable-custody hardening + scripts/validation/validate_deploy_custody.py (ABSORPTION_LEDGER E5 tranche-1)"
     },
     {
       "pr": 260,
       "title": "Complete governed Azure activation hardening",
-      "status": "candidate",
+      "status": "absorbed",
       "epic": "E5",
       "why": "Follow-up hardening on the same activation path; read together with #224.",
       "absorb": ["hardening checklist"],
-      "risks": ["same as #224"]
+      "risks": ["same as #224"],
+      "absorbedInto": "helios-deploy.yml audience/immutable-custody hardening + scripts/validation/validate_deploy_custody.py (ABSORPTION_LEDGER E5 tranche-1)"
     },
     {
       "pr": 211,

@@ -66,6 +66,12 @@ jobs:
       # against the federated credential whose subject is
       # repo:Yolkster64/helios-platform:ref:refs/heads/main — so dispatch this
       # workflow from main, not from a topic branch.
+      #
+      # Audience hardening: pin the token audience to api://AzureADTokenExchange
+      # explicitly instead of relying on the action default. It must match the
+      # audience on the federated credential (scripts/bootstrap/azure-oidc-setup.sh
+      # sets exactly this value); a mismatch fails token exchange with AADSTS700213
+      # rather than minting a token for an unintended audience.
       - name: Azure Login (OIDC)
         if: steps.creds.outputs.configured == 'true'
         uses: azure/login@v2
@@ -73,6 +79,7 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID || secrets.AZURE_OIDC_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID || secrets.AZURE_OIDC_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || secrets.AZURE_OIDC_SUBSCRIPTION_ID }}
+          audience: api://AzureADTokenExchange
 
       # Contributor is scoped to the resource group, so the identity cannot create
       # the RG itself (and an unconditional `az group create` would also fail on a
@@ -85,18 +92,80 @@ jobs:
             az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
           fi
 
+      # Immutable plan custody: the what-if change preview is a read-only rehearsal,
+      # but we still capture it verbatim into a per-run record so the plan an
+      # operator approved is auditable after the fact. main.bicepparam passes no
+      # @secure() values from CI, so the preview carries no secrets.
       - name: What-if
+        id: whatif
         if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
         run: |
+          mkdir -p custody
+          record="custody/record-what-if-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
           az deployment group what-if \
             -g "$AZURE_RESOURCE_GROUP" \
             --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam
+            --parameters infra/main.bicepparam | tee "$record"
 
+      # Immutable deploy custody: name the deployment per run so each apply is a
+      # distinct, traceable record in the resource group's deployment history, and
+      # capture its JSON result (declared outputs only — main.bicep never outputs a
+      # secret) into a per-run record for the custody manifest below.
       - name: Deploy Helios Infra
+        id: deploy
         if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
         run: |
+          mkdir -p custody
+          record="custody/record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           az deployment group create \
             -g "$AZURE_RESOURCE_GROUP" \
+            --name "helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam
+            --parameters infra/main.bicepparam \
+            --output json | tee "$record"
+
+      # Seal the plan/deploy custody: SHA-256 every captured record and write a
+      # signed-by-content manifest (run identity, commit, actor, audience, mode).
+      # The checksums make the archived plan/deploy tamper-evident; the manifest
+      # ties the record to the exact run that produced it.
+      - name: Seal plan/deploy custody
+        id: custody
+        if: steps.creds.outputs.configured == 'true' && (steps.whatif.outcome == 'success' || steps.deploy.outcome == 'success')
+        run: |
+          cd custody
+          sha256sum record-* > checksums.sha256
+          mode="what-if"
+          if [ "${{ steps.deploy.outcome }}" = "success" ]; then mode="deploy"; fi
+          jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg commit "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --arg actor "$GITHUB_ACTOR" \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg resourceGroup "$AZURE_RESOURCE_GROUP" \
+            --arg oidcAudience "api://AzureADTokenExchange" \
+            --arg mode "$mode" \
+            --arg sealedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{runId:$runId, runAttempt:$runAttempt, commit:$commit, ref:$ref, actor:$actor, event:$event, resourceGroup:$resourceGroup, oidcAudience:$oidcAudience, mode:$mode, sealedAt:$sealedAt}' \
+            > manifest.json
+          {
+            echo "## Deploy custody ($mode)"
+            echo '```'
+            cat manifest.json
+            echo
+            cat checksums.sha256
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Retain the sealed plan/deploy record. GitHub artifacts are immutable once
+      # uploaded (deletable after retention, never editable), so this is the durable
+      # custody copy the run summary's checksums vouch for.
+      - name: Upload plan/deploy custody
+        if: steps.custody.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-deploy-custody-${{ github.run_id }}-${{ github.run_attempt }}
+          path: custody/
+          retention-days: 90
+          if-no-files-found: error
