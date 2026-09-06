@@ -32,7 +32,7 @@ operations live in the `connector-integrations` skill
 | GitHub (`gh`) | `gh-models` provider, `copilot` CLI (reuses the gh login), repo/Actions operations | `gh auth login --web` device-code (`scripts/bootstrap/connect-github.sh`) |
 | Azure (`az`) | Key Vault env loading (`load-env-from-keyvault.sh`), `azure-openai`/`azure-foundry` via Entra ID, Bicep deploys | `az login --use-device-code` (`connect-azure.sh` / `connect-azure.ps1`; Cloud Shell is implicitly logged in and skipped) |
 | Anthropic (`ant`) | Profile credentials for the `anthropic` provider and `claude` CLI without handling a raw key | `ant auth login --no-browser` (prints the authorize URL, accepts the pasted code) |
-| OpenAI (`codex`) | `codex` cliAgent (`codex exec {prompt}`) | Headless: `OPENAI_API_KEY` from Key Vault (`openai-api-key`); `codex login` only where a browser exists |
+| OpenAI (`codex`) | `codex` cliAgent (`codex exec {prompt}`) | Local browser: `codex login`; headless interactive session: `codex login --device-auth` when device login is enabled; approved API credentials remain a separate usage-based option |
 
 ### One command, everything
 
@@ -46,6 +46,26 @@ machine rollup). The identity gate is hard: any `connect-account` mismatch abort
 the chain immediately with exit 2 — acting as the wrong account is worse than
 acting unauthenticated. Report-first by default: nothing is mutated without
 `-Apply`, and even then repair is auth-doctor's non-interactive lane only.
+
+Read `ready` separately from `executionSucceeded`: an exit-zero report can still
+contain `needs-owner`, `build-missing`, unavailable checks, or unknown states.
+`readinessIssues` preserves these gaps, and `ownerActions` includes both top-level
+actions and per-lane/component commands. To make incomplete readiness fail an
+automation gate without repairing accounts:
+
+```powershell
+pwsh scripts/bootstrap/setup-everything.ps1 -Json -RequireReady
+```
+
+`-RequireReady` returns 2 for incomplete readiness; internal failures still return
+1 and identity mismatches still return 2. Without it, the existing report-first
+exit contract is retained. Readiness covers the checks performed by child scripts;
+it does not certify provider inference, remote MCP authentication, or deployment.
+
+For Codex, ChatGPT subscription login and OpenAI API authentication are distinct.
+A connector session also does not authenticate a workstation CLI. Verify the local
+CLI with `codex login status`; device login requires the corresponding account or
+workspace setting. See the [official Codex authentication guide](https://learn.chatgpt.com/docs/auth).
 
 **Auto-login** (`. scripts/bootstrap/auto-login.ps1`, dot-sourced) is the
 acquire-and-export companion: it delegates az repair to `auth-doctor -Apply`

@@ -28,11 +28,12 @@ ownerAction/nextCommand field across the captured reports, deduped, order kept).
 -Json emits one rollup object instead:
 
   {script, generatedUtc, mode, steps[{step, script, state, exitCode, summary}],
-   ownerActions[], ready, exitCode}
+   ownerActions[], readinessIssues[], executionSucceeded, ready, exitCode}
 
-ready means every executed step came back clean (the soft smoke step may be
-unavailable); the chained report-only scripts exit 0 by their own contracts, so the
-work that remains lives in ownerActions, not in ready.
+executionSucceeded means every step returned successfully (a missing soft step is
+allowed). ready additionally requires affirmative child readiness evidence, no
+unresolved lanes/components, and no remaining owner actions. Neither flag proves
+paid provider inference or a deployed environment.
 
 Exit codes: 0 = every step clean or degraded-as-designed (degradation is reported,
 report-first contract of the chained scripts); 2 = identity mismatch (always, even
@@ -46,6 +47,10 @@ Pass -Apply through to auth-doctor.ps1: automatic NON-INTERACTIVE repair only
 
 .PARAMETER Json
 Emit the single rollup object (nothing else on stdout — chained-script convention).
+
+.PARAMETER RequireReady
+Exit 2 if reported readiness is incomplete. Default report-only exit behavior stays
+unchanged; automation can opt into this stricter gate without enabling -Apply.
 
 .EXAMPLE
 pwsh scripts/bootstrap/setup-everything.ps1
@@ -61,7 +66,9 @@ pwsh scripts/bootstrap/setup-everything.ps1 -Json | ConvertFrom-Json
 param(
     [switch]$Apply,
 
-    [switch]$Json
+    [switch]$Json,
+
+    [switch]$RequireReady
 )
 
 Set-StrictMode -Version Latest
@@ -111,9 +118,15 @@ function Get-OwnerAction {
     # (connect-account, auth-doctor, stack-smoke) and components (setup-all) alike.
     param($Report)
     if ($null -eq $Report) { return }
+    if ($Report.PSObject.Properties['ownerActions']) {
+        foreach ($action in @($Report.ownerActions)) {
+            if ($action -is [string] -and $action.Trim()) { $action.Trim() }
+        }
+    }
     foreach ($listName in 'lanes', 'components', 'steps') {
         if (-not $Report.PSObject.Properties[$listName]) { continue }
         foreach ($item in @($Report.$listName)) {
+            if ($null -eq $item) { continue }
             foreach ($field in 'ownerAction', 'nextCommand') {
                 if ($item.PSObject.Properties[$field] -and "$($item.$field)".Trim()) {
                     "$($item.$field)".Trim()
@@ -121,6 +134,41 @@ function Get-OwnerAction {
             }
         }
     }
+}
+
+function Get-ReadinessIssue {
+    # A child's exit 0 only proves that its reporting command completed. Keep its
+    # readiness assertions separate, including non-gating and soft-step gaps.
+    param($Step)
+    $report = $Step.report
+    if ($null -eq $report) { "$($Step.step): readiness unavailable"; return }
+    if ($Step.exitCode -ne 0) { "$($Step.step): exit $($Step.exitCode)" }
+    $hasEvidence = $false
+    if ($report.PSObject.Properties['ready']) {
+        $hasEvidence = $true
+        if ($report.ready -isnot [bool] -or -not $report.ready) {
+            "$($Step.step): ready is not true"
+        }
+    }
+    foreach ($listName in 'lanes', 'components') {
+        if (-not $report.PSObject.Properties[$listName]) { continue }
+        $items = @($report.$listName)
+        if ($items.Count -eq 0) { "$($Step.step): empty $listName" }
+        foreach ($item in $items) {
+            $hasEvidence = $true
+            if ($null -eq $item) { "$($Step.step): missing $listName entry"; continue }
+            $stateField = if ($listName -eq 'lanes') { 'state' } else { 'status' }
+            $nameField = if ($listName -eq 'lanes') { 'lane' } else { 'component' }
+            if (-not $item.PSObject.Properties[$stateField]) {
+                "$($Step.step): $listName entry has no $stateField"; continue
+            }
+            $label = if ($item.PSObject.Properties[$nameField]) { [string]$item.$nameField } else { $listName }
+            if ($item.$stateField -notin @('ready', 'ok', 'repaired')) {
+                "$($Step.step)/${label}: $($item.$stateField)"
+            }
+        }
+    }
+    if (-not $hasEvidence) { "$($Step.step): no readiness evidence" }
 }
 
 function Invoke-ChainStep {
@@ -142,8 +190,20 @@ function Invoke-ChainStep {
     $lines = @(& $pwshExe -NoProfile -File $scriptPath @Arguments 2>&1 | ForEach-Object { "$_" })
     $exit = [int]$LASTEXITCODE
     $report = $null
-    try { $report = ($lines -join "`n") | ConvertFrom-Json }
+    try { $report = ($lines -join "`n") | ConvertFrom-Json -NoEnumerate }
     catch { Write-Verbose "$Step emitted invalid JSON: $($_.Exception.Message)" }
+    # JSON scalars and arrays are not child report objects.
+    if ($report -is [Array] -or $report -isnot [pscustomobject]) { $report = $null }
+    if ($Step -eq 'identity' -and $null -ne $report) {
+        $lanesProperty = $report.PSObject.Properties['lanes']
+        $lanes = if ($lanesProperty) { @($lanesProperty.Value) } else { @() }
+        $invalidLanes = @($lanes | Where-Object {
+                $null -eq $_ -or -not $_.PSObject.Properties['lane'] -or
+                -not $_.PSObject.Properties['state'] -or
+                $_.state -notin @('ready', 'repaired', 'mismatch', 'needs-owner', 'unavailable')
+            })
+        if (@($lanes).Count -eq 0 -or @($invalidLanes).Count -gt 0) { $report = $null }
+    }
     $state = if ($null -eq $report) { 'failed' } elseif ($exit -eq 0) { 'ok' } else { 'degraded' }
     [pscustomobject]@{
         step = $Step; script = $Script; state = $state; exitCode = $exit
@@ -206,8 +266,12 @@ try {
     $identityMismatch = $mismatchLanes.Count -gt 0
     $authStep = $steps | Where-Object { $_.step -eq 'auth' } | Select-Object -First 1
     $ownerActions = @($steps | ForEach-Object { Get-OwnerAction -Report $_.report } | Select-Object -Unique)
-    $ready = (-not $identityMismatch) -and ($steps.Count -eq $chainSpecs.Count) -and
+    $executionSucceeded = (-not $identityMismatch) -and ($steps.Count -eq $chainSpecs.Count) -and
         (@($steps | Where-Object { $_.state -notin @('ok', 'unavailable') }).Count -eq 0)
+    $readinessIssues = @($steps | ForEach-Object { Get-ReadinessIssue -Step $_ })
+    if ($steps.Count -ne $chainSpecs.Count) { $readinessIssues += 'chain: later checks did not run' }
+    if ($ownerActions.Count -gt 0) { $readinessIssues += "owner: $($ownerActions.Count) action(s) remain" }
+    $ready = $executionSucceeded -and $readinessIssues.Count -eq 0
 
     # A required (non-soft) step that could not run at all — script missing, output
     # not parseable as JSON, or a child internal error (the child's own exit 1) — is
@@ -231,6 +295,7 @@ try {
     if ($identityMismatch) { $exitCode = 2 }
     elseif ($Apply -and $authStep -and $authStep.exitCode -eq 2) { $exitCode = 2 }
     elseif ($requiredFailed.Count -gt 0) { $exitCode = 1 }
+    elseif ($RequireReady -and -not $ready) { $exitCode = 2 }
 
     if ($Json) {
         [ordered]@{
@@ -241,6 +306,8 @@ try {
                     [ordered]@{ step = $_.step; script = $_.script; state = $_.state; exitCode = $_.exitCode; summary = $_.summary }
                 })
             ownerActions = @($ownerActions)
+            readinessIssues = @($readinessIssues)
+            executionSucceeded = $executionSucceeded
             ready        = $ready
             exitCode     = $exitCode
         } | ConvertTo-Json -Depth 4
@@ -257,10 +324,10 @@ try {
         if ($identityMismatch) {
             Write-Report 'NOT ready: identity mismatch — fix it before doing anything else (acting as the wrong account is worse than acting unauthenticated).'
         }
-        elseif ($ready) { Write-Report 'Ready: every chained step is clean; anything left is listed above as an owner action.' }
+        elseif ($ready) { Write-Report 'All reported checks are ready. Scope: setup checks; live provider inference and deployment are unverified.' }
         else {
-            $unclean = @($steps | Where-Object { $_.state -notin @('ok', 'unavailable') } | ForEach-Object step) -join ', '
-            Write-Report ("Not fully ready — attention on: $unclean. See the step sections and owner actions above.")
+            Write-Report 'Setup incomplete. Readiness gaps:'
+            foreach ($issue in $readinessIssues) { Write-Report "   $issue" }
         }
     }
 
