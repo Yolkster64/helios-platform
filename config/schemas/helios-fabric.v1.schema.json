@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/helios-fabric.v1.schema.json",
+  "title": "HELIOS Fabric activation contract",
+  "description": "HC-029 executable fabric contract: migration-safe safety state, connector targets, post-rename Azure gates, and idempotent activation checklist receipts.",
+  "type": "object",
+  "required": [
+    "version",
+    "migrationIssue",
+    "sourcePullRequest",
+    "safetyState",
+    "mcp",
+    "connectors",
+    "azureActivation",
+    "checklist"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "version": { "type": "integer", "const": 1 },
+    "migrationIssue": { "type": "string", "pattern": "^HC-[0-9]{3}$" },
+    "sourcePullRequest": { "$ref": "#/$defs/sourcePullRequest" },
+    "safetyState": { "$ref": "#/$defs/safetyState" },
+    "mcp": { "$ref": "#/$defs/mcpVerification" },
+    "connectors": { "$ref": "#/$defs/connectors" },
+    "azureActivation": { "$ref": "#/$defs/azureActivation" },
+    "checklist": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/checklistItem" }
+    }
+  },
+  "$defs": {
+    "requiredCheck": {
+      "type": "object",
+      "required": ["name", "result", "evidenceRef"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "result": {
+          "type": "string",
+          "enum": ["pending", "success", "failed", "skipped", "n/a"]
+        },
+        "evidenceRef": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourcePullRequest": {
+      "type": "object",
+      "required": ["repository", "number", "mergeSha", "requiredChecks"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "const": "Yolkster64/helios-platform"
+        },
+        "number": { "type": "integer", "const": 154 },
+        "mergeSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "requiredChecks": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/requiredCheck" },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "CI - Code Validation & Testing" } }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "PR Pipeline" } }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "Infra Validation" } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "safetyState": {
+      "type": "object",
+      "required": [
+        "productionEnabled",
+        "applyDefault",
+        "secretValuesInRepository",
+        "activeUiFramework"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "productionEnabled": { "type": "boolean", "const": false },
+        "applyDefault": { "type": "boolean", "const": false },
+        "secretValuesInRepository": { "type": "boolean", "const": false },
+        "activeUiFramework": { "type": "string", "const": "WinUI 3" }
+      }
+    },
+    "mcpVerification": {
+      "type": "object",
+      "required": ["requiredTool", "verificationMethod", "catalogReceiptPath"],
+      "additionalProperties": false,
+      "properties": {
+        "requiredTool": { "type": "string", "const": "helios_fabric_plan_get" },
+        "verificationMethod": {
+          "type": "string",
+          "enum": ["stdio-jsonrpc-tools-list"]
+        },
+        "catalogReceiptPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "slackConnector": {
+      "type": "object",
+      "required": ["workspaceId", "conversationId", "receiptPath"],
+      "additionalProperties": false,
+      "properties": {
+        "workspaceId": { "type": "string", "const": "T0BAFGSNY5P" },
+        "conversationId": { "type": "string", "const": "D0BB80HRZFA" },
+        "receiptPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "linearConnector": {
+      "type": "object",
+      "required": ["teamKey", "issueKey", "receiptPath"],
+      "additionalProperties": false,
+      "properties": {
+        "teamKey": { "type": "string", "const": "JOH" },
+        "issueKey": { "type": "string", "pattern": "^[A-Z]+-[0-9]+$" },
+        "receiptPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sharePointConnector": {
+      "type": "object",
+      "required": ["documentRoot", "receiptPath"],
+      "additionalProperties": false,
+      "properties": {
+        "documentRoot": { "type": "string", "minLength": 1 },
+        "receiptPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "connectors": {
+      "type": "object",
+      "required": ["slack", "linear", "sharePoint"],
+      "additionalProperties": false,
+      "properties": {
+        "slack": { "$ref": "#/$defs/slackConnector" },
+        "linear": { "$ref": "#/$defs/linearConnector" },
+        "sharePoint": { "$ref": "#/$defs/sharePointConnector" }
+      }
+    },
+    "whatIfState": {
+      "type": "object",
+      "required": ["apply", "planHash", "receiptPath", "lastRunUtc"],
+      "additionalProperties": false,
+      "properties": {
+        "apply": { "type": "boolean", "const": false },
+        "planHash": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          ]
+        },
+        "receiptPath": { "type": "string", "minLength": 1 },
+        "lastRunUtc": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date-time" }
+          ]
+        }
+      }
+    },
+    "azureActivation": {
+      "type": "object",
+      "required": [
+        "requiresRepositoryRename",
+        "renameTarget",
+        "oidcStatus",
+        "adoWifStatus",
+        "whatIf"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "requiresRepositoryRename": { "type": "boolean" },
+        "renameTarget": { "type": "string", "const": "Yolkster64/helios-control" },
+        "oidcStatus": {
+          "type": "string",
+          "enum": ["blocked-by-rename", "ready", "configured"]
+        },
+        "adoWifStatus": {
+          "type": "string",
+          "enum": ["blocked-by-rename", "ready", "configured"]
+        },
+        "whatIf": { "$ref": "#/$defs/whatIfState" }
+      }
+    },
+    "checklistItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "category",
+        "owner",
+        "requiresRename",
+        "dependsOn",
+        "externalAction"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "done", "blocked"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["evidence", "schema", "mcp", "connectors", "sharepoint", "azure", "validation"]
+        },
+        "owner": { "type": "string", "minLength": 1 },
+        "requiresRename": { "type": "boolean" },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "uniqueItems": true
+        },
+        "externalAction": { "type": "boolean" },
+        "receiptRef": { "type": "string", "minLength": 1 },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "done" } } },
+          "then": { "required": ["receiptRef"] }
+        }
+      ]
+    }
+  }
+}

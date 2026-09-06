@@ -1,19 +1,90 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - config/fabric/helios-fabric.v1.json
+      - config/schemas/helios-fabric.v1.schema.json
+      - scripts/validation/validate_helios_fabric_contract.py
+      - scripts/validation/tests/test_validate_helios_fabric_contract.py
+      - src/ai/HELIOS.AIHub/Fabric/*
+      - src/mcp/HELIOS.Mcp/HeliosFabricPlanTools.cs
+      - tests/HELIOS.AIHub.Tests/Fabric/*
+      - tests/HELIOS.AIHub.Tests/McpFabricPlanToolTests.cs
+      - docs/mcp/CLIENT_SETUP.md
+      - docs/migration/yolkster-control-cutover/FABRIC-*.md
+      - .claude/agents/fabric-activation.md
+      - .claude/commands/activate-fabric-plane.md
+      - azure-pipelines.yml
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - config/fabric/helios-fabric.v1.json
+      - config/schemas/helios-fabric.v1.schema.json
+      - scripts/validation/validate_helios_fabric_contract.py
+      - scripts/validation/tests/test_validate_helios_fabric_contract.py
+      - src/ai/HELIOS.AIHub/Fabric/*
+      - src/mcp/HELIOS.Mcp/HeliosFabricPlanTools.cs
+      - tests/HELIOS.AIHub.Tests/Fabric/*
+      - tests/HELIOS.AIHub.Tests/McpFabricPlanToolTests.cs
+      - docs/mcp/CLIENT_SETUP.md
+      - docs/migration/yolkster-control-cutover/FABRIC-*.md
+      - .claude/agents/fabric-activation.md
+      - .claude/commands/activate-fabric-plane.md
+      - azure-pipelines.yml
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  BuildConfiguration: Release
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+stages:
+  - stage: fabric_contract
+    displayName: Fabric contract and evidence parity
+    jobs:
+      - job: contract
+        displayName: Validate contract JSON and mutation tests
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.x'
+          - script: python3 scripts/validation/validate_helios_fabric_contract.py
+            displayName: Validate Fabric contract
+          - script: python3 -m unittest scripts.validation.tests.test_validate_helios_fabric_contract -v
+            displayName: Run Fabric validator mutation tests
+
+      - job: dotnet
+        displayName: Build and run Fabric-focused .NET tests
+        steps:
+          - checkout: self
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '10.0.x'
+          - script: dotnet build HELIOS.sln -c $(BuildConfiguration)
+            displayName: Build HELIOS solution
+          - script: dotnet test tests/HELIOS.AIHub.Tests -c $(BuildConfiguration) --filter "FullyQualifiedName~Fabric"
+            displayName: Run Fabric-focused test filter
+
+      - job: evidence
+        displayName: Capture MCP tool-catalog evidence
+        steps:
+          - checkout: self
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '10.0.x'
+          - script: dotnet build HELIOS.sln -c $(BuildConfiguration)
+            displayName: Build HELIOS solution
+          - script: pwsh scripts/verify/stack-smoke.ps1 -Json > "$(Build.SourcesDirectory)/stack-smoke.fabric.json"
+            displayName: Run stack smoke JSON-RPC verification
+          - publish: "$(Build.SourcesDirectory)/stack-smoke.fabric.json"
+            displayName: Publish Fabric MCP evidence
+            artifact: fabric-mcp-evidence

@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "helios": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
+      "env": {
+        "HELIOS_REPO_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}

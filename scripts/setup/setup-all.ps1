@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
 Unified HELIOS readiness entrypoint (absorption ledger epic E1): one command that
-inventories toolchain, auth state, AI CLI fleet, fleet topology, and MCP registration.
+inventories toolchain, auth state, AI CLI fleet, fleet topology, MCP registration, and
+(informationally) whether the MCP server answers a stdio handshake.
 
 .DESCRIPTION
 Orchestrator only — every check calls the existing script that owns the area (repo
@@ -14,9 +15,14 @@ convention: PowerShell wraps, it never reimplements):
   c. scripts/bootstrap/setup-ai-clis.ps1               (-VerifyOnly unless -Fix)
   d. config/fleet/fleet-topology.json                  (parses + pools listed)
   e. .mcp.json                                         (parses + server project exists)
+  f. dotnet run --project src/mcp/HELIOS.Mcp -c Release --no-build (INFORMATIONAL: one
+     JSON-RPC initialize request over stdio, 30 s budget; row reads ready | unhealthy |
+     skipped when dotnet or the Release build is absent, and never changes the exit code)
 
-The result is a single INVENTORY table: component / status (ready | needs-attention) /
-detail / next command to fix. Exit 0 when everything is ready, 2 otherwise.
+The result is a single INVENTORY table: component / status (ready | needs-attention;
+the mcp-health row uses ready | unhealthy | skipped) / detail / next command to fix.
+Exit 0 when every gating component is ready, 2 otherwise; mcp-health never gates
+because a fresh clone legitimately has no Release build yet.
 
 -Fix runs the actual installers (setup-ai-clis.ps1 without -VerifyOnly). Authentication
 is NEVER mutated in either mode: device-code logins stay behind the connect-* scripts,
@@ -92,10 +98,34 @@ function New-Component {
         [Parameter(Mandatory)][string]$FixCommand
     )
     [pscustomobject]@{
-        Component = $Name
-        Status    = if ($Ready) { 'ready' } else { 'needs-attention' }
-        Detail    = $Detail
-        Fix       = if ($Ready) { '' } else { $FixCommand }
+        Component     = $Name
+        Status        = if ($Ready) { 'ready' } else { 'needs-attention' }
+        Detail        = $Detail
+        Fix           = if ($Ready) { '' } else { $FixCommand }
+        Informational = $false
+    }
+}
+
+# Informational rows read ready | unhealthy | skipped and are excluded from the readiness
+# verdict by construction: the exit-code filter below keys on the literal
+# 'needs-attention', which these statuses never equal. A passing probe says 'ready' rather
+# than a private word such as 'healthy' because setup-everything.ps1 extracts every
+# component whose status is not 'ready' as needing attention, and a passing probe must not
+# surface there. Fix is always empty for the same reason: the roll-ups harvest nextCommand
+# into the owner checklist, and an informational probe must never mint an owner action;
+# the remedy travels inside Detail instead, where a human still sees it.
+function New-InformationalComponent {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][ValidateSet('ready', 'unhealthy', 'skipped')][string]$Status,
+        [Parameter(Mandatory)][string]$Detail
+    )
+    [pscustomobject]@{
+        Component     = $Name
+        Status        = $Status
+        Detail        = $Detail
+        Fix           = ''
+        Informational = $true
     }
 }
 
@@ -386,6 +416,142 @@ $components += New-Component -Name 'mcp-registration' -Ready $mcpReady -Detail $
     -FixCommand 'dotnet build HELIOS.sln -c Release   # builds src/mcp/HELIOS.Mcp; then re-check .mcp.json paths'
 Write-ChildOutput @($mcpDetail)
 
+# --- f. MCP health (informational) --------------------------------------------------
+Write-Section ''
+Write-Section '-- f. MCP health (dotnet run --project src/mcp/HELIOS.Mcp -c Release --no-build; JSON-RPC initialize over stdio; 30 s budget) --'
+# Registration (e) proves the files line up; this proves the server actually ANSWERS.
+# Informational by design: a fresh clone has no Release build yet, so a readiness
+# inventory must not turn that into a red verdict. The launch shape is the one every
+# client config uses (.mcp.json, .vscode/mcp.json, write-codex-config.ps1) plus
+# --no-build, for two reasons: an inventory is read-only and must not restore, compile,
+# or write bin/obj (stack-smoke.ps1 keeps the same rule), and even an up-to-date build's
+# MSBuild/NuGet evaluation has been measured well past a 20 s budget on a cold machine,
+# which turned a working server into a spurious 'unhealthy' row. Without the build step
+# the answer arrives in a few seconds, so a server that stays silent for the whole budget
+# is a real finding rather than a slow build.
+$mcpHealthTimeoutSeconds = 30
+$mcpHealthProject = 'src/mcp/HELIOS.Mcp'
+$mcpHealthBuildHint = 'run: dotnet build HELIOS.sln -c Release, then pwsh scripts/verify/stack-smoke.ps1 for the full handshake + tool-name check'
+$mcpHealthStatus = 'skipped'
+$mcpHealthDetail = ''
+$dotnetResolution = Resolve-HeliosTool -Name 'dotnet' -RepoRoot $repoRoot
+# --no-build needs Release output to exist, so the probe looks for it up front: a fresh
+# clone then reads 'skipped' with the build command instead of burning the budget on a
+# launch that cannot start. Any target framework directory under bin/Release counts, so a
+# TFM bump in the csproj does not quietly turn this back into a false 'skipped'.
+$mcpHealthBuiltAssembly = @(Get-ChildItem -Path (Join-Path $repoRoot $mcpHealthProject 'bin' 'Release') -Filter 'HELIOS.Mcp.dll' -Recurse -Depth 1 -File -ErrorAction SilentlyContinue)
+if (-not $dotnetResolution.Found) {
+    $mcpHealthDetail = 'skipped: dotnet is not on PATH (nor under .tools/dotnet); install the .NET 10 SDK to probe the server'
+}
+elseif (-not (Test-Path -LiteralPath (Join-Path $repoRoot $mcpHealthProject) -PathType Container)) {
+    $mcpHealthDetail = "skipped: $mcpHealthProject is not in this checkout"
+}
+elseif ($mcpHealthBuiltAssembly.Count -eq 0) {
+    $mcpHealthDetail = "skipped: no Release build of $mcpHealthProject yet ($mcpHealthBuildHint)"
+}
+else {
+    $mcpProc = $null
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $dotnetResolution.Path
+        foreach ($arg in @('run', '--project', $mcpHealthProject, '-c', 'Release', '--no-build')) { $psi.ArgumentList.Add($arg) }
+        $psi.WorkingDirectory = $repoRoot
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        # UTF-8 WITHOUT BOM: a BOM ahead of the first JSON-RPC frame breaks the server's
+        # parse of it (stack-smoke.ps1 finding).
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        $psi.StandardInputEncoding = $utf8NoBom
+        $psi.StandardOutputEncoding = $utf8NoBom
+        $psi.StandardErrorEncoding = $utf8NoBom
+        # The same env the client configs pass, so the probe exercises the real launch.
+        $psi.Environment['HELIOS_REPO_ROOT'] = $repoRoot
+        $mcpProc = [System.Diagnostics.Process]::new()
+        $mcpProc.StartInfo = $psi
+        $null = $mcpProc.Start()
+        # Drain stderr (server logs and build output land there): an unread pipe fills
+        # and blocks the child mid-write. The content is discarded, never printed:
+        # build and log lines can echo environment details this inventory must not.
+        $null = $mcpProc.StandardError.ReadToEndAsync()
+        $mcpProc.StandardInput.AutoFlush = $true
+        $mcpProc.StandardInput.WriteLine((@{
+                    jsonrpc = '2.0'; id = 1; method = 'initialize'
+                    params  = @{
+                        protocolVersion = '2024-11-05'
+                        capabilities    = @{}
+                        clientInfo      = @{ name = 'setup-all'; version = '1.0.0' }
+                    }
+                } | ConvertTo-Json -Compress -Depth 6))
+        # Wait for the id=1 reply one line at a time, bounded by the budget. Non-JSON or
+        # other-id lines are skipped defensively even though the server keeps stdout
+        # clean (Program.cs routes all logging to stderr).
+        $reply = $null
+        $sawEof = $false
+        $deadline = [datetime]::UtcNow.AddSeconds($mcpHealthTimeoutSeconds)
+        $pending = $null
+        while ([datetime]::UtcNow -lt $deadline -and $null -eq $reply) {
+            if ($null -eq $pending) { $pending = $mcpProc.StandardOutput.ReadLineAsync() }
+            $completed = $false
+            try { $completed = $pending.Wait(250) } catch { $sawEof = $true; break }
+            if (-not $completed) { continue }
+            $line = $pending.Result
+            $pending = $null
+            if ($null -eq $line) { $sawEof = $true; break }
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $message = $null
+            try { $message = $line | ConvertFrom-Json } catch { continue }
+            $idProp = $message.PSObject.Properties['id']
+            if ($idProp -and $null -ne $idProp.Value -and [int]$idProp.Value -eq 1) { $reply = $message }
+        }
+        # EOF means the child is going away; give it a moment so the exit code below is
+        # real instead of a race with process teardown.
+        if ($sawEof) { $null = $mcpProc.WaitForExit(2000) }
+        $stopwatch.Stop()
+        $elapsed = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+        $replyResult = if ($null -ne $reply -and $reply.PSObject.Properties['result']) { $reply.result } else { $null }
+        if ($null -ne $replyResult) {
+            $mcpHealthStatus = 'ready'
+            $serverInfo = if ($replyResult.PSObject.Properties['serverInfo']) { $replyResult.serverInfo } else { $null }
+            $serverName = if ($serverInfo -and $serverInfo.PSObject.Properties['name']) { [string]$serverInfo.name } else { 'unnamed server' }
+            $serverVersion = if ($serverInfo -and $serverInfo.PSObject.Properties['version']) { [string]$serverInfo.version } else { '' }
+            $protocol = if ($replyResult.PSObject.Properties['protocolVersion']) { [string]$replyResult.protocolVersion } else { '?' }
+            $mcpHealthDetail = "ready: initialize answered in ${elapsed}s ($serverName $serverVersion, protocol $protocol)".Replace('  ', ' ')
+        }
+        elseif ($null -ne $reply) {
+            $mcpHealthStatus = 'unhealthy'
+            $mcpHealthDetail = "unhealthy: initialize returned an error frame after ${elapsed}s ($mcpHealthBuildHint)"
+        }
+        elseif ($mcpProc.HasExited) {
+            $mcpHealthStatus = 'unhealthy'
+            $mcpHealthDetail = ("unhealthy: the server exited (code $($mcpProc.ExitCode)) after ${elapsed}s without answering initialize " +
+                "(stale or broken Release output; stderr deliberately not echoed; $mcpHealthBuildHint)")
+        }
+        else {
+            $mcpHealthStatus = 'unhealthy'
+            $mcpHealthDetail = "unhealthy: no initialize response within ${mcpHealthTimeoutSeconds}s (the server started but never answered; $mcpHealthBuildHint)"
+        }
+    }
+    catch {
+        $stopwatch.Stop()
+        $mcpHealthStatus = 'unhealthy'
+        $mcpHealthDetail = "unhealthy: could not spawn or talk to the server ($($_.Exception.Message); $mcpHealthBuildHint)"
+    }
+    finally {
+        # Tree kill: dotnet run wraps the server in a child process, and killing only the
+        # parent would leave the server running against a closed stdin.
+        if ($mcpProc -and -not $mcpProc.HasExited) {
+            try { $mcpProc.Kill($true); $null = $mcpProc.WaitForExit(5000) }
+            catch { Write-Verbose "mcp-health: could not stop the probe process: $($_.Exception.Message)" }
+        }
+        if ($mcpProc) { $mcpProc.Dispose() }
+    }
+}
+$components += New-InformationalComponent -Name 'mcp-health' -Status $mcpHealthStatus -Detail $mcpHealthDetail
+Write-ChildOutput @($mcpHealthDetail)
+
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })
 $allReady = $needsAttention.Count -eq 0
@@ -397,10 +563,11 @@ if ($Json) {
         ready        = $allReady
         components   = @($components | ForEach-Object {
                 [pscustomobject]@{
-                    component   = $_.Component
-                    status      = $_.Status
-                    detail      = $_.Detail
-                    nextCommand = $_.Fix
+                    component     = $_.Component
+                    status        = $_.Status
+                    detail        = $_.Detail
+                    nextCommand   = $_.Fix
+                    informational = [bool]$_.Informational
                 }
             })
     } | ConvertTo-Json -Depth 4
@@ -413,6 +580,7 @@ else {
         Out-String -Width 4096
     Write-Host $table.TrimEnd()
     Write-Host ''
+    Write-Host 'Informational rows (mcp-health: ready | unhealthy | skipped) never change the exit code.'
     if ($allReady) {
         Write-Host 'All components ready.'
     }

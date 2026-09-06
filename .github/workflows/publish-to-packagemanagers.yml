@@ -14,6 +14,11 @@ on:
         required: false
         default: 'chocolatey,winget'
 
+# Prepares package manifests from a downloaded artifact; the only credential it
+# would push with is CHOCO_API_KEY, not GITHUB_TOKEN, so read is enough.
+permissions:
+  contents: read
+
 jobs:
   publish-package-managers:
     runs-on: windows-latest

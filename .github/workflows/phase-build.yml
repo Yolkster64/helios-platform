@@ -23,6 +23,10 @@ on:
           - 'staging'
           - 'production'
 
+# Build and test only: nothing here writes back through the token.
+permissions:
+  contents: read
+
 jobs:
   validate-phase:
     runs-on: ubuntu-latest

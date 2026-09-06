@@ -98,7 +98,9 @@ function Get-StepSummary {
             if ($missing.Count -gt 0) { $extract += '; missing required: ' + ($missing -join ', ') }
         }
         if ($Report.PSObject.Properties['components']) {
-            $attention = @($Report.components | Where-Object { $_.status -ne 'ready' } | ForEach-Object component)
+            $attention = @($Report.components | Where-Object {
+                    -not ($_.PSObject.Properties['informational'] -and $_.informational) -and $_.status -ne 'ready'
+                } | ForEach-Object component)
             if ($attention.Count -gt 0) { $extract += '; needs-attention: ' + ($attention -join ', ') }
         }
         return $extract
@@ -163,6 +165,7 @@ try {
         @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) }
         @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') }
         @{ Step = 'stack-smoke'; Script = 'scripts/verify/stack-smoke.ps1'; Arguments = @('-Json'); Soft = $true }
+        @{ Step = 'rest-connect'; Script = 'scripts/verify/rest-connect.ps1'; Arguments = @('-Json'); Soft = $true }
     )
 
     Write-Report "== HELIOS setup-everything ($modeLabel) — ordered chain over existing scripts =="

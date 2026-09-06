@@ -1,0 +1,192 @@
+name: Branch Prune
+
+# Deliberate, dispatch-only branch hygiene: runs scripts/github/prune-branches.ps1
+# with the Actions token, whose `contents: write` is exactly what archive-tag
+# creation and branch deletion need (the proxy-backed gh in agent sessions has no
+# push permission, so this workflow is the durable apply path).
+#
+# Never on a schedule: deletion is a decision an owner makes per run. Dispatch
+# with apply=false first, read the table in the job summary or the
+# branch-prune-report artifact, then dispatch apply=true.
+#
+# Reversibility: every stale tip survives as the tag archive/<branch>
+# (git push origin refs/tags/archive/X:refs/heads/X restores it); merged tips
+# are already reachable from the default branch, and the report keeps their sha.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Execute the plan. false = dry run: classification table and report only, nothing changes'
+        required: false
+        type: boolean
+        default: false
+      keep:
+        description: 'Extra branches to keep, comma-separated (on top of the default branch, main, develop, master and every open-PR head, local or in the upstream parent of a fork)'
+        required: false
+        type: string
+        default: ''
+      max_delete:
+        description: 'Safety cap: an apply run refuses (exit 2) when the plan deletes more branches than this; the refusal prints the exact re-dispatch with the value the plan needs'
+        required: false
+        type: string
+        default: '200'
+
+# contents: write = git/refs POST (archive tags) and DELETE (branches);
+# pull-requests: read = the open-PR heads that must never be pruned (the read
+# works on a public repository without it, but the grant keeps the workflow
+# honest if the repository ever goes private). Nothing else is touched.
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-prune
+  cancel-in-progress: false # never cancel between "tag created" and "branch deleted"
+
+jobs:
+  prune:
+    name: ${{ inputs.apply && 'Apply prune plan' || 'Dry run (plan only)' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Inputs travel through env, not inline expressions, so a quote in the
+      # keep list cannot break out of a PowerShell string.
+      PRUNE_APPLY: ${{ inputs.apply }}
+      PRUNE_KEEP: ${{ inputs.keep }}
+      PRUNE_MAX_DELETE: ${{ inputs.max_delete }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run prune-branches.ps1 (prints the command first)
+        id: prune
+        shell: pwsh
+        run: |
+          $apply = ($env:PRUNE_APPLY -eq 'true')
+          $keep = @(($env:PRUNE_KEEP -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          # The cap is validated here rather than left to the script's parameter
+          # binder: a binding error would abort before any report exists, and the
+          # summary would then have nothing to explain. Both bounds are checked,
+          # not just the digit count: the script's [ValidateRange(1,100000)] would
+          # reject 100001-999999 at bind time, exactly the abort this guard exists
+          # to prevent.
+          $maxDeleteText = "$env:PRUNE_MAX_DELETE".Trim()
+          if ($maxDeleteText -notmatch '^\d{1,6}$' -or [int]$maxDeleteText -lt 1 -or [int]$maxDeleteText -gt 100000) {
+            Write-Host "max_delete must be an integer from 1 to 100000 (the script's ValidateRange; got '$maxDeleteText'); nothing was run"
+            "exit_code=2" | Add-Content -Path $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $maxDelete = [int]$maxDeleteText
+          $params = @{ Repository = $env:GITHUB_REPOSITORY; Json = $true; MaxDelete = $maxDelete }
+          if ($apply) { $params.Apply = $true }
+          if ($keep.Count -gt 0) { $params.Keep = $keep }
+          $rendered = "pwsh scripts/github/prune-branches.ps1 -Repository $($env:GITHUB_REPOSITORY) -Json -MaxDelete $maxDelete"
+          if ($apply) { $rendered += ' -Apply' }
+          if ($keep.Count -gt 0) { $rendered += " -Keep '" + ($keep -join "','") + "'" }
+          Write-Host "command: $rendered"
+          # stdout is the single JSON object (the -Json contract) and becomes the
+          # report; the table, every per-item gh command and the progress lines
+          # arrive on stderr and stay in this log.
+          & ./scripts/github/prune-branches.ps1 @params 1> branch-prune-report.json
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Add-Content -Path $env:GITHUB_OUTPUT
+          Write-Host "prune-branches.ps1 exited $code (0 = clean, 1 = an item failed, 2 = precondition)"
+          # The runner appends `exit $LASTEXITCODE` to every pwsh step, so the
+          # script's code is cleared here on purpose: this step stays green, the
+          # summary and the artifact publish, and "Propagate the script exit code"
+          # is the single step that turns the job red with the recorded code.
+          $global:LASTEXITCODE = 0
+
+      - name: Render job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          if (-not (Test-Path -LiteralPath 'branch-prune-report.json')) {
+            "## Branch prune`n`nNo report was produced (the script did not start; the run step log names the reason, e.g. an invalid max_delete input)." | Set-Content -Path $summaryPath
+            exit 0
+          }
+          $raw = Get-Content -Raw -LiteralPath 'branch-prune-report.json'
+          try { $report = $raw | ConvertFrom-Json } catch { $report = $null }
+          if ($null -eq $report) {
+            # The raw text is shown so a broken run is still diagnosable from the summary alone.
+            @('## Branch prune', '', 'The report is not valid JSON:', '', '```', $raw, '```') | Set-Content -Path $summaryPath
+            exit 0
+          }
+          $modeLabel = if ($report.apply) { 'APPLY' } else { 'DRY RUN' }
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add("## Branch prune: $modeLabel on $($report.repository)")
+          $lines.Add('')
+          $lines.Add("- Default branch: ``$($report.defaultBranch)``")
+          if ($report.parent) { $lines.Add("- Upstream parent: ``$($report.parent)`` (heads of its open PRs that live here are kept)") }
+          # ConvertFrom-Json turns the ISO timestamp into a DateTime; render it back
+          # as UTC text so the summary does not depend on the runner's culture.
+          $generated = $report.generatedUtc
+          if ($generated -is [datetime]) { $generated = $generated.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+          $lines.Add("- Generated: $generated")
+          $lines.Add("- Exit code: **$($report.exitCode)** (0 = clean, 1 = an item failed, 2 = precondition)")
+          if ($report.error) { $lines.Add("- Precondition: $($report.error)") }
+          $s = $report.summary
+          if ($report.capExceeded) { $lines.Add("- Safety cap: the plan deletes $($s.planned) branches, above max_delete $($report.maxDelete); an apply run refuses until dispatched with ``-f max_delete=$($s.planned)``") }
+          $lines.Add("- Branches: $($s.total) total; open-pr $($s.openPr), keep-list $($s.keepList), merged $($s.merged), stale $($s.stale), unclassified $($s.unclassified); planned deletions $($s.planned); failed $($s.failed)")
+          $lines.Add('')
+          $lines.Add('| Branch | Class | Ahead by | Action | Result |')
+          $lines.Add('|---|---|---:|---|---|')
+          foreach ($item in @($report.items)) {
+            # A literal pipe in a branch name would split the Markdown row.
+            $branchCell = ([string]$item.branch) -replace '\|', '\|'
+            $aheadCell = if ($null -eq $item.aheadBy) { '-' } else { [string]$item.aheadBy }
+            $resultCell = ([string]$item.result) -replace '\|', '\|'
+            $lines.Add("| ``$branchCell`` | $($item.class) | $aheadCell | $($item.action) | $resultCell |")
+          }
+          $replay = @($report.replay)
+          if ($replay.Count -gt 0) {
+            $lines.Add('')
+            $lines.Add('### Replay list (items that did not land)')
+            $lines.Add('')
+            $lines.Add('```')
+            foreach ($line in $replay) { $lines.Add([string]$line) }
+            $lines.Add('```')
+          }
+          # The summary is the surface the owner reads, so it always ends with the
+          # exact next command the script computed (nextStep in the report): the
+          # apply dispatch after a dry run, the raised-cap dispatch after a refusal,
+          # the restore hint after an apply. A precondition failure is spelled out
+          # rather than left as a bare exit code.
+          $lines.Add('')
+          if ($report.exitCode -eq 2) {
+            $lines.Add("**Precondition failed:** $($report.error). Nothing was changed.")
+          }
+          elseif (-not $report.apply) {
+            $lines.Add('Dry run: nothing was changed. Review the table, then dispatch the apply.')
+          }
+          if ($report.nextStep) { $lines.Add("Next: ``$($report.nextStep)``") }
+          if (-not $report.apply -and $report.exitCode -ne 2) { $lines.Add('Add `-f keep=<a,b>` to keep more branches; open-PR heads (local and upstream) need no entry.') }
+          $lines.Add('')
+          $lines.Add('Restore an archived branch: `git push origin refs/tags/archive/<branch>:refs/heads/<branch>`')
+          $lines | Set-Content -Path $summaryPath
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-prune-report
+          path: branch-prune-report.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Propagate the script exit code
+        if: always()
+        shell: bash
+        env:
+          PRUNE_EXIT: ${{ steps.prune.outputs.exit_code }}
+        run: |
+          # The run step cleared $LASTEXITCODE so the summary and artifact could
+          # publish first; the workflow verdict still has to tell the truth, and
+          # this is the one step that carries it.
+          case "${PRUNE_EXIT}" in
+            0) echo "prune-branches.ps1: clean (exit 0)" ;;
+            '') echo "prune-branches.ps1 did not record an exit code" >&2; exit 1 ;;
+            *) echo "prune-branches.ps1 exited ${PRUNE_EXIT}; see the job summary for the replay list" >&2; exit "${PRUNE_EXIT}" ;;
+          esac
