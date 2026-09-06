@@ -65,6 +65,7 @@ htmlcov/
 .nyc_output/
 coverage/
 *.lcov
+testResults.xml
 
 ## Package managers
 node_modules/
@@ -85,6 +86,8 @@ lerna-debug.log*
 
 ## Development Container
 .devcontainer-state/
+.devcontainer/local.env
+.devcontainer/secrets/
 devenv.nix
 flake.nix
 .direnv/

@@ -1,170 +1,29 @@
-version: '3.9'
-
 services:
-  devcontainer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VARIANT: "focal"
-    container_name: helios-platform-dev
-    hostname: helios-platform-dev
-    image: helios-platform-dev:latest
-    
-    working_dir: /workspace
-    
-    volumes:
-      # Main workspace mount
-      - ..:/workspace:cached
-      
-      # Docker socket for Docker-in-Docker
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      
-      # Persistent volumes for caching
-      - devcontainer-node-modules:/workspace/node_modules
-      - devcontainer-python-cache:/workspace/.venv
-      - devcontainer-home:/home/devuser
-      - devcontainer-git-config:/home/devuser/.config/git
-      - devcontainer-npm-cache:/home/devuser/.npm
-      - devcontainer-nvm:/home/devuser/.nvm
-      - devcontainer-ssh:/home/devuser/.ssh
-      - devcontainer-local-bin:/home/devuser/.local/bin
-      - devcontainer-powershell-modules:/usr/local/share/powershell/Modules
-      
-      # Optional: SSH and Git config from host (read-only)
-      # - ~/.ssh:/home/devuser/.ssh:ro
-      # - ~/.gitconfig:/home/devuser/.gitconfig:ro
-    
-    ports:
-      # Wiki Application
-      - "8080:8080"
-      
-      # Database (PostgreSQL)
-      - "5432:5432"
-      
-      # Development servers
-      - "3000:3000"    # Node.js dev server
-      - "5173:5173"    # Vite dev server
-      - "3001:3001"    # API server
-      - "4200:4200"    # Angular dev server
-      - "8000:8000"    # Python development server
-      - "8888:8888"    # Jupyter Notebook
-    
-    environment:
-      # Node/npm environment
-      NODE_ENV: development
-      NPM_CONFIG_LOGLEVEL: warn
-      NODE_OPTIONS: "--max-old-space-size=4096"
-      
-      # Python environment
-      PYTHONUNBUFFERED: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_NO_CACHE_DIR: "1"
-      
-      # General environment
-      WORKSPACE: /workspace
-      HOME: /home/devuser
-      SHELL: /bin/bash
-      LANG: C.UTF-8
-      LC_ALL: C.UTF-8
-      
-      # Git configuration
-      GIT_AUTHOR_NAME: "Dev User"
-      GIT_AUTHOR_EMAIL: "dev@helios-platform.local"
-      GIT_COMMITTER_NAME: "Dev User"
-      GIT_COMMITTER_EMAIL: "dev@helios-platform.local"
-      
-      # Database (if using PostgreSQL)
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: helios_dev
-      POSTGRES_USER: devuser
-      POSTGRES_PASSWORD: devpassword
-      
-      # Docker configuration
-      DOCKER_HOST: unix:///var/run/docker.sock
-    
-    cap_add:
-      - SYS_PTRACE
-      - SYS_ADMIN
-    
-    security_opt:
-      - seccomp=unconfined
-    
-    stdin_open: true
-    tty: true
-    
-    networks:
-      - helios-network
-    
-    depends_on:
-      - postgres
-    
-    healthcheck:
-      test: ["CMD", "test", "-d", "/workspace"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Optional PostgreSQL database for development
   postgres:
+    profiles: ["database"]
     image: postgres:16-alpine
-    container_name: helios-postgres-dev
-    hostname: postgres
-    
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
-    
     ports:
-      - "5432:5432"
-    
+      - "127.0.0.1:${HELIOS_DEV_POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: helios_dev
-      POSTGRES_USER: devuser
-      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: ${HELIOS_DEV_POSTGRES_DB:-helios_dev}
+      POSTGRES_USER: ${HELIOS_DEV_POSTGRES_USER:-helios_dev}
+      POSTGRES_PASSWORD: ${HELIOS_DEV_POSTGRES_PASSWORD:?Set HELIOS_DEV_POSTGRES_PASSWORD or pass --env-file .devcontainer/local.env}
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: UTC
-    
-    networks:
-      - helios-network
-    
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devuser -d helios_dev"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    
     restart: unless-stopped
 
 volumes:
-  # Devcontainer volumes
-  devcontainer-node-modules:
-    driver: local
-  devcontainer-python-cache:
-    driver: local
-  devcontainer-home:
-    driver: local
-  devcontainer-git-config:
-    driver: local
-  devcontainer-npm-cache:
-    driver: local
-  devcontainer-nvm:
-    driver: local
-  devcontainer-ssh:
-    driver: local
-  devcontainer-local-bin:
-    driver: local
-  devcontainer-powershell-modules:
-    driver: local
-  
-  # PostgreSQL data
-  postgres-data:
-    driver: local
-
-networks:
-  helios-network:
-    driver: bridge
-    name: helios-network
+  postgres-data: {}

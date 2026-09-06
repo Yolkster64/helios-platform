@@ -4,308 +4,109 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - '**.ps1'
-      - '**.bat'
-      - '**.cmd'
+      - '**/*.ps1'
+      - '**/*.psm1'
       - '.github/workflows/code-checks.yml'
+      - 'scripts/verify/code-checks.ps1'
+      - 'scripts/verify/tests/test-code-checks.ps1'
   pull_request:
     branches: [main, develop]
     paths:
-      - '**.ps1'
-      - '**.bat'
-      - '**.cmd'
+      - '**/*.ps1'
+      - '**/*.psm1'
+      - '.github/workflows/code-checks.yml'
+      - 'scripts/verify/code-checks.ps1'
+      - 'scripts/verify/tests/test-code-checks.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   code-checks:
-    name: Automated Code Quality Checks
+    name: PowerShell code checks
     runs-on: windows-latest
-    
+    timeout-minutes: 20
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Setup PowerShell 7
-        run: |
-          $ProgressPreference = "SilentlyContinue"
-          choco install powershell-core -y
-        shell: pwsh
-      
+
       - name: Install Pester
-        run: |
-          Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck
         shell: pwsh
-      
-      - name: PowerShell Syntax Validation
-        id: syntax-check
         run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  PowerShell Syntax Validation          ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $Files = Get-ChildItem -Recurse -Filter "*.ps1"
-          $FailCount = 0
-          
-          foreach ($File in $Files) {
-            try {
-              $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $File.FullName), [ref]$null)
-              Write-Host "✓ $($File.Name)"
-            }
-            catch {
-              Write-Host "✗ $($File.Name): $($_.Exception.Message)"
-              $FailCount++
-            }
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $installed = Get-Module -ListAvailable Pester |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+          if ($null -eq $installed -or $installed.Version -lt [version]'5.4.0') {
+            Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -Scope CurrentUser -SkipPublisherCheck
           }
-          
-          if ($FailCount -gt 0) {
-            Write-Host ""
-            Write-Host "❌ Syntax validation FAILED ($FailCount errors)"
-            exit 1
-          }
-          else {
-            Write-Host ""
-            Write-Host "✓ All files have valid syntax"
-          }
-        shell: pwsh
-      
-      - name: Security Scanning
-        id: security-scan
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Security Scanning                     ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $Files = Get-ChildItem -Recurse -Filter "*.ps1"
-          $SecurityIssues = @()
 
-          # The value must be captured and non-empty: empty parameter defaults
-          # ($Password = "") and documentation placeholders (ghp_xxxxx) are not
-          # leaked credentials.
-          $PatternMap = @{
-            'password\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded password"
-            'apikey\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded API key"
-            'secret\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded secret"
-            'token\s*=\s*[''"]([^''\"]+)[''"]' = "Hardcoded token"
-          }
-          $Placeholder = 'xxx|^\*+$|^<[^>]*>$|placeholder|example|changeme|dummy|your[-_]'
+      - name: Run repository PowerShell checks
+        id: checks
+        shell: pwsh
+        env:
+          HELIOS_EVENT_NAME: ${{ github.event_name }}
+          HELIOS_BASE_REF: ${{ github.base_ref }}
+          HELIOS_BEFORE: ${{ github.event.before }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          pwsh -NoLogo -NoProfile -File scripts/verify/code-checks.ps1 `
+            -EventName $env:HELIOS_EVENT_NAME `
+            -BaseRef $env:HELIOS_BASE_REF `
+            -Before $env:HELIOS_BEFORE `
+            -ReportPath code-checks-report.json
 
-          foreach ($File in $Files) {
-            $Raw = Get-Content $File.FullName -Raw
+      - name: Run code-checks regression tests
+        id: regression-tests
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Import-Module Pester -MinimumVersion 5.4.0
+          Invoke-Pester -Path scripts/verify/tests/test-code-checks.ps1 -Output Detailed -CI
 
-            if ($File.Name -notmatch '^test-' -and $Raw -notmatch '# EXAMPLE CODE') {
-              foreach ($Line in (Get-Content $File.FullName)) {
-                foreach ($Pattern in $PatternMap.Keys) {
-                  if ($Line -match $Pattern -and $Matches[1] -notmatch $Placeholder) {
-                    $SecurityIssues += @{
-                      File = $File.Name
-                      Issue = $PatternMap[$Pattern]
-                      Pattern = $Pattern
-                    }
-                  }
-                }
-              }
-            }
-          }
-          
-          if ($SecurityIssues.Count -gt 0) {
-            Write-Host "❌ Security issues found:"
-            $SecurityIssues | ForEach-Object {
-              Write-Host "  - [$($_.File)] $($_.Issue)"
-            }
-            exit 1
-          }
-          else {
-            Write-Host "✓ No security issues detected"
-          }
-        shell: pwsh
-      
-      - name: Registry Modification Validation
-        id: registry-check
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Registry Modification Validation      ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $Files = Get-ChildItem -Recurse -Filter "*.ps1"
-          $IssueCount = 0
-          
-          foreach ($File in $Files) {
-            $Content = Get-Content $File.FullName
-            
-            # Find registry modifications (grouped: the bare alternation matched
-            # any file that merely mentioned HKCU/HKU anywhere)
-            if ($Content -match '(New-Item|Set-ItemProperty|Remove-Item).*(HKLM|HKCU|HKU)') {
-              # Check for documentation
-              if ($Content -notmatch '# Registry:') {
-                Write-Host "✗ $($File.Name): Missing '# Registry:' documentation"
-                $IssueCount++
-              }
-              else {
-                Write-Host "✓ $($File.Name): Registry changes documented"
-              }
-            }
-          }
-          
-          if ($IssueCount -gt 0) {
-            exit 1
-          }
-        shell: pwsh
-      
-      - name: File Path Validation
-        id: path-check
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  File Path Validation                  ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $Files = Get-ChildItem -Recurse -Filter "*.ps1"
-          $PathIssues = @()
-          
-          foreach ($File in $Files) {
-            $Content = Get-Content $File.FullName
-            
-            # Check for hardcoded paths without env variables. Single-quoted:
-            # in PowerShell double-quoted strings \" does not escape the quote
-            # (backtick is the escape char), so the original never parsed.
-            if ($Content -match '[''"]C:\\Users\\[^''"]*[''"]' -and
-                $File.Name -notmatch '^test-') {
-              $PathIssues += "$($File.Name): Consider using environment variables"
-            }
-
-            # Check for invalid filename characters in quoted paths. Anchor to
-            # a drive-style prefix: bare [<>:|?*] between any two quotes on a
-            # line matches every quoted URL ("https://...") in the repo.
-            if ($Content -match '[''"][A-Za-z]:\\[^''"]*[<>|?*][^''"]*[''"]') {
-              $PathIssues += "$($File.Name): Path contains invalid characters"
-            }
-          }
-          
-          if ($PathIssues.Count -gt 0) {
-            Write-Host "⚠  Path warnings:"
-            $PathIssues | ForEach-Object { Write-Host "  - $_" }
-          }
-          else {
-            Write-Host "✓ File paths are valid"
-          }
-        shell: pwsh
-      
-      - name: Documentation Check
-        id: doc-check
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Documentation Requirements            ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $PhaseFiles = Get-ChildItem -Recurse -Filter "Phase-*.ps1"
-          $DocIssues = 0
-          
-          foreach ($File in $PhaseFiles) {
-            $Content = Get-Content $File.FullName
-            
-            $HasHeader = $Content -match '<#'
-            $HasSynopsis = $Content -match '\.SYNOPSIS'
-            $HasDescription = $Content -match '\.DESCRIPTION'
-            
-            if ($HasHeader -and $HasSynopsis -and $HasDescription) {
-              Write-Host "✓ $($File.Name): Documentation complete"
-            }
-            else {
-              Write-Host "✗ $($File.Name): Missing documentation"
-              $DocIssues++
-            }
-          }
-          
-          if ($DocIssues -gt 0) {
-            Write-Host ""
-            Write-Host "❌ $DocIssues files missing documentation"
-            exit 1
-          }
-        shell: pwsh
-      
-      - name: Test Coverage Check
-        id: coverage-check
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Test Coverage Requirements            ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $TestFiles = Get-ChildItem -Recurse -Filter "test-*.ps1"
-          
-          if ($TestFiles.Count -eq 0) {
-            Write-Host "⚠  No test files found"
-          }
-          else {
-            Write-Host "✓ Found $($TestFiles.Count) test files"
-            
-            foreach ($TestFile in $TestFiles) {
-              Write-Host "  - $($TestFile.Name)"
-            }
-          }
-        shell: pwsh
-      
-      - name: Run Unit Tests
-        id: unit-tests
-        continue-on-error: true
-        run: |
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Running Unit Tests                    ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          
-          $TestFiles = Get-ChildItem -Recurse -Filter "test-*-unit.ps1"
-          
-          if ($TestFiles.Count -eq 0) {
-            Write-Host "ℹ  No unit tests found, skipping"
-          }
-          else {
-            foreach ($TestFile in $TestFiles) {
-              Write-Host ""
-              Write-Host "Running $($TestFile.Name)..."
-              
-              $Result = Invoke-Pester -Path $TestFile.FullName -PassThru -ErrorAction SilentlyContinue
-              
-              if ($Result.FailedCount -gt 0) {
-                Write-Host "❌ $($Result.FailedCount) test(s) failed"
-                exit 1
-              }
-              else {
-                Write-Host "✓ All tests passed"
-              }
-            }
-          }
-        shell: pwsh
-      
-      - name: Generate Report
+      - name: Publish summary
         if: always()
-        run: |
-          Write-Host ""
-          Write-Host "╔════════════════════════════════════════╗"
-          Write-Host "║  Code Checks Summary                   ║"
-          Write-Host "╚════════════════════════════════════════╝"
-          Write-Host ""
-          Write-Host "✓ Syntax Validation: $(if ('${{ steps.syntax-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Security Scanning: $(if ('${{ steps.security-scan.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Registry Check: $(if ('${{ steps.registry-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Path Validation: $(if ('${{ steps.path-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Documentation: $(if ('${{ steps.doc-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host ""
         shell: pwsh
-      
-      - name: Final Status
-        if: failure()
+        env:
+          CHECKS_OUTCOME: ${{ steps.checks.outcome }}
+          TESTS_OUTCOME: ${{ steps.regression-tests.outcome }}
         run: |
-          Write-Host ""
-          Write-Host "❌ Code checks FAILED"
-          Write-Host ""
-          Write-Host "Please fix the issues above before committing."
-          exit 1
-        shell: pwsh
-      
-      - name: Success Message
-        if: success()
-        run: |
-          Write-Host ""
-          Write-Host "✅ All code checks PASSED"
-          Write-Host ""
-          Write-Host "Your code is ready to merge!"
-        shell: pwsh
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Format-Outcome([string]$Outcome) {
+            switch ($Outcome) {
+              'success' { 'PASS' }
+              'failure' { 'FAIL' }
+              'skipped' { 'SKIPPED' }
+              default { $Outcome.ToUpperInvariant() }
+            }
+          }
+
+          $summary = @(
+            '# Code checks summary'
+            ''
+            "- PowerShell repository checks: $(Format-Outcome $env:CHECKS_OUTCOME)"
+            "- Regression tests: $(Format-Outcome $env:TESTS_OUTCOME)"
+          )
+
+          if (Test-Path -LiteralPath code-checks-report.json) {
+            $report = Get-Content -LiteralPath code-checks-report.json -Raw | ConvertFrom-Json
+            $summary += ''
+            $summary += "Checked PowerShell files: $($report.TargetFiles.Count)"
+            foreach ($check in $report.Checks) {
+              $summary += "- $($check.Name): $($check.Status)"
+              foreach ($message in @($check.Messages)) {
+                $summary += "  - $message"
+              }
+            }
+          }
+
+          $summary -join [Environment]::NewLine | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
