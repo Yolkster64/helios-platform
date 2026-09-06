@@ -3,8 +3,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- NavigationView shell (GUI_THEME_ANALYSIS.md): three pages planned — AI Hub
-         dashboard (implemented), Routing and Fleet (PR6 roadmap, disabled placeholders). -->
+    <!-- NavigationView shell: AI Hub owns provider health; Fabric Control owns the
+         cross-system GitHub/Claude/Azure/Foundry/operator readiness surface. -->
     <NavigationView
         x:Name="Nav"
         PaneDisplayMode="Left"
@@ -17,6 +17,11 @@
             <NavigationViewItem x:Name="AIHubNavItem" Content="AI Hub" Tag="aihub">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE99A;" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem x:Name="FabricControlNavItem" Content="Fabric Control" Tag="fabric">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE950;" />
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False"
