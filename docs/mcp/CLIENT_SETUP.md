@@ -92,10 +92,40 @@ pwsh scripts/bootstrap/write-codex-config.ps1 -Apply -Force   # existing file: r
 
 `-Path <file>` renders elsewhere; `-Json` emits one report object. The result is a
 `[mcp_servers.helios]` table with `command = "dotnet"`, the `run --project <checkout>/src/mcp/HELIOS.Mcp -c Release`
-arguments, and `env = { HELIOS_REPO_ROOT = "<checkout>" }`. Re-run after moving the
-checkout. Exit 0 = written or already up to date, 1 = refused (existing file without
+arguments, and `env = { HELIOS_REPO_ROOT = "<checkout>" }`, followed by the
+`[mcp_servers.playwright]` table (see *Playwright MCP* below; `-SkipPlaywright` omits it).
+Re-run after moving the checkout. Exit 0 = written or already up to date, 1 = refused (existing file without
 `-Force`), 2 = `src/mcp/HELIOS.Mcp` missing. That `-Apply` run is the whole Codex
 registration; verify it with `codex mcp list`, which should show `helios`.
+
+## Playwright MCP (browser automation for all three clients)
+
+The same second server is registered everywhere the `helios` server is, so Claude Code,
+Copilot and Codex drive one browser tool: `@playwright/mcp` (pinned at `0.0.80`; bump it
+in all three places together — `.mcp.json`, `.vscode/mcp.json`, and the table
+`scripts/bootstrap/write-codex-config.ps1` renders). It needs Node 18+ (`npx` fetches the
+pinned package on first use) and a Chromium it can launch — the devcontainer and the
+agent containers already carry one.
+
+| Client | Where | Mode |
+|---|---|---|
+| Claude Code | `.mcp.json` → `playwright` (`npx -y @playwright/mcp@0.0.80 --headless`) | headless: agent containers and Codespaces have no display |
+| VS Code / Copilot | `.vscode/mcp.json` → `playwright` | headed, so you can watch it work |
+| Codex CLI | `[mcp_servers.playwright]`, rendered next to the helios table by `write-codex-config.ps1` (`npx.cmd` on Windows); `-SkipPlaywright` leaves it out | headed; add `"--headless"` to `args` on a display-less host |
+
+What to know before letting an agent drive it:
+
+- The browser profile is **persistent** by default: a site you sign into stays signed in
+  for the next session. That is what makes the two GitHub App clicks
+  (`scripts/bootstrap/connect-github-app.ps1`) scriptable from a logged-in profile, and
+  also why the profile directory must never be committed or shared. Pass `--isolated` for
+  a throwaway profile.
+- Nothing here holds a credential: the config carries the package name and flags only.
+  A device code or an MFA prompt still needs you, whatever drives the browser.
+- Verify: Claude Code `/mcp` lists `playwright`; Copilot's tool picker shows `MCP:
+  playwright`; `codex mcp list` shows `helios` and `playwright` after
+  `pwsh scripts/bootstrap/write-codex-config.ps1 -Apply` (`-Force` on an existing file
+  replaces only the helios+playwright block).
 
 ## Cursor
 
