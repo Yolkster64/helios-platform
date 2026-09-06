@@ -1207,11 +1207,9 @@ function Test-AzureLane {
     }
 
     $azCmd = Get-CliCommand -Name 'az'
-    # Failure classification across the whole chain (review findings): a 403 RBAC
-    # diagnosis is stashed and only used if nothing later succeeds; MFA/re-login
+    # Failure classification across the whole chain (review findings): MFA/re-login
     # advice requires at least one DEFINITIVE auth rejection — transient-only runs
     # (transport/429/5xx) end as unavailable-retryable, never credential advice.
-    $armForbidden = $null
     $sawAuthRejection = $false
     # A DECLARED managed-identity endpoint answering 401/403 is a configuration
     # failure (review finding): the identity header/secret or the endpoint wiring is
@@ -1467,8 +1465,8 @@ function Test-AzureLane {
         $chainNotes.Add("managed-identity ($Kind): $miStatus")
         return $false
     }
-    # Select one declared implementation before probing. A failed IDENTITY_ENDPOINT
-    # cannot be rescued by MSI_ENDPOINT or a cached CLI principal.
+    # Probe declared implementations in order so MSI_ENDPOINT can still be tried
+    # when IDENTITY_ENDPOINT is set but unusable.
     $miDeclared = $false
     $miUsableDeclared = $false   # at least one declared endpoint passed the shape check
     $miKind = ''
@@ -1487,7 +1485,7 @@ function Test-AzureLane {
         [pscustomobject]@{ Kind = 'identity-endpoint'; Env = 'IDENTITY_ENDPOINT'; HeaderEnv = 'IDENTITY_HEADER'; HeaderName = 'X-IDENTITY-HEADER'; ApiVersion = '2019-08-01'; Metadata = $false; Selector = 'client_id' }
         [pscustomobject]@{ Kind = 'msi-endpoint'; Env = 'MSI_ENDPOINT'; HeaderEnv = 'MSI_SECRET'; HeaderName = 'Secret'; ApiVersion = '2017-09-01'; Metadata = $true; Selector = 'clientid' }
     )
-    $miCandidates = @($miCandidates | Where-Object { Test-EnvValue $_.Env } | Select-Object -First 1)
+    $miCandidates = @($miCandidates | Where-Object { Test-EnvValue $_.Env })
     foreach ($miCandidate in $miCandidates) {
         if (-not (Test-EnvValue $miCandidate.Env)) { continue }
         $miDeclared = $true
@@ -1705,15 +1703,7 @@ function Test-AzureLane {
 
     # Chain exhausted — classify honestly (review findings):
     $chainText = $chainNotes -join '; '
-    # 1. A stashed 403 diagnosis wins: some rung authenticated but lacks RBAC — the
-    #    role-assignment action is the accurate remediation, never MFA.
-    #    …unless a certificate service principal is configured (review finding): the
-    #    principal that got 403 (managed identity / az cache) and the certificate
-    #    principal can differ, so the non-interactive certificate path is advertised
-    #    first, with the 403 evidence attached, rather than discarded behind an RBAC
-    #    grant for a principal the hub may never use.
-    if ($null -ne $armForbidden -and -not $spCertReady) { return $armForbidden }
-    # 2. A configured certificate is a usable NON-INTERACTIVE repair that this
+    # 1. A configured certificate is a usable NON-INTERACTIVE repair that this
     #    report-only script deliberately does not execute (its az login rewrites the
     #    shared profile). When the chain ends without a ready lane, that repair must
     #    be the terminal ownerAction (review finding): setup-everything.ps1 harvests
@@ -1736,13 +1726,10 @@ function Test-AzureLane {
         # certificate wins the ownerAction slot (it works right now with no
         # workflow edit), and the azure/login alternative rides in the detail.
         $certOidcNote = if ($ciOidcAvailable) { ' — alternative: this Actions job can also mint an OIDC token, so adding the azure/login step before this probe works too' } else { '' }
-        # A stashed 403 rides along as evidence (review finding): if the certificate
-        # principal turns out to be the SAME identity, the RBAC grant is the real repair.
-        $certForbiddenNote = if ($null -ne $armForbidden) { " — note: another credential source ($($armForbidden.source)) already authenticated but ARM answered 403 for that principal; if the certificate service principal is the same identity, the RBAC grant (az role assignment create --assignee <principal> --role Reader --scope <scope>, owner-gated) is the repair instead" } else { '' }
         return New-LaneResult -Lane 'azure' -State 'needs-owner' -Source 'env-service-principal-cert' `
             -Detail ("the certificate service-principal flow is configured (AZURE_CLIENT_ID/AZURE_TENANT_ID/" +
                 "AZURE_CLIENT_CERTIFICATE_PATH set) and is a non-interactive repair this report-only probe " +
-                "deliberately does not execute: $chainText$certOidcNote$certForbiddenNote") `
+                "deliberately does not execute: $chainText$certOidcNote") `
             -OwnerAction $certAction
     }
     # 3. CI OIDC available and NO rung ever held a token (and no certificate to

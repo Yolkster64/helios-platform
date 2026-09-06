@@ -93,11 +93,11 @@ if ($LASTEXITCODE -ne 0) {
 if (-not $FoundryResource) {
     $foundryCandidates = @(
         (Invoke-Az @('cognitiveservices', 'account', 'list', '--resource-group', $ResourceGroup,
-            '--query', "[?kind=='AIServices'].name", '--output', 'tsv')) -split "`n" |
+            '--query', "[?kind=='AIServices' && properties.allowProjectManagement==true].name", '--output', 'tsv')) -split "`n" |
             Where-Object { $_ }
     )
     if ($foundryCandidates.Count -ne 1) {
-        throw "Expected exactly one AIServices Foundry account in '$ResourceGroup' but found $($foundryCandidates.Count). Pass -FoundryResource explicitly."
+        throw "Expected exactly one Foundry account candidate (kind AIServices with allowProjectManagement=true) in '$ResourceGroup' but found $($foundryCandidates.Count). Pass -FoundryResource explicitly."
     }
     $FoundryResource = $foundryCandidates[0]
 }
