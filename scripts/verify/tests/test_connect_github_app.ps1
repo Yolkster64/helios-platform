@@ -151,6 +151,7 @@ if [ "$1" = "variable" ] && [ "$2" = "get" ]; then
   echo "variable not found" >&2; exit 1
 fi
 if [ "$1" = "secret" ] && [ "$2" = "list" ]; then
+  if [ -n "${GH_SHIM_SECRET_LIST_EXIT:-}" ]; then echo "HTTP 403: Resource not accessible" >&2; exit 1; fi
   if [ -n "$GH_SHIM_KEY_PRESENT" ]; then echo '[{"name":"HELIOS_APP_PRIVATE_KEY"}]'; else echo '[]'; fi; exit 0
 fi
 # Paged listings: the path carries ?per_page=100&page=N; page 2+ is empty unless
@@ -162,6 +163,7 @@ if [ "$1" = "api" ] && [ "${2%%\?*}" = "/user/installations" ]; then
   else echo '{"installations":[]}'; fi; exit 0
 fi
 if [ "$1" = "api" ] && [ "${2%%\?*}" = "/user/installations/777/repositories" ]; then
+  if [ -n "${GH_SHIM_REPOS_EXIT:-}" ]; then echo "HTTP 403: Resource not accessible" >&2; exit 1; fi
   page="${2##*page=}"; [ "$page" = "$2" ] && page=1
   if [ -n "$GH_SHIM_PAGES" ] && [ "$page" = "1" ]; then
     names=""; for i in $(seq 1 100); do names="${names}{\"full_name\":\"owner/filler-$i\"},"; done
@@ -288,6 +290,33 @@ exit 0
     Assert-True ($run.ExitCode -eq 2) 'Uninstalled app must exit 2.'
     Assert-True ((Get-Lane $run.Object 'app-installed').ownerAction -match 'apps/helios-control-owner/installations/new') 'Install action must link the install page.'
 
+    # Unreadable listings are "unproven", never "absent": a failed secrets listing must not
+    # send the owner to a key rotation, and a failed repository listing must not tell them
+    # the installation excludes the repository.
+    $env:GH_SHIM_REGISTERED = '1'
+    $env:GH_SHIM_KEY_PRESENT = '1'
+    $env:GH_SHIM_INSTALLED = '1'
+    $env:GH_SHIM_SECRET_LIST_EXIT = '1'
+    Assert-True ($null -eq (Test-RepositorySecretPresent -Name 'HELIOS_APP_PRIVATE_KEY' -Repository 'owner/repo')) 'A failed secrets listing must read as null, not false.'
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
+    Assert-True ($run.ExitCode -eq 2 -and (Get-Lane $run.Object 'secret-stored').state -eq 'needs-owner') 'An unprovable secret must need the owner.'
+    Assert-True ((Get-Lane $run.Object 'secret-stored').detail -match 'cannot be proven') 'An unprovable secret must say so.'
+    Assert-True ((Get-Lane $run.Object 'secret-stored').ownerAction -match 'gh secret list' -and (Get-Lane $run.Object 'secret-stored').ownerAction -notmatch 'generate a private key') 'An unprovable secret must ask for a re-run, never a rotation.'
+    $env:GH_SHIM_REGISTERED = ''
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
+    Assert-True ((Get-Lane $run.Object 'secret-stored').detail -match 'cannot be proven') 'The unregistered verify-only row must also say unproven when the listing failed.'
+    $env:GH_SHIM_SECRET_LIST_EXIT = ''
+    $env:GH_SHIM_REGISTERED = '1'
+    $env:GH_SHIM_REPOS_EXIT = '1'
+    Assert-True ($null -eq (Get-UserInstallationRepositories -InstallationId '777')) 'A failed repository listing must read as null, not an empty list.'
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
+    Assert-True ((Get-Lane $run.Object 'app-installed').state -eq 'needs-owner' -and (Get-Lane $run.Object 'app-installed').detail -match 'could not be read') 'An unreadable repository list must be reported as unproven.'
+    Assert-True ((Get-Lane $run.Object 'app-installed').detail -notmatch 'does not include' -and (Get-Lane $run.Object 'app-installed').ownerAction -match '/user/installations/777/repositories') 'An unreadable repository list must not claim the repository is excluded.'
+    $env:GH_SHIM_REPOS_EXIT = ''
+    $env:GH_SHIM_REGISTERED = ''
+    $env:GH_SHIM_KEY_PRESENT = ''
+    $env:GH_SHIM_INSTALLED = ''
+
     # Paging: the installation and repository listings are read page by page, so a
     # repository that only appears on the second page is still found (`--paginate`
     # concatenated one document per page, which ConvertFrom-Json rejected).
@@ -331,7 +360,7 @@ finally {
     $env:PATH = $savedPath
     $env:GH_TOKEN = $savedGh
     $env:GITHUB_TOKEN = $savedGithub
-    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT', 'GH_SHIM_PAGES', 'GH_SHIM_PASTED_CODE') { [Environment]::SetEnvironmentVariable($name, $null) }
+    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT', 'GH_SHIM_PAGES', 'GH_SHIM_PASTED_CODE', 'GH_SHIM_SECRET_LIST_EXIT', 'GH_SHIM_REPOS_EXIT') { [Environment]::SetEnvironmentVariable($name, $null) }
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 Write-Host "Passed $($script:cases) offline connect-github-app cases."

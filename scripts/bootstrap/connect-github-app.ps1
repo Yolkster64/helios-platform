@@ -569,8 +569,10 @@ function Get-GhJsonCollection {
 }
 function Get-UserInstallationRepositories {
     param([Parameter(Mandatory)][string]$InstallationId)
+    # $null when the listing could not be read (distinct from an installation that
+    # covers zero repositories), so the caller can say "unproven" instead of "not included".
     $repositories = Get-GhJsonCollection -Path "/user/installations/$InstallationId/repositories" -Collection 'repositories'
-    if ($null -eq $repositories) { return @() }
+    if ($null -eq $repositories) { return $null }
     return @($repositories | ForEach-Object { [string](Get-OptionalProperty $_ 'full_name' '') } | Where-Object { $_ })
 }
 
@@ -597,8 +599,11 @@ function Get-RepositoryVariable {
 
 function Test-RepositorySecretPresent {
     param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Repository)
+    # Tri-state: $true / $false when the listing answered, $null when it could not be
+    # read (permission or API error) - "unreadable" must never be reported as "absent",
+    # because absent leads the owner to a key rotation.
     $names = Get-GhJson -Arguments @('secret', 'list', '--repo', $Repository, '--json', 'name')
-    if ($null -eq $names) { return $false }
+    if ($null -eq $names) { return $null }
     return (@($names | ForEach-Object { [string](Get-OptionalProperty $_ 'name' '') }) -contains $Name)
 }
 
@@ -679,7 +684,10 @@ function Invoke-ConnectGitHubApp {
     if ($registered) {
         Add-Lane -Name 'app-registered' -State 'ready' -Detail "repository variables name the App: slug=$slug client_id=$clientId id=$($stored['HELIOS_APP_ID'])"
         Add-Lane -Name 'variables-stored' -State 'ready' -Detail ($script:variableNames -join ', ')
-        if ($secretPresent) {
+        if ($null -eq $secretPresent) {
+            Add-Lane -Name 'secret-stored' -State 'needs-owner' -Detail "$($script:secretName): presence cannot be proven - gh could not list this repository's Actions secrets (permission or API error); nothing is rotated on that basis" -OwnerAction "re-run when gh can read the secrets: gh secret list --repo $Repository --json name"
+        }
+        elseif ($secretPresent) {
             Add-Lane -Name 'secret-stored' -State 'ready' -Detail "$($script:secretName) is present (name only)"
         }
         else {
@@ -689,7 +697,15 @@ function Invoke-ConnectGitHubApp {
     elseif ($VerifyOnly) {
         Add-Lane -Name 'app-registered' -State 'needs-owner' -Detail "not registered: missing $($missingVariables -join ', ')" -OwnerAction "pwsh $($script:scriptRel) (two browser clicks: Create GitHub App, Install)"
         Add-Lane -Name 'variables-stored' -State 'needs-owner' -Detail 'set by the registration run'
-        Add-Lane -Name 'secret-stored' -State $(if ($secretPresent) { 'ready' } else { 'needs-owner' }) -Detail $(if ($secretPresent) { "$($script:secretName) is present (name only)" } else { 'set by the registration run' })
+        if ($null -eq $secretPresent) {
+            Add-Lane -Name 'secret-stored' -State 'needs-owner' -Detail "$($script:secretName): presence cannot be proven (gh could not list this repository's Actions secrets)" -OwnerAction "re-run when gh can read the secrets: gh secret list --repo $Repository --json name"
+        }
+        elseif ($secretPresent) {
+            Add-Lane -Name 'secret-stored' -State 'ready' -Detail "$($script:secretName) is present (name only)"
+        }
+        else {
+            Add-Lane -Name 'secret-stored' -State 'needs-owner' -Detail 'set by the registration run'
+        }
     }
     else {
         # --- Register through the manifest flow ---
@@ -833,10 +849,16 @@ function Invoke-ConnectGitHubApp {
             $installationId = [string](Get-OptionalProperty $installation 'id' '')
             $admin = Get-InstallationAdminState -Installation $installation
             $repos = Get-UserInstallationRepositories -InstallationId $installationId
-            $hasRepo = ($repos -contains $Repository)
+            $hasRepo = ($null -ne $repos -and (@($repos) -contains $Repository))
             $selection = [string](Get-OptionalProperty $installation 'repository_selection' '')
             if ($admin -ne 'write') {
                 Add-Lane -Name 'app-installed' -State 'needs-owner' -Detail "installation $installationId exists but administration=$admin" -OwnerAction "accept the pending permission update: https://github.com/settings/installations/$installationId"
+            }
+            elseif ($null -eq $repos -and $selection -ne 'all') {
+                # The listing failed, so whether the installation covers this repository is
+                # unproven: say so, never "does not include" (that sends the owner to change
+                # the installation's repository selection for no reason).
+                Add-Lane -Name 'app-installed' -State 'needs-owner' -Detail "installation $installationId exists but its repository list could not be read (gh API or permission error); whether it covers $Repository is unproven" -OwnerAction "re-run when gh can read it: gh api /user/installations/$installationId/repositories"
             }
             elseif (-not $hasRepo -and $selection -ne 'all') {
                 Add-Lane -Name 'app-installed' -State 'needs-owner' -Detail "installation $installationId does not include $Repository" -OwnerAction "add the repository: https://github.com/settings/installations/$installationId"
