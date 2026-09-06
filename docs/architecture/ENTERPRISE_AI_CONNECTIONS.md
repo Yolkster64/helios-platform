@@ -114,7 +114,7 @@ ready-for-review; `@codex review` / `@codex address that feedback` work in PR
 comments; managed at chatgpt.com/codex settings). To light up the local lanes:
 
 ```bash
-codex login            # ChatGPT-plan device flow (browserless: codex login --device)
+codex login            # ChatGPT-plan device flow (browserless: codex login --device-auth)
 # OR platform billing:
 export OPENAI_API_KEY=<from platform.openai.com project keys>   # value never in files
 ```

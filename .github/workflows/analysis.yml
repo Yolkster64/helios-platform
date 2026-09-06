@@ -17,6 +17,10 @@ jobs:
   analyze:
     name: Analyze Components & Generate Metrics
     runs-on: ubuntu-latest
+    # The "Comment on commit" step calls git.createCommit through GITHUB_TOKEN,
+    # which is a contents write; every other step only reads the checkout.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       

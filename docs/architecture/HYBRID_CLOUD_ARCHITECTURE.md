@@ -44,7 +44,7 @@ per zone: `HERMES_FLEET_AND_XCORE.md` (fleet), `GITHUB_ECOSYSTEM_DESIGN.md`
 |---|---|
 | Who authenticates as what | `helios-deploy.yml` runs authenticate as the **`helios-github-deploy`** app via OIDC federation — subjects `repo:Yolkster64/helios-platform:ref:refs/heads/main` and `:environment:production`, deliberately no `pull_request` (`scripts/bootstrap/azure-oidc-setup.sh`; `IDENTITY_ARCHITECTURE.md` §3). Roles: `Contributor` @ RG, `Key Vault Secrets Officer` @ vault only. |
 | Where keys live | **Nowhere.** No cloud secret is stored in the repo or in Actions; `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` are Actions *variables* (identifiers). Provider keys enter deploys only as `@secure()` parameters and land in Key Vault, never in outputs (`infra/main.bicep`). |
-| What never crosses | PR-triggered runs can never reach Azure (no matching federated subject; infra PR validation is offline in `infra-validate.yml`). The known-red `deploy.yml` still names a `secrets.AZURE_CLIENT_SECRET` — catalogued for deletion (`ROADMAP_MULTI_LLM.md`); nothing may copy it. |
+| What never crosses | PR-triggered runs can never reach Azure (no matching federated subject; infra PR validation is offline in `infra-validate.yml`). No workflow reads a client secret: the known-red `deploy.yml` that mapped `secrets.AZURE_CLIENT_SECRET` was deleted (`ROADMAP_MULTI_LLM.md`), and nothing may reintroduce one. |
 
 ## Boundary 3 — GitHub ↔ local runner cluster (ARC)
 

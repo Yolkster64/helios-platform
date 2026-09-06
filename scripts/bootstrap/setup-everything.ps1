@@ -98,7 +98,9 @@ function Get-StepSummary {
             if ($missing.Count -gt 0) { $extract += '; missing required: ' + ($missing -join ', ') }
         }
         if ($Report.PSObject.Properties['components']) {
-            $attention = @($Report.components | Where-Object { $_.status -ne 'ready' } | ForEach-Object component)
+            $attention = @($Report.components | Where-Object {
+                    -not ($_.PSObject.Properties['informational'] -and $_.informational) -and $_.status -ne 'ready'
+                } | ForEach-Object component)
             if ($attention.Count -gt 0) { $extract += '; needs-attention: ' + ($attention -join ', ') }
         }
         return $extract

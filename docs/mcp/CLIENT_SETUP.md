@@ -39,9 +39,26 @@ Choose project scope, then invoke `/helios-operator:operate-helios` or mention
 server itself still comes from the repo-level `.mcp.json`, so enabling the plugin does
 not produce duplicate `helios_*` tools or a second server process.
 
+Fewer permission prompts: `.claude/settings.local.json.example` allowlists the read-only
+commands a HELIOS session repeats (`az account show`, `az keyvault secret list` (names,
+never values), `gh repo view` / `gh pr list` / `gh pr view` / `gh run list` /
+`gh ruleset list`, `dotnet build` / `dotnet test`, and the verify scripts plus the auth
+doctor, each named by file). Claude Code matches these entries as command prefixes, which
+is why the list is shaped the way it is: `gh api` is absent because a `-X POST` or
+`-f field=value` after the prefix would ride through unprompted; anything that prints a
+credential (`az account get-access-token`, `gh auth status`, `gh auth token`) is absent so
+a token never lands in a transcript without a prompt; the verify scripts are listed by
+file name rather than `scripts/verify/*` so a `../` path cannot reach a script that
+mutates. The one entry that changes local state is the auth doctor, whose `-Apply` only
+re-runs non-interactive `az` logins. Copy the example to `.claude/settings.local.json`;
+it is personal and must never be committed: `.gitignore` lists that exact file name
+(the `.example` stays tracked), so `git check-ignore -q .claude/settings.local.json`
+succeeds — if it ever stops doing so, restore the entry before committing. Claude Code
+merges it with the project's `.claude/settings.json`, whose deny list still wins.
+
 ## VS Code / GitHub Copilot
 
-`.vscode/mcp.json`:
+`.vscode/mcp.json` in this repo registers the server for Copilot agent mode:
 
 ```json
 {
@@ -49,23 +66,36 @@ not produce duplicate `helios_*` tools or a second server process.
     "helios": {
       "type": "stdio",
       "command": "dotnet",
-      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"]
+      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
+      "env": {
+        "HELIOS_REPO_ROOT": "${workspaceFolder}"
+      }
     }
   }
 }
 ```
 
-Then enable the tools in Copilot Chat's agent mode (Tools picker → MCP: helios).
+Open the repo folder (or `workspace.code-workspace`), then enable the tools in Copilot
+Chat's agent mode (Tools picker → MCP: helios). The Codespaces devcontainer ships the
+same file.
 
 ## Codex CLI
 
-`~/.codex/config.toml`:
+Codex starts MCP servers from its own working directory, so its config needs the
+absolute project path. Render it instead of hand-editing:
 
-```toml
-[mcp_servers.helios]
-command = "dotnet"
-args = ["run", "--project", "/path/to/helios-platform/src/mcp/HELIOS.Mcp", "-c", "Release"]
+```bash
+pwsh scripts/bootstrap/write-codex-config.ps1            # dry run: prints the TOML it would write
+pwsh scripts/bootstrap/write-codex-config.ps1 -Apply     # creates ~/.codex/config.toml
+pwsh scripts/bootstrap/write-codex-config.ps1 -Apply -Force   # existing file: replaces only the helios table
 ```
+
+`-Path <file>` renders elsewhere; `-Json` emits one report object. The result is a
+`[mcp_servers.helios]` table with `command = "dotnet"`, the `run --project <checkout>/src/mcp/HELIOS.Mcp -c Release`
+arguments, and `env = { HELIOS_REPO_ROOT = "<checkout>" }`. Re-run after moving the
+checkout. Exit 0 = written or already up to date, 1 = refused (existing file without
+`-Force`), 2 = `src/mcp/HELIOS.Mcp` missing. That `-Apply` run is the whole Codex
+registration; verify it with `codex mcp list`, which should show `helios`.
 
 ## Cursor
 
@@ -76,17 +106,44 @@ args = ["run", "--project", "/path/to/helios-platform/src/mcp/HELIOS.Mcp", "-c",
   "mcpServers": {
     "helios": {
       "command": "dotnet",
-      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"]
+      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"],
+      "env": {
+        "HELIOS_REPO_ROOT": "."
+      }
     }
   }
 }
 ```
+
+`env.HELIOS_REPO_ROOT` is the same key `.mcp.json` (`.`), `.vscode/mcp.json`
+(`${workspaceFolder}`) and the Codex table (absolute checkout path) set, so the server
+resolves `config/aihub.json` from the project and not from the client's working
+directory. `.` is right for the project file; in the global `~/.cursor/mcp.json` use the
+absolute checkout path, as the Codex config does.
 
 ## Inspector (debugging)
 
 ```bash
 npx @modelcontextprotocol/inspector -- dotnet run --project src/mcp/HELIOS.Mcp -c Release
 ```
+
+## Health check
+
+Two levels, both read-only: each launches with `dotnet run ... --no-build`, so neither
+restores, compiles, or writes `bin/` / `obj/`. Build first with
+`dotnet build HELIOS.sln -c Release`.
+
+- `pwsh scripts/setup/setup-all.ps1` includes an informational `mcp-health` row: it spawns
+  the client launch shape with `--no-build` appended
+  (`dotnet run --project src/mcp/HELIOS.Mcp -c Release --no-build`), sends one JSON-RPC
+  `initialize` over stdio with a 30 s budget, and reports `ready` (the server answered),
+  `unhealthy` (it exited, returned an error frame, or stayed silent) or `skipped` (no
+  `dotnet`, or no Release build yet; the detail names the build command). The row never
+  changes the exit code and carries no `nextCommand`, so the `setup-everything.ps1` /
+  `first-run` roll-ups never turn it into an owner action.
+- `pwsh scripts/verify/stack-smoke.ps1` is the full handshake (`initialize` →
+  `notifications/initialized` → `tools/list` with pagination) and checks the tool names
+  against this document name-for-name.
 
 ## Tool surface & safety
 
