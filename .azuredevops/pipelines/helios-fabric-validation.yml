@@ -1,0 +1,136 @@
+# HELIOS Fabric Azure DevOps validation/evidence mirror.
+# GitHub protected environments remain deployment authority.
+# This pipeline has no deployment/apply stage.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: runDevelopmentWhatIf
+    displayName: Run development Azure what-if
+    type: boolean
+    default: false
+
+variables:
+  azureServiceConnection: helios-control-azure-wif-dev
+  azureResourceGroup: $(HELIOS_AZURE_RESOURCE_GROUP_DEV)
+  azureLocation: $(HELIOS_AZURE_LOCATION)
+  evidenceDirectory: $(Build.ArtifactStagingDirectory)/helios-fabric
+
+stages:
+  - stage: Validate
+    displayName: Validate HELIOS Fabric and Bicep
+    jobs:
+      - job: Contracts
+        displayName: Validate contracts
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 1
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.12'
+            displayName: Use Python 3.12
+          - script: |
+              set -euo pipefail
+              python scripts/validation/validate_yolkster_cutover.py
+              python scripts/validation/validate_helios_fabric.py
+              python scripts/validation/validate_model_providers.py
+            displayName: Validate HELIOS contracts
+          - task: AzureCLI@2
+            displayName: Resolve and compile canonical Bicep
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                mkdir -p "$(evidenceDirectory)"
+                bicep_file=''
+                for candidate in \
+                  infra/bicep/main.bicep \
+                  infra/bicep/enterprise/main.bicep \
+                  infra/azure/main.bicep; do
+                  if [ -f "$candidate" ]; then
+                    bicep_file="$candidate"
+                    break
+                  fi
+                done
+                test -n "$bicep_file"
+                az bicep install
+                az bicep build \
+                  --file "$bicep_file" \
+                  --outfile "$(evidenceDirectory)/main.json"
+                printf '%s\n' "$bicep_file" > "$(evidenceDirectory)/bicep-source.txt"
+                printf 'repository=%s\ncommit=%s\nbuild=%s\n' \
+                  "$(Build.Repository.Name)" \
+                  "$(Build.SourceVersion)" \
+                  "$(Build.BuildId)" \
+                  > "$(evidenceDirectory)/source.txt"
+                sha256sum "$(evidenceDirectory)/main.json" \
+                  > "$(evidenceDirectory)/SHA256SUMS"
+          - publish: $(evidenceDirectory)
+            artifact: helios-fabric-validation
+            displayName: Publish validation evidence
+
+  - stage: DevelopmentWhatIf
+    displayName: Development what-if only
+    dependsOn: Validate
+    condition: and(succeeded(), eq('${{ parameters.runDevelopmentWhatIf }}', 'true'))
+    jobs:
+      - deployment: WhatIf
+        displayName: Preview development resources
+        pool:
+          vmImage: ubuntu-latest
+        environment: helios-dev-plan
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  clean: true
+                  fetchDepth: 1
+                - task: AzureCLI@2
+                  displayName: Run exact-source development what-if
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      test -n "$(azureResourceGroup)"
+                      bicep_file=''
+                      for candidate in \
+                        infra/bicep/main.bicep \
+                        infra/bicep/enterprise/main.bicep \
+                        infra/azure/main.bicep; do
+                        if [ -f "$candidate" ]; then
+                          bicep_file="$candidate"
+                          break
+                        fi
+                      done
+                      test -n "$bicep_file"
+                      mkdir -p "$(evidenceDirectory)"
+                      az group show \
+                        --name "$(azureResourceGroup)" \
+                        --output none
+                      az deployment group what-if \
+                        --name "helios-dev-$(Build.BuildId)" \
+                        --resource-group "$(azureResourceGroup)" \
+                        --template-file "$bicep_file" \
+                        --parameters environmentName=dev location="$(azureLocation)" \
+                        --result-format FullResourcePayloads \
+                        --no-pretty-print \
+                        | tee "$(evidenceDirectory)/what-if.json"
+                      printf 'repository=%s\ncommit=%s\nresourceGroup=%s\n' \
+                        "$(Build.Repository.Name)" \
+                        "$(Build.SourceVersion)" \
+                        "$(azureResourceGroup)" \
+                        > "$(evidenceDirectory)/what-if-source.txt"
+                      sha256sum "$(evidenceDirectory)/what-if.json" \
+                        > "$(evidenceDirectory)/what-if.sha256"
+                - publish: $(evidenceDirectory)
+                  artifact: helios-dev-what-if
+                  displayName: Publish development what-if evidence
