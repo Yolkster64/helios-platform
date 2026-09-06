@@ -430,7 +430,8 @@ function Test-PublicModelsOrigin {
 #   conflict     — readers name DIFFERENT Key Vault secrets for one variable, so
 #                  declaration order would choose the credential every sharer reads.
 #   incompatible — readers belong to different credential FAMILIES (OpenAI, Anthropic,
-#                  Azure OpenAI, the public GitHub Models origin, each custom endpoint),
+#                  Azure OpenAI, Claude in Foundry, the public GitHub Models origin,
+#                  each custom endpoint),
 #                  so no single value can be valid for all of them and a preset or
 #                  exported value would reach the wrong service. A per-type view sees
 #                  neither, and would report both lanes ready on such a value.
@@ -456,6 +457,9 @@ function Get-AIHubEnvReaders {
                     'anthropic' { 'ANTHROPIC_API_KEY' }
                     'github-models' { 'GITHUB_MODELS_TOKEN' }
                     'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                    # Claude in Microsoft Foundry: the key is optional (Entra ID fallback,
+                    # like azure-openai) but it is still this type's own credential family.
+                    'anthropic-foundry' { 'ANTHROPIC_FOUNDRY_API_KEY' }
                     default { '' }
                 }
                 if (-not $typeDefault) { continue }

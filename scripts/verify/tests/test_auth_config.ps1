@@ -28,7 +28,8 @@ $rest = Read-Ast 'scripts/verify/rest-connect.ps1'
 $doctor = Read-Ast 'scripts/bootstrap/auth-doctor.ps1'
 $auto = Read-Ast 'scripts/bootstrap/auto-login.ps1'
 $names = @('AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_CLIENT_SECRET','AZURE_CLIENT_CERTIFICATE_PATH','AZURE_FEDERATED_TOKEN_FILE',
-    'IDENTITY_ENDPOINT','IDENTITY_HEADER','MSI_ENDPOINT','MSI_SECRET','AZURE_OPENAI_ENDPOINT','AZURE_OPENAI_API_KEY','AIHUB_CONFIG','PATH','GH_REPO')
+    'IDENTITY_ENDPOINT','IDENTITY_HEADER','MSI_ENDPOINT','MSI_SECRET','AZURE_OPENAI_ENDPOINT','AZURE_OPENAI_API_KEY','AIHUB_CONFIG','PATH','GH_REPO',
+    'ANTHROPIC_FOUNDRY_RESOURCE','ANTHROPIC_FOUNDRY_API_KEY','FOUNDRY_ALT')
 $saved = @{}
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('helios-auth-config-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temp | Out-Null
@@ -149,19 +150,21 @@ try {
     Assert-True ($out.State -eq 'needs-owner' -and $out.Action -eq 'rotate the secret (inert action)') 'An unproven service principal fallback was credited because az is ready.'
 
     # --- 5. The production secretless azure-openai loop, with inert reporting -------------
-    $loop = $auto.Find({ param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] -and $n.Extent.Text.StartsWith('foreach ($secretless in $secretlessAzureOpenAi)') }, $true)
-    if (-not $loop) { throw 'Secretless azure-openai loop not found.' }
+    $loop = $auto.Find({ param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] -and $n.Extent.Text.StartsWith('foreach ($secretless in $secretlessEntraProviders)') }, $true)
+    if (-not $loop) { throw 'Secretless Entra-provider loop not found.' }
     $loopBlock = [scriptblock]::Create($loop.Extent.Text)
     $aihubConfigLabel = 'AIHUB_CONFIG'
+    $entraProviderTypes = Get-AssignedLiteral $auto '$entraProviderTypes'
     $script:steps = [System.Collections.Generic.List[object]]::new()
     $script:actions = [System.Collections.Generic.List[string]]::new()
     function Add-Step { param([string]$Step, [string]$State, [string]$Detail) $script:steps.Add([pscustomobject]@{ Step = $Step; State = $State; Detail = $Detail }) }
     function Add-OwnerAction { param([string]$Text, [string]$Env = '', [switch]$Imported) $script:actions.Add($Text) }
     function Test-RawImdsManagedIdentity { return $false }
-    function Run-Loop([bool]$Usable, [string]$State) {
+    function Run-Loop([bool]$Usable, [string]$State, [string]$Type = 'azure-openai') {
         $script:steps.Clear(); $script:actions.Clear(); $selectedCredentialProofCache.Clear()
-        $secretlessAzureOpenAi = [System.Collections.Generic.List[object]]::new()
-        $secretlessAzureOpenAi.Add([pscustomobject]@{ Name = 'aoai'; Env = 'AZURE_OPENAI_API_KEY'; EndpointEnv = 'AZURE_OPENAI_ENDPOINT' })
+        $secretlessEntraProviders = [System.Collections.Generic.List[object]]::new()
+        if ($Type -eq 'azure-openai') { $secretlessEntraProviders.Add([pscustomobject]@{ Name = 'aoai'; Type = 'azure-openai'; Env = 'AZURE_OPENAI_API_KEY'; EndpointEnv = 'AZURE_OPENAI_ENDPOINT'; BaseUrl = '' }) }
+        else { $secretlessEntraProviders.Add([pscustomobject]@{ Name = 'claude-foundry'; Type = 'anthropic-foundry'; Env = 'ANTHROPIC_FOUNDRY_API_KEY'; EndpointEnv = 'ANTHROPIC_FOUNDRY_RESOURCE'; BaseUrl = '' }) }
         $azUsable = $Usable; $azState = $State; $azLaneHadAction = $false
         . $loopBlock
         return $script:steps[0]
@@ -313,6 +316,163 @@ try {
     $lane = Test-AzLane
     Assert-True ($lane.state -eq 'ready' -and $lane.method -eq 'managed-identity') 'A proven managed identity was not reported ready.'
     $env:IDENTITY_ENDPOINT = $null
+
+    # --- 11. Claude in Microsoft Foundry (anthropic-foundry) mirrors ProviderFactory ------
+    # CreateAnthropicFoundry: config baseUrl overrides the endpoint variable
+    # (ANTHROPIC_FOUNDRY_RESOURCE by default); TryResolveBaseUri accepts a bare resource
+    # name or an absolute https URL; the key is optional (Entra ID fallback).
+    Import-Functions $auto
+    function Add-Step { param([string]$Step, [string]$State, [string]$Detail) $script:steps.Add([pscustomobject]@{ Step = $Step; State = $State; Detail = $Detail }) }
+    function Add-OwnerAction { param([string]$Text, [string]$Env = '', [switch]$Imported) $script:actions.Add($Text) }
+    function Test-RawImdsManagedIdentity { return $false }
+    $azCmd = $null
+    $keyedProviderTypes = Get-AssignedLiteral $auto '$keyedProviderTypes'
+    Assert-True (('anthropic-foundry' -in $keyedProviderTypes) -and ('anthropic-foundry' -in $entraProviderTypes) -and ('ollama' -notin $keyedProviderTypes)) 'anthropic-foundry is not a keyed, Entra-capable type in auto-login.'
+    foreach ($case in @(
+        @{ V = 'helios-aijcut'; Ok = $true; Kind = 'resource-name' },
+        @{ V = ' helios-aijcut '; Ok = $true; Kind = 'resource-name' },
+        @{ V = 'https://helios-aijcut.services.ai.azure.com/anthropic/v1/messages'; Ok = $true; Kind = 'https-url' },
+        @{ V = 'HTTPS://helios-aijcut.services.ai.azure.com'; Ok = $true; Kind = 'https-url' },
+        @{ V = 'http://helios-aijcut.services.ai.azure.com/anthropic'; Ok = $false; Kind = 'rejected' },
+        @{ V = 'helios aijcut'; Ok = $false; Kind = 'rejected' },
+        @{ V = 'helios_aijcut'; Ok = $false; Kind = 'rejected' },
+        @{ V = '-helios'; Ok = $false; Kind = 'rejected' },
+        @{ V = ('a' * 65); Ok = $false; Kind = 'rejected' },
+        @{ V = ''; Ok = $false; Kind = 'unset' },
+        @{ V = '   '; Ok = $false; Kind = 'unset' })) {
+        $verdict = Test-AnthropicFoundryResource -Value $case.V
+        Assert-True ($verdict.Ok -eq $case.Ok -and $verdict.Kind -eq $case.Kind) "Foundry resource rule wrong for '$($case.V)'."
+    }
+    function New-FoundryPair([string]$BaseUrl = '', [string]$EndpointEnv = 'ANTHROPIC_FOUNDRY_RESOURCE') {
+        [pscustomobject]@{ SecretName = 'anthropic-foundry-api-key'; Env = 'ANTHROPIC_FOUNDRY_API_KEY'; Lights = 'claude-foundry'; EntraFallbackOnly = $true; EndpointEnvs = @()
+            Members = @([pscustomobject]@{ Name = 'claude-foundry'; Type = 'anthropic-foundry'; EndpointEnv = $EndpointEnv; BaseUrl = $BaseUrl }) }
+    }
+    $script:steps.Clear(); $script:actions.Clear()
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    $problems = @(Get-EntraEndpointProblems -Pair (New-FoundryPair))
+    Assert-True ($problems.Count -eq 1 -and $problems[0] -like '*ANTHROPIC_FOUNDRY_RESOURCE is unset*' -and $script:actions.Count -eq 1 -and $script:actions[0] -like 'set ANTHROPIC_FOUNDRY_RESOURCE*') 'An unset Foundry resource was not reported with its set action.'
+    $script:actions.Clear(); $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios aijcut'
+    $problems = @(Get-EntraEndpointProblems -Pair (New-FoundryPair))
+    Assert-True ($problems.Count -eq 1 -and $problems[0] -notlike '*helios aijcut*' -and $script:actions[0] -like 'fix ANTHROPIC_FOUNDRY_RESOURCE*') 'A malformed Foundry resource was not reported, or its value leaked.'
+    $script:actions.Clear(); $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios-aijcut'
+    Assert-True (@(Get-EntraEndpointProblems -Pair (New-FoundryPair)).Count -eq 0 -and $script:actions.Count -eq 0) 'A bare Foundry resource name was rejected.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    Assert-True (@(Get-EntraEndpointProblems -Pair (New-FoundryPair -BaseUrl 'https://helios-aijcut.services.ai.azure.com/anthropic')).Count -eq 0) 'A config baseUrl did not override the unset variable.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios-aijcut'
+    $problems = @(Get-EntraEndpointProblems -Pair (New-FoundryPair -BaseUrl 'ftp://inert'))
+    Assert-True ($problems.Count -eq 1 -and $problems[0] -like 'providers.claude-foundry.baseUrl*' -and $script:actions[0] -like 'fix providers.claude-foundry.baseUrl*') 'A rejected config baseUrl was not reported ahead of the valid variable.'
+    $script:actions.Clear()
+    $problems = @(Get-EntraEndpointProblems -Pair (New-FoundryPair -EndpointEnv ''))
+    Assert-True ($problems.Count -eq 1 -and $problems[0] -like '*blank endpointEnv*') 'A blank endpointEnv was not reported.'
+    $script:actions.Clear()
+    $env:AZURE_OPENAI_ENDPOINT = 'https://inert.openai.azure.com/'
+    $aoaiPair = [pscustomobject]@{ SecretName = 'azure-openai-api-key'; Env = 'AZURE_OPENAI_API_KEY'; Lights = 'azure-openai'; Members = @([pscustomobject]@{ Name = 'azure-openai'; Type = 'azure-openai'; EndpointEnv = 'AZURE_OPENAI_ENDPOINT'; BaseUrl = '' }); EntraFallbackOnly = $true; EndpointEnvs = @('AZURE_OPENAI_ENDPOINT') }
+    Assert-True (@(Get-EntraEndpointProblems -Pair $aoaiPair).Count -eq 0) 'The Foundry rule broke an azure-openai pair.'
+    $fallback = Get-EntraFallbackText -Pair $aoaiPair
+    Assert-True ($fallback.Factory -eq 'CreateAzureOpenAi' -and $fallback.Endpoint -like '*AZURE_OPENAI_ENDPOINT*' -and $fallback.Role -like '*Cognitive Services OpenAI User*') 'azure-openai fallback wording changed.'
+    $fallback = Get-EntraFallbackText -Pair (New-FoundryPair)
+    Assert-True ($fallback.Factory -eq 'CreateAnthropicFoundry' -and $fallback.Endpoint -like '*ANTHROPIC_FOUNDRY_RESOURCE*' -and $fallback.Role -like '*Cognitive Services User*') 'anthropic-foundry fallback wording is wrong.'
+    $env:AZURE_OPENAI_ENDPOINT = $null
+
+    # The secretless loop with a Foundry entry: resource first, then key or Entra fallback.
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    $step = Run-Loop $true 'ready' 'anthropic-foundry'
+    Assert-True ($step.State -eq 'needs-owner' -and $step.Detail -like '*ANTHROPIC_FOUNDRY_RESOURCE is unset*' -and $step.Detail -like '*CreateAnthropicFoundry*' -and $script:actions.Count -eq 1) 'Secretless anthropic-foundry with no resource was not reported.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios-aijcut'
+    $env:ANTHROPIC_FOUNDRY_API_KEY = 'dummy-key-must-not-leak'
+    $step = Run-Loop $false 'needs-owner' 'anthropic-foundry'
+    Assert-True ($step.State -eq 'ok' -and $step.Detail -notlike '*dummy-key-must-not-leak*' -and $script:actions.Count -eq 0) 'Secretless anthropic-foundry with a set key was not ok, or leaked the key.'
+    $env:ANTHROPIC_FOUNDRY_API_KEY = $null
+    $step = Run-Loop $true 'ready' 'anthropic-foundry'
+    Assert-True ($step.State -eq 'ok' -and $step.Detail -like '*az CLI login*' -and $step.Detail -like '*CreateAnthropicFoundry falls back to Entra ID*') 'Secretless anthropic-foundry Entra fallback through a usable az lane was not ok.'
+    $step = Run-Loop $false 'needs-owner' 'anthropic-foundry'
+    Assert-True ($step.State -eq 'needs-owner' -and $script:actions.Count -eq 1) 'Secretless anthropic-foundry Entra fallback with a broken az lane was credited.'
+
+    # A preset Foundry key counts only with a usable resource (same rule as azure-openai).
+    $script:steps.Clear(); $script:actions.Clear()
+    $env:ANTHROPIC_FOUNDRY_API_KEY = 'dummy-key-must-not-leak'; $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    $vaultPairs = @(New-FoundryPair)
+    . $presetBlock
+    Assert-True ($script:steps[0].State -eq 'needs-owner' -and $script:steps[0].Detail -like '*ANTHROPIC_FOUNDRY_RESOURCE is unset*' -and $script:steps[0].Detail -notlike '*dummy-key-must-not-leak*') 'A preset Foundry key with no resource was reported as skipped.'
+    $script:steps.Clear(); $script:actions.Clear()
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios-aijcut'
+    . $presetBlock
+    Assert-True ($script:steps[0].State -eq 'skipped') 'A preset Foundry key with a usable resource was not skipped.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null; $env:ANTHROPIC_FOUNDRY_API_KEY = $null
+
+    # The provider walk itself, run over an inert providers table: a Foundry entry with
+    # a secret becomes an Entra-fallback-only vault pair (no azure-openai EndpointEnvs,
+    # a typed member), a secretless one is judged later, a blank one keeps the Foundry
+    # default endpoint variable, none is a direct-key provider, and a reader of
+    # another family on the Foundry key variable is an incompatible sharing.
+    $walk = $auto.Find({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -eq '$null -ne $aihubProviders' }, $true)
+    if (-not $walk) { throw 'Provider walk not found.' }
+    $walkBlock = [scriptblock]::Create($walk.Extent.Text)
+    $envNameComparer = [StringComparer]::Ordinal
+    function Run-Walk($Providers) {
+        $script:steps.Clear(); $script:actions.Clear()
+        $aihubProviders = $Providers
+        $aihubParseOk = $false; $aihubParsed = $null
+        $blankEnvProviders = [System.Collections.Generic.List[object]]::new()
+        $directKeyProviders = [System.Collections.Generic.List[object]]::new()
+        $secretlessEntraProviders = [System.Collections.Generic.List[object]]::new()
+        $envReaders = [System.Collections.Generic.Dictionary[string, object]]::new($envNameComparer)
+        $conflictingEnvs = @(); $conflictingEnvSet = New-EnvNameSet; $incompatibleEnvSet = New-EnvNameSet
+        $vaultPairs = @()
+        . $walkBlock
+        return [pscustomobject]@{ Pairs = @($vaultPairs); Readers = $envReaders; Blank = @($blankEnvProviders); Direct = @($directKeyProviders); Secretless = @($secretlessEntraProviders) }
+    }
+    $walkProviders = [pscustomobject]@{
+        'claude-foundry'     = [pscustomobject]@{ type = 'anthropic-foundry'; model = 'claude-sonnet-4-6'; apiKeySecretName = 'anthropic-foundry-api-key' }
+        'foundry-secretless' = [pscustomobject]@{ type = 'anthropic-foundry'; model = 'x'; endpointEnv = 'FOUNDRY_ALT'; baseUrl = 'https://inert.services.ai.azure.com' }
+        'foundry-blank'      = [pscustomobject]@{ type = 'anthropic-foundry'; model = 'x'; apiKeyEnv = '' }
+        'openai'             = [pscustomobject]@{ type = 'openai'; model = 'x'; apiKeySecretName = 'openai-api-key' }
+    }
+    # The blank entry is judged inside the walk: with the resource unset its endpoint
+    # step is the one owner step; with a usable resource it is a supported Entra state.
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    $walked = Run-Walk $walkProviders
+    Assert-True (@($script:steps | Where-Object { $_.State -eq 'needs-owner' }).Count -eq 1 -and $script:steps[0].Step -eq 'provider:foundry-blank:endpoint' -and $script:steps[0].Detail -like '*ANTHROPIC_FOUNDRY_RESOURCE is unset*') 'A blank-apiKeyEnv Foundry entry with no resource did not raise exactly its endpoint step.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = 'helios-aijcut'
+    $walked = Run-Walk $walkProviders
+    Assert-True (@($script:steps | Where-Object { $_.Step -eq 'provider:foundry-blank' -and $_.State -eq 'skipped' -and $_.Detail -like '*CreateAnthropicFoundry uses Entra ID*' }).Count -eq 1) 'A blank-apiKeyEnv Foundry entry with a usable resource was not reported as the supported Entra state.'
+    $env:ANTHROPIC_FOUNDRY_RESOURCE = $null
+    $foundryPair = @($walked.Pairs | Where-Object { $_.Env -eq 'ANTHROPIC_FOUNDRY_API_KEY' })
+    Assert-True ($walked.Pairs.Count -eq 2 -and $foundryPair.Count -eq 1 -and $foundryPair[0].SecretName -eq 'anthropic-foundry-api-key' -and $foundryPair[0].EntraFallbackOnly -and @($foundryPair[0].EndpointEnvs).Count -eq 0) 'A Foundry entry with a secret did not become an Entra-fallback-only vault pair.'
+    Assert-True (@($foundryPair[0].Members).Count -eq 1 -and $foundryPair[0].Members[0].Type -eq 'anthropic-foundry' -and $foundryPair[0].Members[0].EndpointEnv -eq 'ANTHROPIC_FOUNDRY_RESOURCE' -and $foundryPair[0].Members[0].BaseUrl -eq '') 'The Foundry pair member does not carry the default endpoint variable.'
+    Assert-True ($walked.Readers.ContainsKey('ANTHROPIC_FOUNDRY_API_KEY') -and $walked.Readers['ANTHROPIC_FOUNDRY_API_KEY'][0].Family -eq 'anthropic-foundry') 'The Foundry key variable was not registered under its own family.'
+    Assert-True ($walked.Secretless.Count -eq 1 -and $walked.Secretless[0].Name -eq 'foundry-secretless' -and $walked.Secretless[0].EndpointEnv -eq 'FOUNDRY_ALT' -and $walked.Secretless[0].BaseUrl -eq 'https://inert.services.ai.azure.com') 'A secretless Foundry entry lost its endpointEnv or baseUrl.'
+    Assert-True ($walked.Blank.Count -eq 1 -and $walked.Blank[0].Name -eq 'foundry-blank' -and $walked.Blank[0].EndpointEnv -eq 'ANTHROPIC_FOUNDRY_RESOURCE') 'A blank-apiKeyEnv Foundry entry lost the Foundry default endpoint variable.'
+    Assert-True (@($walked.Direct | Where-Object { $_.Type -eq 'anthropic-foundry' }).Count -eq 0 -and @($script:steps | Where-Object { $_.State -eq 'needs-owner' }).Count -eq 0) 'A Foundry entry was treated as a direct-key provider, or the walk raised a spurious owner step.'
+    $walked = Run-Walk ([pscustomobject]@{
+        'claude-foundry' = [pscustomobject]@{ type = 'anthropic-foundry'; model = 'x'; apiKeySecretName = 'anthropic-foundry-api-key' }
+        'anthropic'      = [pscustomobject]@{ type = 'anthropic'; model = 'x'; apiKeyEnv = 'ANTHROPIC_FOUNDRY_API_KEY'; apiKeySecretName = 'anthropic-api-key' }
+    })
+    Assert-True ($walked.Pairs.Count -eq 0 -and @($script:steps | Where-Object { $_.Step -eq 'ANTHROPIC_FOUNDRY_API_KEY' -and $_.State -eq 'needs-owner' }).Count -eq 1 -and @($script:actions | Where-Object { $_ -like 'give the consumers sharing ANTHROPIC_FOUNDRY_API_KEY distinct apiKeyEnv names*' }).Count -eq 1) 'An Anthropic API entry sharing the Foundry key variable was not reported incompatible.'
+
+    # --- 12. auth-doctor reads the Foundry key variable as its own credential family ----
+    Import-Functions $doctor
+    $repoRoot = $root
+    $script:EnvNameComparer = [StringComparer]::Ordinal
+    $configPath = Join-Path $temp 'aihub-foundry.json'
+    @{ providers = @{ 'claude-foundry' = @{ type = 'anthropic-foundry'; model = 'claude-sonnet-4-6' }; 'models-shared' = @{ type = 'github-models'; model = 'x'; apiKeyEnv = 'ANTHROPIC_FOUNDRY_API_KEY' } } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath
+    $env:AIHUB_CONFIG = $configPath
+    $script:aihubConfigState = $null; $script:aihubEnvReaders = $null; $script:aihubVariableDefects = $null
+    $readers = Get-AIHubEnvReaders
+    Assert-True ($readers.ContainsKey('ANTHROPIC_FOUNDRY_API_KEY') -and @($readers['ANTHROPIC_FOUNDRY_API_KEY'] | Where-Object { $_.Type -eq 'anthropic-foundry' -and $_.Family -eq 'anthropic-foundry' }).Count -eq 1) 'auth-doctor did not register the Foundry key variable under its own family.'
+    Assert-True (@(Get-AIHubVariableDefects | Where-Object { $_.Kind -eq 'incompatible' -and $_.Env -eq 'ANTHROPIC_FOUNDRY_API_KEY' }).Count -eq 1) 'A Models entry sharing the Foundry key variable was not reported incompatible by auth-doctor.'
+    $env:AIHUB_CONFIG = $null
+    $script:aihubConfigState = $null; $script:aihubEnvReaders = $null; $script:aihubVariableDefects = $null
+
+    # --- 13. rest-connect never offers the Foundry key variable to api.github.com -------
+    Import-Functions $rest
+    $script:aihubMemberSchemas = $restSchemas
+    $configPath = Join-Path $temp 'aihub-foundry-rest.json'
+    @{ providers = @{ 'claude-foundry' = @{ type = 'anthropic-foundry'; model = 'x' }; 'models-shared' = @{ type = 'github-models'; model = 'x'; apiKeyEnv = 'ANTHROPIC_FOUNDRY_API_KEY' }; 'models-public' = @{ type = 'github-models'; model = 'x' } } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath
+    $env:AIHUB_CONFIG = $configPath
+    $candidates = @(Get-ConfiguredGitHubModelsEnvs)
+    Assert-True (($candidates -contains 'GITHUB_MODELS_TOKEN') -and ($candidates -notcontains 'ANTHROPIC_FOUNDRY_API_KEY') -and $script:nonGitHubReaderEnvs.Contains('ANTHROPIC_FOUNDRY_API_KEY')) 'rest-connect offered the Foundry key variable as a GitHub candidate.'
+    $env:AIHUB_CONFIG = $null
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue

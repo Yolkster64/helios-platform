@@ -116,14 +116,27 @@ try {
     function Add-OwnerAction { param($Text) $script:actions.Add($Text) }
     function Add-Step { param($Step,$State,$Detail) $script:steps.Add([pscustomobject]@{Step=$Step;State=$State}) }
     $aihubConfigLabel='fixture'
+    # The Entra-capable type list the loop reads, evaluated from the script's own literal.
+    $entraTypesNode=$auto.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$entraProviderTypes' },$true)
+    if (-not $entraTypesNode) { throw 'Entra provider type list not found.' }
+    $entraProviderTypes=Invoke-Expression $entraTypesNode.Right.Extent.Text
     foreach ($secret in @('','dummy-secret-name')) {
         foreach ($endpoint in @('','bad endpoint','https://fixture.openai.azure.com/')) {
             $env:TEST_ENDPOINT=$endpoint
             $script:actions=[Collections.Generic.List[string]]::new(); $script:steps=[Collections.Generic.List[object]]::new()
-            $blankEnvProviders=@([pscustomobject]@{ Name='azure-test'; Type='azure-openai'; SecretName=$secret; EndpointEnv='TEST_ENDPOINT' })
+            $blankEnvProviders=@([pscustomobject]@{ Name='azure-test'; Type='azure-openai'; SecretName=$secret; EndpointEnv='TEST_ENDPOINT'; BaseUrl='' })
             & ([scriptblock]::Create($loop.Extent.Text))
             $bad=@($script:steps | Where-Object State -eq 'needs-owner').Count -gt 0
             Assert-True ($bad -eq ($endpoint -notlike 'https://*')) 'Blank-key Azure endpoint state was hidden.'
+        }
+        # The Foundry twin: a bare resource name is usable, a padded one is not.
+        foreach ($resource in @('','helios aijcut','fixture-foundry')) {
+            $env:TEST_ENDPOINT=$resource
+            $script:actions=[Collections.Generic.List[string]]::new(); $script:steps=[Collections.Generic.List[object]]::new()
+            $blankEnvProviders=@([pscustomobject]@{ Name='foundry-test'; Type='anthropic-foundry'; SecretName=$secret; EndpointEnv='TEST_ENDPOINT'; BaseUrl='' })
+            & ([scriptblock]::Create($loop.Extent.Text))
+            $bad=@($script:steps | Where-Object State -eq 'needs-owner').Count -gt 0
+            Assert-True ($bad -eq ($resource -ne 'fixture-foundry')) 'Blank-key Foundry resource state was hidden.'
         }
     }
 } finally {

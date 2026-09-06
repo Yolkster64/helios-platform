@@ -36,4 +36,10 @@ it checks readiness (bare names and absolute paths; a relative path with a separ
 is refused), and the rule that a selected Azure credential is proven only by
 `rest-connect.ps1` acquiring a token through it — a cached az identity whose client
 and tenant match is context, never proof — including the secretless `azure-openai`
-entry's endpoint and Entra-fallback verdicts.
+entry's endpoint and Entra-fallback verdicts. It also pins the `anthropic-foundry`
+(Claude in Microsoft Foundry) mirror of `ProviderFactory.CreateAnthropicFoundry`: the
+resource rule (a bare Foundry resource name or an absolute https base URL, with the
+entry's `baseUrl` overriding `ANTHROPIC_FOUNDRY_RESOURCE`), the provider walk's
+pair / reader / blank / secretless records for that type, and the rule in all three
+scripts that `ANTHROPIC_FOUNDRY_API_KEY` is its own credential family — never a
+GitHub candidate, never shareable with another provider type.
