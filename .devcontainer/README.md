@@ -9,7 +9,7 @@ That split keeps one canonical toolchain while still offering an opt-in local da
 
 ## What the devcontainer includes
 
-- A `.devcontainer/Dockerfile` image that inherits `mcr.microsoft.com/devcontainers/dotnet:8.0` for the portable `HELIOS.sln` build.
+- A `.devcontainer/Dockerfile` image that inherits `mcr.microsoft.com/devcontainers/dotnet:${VARIANT}` (currently `VARIANT=8.0`) for the portable `HELIOS.sln` build.
 - Dev Container features for Azure CLI, GitHub CLI, **Node.js 22** (pinned for current repository tooling), PowerShell 7, Python 3.11, and Terraform.
 - A small Dockerfile layer with `cmake`, `postgresql-client`, `shellcheck`, `sqlite3`, and other repo-level utilities.
 - Port forwarding for `helios-ai-api` on `5170`.

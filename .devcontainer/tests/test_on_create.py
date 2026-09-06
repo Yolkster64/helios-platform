@@ -17,7 +17,7 @@ def make_executable(path: Path, content: str) -> None:
 
 
 class OnCreateCommandTests(unittest.TestCase):
-    def _workspace(self) -> Path:
+    def _workspace(self, native_exit_code: int = 0) -> Path:
         workspace = Path(tempfile.mkdtemp(prefix="helios-devcontainer-"))
         (workspace / ".devcontainer").mkdir()
         (workspace / "scripts" / "build").mkdir(parents=True)
@@ -27,7 +27,7 @@ class OnCreateCommandTests(unittest.TestCase):
             SCRIPT_SOURCE.read_text(encoding="utf-8"), encoding="utf-8"
         )
         (workspace / "scripts" / "build" / "build-native.sh").write_text(
-            "#!/usr/bin/env bash\nexit 0\n", encoding="utf-8"
+            f"#!/usr/bin/env bash\nexit {native_exit_code}\n", encoding="utf-8"
         )
         (workspace / "scripts" / "build" / "build-native.sh").chmod(0o755)
         (workspace / "scripts" / "build" / "verify-readiness.ps1").write_text(
@@ -118,6 +118,26 @@ class OnCreateCommandTests(unittest.TestCase):
         tool_log = log_file.read_text(encoding="utf-8")
         self.assertIn("build HELIOS.sln -c Release", tool_log)
         self.assertIn("pwsh -NoLogo -NoProfile -File scripts/build/verify-readiness.ps1", tool_log)
+
+    def test_optional_native_build_failure_is_non_fatal(self) -> None:
+        workspace = self._workspace(native_exit_code=1)
+        log_file = workspace / "tool.log"
+        bin_dir = self._tool_bin(workspace)
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["HELIOS_TEST_TOOL_LOG"] = str(log_file)
+
+        completed = subprocess.run(
+            ["bash", str(workspace / ".devcontainer" / "onCreateCommand.sh")],
+            cwd=workspace,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        self.assertIn("Native spoke build failed", completed.stdout)
 
 
 if __name__ == "__main__":

@@ -87,6 +87,15 @@ Describe 'Get-CodeCheckTargetFiles' {
         { Get-CodeCheckTargetFiles -RepoRoot $repo -EventName 'pull_request' -BaseRef 'missing' } |
             Should -Throw '*Could not resolve pull request base ref*'
     }
+
+    It 'rejects unsafe pull request base refs before fetch' {
+        $repo = New-CodeChecksTestRepo
+        Add-TrackedFile -Repo $repo -RelativePath 'scripts/a.ps1' -Content 'Write-Host "a"'
+        Commit-Repo -Repo $repo -Message 'initial'
+
+        { Get-CodeCheckTargetFiles -RepoRoot $repo -EventName 'pull_request' -BaseRef 'main:evil' } |
+            Should -Throw '*Unsafe pull request base ref*'
+    }
 }
 
 Describe 'Test-PowerShellSyntax' {

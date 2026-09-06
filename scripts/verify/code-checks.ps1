@@ -79,6 +79,10 @@ function Resolve-PullRequestBaseRef {
         [string]$BaseRef
     )
 
+    if ($BaseRef -notmatch '^(?!/)(?!.*//)(?!.*\.\.)(?!.*@$)[A-Za-z0-9._/-]+(?<!/)$') {
+        throw "Unsafe pull request base ref '$BaseRef'."
+    }
+
     foreach ($candidate in @("refs/remotes/origin/$BaseRef", "refs/heads/$BaseRef")) {
         if (Test-GitRef -RepoRoot $RepoRoot -Ref $candidate) {
             return $candidate
