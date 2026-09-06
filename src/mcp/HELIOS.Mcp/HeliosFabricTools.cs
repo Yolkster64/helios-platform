@@ -79,11 +79,16 @@ public static class HeliosFabricTools
                     .Select(item => item.GetString() ?? string.Empty)
                     .Where(name => name.Length > 0)
                     .ToArray();
+                var environmentVariables = Environment.GetEnvironmentVariables();
                 var presentEnvNames = requiredEnvNames
                     .Where(name =>
                     {
-                        secretValuesRead = true;
-                        return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name));
+                        if (environmentVariables.Contains(name))
+                        {
+                            secretValuesRead = true;
+                            return true;
+                        }
+                        return false;
                     })
                     .ToArray();
                 var missingEnvNames = requiredEnvNames.Except(presentEnvNames, StringComparer.Ordinal).ToArray();

@@ -175,6 +175,8 @@ public sealed class McpFabricToolTests : IDisposable
     public void GetFabricPlan_ReturnsSanitizedShape_WithFailClosedInvariants()
     {
         var root = CreateRepoRoot(MinimalValidContract);
+        SetTestEnv("TEST_OPENAI_API_KEY", null);
+        SetTestEnv("TEST_AZURE_CLIENT_ID", null);
 
         var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
 
@@ -190,7 +192,7 @@ public sealed class McpFabricToolTests : IDisposable
         var security = element.GetProperty("security");
         Assert.False(security.GetProperty("productionEnabled").GetBoolean());
         Assert.False(security.GetProperty("applyDefault").GetBoolean());
-        Assert.True(security.GetProperty("secretValuesRead").GetBoolean());
+        Assert.False(security.GetProperty("secretValuesRead").GetBoolean());
         Assert.False(security.GetProperty("externalMutationPerformed").GetBoolean());
         Assert.Equal("WinUI 3", security.GetProperty("activeUiFramework").GetString());
 
@@ -259,7 +261,7 @@ public sealed class McpFabricToolTests : IDisposable
         var present = openai.GetProperty("presentEnvNames")
             .EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Empty(present);
-        Assert.True(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
+        Assert.False(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
     }
 
     [Fact]
