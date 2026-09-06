@@ -169,7 +169,8 @@ try {
     $chainSpecs = @(
         @{ Step = 'toolchain'; Script = 'scripts/build/verify-readiness.ps1'; Arguments = @('-Json') }
         @{ Step = 'identity'; Script = 'scripts/bootstrap/connect-account.ps1'; Arguments = @('-Json') }
-        @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) }
+        @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) +
+            @(if ($Repository) { '-Repository'; $Repository }) }
         @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') +
             @(if ($Repository) { '-Repository'; $Repository }) }
         @{ Step = 'stack-smoke'; Script = 'scripts/verify/stack-smoke.ps1'; Arguments = @('-Json'); Soft = $true }

@@ -62,7 +62,7 @@ Emit the state object and nothing else on stdout (chained-script convention).
 Skip step 5 (setup-everything.ps1); the auth steps and the repo-secret probe still run.
 
 .PARAMETER Repository
-Validated owner/repo target shared by setup-everything and provision-github-secrets.
+Validated owner/repo target shared by auth reports, setup-everything, and provision-github-secrets.
 Automatically includes label/milestone dry-run probes in setup. Omit to preserve
 the existing child defaults (no issue probes). Does not grant access or apply changes.
 
@@ -236,6 +236,7 @@ try {
     Add-Step -Name 'cloud-shell-setup' -Script $setupScript -ExitCode $setupExit
 
     # --- 2..6 -----------------------------------------------------------------------
+    $repositoryArgs = @('-Json') + @(if ($Repository) { '-Repository'; $Repository })
     if ($VerifyOnly) {
         # auto-login.ps1 has no report-only switch: it always spawns auth-doctor -Apply,
         # which performs `az login --service-principal` / `--identity` when the env
@@ -245,12 +246,11 @@ try {
         Skip-Step -Number 2 -Name 'auto-login' -Script 'scripts/bootstrap/auto-login.ps1' -Why 'verify-only (auto-login delegates to auth-doctor -Apply, which can log in non-interactively; -UseManagedIdentity not forwarded)'
     }
     else {
-        $autoLoginArgs = @('-Json') + @(if ($UseManagedIdentity) { '-UseManagedIdentity' })
+        $autoLoginArgs = $repositoryArgs + @(if ($UseManagedIdentity) { '-UseManagedIdentity' })
         Invoke-JsonStep -Number 2 -Name 'auto-login' -Script 'scripts/bootstrap/auto-login.ps1' -Arguments $autoLoginArgs
     }
     Invoke-JsonStep -Number 3 -Name 'rest-connect' -Script 'scripts/verify/rest-connect.ps1' -Arguments @('-Json')
-    Invoke-JsonStep -Number 4 -Name 'auth-doctor' -Script 'scripts/bootstrap/auth-doctor.ps1' -Arguments @('-Json')
-    $repositoryArgs = @('-Json') + @(if ($Repository) { '-Repository'; $Repository })
+    Invoke-JsonStep -Number 4 -Name 'auth-doctor' -Script 'scripts/bootstrap/auth-doctor.ps1' -Arguments $repositoryArgs
     if ($SkipSetup) {
         Skip-Step -Number 5 -Name 'setup-everything' -Script 'scripts/bootstrap/setup-everything.ps1' -Why '-SkipSetup'
     }
@@ -366,6 +366,7 @@ try {
     }
     $ghLogin = 'gh auth login --hostname github.com --git-protocol https --web --scopes models:read'
     $provisionApply = 'pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply'
+    $repoOption = if ($Repository) { " --repo $Repository" } else { '' }
     if ($Repository) { $provisionApply += " -Repository $Repository" }
     # The load step, once: the doctor's `(bash) or pwsh: ...` prose and connect-account's
     # `# after the az lane ...` comment are this same step in two wordings, so every
@@ -462,7 +463,7 @@ try {
     if ($adminState -ne 'present') {
         Add-Item -Title ("HELIOS_ADMIN_TOKEN repo secret ($adminState) — owner PAT for governance-apply.yml admin writes (fine-grained: " +
             'Administration, Contents, Issues, Pull requests, Pages RW + Metadata R; permission list in the .github/workflows/governance-apply.yml header)') -Lines @(
-            'gh secret set HELIOS_ADMIN_TOKEN   # paste when prompted; the value never touches argv',
+            "gh secret set HELIOS_ADMIN_TOKEN$repoOption   # paste when prompted; the value never touches argv",
             '$env:HELIOS_ADMIN_TOKEN = Read-Host -MaskInput   # or: typed hidden (PowerShell 7.1+), never on argv or in history, then:',
             "$provisionApply   # feeds every set target to gh secret set over stdin")
     }
@@ -471,7 +472,7 @@ try {
         if (-not (Test-NeedsOwner $pair.Lane) -and $secretState -eq 'present') { continue }
         $raw = Get-RawAction $pair.Lane
         Add-Item -Title ($pair.Lane + ' connector secret (repo secret ' + $secretState + ')') -Lines @(
-            $(if ($raw) { $raw } else { 'gh secret set ' + $pair.Env }),
+            $(if ($raw) { $raw } else { 'gh secret set ' + $pair.Env + $repoOption }),
             ('$env:{0} = Read-Host -MaskInput   # or: typed hidden (PowerShell 7.1+), never on argv or in history, then:' -f $pair.Env),
             "$provisionApply   # feeds every set target to gh secret set over stdin")
         Set-Covered $raw

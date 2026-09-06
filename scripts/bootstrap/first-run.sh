@@ -203,6 +203,8 @@ skip_step() {
   record_step "$name" "$script" -1 "skipped: $why"
 }
 
+repository_args=(-Json)
+[[ -n "$repository" ]] && repository_args+=(-Repository "$repository")
 if [[ -n "$verify_only" ]]; then
   # auto-login.ps1 has no report-only switch: it always spawns auth-doctor -Apply,
   # which performs `az login --service-principal` / `--identity` when the env holds
@@ -212,14 +214,12 @@ if [[ -n "$verify_only" ]]; then
   skip_step 2 "auto-login" "scripts/bootstrap/auto-login.ps1" \
     "verify-only (auto-login delegates to auth-doctor -Apply, which can log in non-interactively; -UseManagedIdentity not forwarded)"
 else
-  auto_login_args=(-Json)
+  auto_login_args=("${repository_args[@]}")
   [[ -n "$managed_identity" ]] && auto_login_args+=(-UseManagedIdentity)
   run_json 2 "auto-login" "scripts/bootstrap/auto-login.ps1" "${auto_login_args[@]}"
 fi
 run_json 3 "rest-connect" "scripts/verify/rest-connect.ps1" -Json
-run_json 4 "auth-doctor" "scripts/bootstrap/auth-doctor.ps1" -Json
-repository_args=(-Json)
-[[ -n "$repository" ]] && repository_args+=(-Repository "$repository")
+run_json 4 "auth-doctor" "scripts/bootstrap/auth-doctor.ps1" "${repository_args[@]}"
 if [[ -n "$skip_setup" ]]; then
   skip_step 5 "setup-everything" "scripts/bootstrap/setup-everything.ps1" "--skip-setup"
 else
@@ -373,6 +373,7 @@ items = []
 covered = set()
 gh_login = "gh auth login --hostname github.com --git-protocol https --web --scopes models:read"
 provision_apply = "pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply"
+repo_option = " --repo " + repository if repository else ""
 if repository:
     provision_apply += " -Repository " + repository
 # The load step, once: the doctor's `(bash) or pwsh: ...` prose and connect-account's
@@ -484,7 +485,7 @@ if admin_state != "present":
         "HELIOS_ADMIN_TOKEN repo secret (%s) — owner PAT for governance-apply.yml admin writes (fine-grained: "
         "Administration, Contents, Issues, Pull requests, Pages RW + Metadata R; permission list in the "
         ".github/workflows/governance-apply.yml header)" % admin_state,
-        ["gh secret set HELIOS_ADMIN_TOKEN   # paste when prompted; the value never touches argv",
+        ["gh secret set HELIOS_ADMIN_TOKEN" + repo_option + "   # paste when prompted; the value never touches argv",
          "read -rs HELIOS_ADMIN_TOKEN && export HELIOS_ADMIN_TOKEN   # or: typed hidden, never on argv or in shell history, then:",
          provision_apply + "   # feeds every exported target to gh secret set over stdin"],
     ))
@@ -493,7 +494,7 @@ for lane, env_name in (("linear", "LINEAR_API_KEY"), ("slack", "SLACK_WEBHOOK_UR
     if needs_owner(lane) or secret_state != "present":
         raw = raw_action(lane)
         items.append((lane + " connector secret (repo secret " + secret_state + ")", [
-            raw if raw else ("gh secret set " + env_name),
+            raw if raw else ("gh secret set " + env_name + repo_option),
             "read -rs " + env_name + " && export " + env_name + "   # or: typed hidden, never on argv or in shell history, then:",
             provision_apply + "   # feeds every exported target to gh secret set over stdin",
         ]))

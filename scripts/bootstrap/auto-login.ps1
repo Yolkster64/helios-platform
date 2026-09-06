@@ -32,9 +32,9 @@ scope, so dot-sourcing does NOT change the caller's StrictMode or
 $ErrorActionPreference (review finding); on an internal failure a dot-sourced run
 RETHROWS so the caller can detect the partial setup, while a normal run exits 1.
 Scope hygiene: the helper symbols are removed from the caller's scope on every
-path; the one unavoidable residue is the PARAMETER bindings (-Json and
--UseManagedIdentity), which overwrite (and cleanup then deletes) any caller
-variable named $Json/$json or $UseManagedIdentity — do not rely on those names
+path; the one unavoidable residue is the PARAMETER bindings (-Json,
+-UseManagedIdentity, -Repository), which overwrite (and cleanup then deletes) any caller
+variable named $Json/$json, $UseManagedIdentity, or $Repository — do not rely on those names
 surviving the call.
 
 Chain (reuse-first — this script orchestrates, it does not reimplement):
@@ -117,6 +117,10 @@ classic IMDS-only Azure VM exposes neither). Still non-interactive; without it t
 lane on such a VM can only print the interactive login as an owner action, and the
 Key Vault stage stays blocked behind it.
 
+.PARAMETER Repository
+Validated owner/repo for the doctor's repository-secret metadata and owner commands.
+Omit to preserve checkout defaults; does not authorize secret writes.
+
 Exit contract: 0 = ran to completion (owner-gated lanes are reported, not failures);
 1 = internal failure. Dot-sourced, exit codes are not asserted (exiting would kill
 the caller's shell): completion is silent success and an internal failure RETHROWS.
@@ -125,7 +129,10 @@ the caller's shell): completion is silent success and an internal failure RETHRO
 param(
     [switch]$Json,
 
-    [switch]$UseManagedIdentity
+    [switch]$UseManagedIdentity,
+
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 # Everything lives in this function so StrictMode and ErrorActionPreference are
@@ -136,6 +143,7 @@ function Invoke-HeliosAutoLogin {
     param(
         [switch]$Json,
         [switch]$UseManagedIdentity,
+        [string]$Repository,
         [bool]$DotSourced,
         [Parameter(Mandatory)][string]$RepoRoot
     )
@@ -448,6 +456,7 @@ function Invoke-HeliosAutoLogin {
         # non-interactive credential was available all along.
         $doctorArgs = @('-Apply', '-Json')
         if ($UseManagedIdentity) { $doctorArgs += '-UseManagedIdentity' }
+        if ($Repository) { $doctorArgs += @('-Repository', $Repository) }
         # The PowerShell application, resolved (review finding): an unqualified `pwsh`
         # fails when the host executable's directory is not on PATH and, in a
         # dot-sourcing caller, could resolve to a caller-defined function or alias.
@@ -1966,9 +1975,9 @@ function Invoke-HeliosAutoLogin {
 # two surfaces (the az profile via auth-doctor -Apply, and process env vars), so
 # every helper symbol this file necessarily creates in a dot-sourcing caller's
 # scope is removed again on every path below. ONE class of residue is not
-# removable: PowerShell binds the -Json and -UseManagedIdentity parameters into
+# removable: PowerShell binds the -Json, -UseManagedIdentity, and -Repository parameters into
 # the calling scope BEFORE any code runs, so a caller variable named $Json/$json
-# or $UseManagedIdentity (names are case-insensitive) is overwritten by the
+# or $UseManagedIdentity/$Repository (names are case-insensitive) is overwritten by the
 # binding itself — cleanup deletes the symbols rather than restoring prior values.
 # Do not rely on those names surviving this call.
 function Remove-HeliosAutoLoginScopeResidue {
@@ -1977,6 +1986,7 @@ function Remove-HeliosAutoLoginScopeResidue {
     # Every PARAMETER binding is a residue, not only -Json (review finding): the
     # -UseManagedIdentity switch lands in the caller's scope the same way.
     Remove-Item -Path variable:UseManagedIdentity -ErrorAction SilentlyContinue
+    Remove-Item -Path variable:Repository -ErrorAction SilentlyContinue
     Remove-Item -Path variable:autoLoginDotSourced -ErrorAction SilentlyContinue
     # Self-removal last: the already-loaded body keeps executing to completion.
     Remove-Item -Path function:Remove-HeliosAutoLoginScopeResidue -ErrorAction SilentlyContinue
@@ -1984,7 +1994,7 @@ function Remove-HeliosAutoLoginScopeResidue {
 
 $autoLoginDotSourced = $MyInvocation.InvocationName -eq '.'
 try {
-    Invoke-HeliosAutoLogin -Json:$Json -UseManagedIdentity:$UseManagedIdentity -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
+    Invoke-HeliosAutoLogin -Json:$Json -UseManagedIdentity:$UseManagedIdentity -Repository $Repository -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
     if (-not $autoLoginDotSourced) { exit 0 }
     Remove-HeliosAutoLoginScopeResidue
 }

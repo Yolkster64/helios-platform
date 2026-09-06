@@ -70,6 +70,10 @@ $allPath = 'scripts/setup/setup-all.ps1'
 $chainPath = 'scripts/bootstrap/setup-everything.ps1'
 $firstPsPath = 'scripts/bootstrap/first-run.ps1'
 $firstShPath = 'scripts/bootstrap/first-run.sh'
+$doctorPath = 'scripts/bootstrap/auth-doctor.ps1'
+$autoPath = 'scripts/bootstrap/auto-login.ps1'
+$doctorAst = Read-Ast (Join-Path $root $doctorPath)
+$autoAst = Read-Ast (Join-Path $root $autoPath)
 $allAst = Read-Ast (Join-Path $root $allPath)
 $chainAst = Read-Ast (Join-Path $root $chainPath)
 $null = Read-Ast (Join-Path $root $firstPsPath)
@@ -224,7 +228,7 @@ exit 0
     Put-Fixture 'scripts/bootstrap/setup-ai-clis.ps1' "param([switch]`$VerifyOnly)`n'AI CLIs: fixture'`nexit 0"
     foreach ($path in 'scripts/bootstrap/connect-account.ps1', 'scripts/bootstrap/auth-doctor.ps1',
         'scripts/verify/stack-smoke.ps1', 'scripts/verify/rest-connect.ps1') {
-        Put-Fixture $path "param([switch]`$Json, [switch]`$Apply)`n'{`"lanes`":[]}'`nexit 0"
+        Put-Fixture $path "param([switch]`$Json, [switch]`$Apply, [string]`$Repository)`n'{`"lanes`":[]}'`nexit 0"
     }
     foreach ($kind in 'labels', 'milestones') {
         Put-Fixture "scripts/github/apply-$kind.ps1" @'
@@ -278,6 +282,66 @@ exit 0
     foreach ($entrypoint in $firstPsPath, $firstShPath) {
         Put-Fixture $entrypoint (Get-Content -Raw (Join-Path $root $entrypoint))
     }
+    # Real connector command producers and metadata resolver, with every probe inert.
+    # A different checkout/default catches accidentally consulting origin for a target.
+    $doctorFixture = $doctorAst.ParamBlock.Extent.Text + @'
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+function Test-EnvValue { param($Name) $false }
+function Get-CheckoutRepositorySlug { 'Yolkster64/helios-platform' }
+function Get-CliCommand { param($Name) [pscustomobject]@{ Source = 'inert-never-executed' } }
+function Get-NonGitHubOwnedTokenNames { @() }
+function Invoke-Probe {
+    param($Executable, $Arguments)
+    $expected = if ($Repository) { $Repository } else { 'Yolkster64/helios-platform' }
+    if ($Arguments.Count -ne 3 -or $Arguments[0] -ne 'api' -or $Arguments[1] -ne '-i' -or
+        $Arguments[2] -notlike "repos/$expected/actions/secrets*") {
+        throw 'Repository metadata escaped the explicit target / no-target default'
+    }
+    $status = if ($Arguments[2].EndsWith('?per_page=1')) { 200 } else { 404 }
+    [pscustomobject]@{ ExitCode = 0; Output = @("HTTP/2 $status") }
+}
+'@
+    foreach ($name in 'New-LaneResult', 'Get-RepositorySecretState', 'Get-ConnectorSecretLane',
+        'Test-LinearLane', 'Test-SlackLane') {
+        $fn = $doctorAst.Find({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name
+        }, $true)
+        Assert ($null -ne $fn) "real connector producer seam: $name"
+        $doctorFixture += "`n" + $fn.Extent.Text
+    }
+    $doctorFixture += @'
+
+$lanes = if (Test-Path (Join-Path $repoRoot 'no-connector-lanes')) { @() }
+    else { @(Test-LinearLane; Test-SlackLane) }
+@{ lanes = @($lanes) } | ConvertTo-Json -Depth 6
+exit 0
+'@
+    Put-Fixture $doctorPath $doctorFixture
+    # Exercise the REAL auto-login argv construction and child invocation, not its
+    # credential acquisition entrypoint. The child is the inert doctor above.
+    $argsAssignment = $autoAst.Find({ param($n)
+        $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $n.Left.Extent.Text -eq '$doctorArgs' -and $n.Operator -eq 'Equals'
+    }, $true)
+    Assert ($null -ne $argsAssignment) 'auto-login doctor argv seam'
+    $forwarding = @($argsAssignment.Parent.Statements | Where-Object {
+        $_.Extent.StartOffset -ge $argsAssignment.Extent.StartOffset
+    })
+    $autoForwarding = ''
+    foreach ($statement in $forwarding) {
+        $autoForwarding += "`n" + $statement.Extent.Text
+        if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $statement.Left.Extent.Text -eq '$doctorLines') { break }
+    }
+    Assert ($autoForwarding.Contains('$doctorLines =')) 'auto-login real child invocation captured'
+    $autoEntry = $autoAst.Find({ param($n)
+        $n -is [System.Management.Automation.Language.CommandAst] -and
+        $n.GetCommandName() -eq 'Invoke-HeliosAutoLogin'
+    }, $true)
+    Assert ($autoEntry.Extent.Text.Contains('-Repository $Repository')) 'auto-login entry passes target to wrapper'
     $spyStub = @'
 [CmdletBinding()]
 param([switch]$Json, [switch]$VerifyOnly, [switch]$SkipSmoke, [switch]$SkipAuth,
@@ -296,10 +360,24 @@ exit 0
     foreach ($name in 'cloud-shell-setup', 'auto-login', 'provision-github-secrets') {
         Put-Fixture "scripts/bootstrap/$name.ps1" $spyStub
     }
+    $autoFixture = $spyStub.Substring(0, $spyStub.IndexOf("'{" + '"lanes"')) + @'
+
+$doctorPath = Join-Path $root 'scripts/bootstrap/auth-doctor.ps1'
+'@ + $autoForwarding + @'
+
+if ($LASTEXITCODE -ne 0) { throw 'Inert doctor failed' }
+$report = ($doctorLines -join "`n") | ConvertFrom-Json
+@{ ownerActions = @($report.lanes | ForEach-Object ownerAction) } | ConvertTo-Json -Depth 6
+exit 0
+'@
+    Put-Fixture $autoPath $autoFixture
     Put-Fixture 'scripts/bootstrap/cloud-shell-setup.sh' 'printf "CLOUD_ARG:%s\n" "$@"; exit 0'
     foreach ($entrypoint in $firstPsPath, $firstShPath) {
         $isBash = $entrypoint.EndsWith('.sh')
-        foreach ($mode in 'default', 'target', 'verify', 'skip') {
+        foreach ($mode in 'default', 'target', 'verify', 'skip', 'fallback') {
+            $noLanes = Join-Path $sandbox 'no-connector-lanes'
+            if ($mode -eq 'fallback') { Put-Fixture 'no-connector-lanes' '' }
+            else { Remove-Item $noLanes -ErrorAction SilentlyContinue }
             Remove-Item (Join-Path $sandbox '*-spy.json') -Force -ErrorAction SilentlyContinue
             $argv = @(if ($isBash) { '--json' } else { '-Json' })
             if ($mode -ne 'default') {
@@ -325,7 +403,7 @@ exit 0
             $setupStep = @($state.steps | Where-Object name -eq 'setup-everything')[0]
             Assert ($setupStep.exitCode -eq $(if ($mode -eq 'skip') { -1 } else { 0 })) 'skip-setup preserved'
             $issueActions = @($state.ownerActions | Where-Object action -match 'scripts/github/apply-(labels|milestones)')
-            $expectedCount = if ($mode -in 'target', 'verify') { 2 } else { 0 }
+            $expectedCount = if ($mode -in 'target', 'verify', 'fallback') { 2 } else { 0 }
             Assert ($issueActions.Count -eq $expectedCount) 'automatic issues reach first-run owner checklist unless no target or skipped'
             foreach ($action in $issueActions) {
                 Assert ($action.action -match "-Repository $([regex]::Escape($Repository)) -Json$") 'issue target survives entire chain'
@@ -337,7 +415,8 @@ exit 0
                 $autoArgs = Get-Content -Raw $autoSpy | ConvertFrom-Json -AsHashtable
                 Assert ($autoArgs.Json -eq $true) 'automatic login JSON unchanged'
                 Assert ($autoArgs.ContainsKey('UseManagedIdentity') -eq ($mode -ne 'default')) 'managed identity forwarding preserved'
-                Assert (-not $autoArgs.ContainsKey('Repository')) 'target not forwarded to auth'
+                Assert ($autoArgs.ContainsKey('Repository') -eq ($mode -ne 'default')) 'auth gets only an explicit target'
+                if ($mode -ne 'default') { Assert ($autoArgs.Repository -ceq $Repository) 'same target reaches auto-login' }
             }
             if ($isBash) {
                 $cloudArgs = @(Get-Content (Join-Path $sandbox '.helios/bootstrap/first-run.log') |
@@ -353,13 +432,40 @@ exit 0
             $replay = 'pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply'
             if ($mode -ne 'default') { $replay += " -Repository $Repository" }
             Assert ($checklist.Contains($replay)) 'printed provision replay retains same target (not executed)'
+            $repoOption = if ($mode -eq 'default') { '' } else { " --repo $Repository" }
+            $secretLines = @($state.checklist.lines | Where-Object { $_ -match '^gh secret set ' })
+            Assert ($secretLines.Count -eq 3) 'admin and both connector commands emitted once'
+            foreach ($name in 'HELIOS_ADMIN_TOKEN', 'LINEAR_API_KEY', 'SLACK_WEBHOOK_URL') {
+                $expected = "gh secret set $name$repoOption"
+                $matching = @($secretLines | Where-Object { ($_ -split '#', 2)[0].Trim() -ceq $expected })
+                Assert ($matching.Count -eq 1) "$entrypoint $mode exact target once, before comment: $name"
+            }
+            # Inspect raw child reports too: aggregation must not rewrite command text
+            # or append a second --repo to an already scoped producer command.
+            $actions = @($state.ownerActions | ForEach-Object action) +
+                @($state.lanes.PSObject.Properties | ForEach-Object { $_.Value.ownerAction })
+            foreach ($source in 'auto-login', 'setup-everything') {
+                if (-not $state.reports.PSObject.Properties[$source]) { continue }
+                $child = Get-Content -Raw (Join-Path $sandbox ".helios/bootstrap/$source.json") | ConvertFrom-Json
+                $childSecrets = @($child.ownerActions | Where-Object { $_ -match '^gh secret set ' })
+                Assert ($childSecrets.Count -eq $(if ($mode -eq 'fallback') { 0 } else { 2 })) "$source inherited secret commands present"
+                $actions += $childSecrets
+            }
+            foreach ($action in @($actions | Where-Object { $_ -match '^gh secret set ' })) {
+                $command = ($action -split '#', 2)[0].Trim()
+                Assert ($command -cmatch "^gh secret set (LINEAR_API_KEY|SLACK_WEBHOOK_URL)$([regex]::Escape($repoOption))$") 'inherited command already scoped exactly once (default unchanged)'
+                Assert (@($secretLines | Where-Object { $_ -ceq $action }).Count -eq 1) 'producer command preserved verbatim and deduped'
+            }
         }
     }
     # Parameter guards must fail BEFORE any dependency is accessed.
     Remove-Item (Join-Path $sandbox 'scripts/build') -Recurse
     Remove-Item (Join-Path $sandbox '.helios') -Recurse -Force
     Remove-Item (Join-Path $sandbox '*-spy.json') -Force
-    foreach ($entrypoint in $allPath, $chainPath, $firstPsPath, $firstShPath) {
+    # Bind the actual producer parameter contracts without executing either producer.
+    Put-Fixture $doctorPath ($doctorAst.ParamBlock.Extent.Text + "`nthrow 'valid target reached inert body'")
+    Put-Fixture $autoPath ($autoAst.ParamBlock.Extent.Text + "`nthrow 'valid target reached inert body'")
+    foreach ($entrypoint in $allPath, $chainPath, $firstPsPath, $firstShPath, $doctorPath, $autoPath) {
         $flag = if ($entrypoint.EndsWith('.sh')) { '--repository' } else { '-Repository' }
         foreach ($bad in '', ' ', 'owner', 'https://github.com/owner/repo', 'a/b/c', 'a/b;exit', 'a/..', 'a/.', "a/b`n", '-a/b', 'a-/b', 'a/r?x', ('a' * 40 + '/b'), ('a/' + 'b' * 101)) {
             $argv = @($flag, $bad)

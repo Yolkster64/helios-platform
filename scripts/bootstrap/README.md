@@ -28,6 +28,15 @@ is retained. Omit the target for compatibility: no issue probes, and the existin
 repository-secret default remains unchanged. `--skip-setup` / `-SkipSetup` skips
 issue readiness with the setup step, but still forwards the target to the secret probe.
 
+The same target reaches `auth-doctor.ps1`, including through `auto-login.ps1` and
+`setup-everything.ps1`: connector secret metadata is read from that repository,
+not the checkout origin or `GH_REPO`. Printed `gh secret set` commands for
+`HELIOS_ADMIN_TOKEN`, `LINEAR_API_KEY`, and `SLACK_WEBHOOK_URL` include
+`--repo owner/repo` exactly once, before any comment. These are owner actions,
+not executed writes. Both auth scripts also accept `-Repository owner/repo`
+directly; without it, the doctor still pins metadata to the checkout's GitHub
+origin (never `GH_REPO`) and leaves its printed secret commands unqualified.
+
 ## The pieces (each usable on its own)
 
 | Script | What it does |

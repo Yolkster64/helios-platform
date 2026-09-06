@@ -132,7 +132,11 @@ param(
 
     [switch]$Json,
 
-    [switch]$UseManagedIdentity
+    [switch]$UseManagedIdentity,
+
+    # Optional repository-secret metadata / owner-command target, never mutation authority.
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 Set-StrictMode -Version Latest
@@ -1598,7 +1602,7 @@ function Test-CopilotLane {
 # permission: a 404 counts as absent only when the listing endpoint answered 200 (GitHub
 # hides secrets from a token without that permission behind the same 404), anything
 # else is unknown with the reason. Screened GitHub tokens are cleared around the calls
-# exactly as for the gh lane; the repository is THIS checkout's origin remote, passed
+# exactly as for the gh lane; absent -Repository, use THIS checkout's origin remote, passed
 # explicitly (review finding): gh's {owner}/{repo} placeholders resolve through GH_REPO
 # when it is set, which would report another repository's secrets as this one's.
 $script:checkoutRepositorySlug = $null
@@ -1620,7 +1624,7 @@ function Get-RepositorySecretState {
     if ($Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return [pscustomobject]@{ State = 'unknown'; Reason = "'$Name' is not a valid secret name" } }
     $ghCmd = Get-CliCommand -Name 'gh'
     if (-not $ghCmd) { return [pscustomobject]@{ State = 'unknown'; Reason = 'gh is not on PATH, so repository-secret metadata could not be read' } }
-    $slug = Get-CheckoutRepositorySlug
+    $slug = if ($Repository) { $Repository } else { Get-CheckoutRepositorySlug }
     if (-not $slug) { return [pscustomobject]@{ State = 'unknown'; Reason = "this checkout's origin remote is not a github.com repository (or git is absent), so the repository whose secrets to read cannot be pinned; GH_REPO is deliberately not consulted" } }
     $cleared = @(Get-NonGitHubOwnedTokenNames)
     $saved = @{}
@@ -1688,9 +1692,10 @@ function Test-LinearLane {
     # (.github/workflows/linear-sync.yml) reads the REPOSITORY SECRET of that name and
     # skips green without it — reported as its own state, never inferred from this
     # shell's variable (review finding).
+    $repoOption = if ($Repository) { " --repo $Repository" } else { '' }
     return Get-ConnectorSecretLane -Lane 'linear' -Name 'LINEAR_API_KEY' -Declared 'declared by config/connectors.json linear.apiKeyEnv' `
         -Workflow '.github/workflows/linear-sync.yml' -Purpose 'GitHub->Linear issue sync' `
-        -OwnerAction 'gh secret set LINEAR_API_KEY   # value from Linear Settings -> Security & access -> API'
+        -OwnerAction "gh secret set LINEAR_API_KEY$repoOption   # value from Linear Settings -> Security & access -> API"
 }
 
 # --- slack lane (connector; verify-only, never gates) ----------------------------------
@@ -1701,9 +1706,10 @@ function Test-SlackLane {
     $botTokenState = if (Test-EnvValue 'SLACK_BOT_TOKEN') { 'set in this shell' } else { 'not set' }
     $botTokenNote = "SLACK_BOT_TOKEN ($botTokenState) is declared in config/connectors.json but nothing in the repo consumes it today"
     # The repository secret is its own state (review finding), as for the Linear lane.
+    $repoOption = if ($Repository) { " --repo $Repository" } else { '' }
     return Get-ConnectorSecretLane -Lane 'slack' -Name 'SLACK_WEBHOOK_URL' -Declared 'declared by config/connectors.json slack.webhookUrlEnv' `
         -Workflow '.github/workflows/notify-slack.yml' -Purpose 'workflow notifications' `
-        -OwnerAction 'gh secret set SLACK_WEBHOOK_URL   # value from the Slack app incoming-webhook config' -Suffix $botTokenNote
+        -OwnerAction "gh secret set SLACK_WEBHOOK_URL$repoOption   # value from the Slack app incoming-webhook config" -Suffix $botTokenNote
 }
 
 # --- sharepoint lane (connector; verify-only, never gates) -----------------------------
