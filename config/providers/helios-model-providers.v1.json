@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "registryId": "helios-model-providers",
+  "defaultPolicy": "deny",
+  "providers": [
+    {
+      "id": "openai",
+      "client": "OpenAI Responses and Agents SDK adapter",
+      "modes": ["responses", "agents", "mcp-tools", "structured-output", "tracing"],
+      "secretReferences": ["OPENAI_API_KEY", "OPENAI_PROJECT_ID", "OPENAI_ORG_ID", "OPENAI_BASE_URL"],
+      "allowed": ["bounded-model-request", "tool-call-through-registry", "trace", "cost-report", "health-check"],
+      "denied": ["secret-readback", "generic-shell", "repository-admin", "azure-apply", "tenant-consent"]
+    },
+    {
+      "id": "anthropic",
+      "client": "Anthropic Messages and Claude Code adapter",
+      "modes": ["messages", "claude-code", "project-mcp", "subagents", "hooks"],
+      "secretReferences": ["ANTHROPIC_API_KEY"],
+      "allowed": ["bounded-model-request", "reviewed-branch-edit", "build", "test", "prepare-pr", "dev-plan-review"],
+      "denied": ["secret-readback", "merge", "repository-rename", "azure-apply", "rbac-or-consent", "workstation-admin"]
+    },
+    {
+      "id": "azure-foundry",
+      "client": "Azure AI Foundry and Azure OpenAI adapter",
+      "modes": ["model-inference", "agent-service", "evaluation", "tracing"],
+      "secretReferences": ["AZURE_CLIENT_ID", "AZURE_TENANT_ID", "AZURE_SUBSCRIPTION_ID", "AZURE_FOUNDRY_PROJECT_ENDPOINT"],
+      "allowed": ["workload-identity-login", "bounded-model-request", "dev-agent-evaluation", "health-check"],
+      "denied": ["client-secret-creation", "tenant-wide-role", "production-agent-publication", "secret-readback"]
+    },
+    {
+      "id": "microsoft-copilot",
+      "client": "Microsoft 365 Copilot and Copilot Studio adapter",
+      "modes": ["declarative-agent", "copilot-studio", "teams-package", "scoped-graph"],
+      "secretReferences": ["MICROSOFT_TENANT_ID", "MICROSOFT_CLIENT_ID"],
+      "allowed": ["package-validation", "dev-environment-plan", "approved-scoped-graph", "health-check"],
+      "denied": ["automatic-admin-consent", "tenant-wide-publish", "broad-mailbox-access", "credential-export"]
+    },
+    {
+      "id": "ollama-local",
+      "client": "Ollama loopback adapter",
+      "modes": ["chat", "embeddings", "health"],
+      "endpointDefault": "http://127.0.0.1:11434",
+      "allowed": ["loopback-request", "model-inventory", "health-check"],
+      "denied": ["public-bind", "remote-model-pull-without-approval", "generic-shell", "secret-access"]
+    },
+    {
+      "id": "lm-studio-local",
+      "client": "OpenAI-compatible LM Studio loopback adapter",
+      "modes": ["chat", "embeddings", "health"],
+      "endpointDefault": "http://127.0.0.1:1234/v1",
+      "allowed": ["loopback-request", "model-inventory", "health-check"],
+      "denied": ["public-bind", "remote-model-download-without-approval", "generic-shell", "secret-access"]
+    },
+    {
+      "id": "hermes-xcore",
+      "client": "HELIOS fleet and learning adapter",
+      "modes": ["route", "execute-bounded-worker", "score", "reflect", "redacted-memory", "recommend-scale"],
+      "secretReferences": [],
+      "allowed": ["approved-task", "evaluation", "redacted-learning", "health-check"],
+      "denied": ["self-enable-tool", "self-approve", "merge", "deploy", "read-secret", "publish-private-memory"]
+    }
+  ],
+  "commonContract": {
+    "task": ["taskId", "taskType", "prompt", "classification", "budget", "deadline", "correlationId"],
+    "result": ["status", "content", "provider", "model", "latencyMs", "costUsd", "quality", "traceId", "evidence"],
+    "policy": ["allowedTools", "deniedTools", "maxInputBytes", "maxOutputBytes", "timeoutSeconds", "maxCostUsd", "redactionProfile"],
+    "routing": ["primary", "fallbacks", "parallelism", "comparison", "humanApprovalRequired"],
+    "health": ["available", "authenticated", "endpoint", "capabilities", "lastCheckedAt", "sanitizedError"]
+  },
+  "globalRules": {
+    "credentialsAreReferencesOnly": true,
+    "providerBusinessLogicInGui": false,
+    "unrestrictedToolExecution": false,
+    "automaticProductionAction": false,
+    "tracingRequiresRedaction": true,
+    "budgetRequired": true
+  }
+}
