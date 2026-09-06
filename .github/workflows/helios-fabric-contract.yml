@@ -62,7 +62,9 @@ jobs:
 
           schema = json.loads(Path("config/schemas/helios-fabric.schema.json").read_text(encoding="utf-8"))
           instance = json.loads(Path("config/fabric/helios-fabric.v1.json").read_text(encoding="utf-8"))
-          Draft202012Validator(schema).validate(instance)
+          validator = Draft202012Validator(schema)
+          validator.check_schema(schema)
+          validator.validate(instance)
           PY
 
       - name: Build sanitized Fabric plan
