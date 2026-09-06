@@ -1,18 +1,35 @@
 {
   "name": "HELIOS Platform",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0",
+  "build": {
+    "context": "..",
+    "dockerfile": "Dockerfile"
+  },
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/powershell:1": {},
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
+      "version": "22"
     },
+    "ghcr.io/devcontainers/features/powershell:1": {},
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.11"
     },
     "ghcr.io/devcontainers/features/terraform:1": {}
   },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "containerEnv": {
+    "DOTNET_NOLOGO": "1",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "POWERSHELL_TELEMETRY_OPTOUT": "1"
+  },
+  "mounts": [
+    "source=helios-nuget-packages,target=/home/vscode/.nuget/packages,type=volume",
+    "source=helios-pip-cache,target=/home/vscode/.cache/pip,type=volume",
+    "source=helios-npm-cache,target=/home/vscode/.npm,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -35,18 +52,12 @@
       }
     }
   },
-  "remoteEnv": {
-    "DOTNET_NOLOGO": "1",
-    "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
-  },
-  "forwardPorts": [
-    5170
-  ],
+  "forwardPorts": [5170],
   "portsAttributes": {
     "5170": {
       "label": "helios-ai-api",
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "echo '== [1/4] native C++ spoke (optional; AIHub falls back to managed paths) =='; { command -v cmake >/dev/null 2>&1 && ./scripts/build/build-native.sh || echo 'SKIP: cmake missing or native build failed (non-fatal)'; }; echo '== [2/4] restore + build HELIOS.sln =='; dotnet restore HELIOS.sln || true; dotnet build HELIOS.sln -c Release --no-restore || true; echo '== [3/4] python spoke (ml extras, falling back to dependency-free) =='; python3 -m pip install -e 'src/ai/python[ml]' || python3 -m pip install -e src/ai/python || true; echo '== [4/4] helios-ai on PATH =='; sudo ln -sf \"$PWD/src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai\" /usr/local/bin/helios-ai || true; { command -v helios-ai >/dev/null 2>&1 && test -x src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai && echo 'helios-ai ready (try: helios-ai status)' || echo 'helios-ai symlinked; run: dotnet build HELIOS.sln -c Release'; }"
+  "postCreateCommand": "bash .devcontainer/onCreateCommand.sh"
 }

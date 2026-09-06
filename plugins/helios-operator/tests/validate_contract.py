@@ -46,11 +46,31 @@ def main() -> int:
     require(manifest.get("name") == "helios-operator", "plugin name must be helios-operator", errors)
     require(manifest.get("version") == "0.1.0", "plugin version must be 0.1.0", errors)
     require(marketplace.get("name") == "helios-platform", "marketplace name must be helios-platform", errors)
+    require(isinstance(marketplace.get("description"), str) and marketplace["description"].strip(),
+            "marketplace description must be a non-empty string", errors)
+    owner = marketplace.get("owner", {})
+    require(owner.get("url") == "https://github.com/Yolkster64",
+            "marketplace owner URL must point to Yolkster64", errors)
     entries = marketplace.get("plugins", [])
     require(isinstance(entries, list) and len(entries) == 1, "marketplace must expose one plugin", errors)
     if isinstance(entries, list) and entries:
-        require(entries[0].get("name") == "helios-operator", "marketplace plugin name drifted", errors)
-        require(entries[0].get("source") == "./plugins/helios-operator", "marketplace source drifted", errors)
+        entry = entries[0]
+        require(entry.get("name") == "helios-operator", "marketplace plugin name drifted", errors)
+        require(entry.get("source") == "./plugins/helios-operator", "marketplace source drifted", errors)
+        require(entry.get("category") == "development", "marketplace plugin category drifted", errors)
+        require(isinstance(entry.get("tags"), list) and len(entry["tags"]) > 0,
+                "marketplace plugin tags must be a non-empty list", errors)
+        source = entry.get("source", "")
+        require(source.startswith("./"), "marketplace plugin source must stay repository-relative", errors)
+        plugin_path = (REPO_ROOT / source[2:]).resolve() if source.startswith("./") else REPO_ROOT
+        require(plugin_path.is_dir(), "marketplace plugin source directory is missing", errors)
+        require((plugin_path / ".claude-plugin" / "plugin.json").is_file(),
+                "plugin source must include .claude-plugin/plugin.json", errors)
+        require((plugin_path / "README.md").is_file(), "plugin source must include README.md", errors)
+        require((plugin_path / "skills" / "operate-helios" / "SKILL.md").is_file(),
+                "plugin source must include the operate-helios skill manifest", errors)
+        require((plugin_path / "agents" / "fabric-operator.md").is_file(),
+                "plugin source must include the fabric-operator agent manifest", errors)
 
     # The plugin deliberately bundles NO MCP server: inside a HELIOS checkout the
     # repo-level .mcp.json already launches src/mcp/HELIOS.Mcp, and a bundled duplicate

@@ -85,6 +85,8 @@ lerna-debug.log*
 
 ## Development Container
 .devcontainer-state/
+.devcontainer/local.env
+.devcontainer/secrets/
 devenv.nix
 flake.nix
 .direnv/
