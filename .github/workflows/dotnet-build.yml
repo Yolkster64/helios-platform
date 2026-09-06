@@ -8,6 +8,10 @@ on:
       - 'tests/**'
       - 'config/**'
       - 'scripts/build/**'
+      - 'scripts/verify/mcp-health.py'
+      - '.mcp.json'
+      - '.codex/config.toml'
+      - '.vscode/mcp.json'
       - '**.csproj'
       - 'HELIOS.sln'
       - 'Directory.Packages.props'
@@ -148,6 +152,9 @@ jobs:
           -c Release --no-build
           --logger "trx;LogFileName=aihub-tests.trx"
           --results-directory ./test-results
+
+      - name: Verify MCP stdio discovery (no provider calls)
+        run: python3 scripts/verify/mcp-health.py
 
       - name: Smoke-test cross-LLM shell
         id: cli_smoke

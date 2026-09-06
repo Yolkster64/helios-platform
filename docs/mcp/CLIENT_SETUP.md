@@ -13,8 +13,26 @@ client, so Claude Code, GitHub Copilot, Codex CLI, and Cursor all drive the same
 with the same routing table. This is the cross-LLM fabric: each assistant can delegate to
 whichever model is best for the task.
 
-Prereqs: .NET 10 SDK; provider keys in the environment (see `.env.template`). Build once
-with `dotnet build HELIOS.sln -c Release`.
+Prerequisites: .NET 10 SDK and Python 3.10+ for the connection check. Build explicitly
+with `dotnet build HELIOS.sln -c Release`, then run:
+
+```bash
+python3 scripts/verify/mcp-health.py
+```
+
+The probe negotiates MCP, discovers the required HELIOS tools (including paginated
+lists), and sends a protocol ping. It has a 30-second exchange timeout and bounded
+shutdown. It never invokes a tool, acquires a credential, or calls a provider. Exit 0
+means stdio discovery passed; exit 2 means attention is needed. Missing binaries,
+invalid protocol output, and timeouts cannot become a ready result. Raw server logs
+are discarded so credentials or exception details cannot enter the report.
+
+The three checked-in client registrations use `--no-build --no-restore
+--no-launch-profile` to keep build output and launch-profile overrides out of the MCP
+transport. Rebuild after source changes. A successful probe establishes transport and
+tool discovery only; assistant authentication and live provider readiness remain
+separate checks. `scripts/setup/setup-all.ps1` now reports `mcp-runtime` separately
+from `mcp-registration`.
 
 ## Claude Code
 
@@ -41,31 +59,27 @@ not produce duplicate `helios_*` tools or a second server process.
 
 ## VS Code / GitHub Copilot
 
-`.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "helios": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"]
-    }
-  }
-}
-```
-
-Then enable the tools in Copilot Chat's agent mode (Tools picker → MCP: helios).
+The checked-in `.vscode/mcp.json` registers HELIOS using `${workspaceFolder}` for
+the project and repository root. Open the checkout as a folder, build, then use the
+Copilot Chat Tools picker to enable MCP: helios. Workspace trust and the editor's
+normal server approval still apply.
 
 ## Codex CLI
 
-`~/.codex/config.toml`:
+The checked-in `.codex/config.toml` registers the same server. Codex loads project
+configuration only for a trusted checkout; it does not change user authentication,
+model selection, sandbox settings, or approval policies. The working directory
+resolves from `.codex/..` to the repository root, including when starting in a nested
+source folder.
 
-```toml
-[mcp_servers.helios]
-command = "dotnet"
-args = ["run", "--project", "/path/to/helios-platform/src/mcp/HELIOS.Mcp", "-c", "Release"]
-```
+After building, run `codex mcp list` and inspect `/mcp` in the intended Codex session.
+Remove an obsolete duplicate user-level HELIOS entry only if it conflicts with this
+project registration. Do not put provider keys in MCP command arguments or tracked
+configuration. A ChatGPT subscription session does not configure provider API access.
+
+Official references: [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp),
+[project configuration](https://learn.chatgpt.com/docs/config-file/config-advanced),
+[MCP lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle).
 
 ## Cursor
 
@@ -90,7 +104,8 @@ npx @modelcontextprotocol/inspector -- dotnet run --project src/mcp/HELIOS.Mcp -
 
 ## Tool surface & safety
 
-All tools are non-destructive. `helios_ai_*` call LLM providers (network, token cost);
+Tools have different effects. `helios_ai_ask`, `helios_ai_route`,
+`helios_ai_tandem`, and `helios_ai_compare` call LLM providers (network, token cost);
 `helios_ai_status` / `helios_providers_list` / `helios_optimal_provider_get` /
 `helios_task_routing_get` are pure reads;
 `helios_engine_catalog_get` / `helios_engine_mix_recommend` are deterministic local reads

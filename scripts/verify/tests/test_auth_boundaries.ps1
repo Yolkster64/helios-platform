@@ -55,18 +55,18 @@ try {
     $env:MSI_ENDPOINT='http://127.0.0.1:41334/msi/token'; $env:MSI_SECRET='dummy-secret'
     function Invoke-HttpProbe {
         param($Url,$Headers,$TimeoutSec,[switch]$NoProxy)
-        if ($Url -notlike 'http://127.0.0.1:41333/*') { throw 'Alternate identity endpoint was attempted.' }
+        if ($Url -notlike 'http://127.0.0.1:41333/*' -and $Url -notlike 'http://127.0.0.1:41334/*') { throw 'Unexpected identity endpoint was attempted.' }
         $script:calls++; [pscustomobject]@{Status=$script:status;Body='{}';Transport='inert'}
     }
     foreach ($status in @(0,200,400,401,403,429,500)) {
         $script:status=$status; $script:calls=0
         $result=Test-AzureLane
         $expected=if ($status -in @(400,401,403)) {'needs-owner'} else {'unavailable'}
-        Assert-True ($result.state -eq $expected -and $script:calls -eq 1 -and $result.source -eq 'managed-identity (identity-endpoint)') 'Selected MI failure was hidden.'
+        Assert-True ($result.state -eq $expected -and $script:calls -eq 2 -and $result.source -eq 'managed-identity (msi-endpoint)') 'Declared MI fallback did not stay within managed-identity probes.'
     }
-    $env:IDENTITY_ENDPOINT='http://127.999.999.999:41333/msi/token'; $script:calls=0
+    $env:IDENTITY_ENDPOINT='http://127.999.999.999:41333/msi/token'; $script:status=500; $script:calls=0
     $result=Test-AzureLane
-    Assert-True ($result.state -eq 'needs-owner' -and $script:calls -eq 0) 'Rejected preferred endpoint fell through.'
+    Assert-True ($result.state -eq 'unavailable' -and $script:calls -eq 1 -and $result.source -eq 'managed-identity (msi-endpoint)') 'Rejected preferred endpoint blocked declared fallback endpoint.'
 
     $script:knownAzureClouds=@(
         [pscustomobject]@{Name='AzureCloud';Authority='login.microsoftonline.com';Arm='management.azure.com'},

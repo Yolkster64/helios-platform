@@ -37,3 +37,20 @@ is refused), and the rule that a selected Azure credential is proven only by
 `rest-connect.ps1` acquiring a token through it — a cached az identity whose client
 and tenant match is context, never proof — including the secretless `azure-openai`
 entry's endpoint and Entra-fallback verdicts.
+
+## MCP transport and repository evidence
+
+`python3 scripts/verify/mcp-health.py` verifies the built local MCP server through
+initialize, tools/list, and ping. It calls no tools or providers. The portable .NET
+workflow runs it after build; setup-all includes its result as `mcp-runtime`.
+
+`python3 scripts/verify/repository-health.py --inventory` checks current repository
+inputs. The Continuous Verification workflow generates JSON and Markdown from actual
+job conclusions, including failed, skipped, cancelled, and missing evidence. These
+reports describe repository checks; they do not establish runtime or deployment health.
+
+Offline regression checks (Python 3.11+ for TOML configuration parsing):
+
+```bash
+python3 -m unittest discover -s scripts/verify/tests -p 'test_*health.py'
+```

@@ -2,157 +2,67 @@ name: Continuous Verification & Health Check
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/verify/**'
+      - 'scripts/setup/setup-all.ps1'
+      - '.mcp.json'
+      - '.codex/config.toml'
+      - '.vscode/mcp.json'
+      - '.github/workflows/verify.yml'
+
+permissions:
+  contents: read
 
 jobs:
   health-check:
-    name: System Health Check
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      
-      - name: Check Repository Health
-        run: |
-          Write-Host "🏥 HELIOS Platform Health Check" -ForegroundColor Cyan
-          Write-Host ""
-          
-          # Check files exist
-          $files = @(
-            'COMPONENT_ANALYSIS.md',
-            'COMPONENT_METRICS.json',
-            'PROJECT_BOARD_QUICK_START.md',
-            'GITHUB_PROJECT_SETUP.md',
-            'DELIVERY_MANIFEST.md'
-          )
-          
-          foreach ($file in $files) {
-            if (Test-Path $file) {
-              Write-Host "  ✅ $file" -ForegroundColor Green
-            } else {
-              Write-Host "  ❌ $file" -ForegroundColor Red
-            }
-          }
-          
-          Write-Host ""
-          Write-Host "📊 Repository Statistics:" -ForegroundColor Cyan
-          $commits = git rev-list --count HEAD
-          $files_count = git ls-files | Measure-Object -Line | Select-Object -ExpandProperty Lines
-          Write-Host "  Commits: $commits" -ForegroundColor Green
-          Write-Host "  Files: $files_count" -ForegroundColor Green
-      
-      - name: Validate Deployment Scripts
-        run: |
-          Write-Host "🔍 Validating Deployment Scripts..." -ForegroundColor Cyan
-          
-          $scripts = @(
-            'src/phases/master-deploy.ps1',
-            'src/phases/phase-0-preflight.ps1',
-            'src/phases/phase-1-infrastructure.ps1',
-            'src/phases/phase-2-agents.ps1',
-            'src/phases/phase-3-ai-services.ps1',
-            'src/phases/phase-4-security.ps1',
-            'src/phases/phase-5-monitoring.ps1',
-            'src/phases/phase-6-verification.ps1'
-          )
-          
-          foreach ($script in $scripts) {
-            if (Test-Path $script) {
-              $size = (Get-Item $script).Length
-              Write-Host "  ✅ $script ($size bytes)" -ForegroundColor Green
-            } else {
-              Write-Host "  ❌ $script" -ForegroundColor Red
-            }
-          }
-
-  metrics-validation:
-    name: Validate Metrics & Analysis
+    name: Check repository sources
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Validate COMPONENT_METRICS.json
-        run: |
-          python3 -c "
-          import json
-          import sys
-          
-          try:
-              with open('COMPONENT_METRICS.json', 'r') as f:
-                  metrics = json.load(f)
-              
-              print('✅ COMPONENT_METRICS.json is valid JSON')
-              print(f'  Components: {len(metrics.get(\"components\", {}))}')
-              print(f'  Phases: {len(metrics.get(\"phases\", {}))}')
-              print(f'  Deployment Options: {len(metrics.get(\"deployment_options\", {}))}')
-              
-          except json.JSONDecodeError as e:
-              print(f'❌ JSON Error: {e}')
-              sys.exit(1)
-          except Exception as e:
-              print(f'❌ Error: {e}')
-              sys.exit(1)
-          "
-      
-      - name: Check Analysis Documents
-        run: |
-          for file in COMPONENT_ANALYSIS.md GITHUB_PROJECT_SETUP.md DELIVERY_MANIFEST.md; do
-            if [ -f "$file" ]; then
-              size=$(wc -c < "$file")
-              lines=$(wc -l < "$file")
-              echo "✅ $file: $lines lines, $size bytes"
-            else
-              echo "❌ $file: NOT FOUND"
-              exit 1
-            fi
-          done
+      - name: Validate current repository inputs
+        run: python3 scripts/verify/repository-health.py --inventory
+
+  verification-contract:
+    name: Verification contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test MCP transport failures and repository evidence
+        run: python -m unittest discover -s scripts/verify/tests -p "test_*health.py"
 
   generate-status-report:
-    name: Generate Status Report
-    needs: [health-check, metrics-validation]
+    name: Generate scoped verification report
+    needs: [health-check, verification-contract]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always()
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Create Health Report
+      - name: Generate from actual job results
+        env:
+          HELIOS_JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          cat > health-report.md << 'EOF'
-          # HELIOS Platform Health Report
-          
-          **Generated:** $(date)
-          **Status:** ✅ OPERATIONAL
-          
-          ## Components
-          - ✅ Storage Agent
-          - ✅ Security Agent
-          - ✅ Software Agent
-          - ✅ Configuration Agent
-          - ✅ Optimization Agent
-          - ✅ Verification Agent
-          
-          ## Phases
-          - ✅ Phase 0: Preflight
-          - ✅ Phase 1: Infrastructure
-          - ✅ Phase 2: Agents
-          - ✅ Phase 3: AI Services
-          - ✅ Phase 4: Security
-          - ✅ Phase 5: Monitoring
-          - ✅ Phase 6: Verification
-          
-          ## Metrics
-          - **Total Deployment Time:** 102 minutes
-          - **Components:** 6
-          - **Phases:** 7
-          - **Tests:** 42
-          - **Security Layers:** 8
-          
-          EOF
-          cat health-report.md
-      
-      - name: Upload Report
+          python3 scripts/verify/repository-health.py
+          cat health-report/health-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: health-report
-          path: health-report.md
+          path: health-report/
+          if-no-files-found: error
+      - name: Require successful repository checks
+        run: |
+          python3 -c 'import json, sys; r=json.load(open("health-report/health-report.json")); sys.exit(0 if r["repositoryChecksPassed"] else 1)'
