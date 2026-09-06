@@ -1,0 +1,51 @@
+<Page x:Class="HELIOS.Shell.Views.FabricControlPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:helpers="using:HELIOS.Shell.Helpers"
+      xmlns:vm="using:HELIOS.Shell.ViewModels"
+      Background="{ThemeResource SurfaceBrush}">
+  <Grid Padding="24" RowSpacing="12">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <Grid Grid.Row="0" ColumnSpacing="12">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Fabric Control" Style="{StaticResource HeliosHeadlineTextBlockStyle}" Foreground="{ThemeResource HeliosAccentBrush}"/>
+        <TextBlock Text="GitHub · Claude Code · Azure OIDC · Foundry · Key Vault · OpenAI/Codex · Hermes · collaboration connectors" Style="{StaticResource HeliosBodyTextBlockStyle}" Foreground="{ThemeResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+        <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" Style="{StaticResource HeliosCaptionTextBlockStyle}" TextWrapping="Wrap"/>
+      </StackPanel>
+      <Button Grid.Column="1" Content="Refresh" VerticalAlignment="Top" Command="{x:Bind ViewModel.RefreshCommand}"/>
+    </Grid>
+    <Border Grid.Row="1" Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+      <StackPanel Spacing="10">
+        <TextBlock Text="Operator actions" Style="{StaticResource HeliosTitleTextBlockStyle}"/>
+        <CommandBar DefaultLabelPosition="Right" OverflowButtonVisibility="Auto">
+          <AppBarButton Label="Copy bootstrap" Command="{x:Bind ViewModel.CopyBootstrapCommand}"/>
+          <AppBarButton Label="Copy verify-only" Command="{x:Bind ViewModel.CopyVerifyCommand}"/>
+          <AppBarButton Label="Azure portal" Command="{x:Bind ViewModel.OpenAzurePortalCommand}"/>
+          <AppBarButton Label="Claude workflow" Command="{x:Bind ViewModel.OpenClaudeWorkflowCommand}"/>
+          <AppBarButton Label="GitHub repo" Command="{x:Bind ViewModel.OpenRepositoryCommand}"/>
+          <AppBarButton Label="OIDC record #152" Command="{x:Bind ViewModel.OpenClaudeIssueCommand}"/>
+        </CommandBar>
+        <TextBlock Text="Bootstrap" Style="{StaticResource HeliosLabelTextBlockStyle}"/>
+        <TextBlock Text="{x:Bind ViewModel.BootstrapCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap"/>
+        <TextBlock Text="Verify without mutation" Style="{StaticResource HeliosLabelTextBlockStyle}"/>
+        <TextBlock Text="{x:Bind ViewModel.VerifyCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+    <InfoBar Grid.Row="2" IsOpen="True" IsClosable="False" Severity="Informational" Title="Credential boundary" Message="Readiness only: no secret values, Azure role grants, Marketplace acceptance, model deployment, or cloud writes."/>
+    <ListView Grid.Row="3" ItemsSource="{x:Bind ViewModel.Integrations}" SelectionMode="None" IsItemClickEnabled="False">
+      <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,8"/></Style></ListView.ItemContainerStyle>
+      <ListView.ItemTemplate>
+        <DataTemplate x:DataType="vm:FabricIntegrationItemViewModel">
+          <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16,12">
+            <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{x:Bind helpers:ReadinessVisuals.BrushFor(Readiness)}"/>
+              <StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="{x:Bind Name}" Style="{StaticResource HeliosBodyStrongTextBlockStyle}"/><TextBlock Text="{x:Bind Scope}" Style="{StaticResource HeliosCaptionTextBlockStyle}"/><TextBlock Text="{x:Bind Detail}" Style="{StaticResource HeliosBodyTextBlockStyle}" Foreground="{ThemeResource TextSecondaryBrush}" TextWrapping="Wrap"/></StackPanel>
+              <TextBlock Grid.Column="2" Text="{x:Bind Readiness}" VerticalAlignment="Center" Foreground="{x:Bind helpers:ReadinessVisuals.BrushFor(Readiness)}"/>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ListView.ItemTemplate>
+    </ListView>
+  </Grid>
+</Page>
