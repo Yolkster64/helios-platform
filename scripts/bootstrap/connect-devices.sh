@@ -126,10 +126,13 @@ _cd_finish() {
 }
 
 _cd_precondition() {
-  _cd_log "connect-devices: FAILED PRECONDITION - $1"
+  # The message is captured before the shift: the fix lines that follow it must
+  # not replace it in the report's failedPrecondition field.
+  local message="$1"
+  _cd_log "connect-devices: FAILED PRECONDITION - $message"
   shift; local line; for line in "$@"; do _cd_log "  $line"; done
   _cd_log 'Nothing was changed.'
-  _cd_finish 2 "$1"
+  _cd_finish 2 "$message"
 }
 
 _cd_gh_ready() {

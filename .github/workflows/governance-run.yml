@@ -74,7 +74,11 @@ jobs:
       # Both halves or nothing: the variable without the key (or the reverse) is
       # not a mint attempt, it is reported by the run step below. The token is
       # scoped to this repository and to exactly the permissions the four
-      # scripts need, and the action revokes it when the job ends.
+      # scripts need, and the action revokes it when the job ends. The App's
+      # installation also carries Actions and Workflows write (registered by
+      # connect-github-app.ps1 for lanes that dispatch or push workflows); this
+      # runner does neither, so it deliberately mints a NARROWER token - the
+      # permission-* inputs can only narrow the installation grant, never widen it.
       - name: Mint the HELIOS GitHub App installation token
         id: app
         if: env.HAS_APP_KEY == 'true' && env.HAS_APP_CLIENT_ID == 'true'

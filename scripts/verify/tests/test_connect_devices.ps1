@@ -270,6 +270,14 @@ try {
         $twinOut = & $bash.Source $twin --json --skip-chain --retry --timeout-minutes 0.5 --tenant $tenant --repository owner/repo 2>$null
         Assert-True ($LASTEXITCODE -eq 0) 'Twin --retry must recover an expired code.'
         Assert-True (([regex]::Matches((Get-ShimLog), 'gh auth login')).Count -eq 2) 'Twin --retry must launch the login exactly twice.'
+        # Preconditions keep the one-object promise and carry the real message, not
+        # the first fix line.
+        $twinOut = & $bash.Source $twin --json --skip-chain --tenant $tenant --repository nope 2>$null
+        $twinCode = $LASTEXITCODE
+        $twinObject = ($twinOut -join "`n") | ConvertFrom-Json
+        Assert-True ($twinCode -eq 2 -and $twinObject.failedPrecondition -match 'owner/name') 'Twin malformed repository must be a failed precondition naming the rule.'
+        $twinOut = & $bash.Source $twin --json --skip-chain --tenant not-a-tenant --repository owner/repo 2>$null
+        Assert-True ($LASTEXITCODE -eq 2 -and ((($twinOut -join "`n") | ConvertFrom-Json).failedPrecondition -match 'tenant id')) 'Twin malformed tenant must be a failed precondition naming the rule.'
     }
 
     # --- No model identifiers in the shipped files ------------------------------------------------

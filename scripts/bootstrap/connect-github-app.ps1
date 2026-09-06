@@ -485,7 +485,10 @@ function ConvertTo-Base64Url {
 }
 
 # iat backdated 60 s (clock skew), exp 9 minutes out (GitHub caps at 10), iss = the
-# client id. The PEM is imported into an RSA object that is disposed right after.
+# client id: GitHub's JWT reference accepts "the client ID or application ID" for
+# `iss` and recommends the client ID, which is also the identifier the
+# create-github-app-token action takes, so one stored value serves both. The PEM
+# is imported into an RSA object that is disposed right after.
 function New-AppJwt {
     param(
         [Parameter(Mandatory)][string]$ClientId,
