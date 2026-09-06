@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
 HELIOS Platform - Complete Metrics Collection Orchestrator
@@ -34,24 +34,24 @@ $dbPath = Join-Path $scriptRoot ".." "data" "database" "metrics.db"
 $dataPath = Join-Path $scriptRoot ".." "data" "metrics"
 
 # Import modules
-Write-Output "========================================"
-Write-Output "HELIOS Platform - Metrics Orchestrator"
-Write-Output "========================================"
-Write-Output ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "HELIOS Platform - Metrics Orchestrator" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Output "Loading metrics collection modules..."
+Write-Host "Loading metrics collection modules..." -ForegroundColor Yellow
 Import-Module (Join-Path $modulePath "MetricsCollector.psm1") -Force
 Import-Module (Join-Path $scriptRoot "database" "DatabaseHelper.psm1") -Force
 Import-Module (Join-Path $scriptRoot "github" "GitHubIntegration.psm1") -Force
 
-Write-Output "✓ Modules loaded"
-Write-Output ""
+Write-Host "✓ Modules loaded" -ForegroundColor Green
+Write-Host ""
 
 # Initialize database
-Write-Output "Initializing metrics database..."
-Initialize-MetricsDatabase -DatabasePath $dbPath | Out-Null
-Write-Output "✓ Database initialized"
-Write-Output ""
+Write-Host "Initializing metrics database..." -ForegroundColor Yellow
+$schema = Initialize-MetricsDatabase -DatabasePath $dbPath
+Write-Host "✓ Database initialized" -ForegroundColor Green
+Write-Host ""
 
 # Main collection function
 function Invoke-MetricsCollection {
@@ -59,7 +59,7 @@ function Invoke-MetricsCollection {
         [string]$Type = "all"
     )
     
-    Write-Output "[$(Get-Date -Format 'HH:mm:ss')] Collecting metrics..."
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Collecting metrics..." -ForegroundColor Cyan
     
     # Collect all metric types
     $timestamp = Get-Date -Format 'o'
@@ -70,57 +70,57 @@ function Invoke-MetricsCollection {
     }
     
     if ($Type -in "execution", "all") {
-        Write-Output "  → Collecting execution metrics..."
+        Write-Host "  → Collecting execution metrics..." -NoNewline
         $allMetrics.execution = (Get-ExecutionMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "performance", "all") {
-        Write-Output "  → Collecting performance metrics..."
+        Write-Host "  → Collecting performance metrics..." -NoNewline
         $allMetrics.performance = (Get-PerformanceMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "quality", "all") {
-        Write-Output "  → Collecting quality metrics..."
+        Write-Host "  → Collecting quality metrics..." -NoNewline
         $allMetrics.quality = (Get-QualityMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "deployment", "all") {
-        Write-Output "  → Collecting deployment metrics..."
+        Write-Host "  → Collecting deployment metrics..." -NoNewline
         $allMetrics.deployment = (Get-DeploymentMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "cost", "all") {
-        Write-Output "  → Collecting cost metrics..."
+        Write-Host "  → Collecting cost metrics..." -NoNewline
         $allMetrics.cost = (Get-CostMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "security", "all") {
-        Write-Output "  → Collecting security metrics..."
+        Write-Host "  → Collecting security metrics..." -NoNewline
         $allMetrics.security = (Get-SecurityMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "team", "all") {
-        Write-Output "  → Collecting team metrics..."
+        Write-Host "  → Collecting team metrics..." -NoNewline
         $allMetrics.team = (Get-TeamMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "business", "all") {
-        Write-Output "  → Collecting business metrics..."
+        Write-Host "  → Collecting business metrics..." -NoNewline
         $allMetrics.business = (Get-BusinessMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     if ($Type -in "data_quality", "all") {
-        Write-Output "  → Collecting data quality metrics..."
+        Write-Host "  → Collecting data quality metrics..." -NoNewline
         $allMetrics.data_quality = (Get-DataQualityMetrics -Database $dbPath).metrics
-        Write-Output " ✓"
+        Write-Host " ✓" -ForegroundColor Green
     }
     
     return $allMetrics
@@ -130,112 +130,102 @@ function Invoke-MetricsCollection {
 function Invoke-MetricsSync {
     param([hashtable]$Metrics)
     
-    Write-Output "[$(Get-Date -Format 'HH:mm:ss')] Syncing metrics to all channels..."
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Syncing metrics to all channels..." -ForegroundColor Cyan
     
     # Sync to GitHub Board
-    Write-Output "  → Syncing to GitHub Project Board..."
-    Sync-MetricsToGitHubBoard -Metrics $Metrics | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Syncing to GitHub Project Board..." -NoNewline
+    $boardResult = Sync-MetricsToGitHubBoard -Metrics $Metrics
+    Write-Host " ✓" -ForegroundColor Green
     
     # Generate GitHub Pages dashboard
-    Write-Output "  → Generating GitHub Pages dashboard..."
-    Sync-MetricsToGitHubPages -Metrics $Metrics -OutputPath (Join-Path $scriptRoot ".." ".github" "pages") | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Generating GitHub Pages dashboard..." -NoNewline
+    $dashboardResult = Sync-MetricsToGitHubPages -Metrics $Metrics -OutputPath (Join-Path $scriptRoot ".." ".github" "pages")
+    Write-Host " ✓" -ForegroundColor Green
     
     # Publish metrics API
-    Write-Output "  → Publishing metrics API..."
-    Publish-MetricsAPI -Metrics $Metrics -OutputPath (Join-Path $scriptRoot ".." ".github" "pages") | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Publishing metrics API..." -NoNewline
+    $apiResult = Publish-MetricsAPI -Metrics $Metrics -OutputPath (Join-Path $scriptRoot ".." ".github" "pages")
+    Write-Host " ✓" -ForegroundColor Green
     
     # Update GitHub Issues
-    Write-Output "  → Updating metrics in GitHub Issues..."
-    Update-MetricsIssues -Metrics $Metrics | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Updating metrics in GitHub Issues..." -NoNewline
+    $issueResult = Update-MetricsIssues -Metrics $Metrics
+    Write-Host " ✓" -ForegroundColor Green
     
     # Export to storage formats
-    Write-Output "  → Exporting to JSON..."
-    Export-MetricsToJSON -Metrics $Metrics -OutputPath (Join-Path $dataPath "metrics.json") | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Exporting to JSON..." -NoNewline
+    $jsonResult = Export-MetricsToJSON -Metrics $Metrics -OutputPath (Join-Path $dataPath "metrics.json")
+    Write-Host " ✓" -ForegroundColor Green
     
-    Write-Output "  → Exporting to CSV..."
-    Export-MetricsToCSV -Metrics $Metrics -OutputPath (Join-Path $dataPath "metrics.csv") | Out-Null
-    Write-Output " ✓"
+    Write-Host "  → Exporting to CSV..." -NoNewline
+    $csvResult = Export-MetricsToCSV -Metrics $Metrics -OutputPath (Join-Path $dataPath "metrics.csv")
+    Write-Host " ✓" -ForegroundColor Green
 }
 
 # Main report function
 function Invoke-MetricsReport {
     param([hashtable]$Metrics)
     
-    Write-Output "[$(Get-Date -Format 'HH:mm:ss')] Generating metrics report..."
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Generating metrics report..." -ForegroundColor Cyan
     $reportResult = Create-MetricsReport -Metrics $Metrics -OutputPath $dataPath
-    Write-Output "  ✓ Report created: $reportResult"
+    Write-Host "  ✓ Report created: $reportResult" -ForegroundColor Green
 }
 
 # Single execution
 function Invoke-SingleRun {
-    param(
-        [string]$Type = $MetricType,
-        [string]$Format = $OutputFormat
-    )
-
     try {
-        Write-Output "Metric type: $Type"
-        Write-Output "Output format: $Format"
-
-        $metrics = Invoke-MetricsCollection -Type $Type
+        $metrics = Invoke-MetricsCollection -Type $MetricType
         Invoke-MetricsSync -Metrics $metrics
         Invoke-MetricsReport -Metrics $metrics
         
-        Write-Output ""
-        Write-Output "✅ Metrics collection complete"
-        Write-Output ""
-        Write-Output "Metrics Summary:"
-        Write-Output "  • Execution:    $($metrics.execution.Count) variables"
-        Write-Output "  • Performance:  $($metrics.performance.Count) variables"
-        Write-Output "  • Quality:      $($metrics.quality.Count) variables"
-        Write-Output "  • Deployment:   $($metrics.deployment.Count) variables"
-        Write-Output "  • Cost:         $($metrics.cost.Count) variables"
-        Write-Output "  • Security:     $($metrics.security.Count) variables"
-        Write-Output "  • Team:         $($metrics.team.Count) variables"
-        Write-Output "  • Business:     $($metrics.business.Count) variables"
-        Write-Output "  • Data Quality: $($metrics.data_quality.Count) variables"
-        Write-Output ""
+        Write-Host ""
+        Write-Host "✅ Metrics collection complete" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Metrics Summary:" -ForegroundColor Cyan
+        Write-Host "  • Execution:    $($metrics.execution.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Performance:  $($metrics.performance.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Quality:      $($metrics.quality.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Deployment:   $($metrics.deployment.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Cost:         $($metrics.cost.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Security:     $($metrics.security.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Team:         $($metrics.team.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Business:     $($metrics.business.Count) variables" -ForegroundColor Gray
+        Write-Host "  • Data Quality: $($metrics.data_quality.Count) variables" -ForegroundColor Gray
+        Write-Host ""
     } catch {
-        Write-Output "❌ Error during metrics collection:"
-        Write-Output $_.Exception.Message
+        Write-Host "❌ Error during metrics collection:" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
         exit 1
     }
 }
 
 # Continuous execution
 function Invoke-ContinuousRun {
-    param([int]$Interval = $IntervalMinutes)
-
-    Write-Output "Starting continuous metrics collection..."
-    Write-Output "Interval: $Interval minutes"
-    Write-Output "Press Ctrl+C to stop"
-    Write-Output ""
+    Write-Host "Starting continuous metrics collection..." -ForegroundColor Yellow
+    Write-Host "Interval: $IntervalMinutes minutes" -ForegroundColor Yellow
+    Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
+    Write-Host ""
     
     $runCount = 0
     while ($true) {
         $runCount++
-        Write-Output ""
-        Write-Output "=== RUN #$runCount ==="
+        Write-Host ""
+        Write-Host "=== RUN #$runCount ===" -ForegroundColor Cyan
         
         try {
             $metrics = Invoke-MetricsCollection -Type $MetricType
             Invoke-MetricsSync -Metrics $metrics
             
-            Write-Output ""
-            Write-Output "✅ Collection complete at $(Get-Date -Format 'HH:mm:ss')"
-            Write-Output "Next collection in $Interval minute(s)..."
+            Write-Host ""
+            Write-Host "✅ Collection complete at $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Green
+            Write-Host "Next collection in $IntervalMinutes minute(s)..." -ForegroundColor Yellow
             
             # Sleep until next interval
-            Start-Sleep -Seconds ($Interval * 60)
+            Start-Sleep -Seconds ($IntervalMinutes * 60)
         } catch {
-            Write-Output ""
-            Write-Output "⚠️  Error in run #$runCount : $($_.Exception.Message)"
-            Write-Output "Retrying in 1 minute..."
+            Write-Host ""
+            Write-Host "⚠️  Error in run #$runCount : $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Retrying in 1 minute..." -ForegroundColor Yellow
             Start-Sleep -Seconds 60
         }
     }
@@ -243,7 +233,7 @@ function Invoke-ContinuousRun {
 
 # Main execution
 if ($Continuous) {
-    Invoke-ContinuousRun -Interval $IntervalMinutes
+    Invoke-ContinuousRun
 } else {
-    Invoke-SingleRun -Type $MetricType -Format $OutputFormat
+    Invoke-SingleRun
 }
