@@ -96,7 +96,8 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     deploy = _find_step(steps, "Deploy Helios Infra (sanitized custody record)")
     deploy_if = str(deploy.get("if", ""))
     deploy_run = str(deploy.get("run", ""))
-    _require("github.event_name == 'push'" in deploy_if and "github.event_name == 'workflow_dispatch'" in deploy_if and "!inputs.what_if" in deploy_if,
+    expected_deploy_if = "steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))"
+    _require(" ".join(deploy_if.split()) == expected_deploy_if,
              "deploy step must explicitly guard non-what-if deploys to workflow_dispatch")
     _require("record-deploy-" in deploy_run,
              "deploy step must write a dedicated custody record")
@@ -108,8 +109,9 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     seal = _find_step(steps, "Seal custody manifest")
     seal_if = str(seal.get("if", ""))
     seal_run = str(seal.get("run", ""))
+    expected_seal_if = "always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'"
     _require(
-        "always()" in seal_if and "steps.custody.conclusion" in seal_if,
+        " ".join(seal_if.split()) == expected_seal_if,
         "manifest sealing must run after custody setup, including preflight failures",
     )
     _require("sha256sum" in seal_run and "manifest.json" in seal_run,

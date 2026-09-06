@@ -52,6 +52,13 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "resource-group creation",
         )
 
+    def test_fails_when_resource_group_creation_allows_dispatch(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && github.event_name == 'push'",
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')",
+            "resource-group creation",
+        )
+
     def test_fails_when_artifact_upload_is_removed(self) -> None:
         self._validate_mutation(
             "        uses: actions/upload-artifact@v4",
@@ -75,6 +82,30 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)",
             "explicitly guard non-what-if deploys to workflow_dispatch",
         )
+
+    def test_fails_when_deploy_guard_is_bypassed(self) -> None:
+        guard = "steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))"
+        for mutated in ("true || " + guard, guard.replace("&& !inputs.what_if", "|| !inputs.what_if")):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "explicitly guard non-what-if deploys to workflow_dispatch",
+                )
+
+    def test_fails_when_sealing_guard_loses_preflight_evidence(self) -> None:
+        guard = "always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'"
+        for mutated in (
+            guard + " && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')",
+            guard.replace("== 'success'", "!= 'success'"),
+            guard.replace("always()", "success()"),
+        ):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "manifest sealing must run after custody setup",
+                )
 
     def test_fails_when_raw_output_is_tee_d_to_record(self) -> None:
         self._validate_mutation(

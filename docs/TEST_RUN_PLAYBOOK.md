@@ -223,11 +223,11 @@ on (advisory, never an error).
 
 ## 8. Absorption benchmark (keyless; needs Git + network to github.com)
 
-Benchmark one watchlist PR (see `helios-ai absorb-status` for current candidates — #222
+Benchmark one watchlist PR (see `helios-ai absorb-status` for current candidates — #294
 is one as of this writing):
 
 ```bash
-pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
+pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 294
 ```
 
 > **Trust boundary (enforced)**: the gate *executes the merged tree* — the candidate
@@ -241,7 +241,7 @@ pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
 > artifact:
 >
 > ```bash
-> gh workflow run absorption-benchmark.yml -f pr_number=222
+> gh workflow run absorption-benchmark.yml -f pr_number=294
 > ```
 
 **Expected**: the script fetches the upstream PR head (`M0nado/helios-platform` —
