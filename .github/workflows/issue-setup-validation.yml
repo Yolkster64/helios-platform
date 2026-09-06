@@ -1,0 +1,39 @@
+name: Issue setup dry-run validation
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/github/apply-labels.ps1'
+      - 'scripts/github/apply-milestones.ps1'
+      - 'config/github/labels.json'
+      - 'config/github/milestones.json'
+      - 'scripts/validation/test-issue-setup.ps1'
+      - '.github/workflows/issue-setup-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/github/apply-labels.ps1'
+      - 'scripts/github/apply-milestones.ps1'
+      - 'config/github/labels.json'
+      - 'config/github/milestones.json'
+      - 'scripts/validation/test-issue-setup.ps1'
+      - '.github/workflows/issue-setup-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate issue setup offline
+        shell: pwsh
+        run: ./scripts/validation/test-issue-setup.ps1

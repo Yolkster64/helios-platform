@@ -159,6 +159,39 @@ Exit 0 when every component is ready, 2 otherwise. Auth is never mutated in eith
 mode — device-code logins stay behind the `connect-*` scripts, run by a human when the
 inventory says so.
 
+### Optional issue setup readiness (labels and milestones only)
+
+```powershell
+pwsh scripts/setup/setup-all.ps1 -IncludeIssueSetup -Repository Yolkster64/helios-platform -Json
+pwsh scripts/bootstrap/setup-everything.ps1 -IncludeIssueSetup -Repository Yolkster64/helios-platform -Json
+```
+
+The explicit, validated `owner/repo` is required; no target is inferred. Without
+`-IncludeIssueSetup` the existing default behavior is unchanged. This adds two
+gating inventory rows by calling `scripts/github/apply-labels.ps1` and
+`scripts/github/apply-milestones.ps1` with `-Repository ... -Json`, **dry-run only**.
+Neither `-Fix` nor `-Apply` reaches those scripts (existing CLI installation/auth
+repair switches retain their separate behavior).
+
+`gh` automatically reuses its inherited credentials (`GH_TOKEN`/`GITHUB_TOKEN` or
+its existing credential store). This integration does not read/export token values,
+create tokens, grant permissions, or bypass access controls. Successful reads and
+in-sync readiness **do not verify Issues or Projects write scope**; only effective
+required access is relevant, not unrestricted “full access.”
+
+Unknown live state is not ready even if a child exits 0. Missing/malformed reports,
+pending creates/updates, closed milestones, invalid/failed rows, and unknown row
+states also need attention. Output contains bounded summaries, not raw child
+responses or replay commands. `nextCommand` and the consolidated owner checklist
+only suggest another dry run. Inventory exits 2 for attention; `setup-everything`
+retains its report-first exit 0 for a degraded inventory, with `ready: false` and
+owner actions.
+
+Review the direct dry-run reports first. Any subsequent apply is a **separate,
+manual, explicitly approved** invocation of the existing producer with `-Apply`
+and the same `-Repository`; it is never performed by this opt-in. Creating issues,
+configuring Projects, and granting GitHub/Azure access are deliberately not wired.
+
 ## Cloud-only profile
 
 `config/aihub.cloud.json` is the hub with every local dependency removed: hosted LLM

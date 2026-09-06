@@ -36,6 +36,13 @@ same convention as verify-readiness.ps1 -Json).
 Install what can be installed non-interactively (currently: the AI CLIs via npm).
 Verify-only otherwise, and still never auth-mutating.
 
+.PARAMETER IncludeIssueSetup
+Opt in to label and milestone readiness using existing dry-run JSON reports.
+Never forwards -Fix or -Apply to issue setup. Readiness does not prove write access.
+
+.PARAMETER Repository
+Explicit owner/repo target, required with -IncludeIssueSetup. No inferred default.
+
 .EXAMPLE
 pwsh scripts/setup/setup-all.ps1
 
@@ -49,11 +56,19 @@ pwsh scripts/setup/setup-all.ps1 -Json | ConvertFrom-Json
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$Fix
+    [switch]$Fix,
+    [switch]$IncludeIssueSetup,
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($IncludeIssueSetup -and -not $Repository) {
+    [Console]::Error.WriteLine('setup-all: -IncludeIssueSetup requires explicit -Repository owner/repo.')
+    exit 2
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $toolResolver = Join-Path $repoRoot 'scripts' 'build' 'tool-resolver.ps1'
@@ -103,6 +118,76 @@ function New-Component {
         Detail        = $Detail
         Fix           = if ($Ready) { '' } else { $FixCommand }
         Informational = $false
+    }
+}
+
+# Consume only the dry-run contract, not raw notes, commands, names or errors.
+# The producers may exit 0 while live state is unknown: exit alone is not readiness.
+function Invoke-IssueSetup {
+    foreach ($kind in 'labels', 'milestones') {
+        $relativePath = "scripts/github/apply-$kind.ps1"
+        $path = Join-Path $repoRoot $relativePath
+        $ready = $false
+        $detail = 'dry-run unavailable or malformed'
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            try {
+                $step = Invoke-Step -Executable $pwshExe -Arguments @(
+                    '-NoProfile', '-File', $path, '-Repository', $Repository, '-Json'
+                )
+                $text = $step.Output -join "`n"
+                if ($text.Length -gt 1048576) { throw 'report exceeds limit' }
+                $report = ConvertFrom-Json -InputObject $text -NoEnumerate
+                if ($report -isnot [pscustomobject] -or
+                    $report.script -isnot [string] -or $report.script -cne "apply-$kind" -or
+                    $report.repository -isnot [string] -or $report.repository -ine $Repository -or
+                    $report.mode -isnot [string] -or $report.mode -cne 'dry-run' -or
+                    ($report.exitCode -isnot [long] -and $report.exitCode -isnot [int]) -or
+                    $report.exitCode -ne $step.ExitCode -or $step.ExitCode -ne 0 -or
+                    $report.precondition -isnot [pscustomobject] -or
+                    $report.items -isnot [array] -or
+                    $report.items.Count -eq 0 -or $report.items.Count -gt 2000) {
+                    throw 'invalid dry-run contract'
+                }
+                $known = $true
+                foreach ($field in 'ghFound', 'wireReadable', 'existenceKnown') {
+                    if ($report.precondition.$field -isnot [bool]) { throw 'invalid precondition' }
+                    $known = $known -and $report.precondition.$field
+                }
+                $states = @{ 'in-sync' = 0; create = 0; update = 0; invalid = 0; failed = 0 }
+                if ($kind -eq 'milestones') { $states.closed = 0 }
+                $identityField = if ($kind -eq 'labels') { 'name' } else { 'title' }
+                foreach ($item in $report.items) {
+                    if ($item -isnot [pscustomobject] -or
+                        $item.$identityField -isnot [string] -or
+                        [string]::IsNullOrWhiteSpace($item.$identityField) -or
+                        $item.state -isnot [string] -or
+                        $item.state -cnotin @($states.Keys) -or
+                        $item.command -isnot [string] -or $item.detail -isnot [string] -or
+                        ($item.state -ceq 'in-sync' -and $item.command -cne '')) {
+                        throw 'invalid row'
+                    }
+                    $states[$item.state]++
+                }
+                if ($report.counts -isnot [pscustomobject]) { throw 'invalid counts' }
+                foreach ($state in $states.Keys) {
+                    $field = if ($state -eq 'in-sync') { 'inSync' } else { $state }
+                    if (($report.counts.$field -isnot [long] -and $report.counts.$field -isnot [int]) -or
+                        $report.counts.$field -ne $states[$state]) { throw 'inconsistent counts' }
+                }
+                $pending = $report.items.Count - $states['in-sync']
+                $ready = $known -and $pending -eq 0
+                $detail = if (-not $known) { 'dry-run live state unknown; not ready' }
+                else { "dry-run: in-sync=$($states['in-sync']); needs-owner=$pending" }
+            }
+            catch {
+                # Child JSON can contain credentials or mutation commands: never echo it,
+                # even via verbose output or an exception containing a parse excerpt.
+                $detail = 'dry-run unavailable or malformed'
+            }
+        }
+        $detail += '; issue/project write access not verified'
+        New-Component -Name "issue-$kind" -Ready $ready -Detail $detail `
+            -FixCommand "pwsh $relativePath -Repository $Repository -Json"
     }
 }
 
@@ -551,6 +636,13 @@ else {
 }
 $components += New-InformationalComponent -Name 'mcp-health' -Status $mcpHealthStatus -Detail $mcpHealthDetail
 Write-ChildOutput @($mcpHealthDetail)
+
+# --- g. Issue setup (explicit opt-in, dry-run only even with -Fix) ------------------
+if ($IncludeIssueSetup) {
+    Write-Section ''
+    Write-Section '-- g. Issue setup (labels and milestones; dry-run only) --'
+    $components += @(Invoke-IssueSetup)
+}
 
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })

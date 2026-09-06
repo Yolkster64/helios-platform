@@ -47,6 +47,13 @@ Pass -Apply through to auth-doctor.ps1: automatic NON-INTERACTIVE repair only
 .PARAMETER Json
 Emit the single rollup object (nothing else on stdout — chained-script convention).
 
+.PARAMETER IncludeIssueSetup
+Forward opt-in label/milestone dry-run readiness to setup-all.ps1 only.
+Neither -Apply nor -Fix is forwarded to the issue setup scripts.
+
+.PARAMETER Repository
+Explicit owner/repo target, required with -IncludeIssueSetup.
+
 .EXAMPLE
 pwsh scripts/bootstrap/setup-everything.ps1
 
@@ -61,11 +68,20 @@ pwsh scripts/bootstrap/setup-everything.ps1 -Json | ConvertFrom-Json
 param(
     [switch]$Apply,
 
-    [switch]$Json
+    [switch]$Json,
+
+    [switch]$IncludeIssueSetup,
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($IncludeIssueSetup -and -not $Repository) {
+    [Console]::Error.WriteLine('setup-everything: -IncludeIssueSetup requires explicit -Repository owner/repo.')
+    exit 2
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $modeLabel = if ($Apply) { 'apply' } else { 'report-only' }
@@ -163,7 +179,8 @@ try {
         @{ Step = 'toolchain'; Script = 'scripts/build/verify-readiness.ps1'; Arguments = @('-Json') }
         @{ Step = 'identity'; Script = 'scripts/bootstrap/connect-account.ps1'; Arguments = @('-Json') }
         @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) }
-        @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') }
+        @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') +
+            @(if ($IncludeIssueSetup) { '-IncludeIssueSetup'; '-Repository'; $Repository }) }
         @{ Step = 'stack-smoke'; Script = 'scripts/verify/stack-smoke.ps1'; Arguments = @('-Json'); Soft = $true }
         @{ Step = 'rest-connect'; Script = 'scripts/verify/rest-connect.ps1'; Arguments = @('-Json'); Soft = $true }
     )
