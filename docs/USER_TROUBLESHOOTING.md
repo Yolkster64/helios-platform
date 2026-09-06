@@ -64,6 +64,7 @@ Get-EmergencyContact | Send-Alert -Severity Critical
 ### Issue: Installation Hangs During Database Setup
 
 **Symptoms**:
+
 ```
 Install Progress: 60% (Database initialization)
 - Creating tables...
@@ -123,6 +124,7 @@ Option 4: Full Reset (nuclear option)
 ### Issue: "Configuration validation failed"
 
 **Error Message**:
+
 ```
 Error: Deployment configuration validation failed
 ├─ Issue: ApplicationName is missing
@@ -168,6 +170,7 @@ $ Deploy-HELIOSApplication -ConfigFile deployment-config.json
 ### Issue: "Insufficient resources" Error
 
 **Symptom**:
+
 ```
 Error: Cannot create 5 replicas
 ├─ Reason: Insufficient memory available
@@ -210,6 +213,7 @@ Option 4: Manual Allocation (Advanced)
 ### Issue: Deployment Timeout
 
 **Symptom**:
+
 ```
 Deployment: Application deployment timeout
 ├─ Time limit: 30 minutes
@@ -281,6 +285,7 @@ Step 4: Retry
 ### Issue: "Response Times Are Degraded"
 
 **Symptom**:
+
 ```
 Application Performance:
 ├─ Normal Response: 120 ms (P95)
@@ -364,6 +369,7 @@ Recommended: Option 2 or 3
 ### Issue: "Memory Leak - Memory Usage Growing"
 
 **Symptom**:
+
 ```
 Memory Over Time (24 hours):
 
@@ -485,6 +491,7 @@ Verification After Fix:
 ### Issue: "Database Connection Timeout"
 
 **Symptom**:
+
 ```
 Error: Timeout expired while waiting for connection
 ├─ Timeout: 30 seconds
@@ -549,6 +556,7 @@ $ Restart-HELIOSService -Name payment-api
 ### Issue: "Database Corruption Detected"
 
 **Symptom**:
+
 ```
 Database check found errors:
 ├─ Error: Inconsistent index structure
@@ -620,6 +628,7 @@ Customer Impact: 30-minute service interruption
 ### Issue: "Cannot Reach Application Endpoint"
 
 **Symptom**:
+
 ```
 curl: (7) Failed to connect to payment-api.company.local port 443: Connection refused
 ```
@@ -708,6 +717,7 @@ $ curl https://payment-api.company.local/health
 ### Issue: "Firewall Blocking Traffic"
 
 **Symptom**:
+
 ```
 Application deployed but unreachable from outside network
 ├─ Internal access: Works (can reach from same subnet)
@@ -771,6 +781,7 @@ $ curl https://payment-api.company.local/health
 ### Issue: "AI Service Timeout"
 
 **Symptom**:
+
 ```
 Error: AI service call timeout
 ├─ Service: OpenAI
@@ -838,6 +849,7 @@ Verdict: Rate limit approaching, slow latency
 ### Issue: "Access Denied - Authentication Failed"
 
 **Symptom**:
+
 ```
 Error: 401 Unauthorized
 ├─ Request: GET /api/payments
@@ -889,6 +901,7 @@ Result: ✓ 200 OK
 ### Issue: "Insufficient Permissions"
 
 **Symptom**:
+
 ```
 Error: 403 Forbidden
 ├─ Request: DELETE /api/applications/payment-api

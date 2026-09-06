@@ -41,12 +41,14 @@ This directory contains comprehensive documentation of where every HELIOS compon
 ### User-Specific Paths
 
 When you see `[USERNAME]`, replace with actual username:
+
 - `C:\Users\[USERNAME]\AppData\Local\` → `C:\Users\Administrator\AppData\Local\`
 - `C:\Users\[USERNAME]\AppData\Roaming\` → `C:\Users\Administrator\AppData\Roaming\`
 
 ### Registry Paths
 
 Registry paths follow hive notation:
+
 - `HKLM:\` → HKEY_LOCAL_MACHINE (machine-wide)
 - `HKCU:\` → HKEY_CURRENT_USER (current user only)
 - `HKLM:\Software\...` → 64-bit on 64-bit Windows, 32-bit on 32-bit Windows
@@ -72,21 +74,25 @@ Registry paths follow hive notation:
 ## Phase Overview
 
 ### Phase 0: Foundation
+
 - Creates installation media and baseline configurations
 - Files: USB scripts, partition configs, system baselines
 - Location: Primarily `C:\ProgramData\HELIOS\Foundation\`
 
 ### Phase 1: Security
+
 - Deploys security policies (AppLocker, firewall, vault)
 - Files: Policy definitions, security rules, quarantine storage
 - Location: Registry HKLM + `C:\ProgramData\HELIOS\Security\`
 
 ### Phase 2: Optimization
+
 - Configures services, startup items, cleanup routines
 - Files: Service definitions, optimization logs, cleanup configs
 - Location: Registry HKLM:\SYSTEM + `C:\ProgramData\HELIOS\Optimization\`
 
 ### Phase 3: Capability
+
 - Deploys AI dashboard, workflows, analysis profiles
 - Files: Application binaries, AI models, databases
 - Location: `C:\Program Files\HELIOS\` + `C:\ProgramData\HELIOS\Capability\`
@@ -94,16 +100,19 @@ Registry paths follow hive notation:
 ## Usage Tips
 
 ### For Deployment Engineers
+
 1. Use **PHASE_X_FILE_LOCATIONS.md** to verify all files are in place
 2. Check **REGISTRY_CHANGES.md** to ensure registry is correctly configured
 3. Use **DIRECTORY_TREE.md** to validate complete installation
 
 ### For System Administrators
+
 1. Consult **QUICK_LOOKUP_TABLE.md** for quick lookups
 2. Use **FILE_BORROWING_GUIDE.md** to customize phase dependencies
 3. Check **WINDOWS_SYSTEM_PATHS.md** for storage planning
 
 ### For Developers
+
 1. Reference **DIRECTORY_TREE.md** for component locations
 2. Use **REGISTRY_CHANGES.md** to understand configuration storage
 3. Check **FILE_BORROWING_GUIDE.md** for cross-phase dependencies
@@ -113,6 +122,7 @@ Registry paths follow hive notation:
 ### Permission Requirements
 
 Most files are created with:
+
 - **System32, SysWOW64, Registry HKLM**: Admin/SYSTEM privileges
 - **Program Files**: Admin privileges
 - **AppData Local/Roaming**: User privileges
@@ -121,6 +131,7 @@ Most files are created with:
 ### Backup Recommendations
 
 Before Phase deployment, backup:
+
 1. Registry: Export `HKLM:\Software\Policies\Microsoft\Windows\`
 2. Files: Backup `C:\ProgramData\` and `C:\Program Files\HELIOS\`
 3. System: Create system restore point (optional but recommended)
@@ -128,6 +139,7 @@ Before Phase deployment, backup:
 ### Antivirus Considerations
 
 Add to exclusions:
+
 - `C:\ProgramData\HELIOS\` - All HELIOS data
 - `C:\Program Files\HELIOS\` - Application files
 - `C:\Users\[USERNAME]\Vault\` - Vault database

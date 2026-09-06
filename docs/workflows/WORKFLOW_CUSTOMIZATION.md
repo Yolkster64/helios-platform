@@ -216,6 +216,7 @@ jobs:
 ### Creating Custom Actions
 
 **Structure**:
+
 ```
 .github/
 └── actions/
@@ -227,6 +228,7 @@ jobs:
 ```
 
 **action.yml**:
+
 ```yaml
 name: 'My Custom Action'
 description: 'Description of what the action does'
@@ -251,6 +253,7 @@ runs:
 ```
 
 **index.js**:
+
 ```javascript
 const core = require('@actions/core');
 const exec = require('@actions/exec');
@@ -634,6 +637,7 @@ jobs:
 ### Documentation
 
 Always document:
+
 - Purpose of workflow
 - Trigger conditions
 - Expected duration
@@ -655,6 +659,7 @@ git log -p -- .github/workflows/build.yml
 ## Best Practices for Customization
 
 ✅ **Do**:
+
 - Test in branch before merging
 - Document changes clearly
 - Update related documentation
@@ -662,6 +667,7 @@ git log -p -- .github/workflows/build.yml
 - Version workflows appropriately
 
 ❌ **Don't**:
+
 - Modify workflows in production without testing
 - Make breaking changes to shared workflows
 - Remove security checks

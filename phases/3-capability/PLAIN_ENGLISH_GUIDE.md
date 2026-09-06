@@ -7,17 +7,21 @@ This guide explains what Phase 3 does **without the jargon**. Each section cover
 ## 1. Dashboard Installation & Monitoring
 
 ### What It Does
+
 Installs a beautiful, responsive monitoring dashboard on your computer that shows your entire HELIOS system at a glance. Think of it like a control center where you can see:
+
 - What's running and what's broken
 - Traffic patterns and performance
 - AI predictions and alerts
 - Historical trends and comparisons
 
 ### Why You Need It
+
 **Before Phase 3:** You had text-based alerts and had to manually check logs.  
 **After Phase 3:** Real-time visual dashboard with AI insights, trends, and predictions.
 
 ### Real-World Example
+
 ```
 Tuesday 2:47 PM: Dashboard shows
 ├─ System Health: 99.7% ✅
@@ -28,7 +32,9 @@ Tuesday 2:47 PM: Dashboard shows
 ```
 
 ### How To Run
+
 **Installation:**
+
 ```powershell
 cd C:\helios\scripts
 .\install-dashboard.ps1
@@ -40,6 +46,7 @@ cd C:\helios\scripts
 ```
 
 **Starting the Dashboard:**
+
 ```powershell
 # Manually start (if stopped)
 Start-Service -Name "HELIOS-Dashboard"
@@ -49,6 +56,7 @@ Get-Service -Name "HELIOS-Dashboard" | Select-Object Status
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\Dashboard\` directory
 - Adds Windows service "HELIOS-Dashboard" (auto-starts on reboot)
 - Opens port 9000 on localhost
@@ -56,6 +64,7 @@ Get-Service -Name "HELIOS-Dashboard" | Select-Object Status
 - Sets up real-time data streaming from monitoring agents
 
 ### How To Undo
+
 ```powershell
 # Uninstall dashboard
 .\uninstall-dashboard.ps1
@@ -67,6 +76,7 @@ Remove-Item 'C:\Program Files\HELIOS\Dashboard\' -Recurse -Force
 ```
 
 ### Dashboard Features Preview
+
 | Feature | What It Shows | Why It Matters |
 |---------|--------------|----------------|
 | **Real-Time Metrics** | CPU, RAM, Disk, Network right now | Know system health instantly |
@@ -80,7 +90,9 @@ Remove-Item 'C:\Program Files\HELIOS\Dashboard\' -Recurse -Force
 ## 2. AI Learning Engine
 
 ### What It Does
+
 Creates an "intelligence" inside HELIOS that:
+
 - Watches how your system behaves
 - Learns normal patterns (traffic, resource usage, errors)
 - Detects when something is abnormal
@@ -89,11 +101,14 @@ Creates an "intelligence" inside HELIOS that:
 Think of it like hiring a very smart analyst who studies your system 24/7 and can predict what will go wrong next week.
 
 ### Why You Need It
+
 **Problem It Solves:**
+
 - Instead of: "System crashed at 3 PM, now we have to fix it"
 - You get: "We noticed a pattern—system loads reach 95% at 3 PM every Thursday. We'll pre-scale 30 minutes early."
 
 ### Real-World Example
+
 ```
 Week 1: AI Engine Starts Learning
 ├─ Observes: Monday traffic = 1000 req/sec at 10 AM
@@ -115,7 +130,9 @@ Week 4: AI Discovers Deeper Pattern
 ```
 
 ### How To Run
+
 **Initialize AI Learning:**
+
 ```powershell
 # First-time setup (learns from existing Phase 2 data)
 cd C:\helios\scripts
@@ -127,6 +144,7 @@ cd C:\helios\scripts
 ```
 
 **Monitor AI Progress:**
+
 ```powershell
 # Check learning status
 Get-HeliosAIStatus
@@ -139,6 +157,7 @@ Get-HeliosAIConfidence | Format-Table
 ```
 
 **Real AI Output Example:**
+
 ```
 Metric: Database CPU Usage
 ├─ Current: 45%
@@ -156,6 +175,7 @@ Metric: API Response Time
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\AI\` directory
 - Starts AI Engine Windows service
 - Creates PostgreSQL tables for models and predictions
@@ -163,6 +183,7 @@ Metric: API Response Time
 - Sets up background machine learning jobs
 
 ### Learning Timeline
+
 ```
 Day 1: AI Baseline Created (78% accuracy)
 Day 2: Pattern Recognition Begins (82% accuracy)
@@ -174,6 +195,7 @@ Day 30: Expert-Level Analysis (97% accuracy)
 ```
 
 ### How To Undo / Reset Learning
+
 ```powershell
 # Stop learning (but keep dashboard)
 Stop-Service -Name "HELIOS-AI-Learning"
@@ -190,14 +212,18 @@ Reset-HeliosAIModels
 ## 3. Auto-Healing System
 
 ### What It Does
+
 Automatically detects problems and fixes them without human help. It's like having an on-call engineer who:
+
 - Notices the problem instantly
 - Applies the fix immediately
 - Logs what happened
 - Alerts you for follow-up
 
 ### Why You Need It
+
 **Classic Problem:**
+
 ```
 3:15 AM: Server crashes
 3:16 AM: Alert sent to on-call engineer
@@ -210,6 +236,7 @@ Result: 45 minutes of downtime, angry customers
 ```
 
 **With Phase 3:**
+
 ```
 3:15 AM: Server crashes
 3:15:02 AM: AI detects crash
@@ -222,6 +249,7 @@ Result: 10 seconds of downtime, customers don't notice
 ### Real-World Healing Examples
 
 **Example 1: Connection Pool Exhaustion**
+
 ```
 Problem: Database connection pool full
 ├─ Manual Fix: Page DBA, wait 30 min, increase pool size
@@ -232,6 +260,7 @@ Ticket Created: "Auto-healed: Connection pool expanded from 100 to 120"
 ```
 
 **Example 2: Disk Space**
+
 ```
 Problem: Disk 92% full (approaching danger zone)
 ├─ Manual Fix: Delete old logs manually, might break something
@@ -242,6 +271,7 @@ Ticket Created: "Auto-healed: Freed 15 GB via log archival and cache cleanup"
 ```
 
 **Example 3: Memory Leak**
+
 ```
 Problem: Memory usage climbing 2% per hour
 ├─ Manual Fix: Restart service (causes 5 min downtime)
@@ -252,7 +282,9 @@ Ticket Created: "Auto-healed: Memory leak mitigated via garbage collection"
 ```
 
 ### How To Run
+
 **Enable Auto-Healing:**
+
 ```powershell
 # Deploy auto-healing services
 cd C:\helios\scripts
@@ -263,6 +295,7 @@ cd C:\helios\scripts
 ```
 
 **Configure What Gets Auto-Healed:**
+
 ```powershell
 # See what's enabled
 Get-HeliosAutoHealRules
@@ -276,6 +309,7 @@ Get-HeliosAutoHealRules
 ```
 
 **Monitor Auto-Healing:**
+
 ```powershell
 # See today's auto-healing actions
 Get-HeliosAutoHealHistory -Last 24h
@@ -288,6 +322,7 @@ Get-HeliosAutoHealHistory -Last 24h
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\AutoHealing\` directory
 - Starts "HELIOS-AutoHealing" Windows service
 - Creates healing rules database
@@ -295,6 +330,7 @@ Get-HeliosAutoHealHistory -Last 24h
 - Adds detailed audit logging
 
 ### How To Undo
+
 ```powershell
 # Disable auto-healing (keeps dashboard running)
 Stop-Service -Name "HELIOS-AutoHealing"
@@ -308,7 +344,9 @@ Stop-Service -Name "HELIOS-AutoHealing"
 ## 4. Profile Management
 
 ### What It Does
+
 Creates custom "profiles" that change how HELIOS behaves for different scenarios. It's like having multiple configurations ready to go:
+
 - **High-Traffic Profile:** For Black Friday / major events
 - **Low-Cost Profile:** For off-hours / low demand
 - **Latency-Critical Profile:** For real-time trading / gaming
@@ -318,11 +356,13 @@ Creates custom "profiles" that change how HELIOS behaves for different scenarios
 Each profile automatically adjusts memory, CPU limits, caching, AI behavior, and more.
 
 ### Why You Need It
+
 Instead of manually tweaking settings every time your usage pattern changes, profiles do it automatically.
 
 ### Real-World Profile Examples
 
 **Profile 1: High-Traffic (Black Friday)**
+
 ```
 Activated at: 6 AM Thanksgiving Day
 ├─ Cache Settings: Aggressive (store more in RAM)
@@ -336,6 +376,7 @@ Rationale: You know you'll have 100x traffic, so be ready
 ```
 
 **Profile 2: Low-Cost (Nights & Weekends)**
+
 ```
 Activated at: 6 PM Friday
 ├─ Cache Settings: Minimal (save RAM, use disk)
@@ -349,6 +390,7 @@ Rationale: Traffic is low, be cheap. Pay $10 instead of $150 for weekend
 ```
 
 **Profile 3: Latency-Critical (Real-Time Trading)**
+
 ```
 When activated manually: telemetry\activate-profile latency-critical
 ├─ Cache Settings: Extreme (RAM only, no disk)
@@ -363,7 +405,9 @@ Rationale: Trading 1 second late = lose $1000. Spend $50 to avoid that
 ```
 
 ### How To Run
+
 **List Available Profiles:**
+
 ```powershell
 Get-HeliosProfiles
 
@@ -378,6 +422,7 @@ Get-HeliosProfiles
 ```
 
 **Activate a Profile:**
+
 ```powershell
 # Activate for next 4 hours
 Set-HeliosProfile -Name "HighTraffic" -Duration 4h
@@ -390,6 +435,7 @@ Set-HeliosProfile -Name "Normal"
 ```
 
 **Create Your Own Profile:**
+
 ```powershell
 # Create custom profile
 New-HeliosProfile -Name "MyApp-Startup" `
@@ -404,6 +450,7 @@ Set-HeliosProfile -Name "MyApp-Startup"
 ```
 
 **Schedule Profile Changes:**
+
 ```powershell
 # Auto-switch profiles by schedule
 New-HeliosProfileSchedule -Name "BusinessHours" `
@@ -418,6 +465,7 @@ New-HeliosProfileSchedule -Name "BusinessHours" `
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\Profiles\` directory
 - Stores profile definitions in PostgreSQL
 - Adds "HELIOS-ProfileManager" Windows service
@@ -425,6 +473,7 @@ New-HeliosProfileSchedule -Name "BusinessHours" `
 - Enables system reconfiguration automation
 
 ### How To Undo
+
 ```powershell
 # Switch back to default profile
 Set-HeliosProfile -Name "Normal" -Permanent
@@ -438,7 +487,9 @@ Remove-HeliosProfile -Name "MyCustomProfile"
 ## 5. Automation Workflows
 
 ### What It Does
+
 Pre-programmed sequences of actions that HELIOS can run automatically. Think of it like recipes:
+
 - **Recipe:** "If disk is >85% full, archive old logs, then compress, then alert me"
 - **Recipe:** "Every Sunday at 2 AM, run backup, verify backup, report status"
 - **Recipe:** "If response times double, enable caching, add database replicas, notify team"
@@ -446,11 +497,13 @@ Pre-programmed sequences of actions that HELIOS can run automatically. Think of 
 HELIOS has 250+ pre-built workflows. You can also create your own.
 
 ### Why You Need It
+
 Instead of manually running complex multi-step procedures, workflows execute them instantly and perfectly every time.
 
 ### Real-World Workflow Examples
 
 **Workflow 1: Daily Backup & Verify (Automatic)**
+
 ```
 Trigger: Every day at 2:00 AM
 ├─ Step 1: Create database backup (5 min)
@@ -464,6 +517,7 @@ Time saved: 30 minutes per day = 180 hours per year
 ```
 
 **Workflow 2: High-Traffic Auto-Response (Automatic)**
+
 ```
 Trigger: When traffic exceeds 5000 req/sec for 2 minutes
 ├─ Step 1: Enable aggressive caching (+5 min response time)
@@ -477,6 +531,7 @@ Downtime avoided: 0 minutes (AI is ready before traffic spikes)
 ```
 
 **Workflow 3: Monthly Maintenance Window (Automatic)**
+
 ```
 Trigger: First Sunday of month at 1:00 AM
 ├─ Step 1: Drain active connections (5 min)
@@ -493,7 +548,9 @@ Time saved: 2 hours of manual overnight work
 ```
 
 ### How To Run
+
 **See Available Workflows:**
+
 ```powershell
 Get-HeliosWorkflows | Format-Table
 
@@ -506,6 +563,7 @@ Get-HeliosWorkflows | Format-Table
 ```
 
 **Enable a Workflow:**
+
 ```powershell
 # Enable daily backup (runs every day at 2 AM)
 Enable-HeliosWorkflow -Name "DailyBackup"
@@ -515,6 +573,7 @@ Get-HeliosWorkflow -Name "DailyBackup" | Select-Object Status
 ```
 
 **Run a Workflow Manually:**
+
 ```powershell
 # Test run a workflow (doesn't wait, just starts it)
 Invoke-HeliosWorkflow -Name "DailyBackup"
@@ -528,6 +587,7 @@ Get-HeliosWorkflowRun -Name "DailyBackup" -Last 1 | Format-Table
 ```
 
 **Create Custom Workflow:**
+
 ```powershell
 # Create new workflow
 $workflow = New-HeliosWorkflow -Name "MyCustomWorkflow" `
@@ -544,6 +604,7 @@ Enable-HeliosWorkflow -Name "MyCustomWorkflow"
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\Workflows\` directory
 - Adds 250+ pre-built workflow definitions to database
 - Starts "HELIOS-WorkflowEngine" Windows service
@@ -551,6 +612,7 @@ Enable-HeliosWorkflow -Name "MyCustomWorkflow"
 - Sets up workflow execution logging
 
 ### How To Undo
+
 ```powershell
 # Disable a workflow
 Disable-HeliosWorkflow -Name "DailyBackup"
@@ -564,18 +626,22 @@ Remove-HeliosWorkflow -Name "MyCustomWorkflow"
 ## 6. Performance AI (Predictive Optimization)
 
 ### What It Does
+
 Uses machine learning to predict performance problems and optimize your system automatically:
+
 - Predicts what will slow down in the next hour/day/week
 - Automatically tunes settings to prevent slowdowns
 - Finds the best cache settings, connection pools, timeouts, etc.
 - Learns what actually works for your specific usage patterns
 
 ### Why You Need It
+
 System tuning is an art. The best settings for your Black Friday traffic are terrible for normal Tuesday operations. Performance AI learns your patterns and adjusts automatically.
 
 ### Real-World Performance AI Examples
 
 **Example 1: Predictive Scaling**
+
 ```
 Tuesday 9:30 AM: AI analyzes historical data
 ├─ Finding: "Every Tuesday at 10 AM, traffic increases 30%"
@@ -589,6 +655,7 @@ Without AI:
 ```
 
 **Example 2: Cache Optimization**
+
 ```
 Current: Cache stores 1000 most-used items
 AI Analysis Over 7 Days:
@@ -600,6 +667,7 @@ AI Analysis Over 7 Days:
 ```
 
 **Example 3: Database Tuning**
+
 ```
 Current: Database queries averaging 2 seconds
 AI Analysis:
@@ -611,7 +679,9 @@ AI Analysis:
 ```
 
 ### How To Run
+
 **Activate Performance AI:**
+
 ```powershell
 cd C:\helios\scripts
 .\enable-performance-ai.ps1
@@ -621,6 +691,7 @@ cd C:\helios\scripts
 ```
 
 **View AI Performance Recommendations:**
+
 ```powershell
 # See what AI recommends
 Get-HeliosPerformanceOptimizations -Next 24h
@@ -634,6 +705,7 @@ Get-HeliosPerformanceOptimizations -Next 24h
 ```
 
 **Apply AI Recommendations:**
+
 ```powershell
 # Apply recommended optimizations
 Apply-HeliosOptimizations -AutoApprove
@@ -643,6 +715,7 @@ Get-HeliosOptimizations | Where-Object {$_.Confidence -gt 90} | Apply-HeliosOpti
 ```
 
 **Monitor Optimization Results:**
+
 ```powershell
 # See before/after metrics
 Get-HeliosOptimizationResults -Last 7d
@@ -656,6 +729,7 @@ Get-HeliosOptimizationResults -Last 7d
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\PerformanceAI\` directory
 - Starts "HELIOS-PerformanceOptimizer" Windows service
 - Creates analysis tables in PostgreSQL
@@ -663,6 +737,7 @@ Get-HeliosOptimizationResults -Last 7d
 - Sets up automated tuning recommendations
 
 ### How To Undo
+
 ```powershell
 # Disable optimization (AI still provides recommendations)
 Stop-Service -Name "HELIOS-PerformanceOptimizer"
@@ -676,9 +751,11 @@ Restore-HeliosPerformanceBaseline
 ## 7. Reporting System
 
 ### What It Does
+
 Automatically generates professional status reports on a schedule. Instead of manually gathering data and writing reports, HELIOS creates them for you with AI insights.
 
 Reports include:
+
 - System health score
 - AI predictions for next week
 - Performance trends
@@ -687,7 +764,9 @@ Reports include:
 - Recommendations
 
 ### Why You Need It
+
 **Without Reporting System:**
+
 ```
 Friday afternoon manager asks: "How's the system doing?"
 You spend 2 hours gathering data, creating spreadsheets, writing report
@@ -696,6 +775,7 @@ Manager's reaction: "Why wasn't I told about this!?"
 ```
 
 **With Reporting System:**
+
 ```
 Friday morning: Report automatically sent
 Manager reads: "System 99.8% healthy. 1 auto-healed incident Wednesday.
@@ -706,6 +786,7 @@ Manager's reaction: "Great, everything's under control"
 ### Real-World Report Examples
 
 **Report 1: Daily Executive Summary (1 page)**
+
 ```
 HELIOS Daily Report - February 15, 2024
 
@@ -737,6 +818,7 @@ Next 7 Days Forecast:
 ```
 
 **Report 2: Weekly Technical Report (5 pages)**
+
 ```
 HELIOS Weekly Report - Week of Feb 12-18, 2024
 
@@ -781,6 +863,7 @@ Cost Analysis:
 ```
 
 **Report 3: Quarterly Business Review (10 pages)**
+
 ```
 HELIOS Quarterly Report - Q1 2024
 
@@ -817,7 +900,9 @@ Looking Ahead (Q2 Forecast):
 ```
 
 ### How To Run
+
 **Generate Manual Report:**
+
 ```powershell
 # Generate report immediately (any style)
 Invoke-HeliosReport -Style Daily -OutputFormat HTML -SendTo admin@company.com
@@ -829,6 +914,7 @@ Invoke-HeliosReport -Style Quarterly
 ```
 
 **Schedule Automatic Reports:**
+
 ```powershell
 # Set up daily 8 AM email report
 New-HeliosReportSchedule `
@@ -848,6 +934,7 @@ New-HeliosReportSchedule `
 ```
 
 **View Last Generated Report:**
+
 ```powershell
 # Open latest daily report in browser
 Get-HeliosReport -Last 1 -Open
@@ -857,6 +944,7 @@ Get-HeliosReport -Last 1 -OutputFile "C:\reports\latest-report.html"
 ```
 
 ### What It Changes
+
 - Creates `C:\Program Files\HELIOS\Reporting\` directory
 - Starts "HELIOS-ReportGenerator" Windows service
 - Creates scheduled tasks for automatic report generation
@@ -864,6 +952,7 @@ Get-HeliosReport -Last 1 -OutputFile "C:\reports\latest-report.html"
 - Stores reports in `C:\Program Files\HELIOS\Reports\`
 
 ### How To Undo
+
 ```powershell
 # Disable automatic reports
 Disable-HeliosReportSchedule -All
@@ -887,7 +976,9 @@ Disable-HeliosReportSchedule -All
 ## 🆘 Need Help?
 
 ### "I'm confused about capability X"
+
 Re-read its section above. Each has:
+
 - What It Does (plain English)
 - Why You Need It (real-world impact)
 - How To Run (exact commands)
@@ -895,12 +986,15 @@ Re-read its section above. Each has:
 - How To Undo (how to remove it)
 
 ### "I want more examples"
+
 See [BEFORE_AND_AFTER.md](./BEFORE_AND_AFTER.md) for system-wide transformation
 
 ### "I'm ready to implement"
+
 See [README.md](./README.md) for quick start
 
 ### "I need to verify everything works"
+
 See [TESTING_GUIDE.md](./TESTING_GUIDE.md) for comprehensive tests
 
 ---

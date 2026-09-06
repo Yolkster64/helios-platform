@@ -19,6 +19,7 @@ Rollback testing ensures every HELIOS phase can be safely reversed if needed. Al
 ### Pre-Execution Snapshots
 
 Before executing any phase:
+
 1. Export all relevant registry hives
 2. Backup critical files
 3. Document service configuration
@@ -285,6 +286,7 @@ function Test-RollbackProcedure {
 ### Phase 0 Rollback (Optimization)
 
 Disables optimizations applied in Phase 0:
+
 - Re-enables diagnostic services
 - Restores service startup types
 - Removes performance registry settings
@@ -293,6 +295,7 @@ Disables optimizations applied in Phase 0:
 ### Phase 1 Rollback (Security)
 
 Reverses security hardening:
+
 - Disables firewall rules added by Phase 1
 - Restores UAC settings
 - Re-enables previously disabled security policies
@@ -301,6 +304,7 @@ Reverses security hardening:
 ### Phase 2 Rollback (Monitoring)
 
 Removes monitoring infrastructure:
+
 - Stops monitoring service
 - Removes monitoring registry entries
 - Deletes log collection schedules
@@ -331,6 +335,7 @@ ALERT ADMIN
 ## Best Practices
 
 ✓ **Do:**
+
 - Create snapshot BEFORE executing phase
 - Test rollback procedures regularly
 - Verify all snapshots have integrity checks
@@ -339,6 +344,7 @@ ALERT ADMIN
 - Document rollback reasons
 
 ✗ **Don't:**
+
 - Skip snapshot creation
 - Assume rollback will work without testing
 - Delete old snapshots without archiving

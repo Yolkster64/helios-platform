@@ -13,6 +13,7 @@
 **Problem**: Transient failures (network hiccup, temporary service outage)
 
 **Solution**:
+
 ```csharp
 public class RetryPolicy
 {
@@ -48,6 +49,7 @@ var result = await retryPolicy.ExecuteAsync(() =>
 ```
 
 **Strategy**:
+
 ```
 Attempt 1: Immediate
 Attempt 2: Wait 100ms
@@ -73,6 +75,7 @@ Don't retry:
 **Problem**: Cascading failures (one failing service brings down others)
 
 **Solution**:
+
 ```csharp
 public enum CircuitState { Closed, Open, HalfOpen }
 
@@ -128,6 +131,7 @@ public class CircuitBreaker
 
 // Circuit Breaker States
 ```
+
 ```
 Closed (Normal)
     │
@@ -149,6 +153,7 @@ Closed (Normal)
 ```
 
 **Usage**:
+
 ```csharp
 private CircuitBreaker _paymentServiceBreaker = new CircuitBreaker();
 
@@ -176,6 +181,7 @@ public async Task<PaymentResult> ProcessPaymentAsync(Order order)
 **Problem**: Requests hang indefinitely
 
 **Solution**:
+
 ```csharp
 public class TimeoutPolicy
 {
@@ -212,6 +218,7 @@ var result = await timeoutPolicy.ExecuteAsync(
 **Problem**: Service returns error, need graceful degradation
 
 **Solution**:
+
 ```csharp
 public class FallbackPolicy<T>
 {
@@ -246,6 +253,7 @@ var result = await _fallbackPolicy.ExecuteAsync(
 **Problem**: One failing endpoint consumes all threads, starving others
 
 **Solution**:
+
 ```csharp
 public class BulkheadPolicy
 {

@@ -70,12 +70,14 @@ COMPONENT DEPENDENCIES
 | Azure AD | Optional | Any | NO | Local auth only |
 
 **Can work without dependencies?**
+
 - Without .NET Core 3.1: NO - Will not run
 - Without Windows Event Log: NO - Cannot log
 - Without SQL Server: YES - Uses SQLite
 - Without Azure AD: YES - Uses local auth
 
 **Functions requiring what:**
+
 ```
 Local Authentication          - Works always
 Multi-factor Authentication   - Needs Azure AD or RADIUS provider
@@ -98,6 +100,7 @@ Access Control              - Works always
 | TPM 2.0 | Hardware | Windows 10+ | NO | Software storage |
 
 **Can work without dependencies?**
+
 - Without .NET Framework 4.6.1: NO - Will not run
 - Without Windows CNG: NO - Cannot encrypt
 - Without HSM: YES - Uses software storage
@@ -116,6 +119,7 @@ Access Control              - Works always
 | Reporting Services | Optional | Any | NO | Manual export |
 
 **Can work without dependencies?**
+
 - Without .NET Framework 4.6.1: NO - Will not run
 - Without SQL Server Express: YES - Uses embedded SQLite
 - Without Reporting Services: YES - Export as CSV
@@ -135,6 +139,7 @@ Access Control              - Works always
 | GPU Support (NVIDIA/AMD) | Hardware | Optional | NO | Works on CPU |
 
 **Hard dependency on security-engine because:**
+
 - User authentication and authorization
 - Audit logging of all optimization changes
 - Session management for multiple users
@@ -143,12 +148,14 @@ Access Control              - Works always
 **Can work without security-engine?** NO - Installation fails
 
 **Error if not present:**
+
 ```
 Error: security-engine (v1.2.0+) is a mandatory dependency for performance-ai
 Solution: Install security-engine first
 ```
 
 **Installation order:**
+
 ```
 1. Install security-engine (Phase 0) first
    |
@@ -176,6 +183,7 @@ Solution: Install security-engine first
 **Works without Windows Event Log?** NO - Cannot display events
 
 **Limitations when standalone (without security-engine):**
+
 ```
 Feature                | With security-engine | Standalone |
 User authentication    | Multi-user, RBAC    | Single user |
@@ -199,11 +207,13 @@ Role-based features   | Yes                  | No          |
 | Internet Connection | Network | Any | YES | Required |
 
 **Why needs security-engine:**
+
 - Identity federation with Azure AD / AWS IAM
 - Access control to cloud resources
 - Audit logging of cloud operations
 
 **Why needs vault-dynamics:**
+
 - Encrypting credentials before cloud upload
 - Secure key exchange with cloud
 - Encrypted backup storage
@@ -211,6 +221,7 @@ Role-based features   | Yes                  | No          |
 **Can work without both?** NO - Installation fails
 
 **Installation order:**
+
 ```
 1. Install security-engine (Phase 0)
    |
@@ -251,6 +262,7 @@ Role-based features   | Yes                  | No          |
 | analytics-core | No deps | 1.0.3 | Stable |
 
 **.NET Framework Requirements:**
+
 ```
 All components: Minimum 4.6.1, Recommended 4.8+
 ```
@@ -260,6 +272,7 @@ All components: Minimum 4.6.1, Recommended 4.8+
 ## Checking Dependencies
 
 ### Check Before Installing
+
 ```powershell
 # Verify all dependencies
 .\check-dependencies.ps1 -ComponentName "performance-ai"
@@ -273,6 +286,7 @@ All components: Minimum 4.6.1, Recommended 4.8+
 ```
 
 ### Get Dependency Tree
+
 ```powershell
 Get-DependencyTree -ComponentName "performance-ai" -Recursive
 
@@ -305,6 +319,7 @@ Get-DependencyTree -ComponentName "performance-ai" -Recursive
 ## Dependency Troubleshooting
 
 ### Component Won't Install - Missing Dependency
+
 ```powershell
 # Find what's missing
 Get-MissingDependencies -ComponentName "performance-ai"
@@ -317,6 +332,7 @@ Get-MissingDependencies -ComponentName "performance-ai"
 ```
 
 ### Component Crashes on Startup
+
 ```powershell
 # Verify all dependencies are correct version
 Test-ComponentDependencies -ComponentName "performance-ai" -Verbose
@@ -326,6 +342,7 @@ Test-ComponentDependencies -ComponentName "performance-ai" -Verbose
 ```
 
 ### Dependency Version Conflict
+
 ```powershell
 # Show installed vs required
 Get-DependencyMismatch -ComponentName "cloud-bridge"

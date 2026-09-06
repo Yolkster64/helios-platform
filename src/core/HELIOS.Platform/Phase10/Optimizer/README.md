@@ -9,6 +9,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 ### Core Services
 
 #### 1. **SystemOptimizer.cs**
+
 - Manages registry optimization
 - Disables unnecessary services (DiagTrack, dmwappushservice, HomeGroup, etc.)
 - Removes bloatware from startup
@@ -16,6 +17,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Creates rollback snapshots for all changes
 
 **Key Features:**
+
 - Registry optimization for performance
 - Automatic service disabling
 - Startup program cleanup
@@ -23,6 +25,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Rollback capability
 
 #### 2. **PerformanceTuner.cs**
+
 - CPU scheduling optimization
 - CPU affinity configuration
 - Virtual memory and paging file tuning
@@ -30,6 +33,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Disk I/O optimization
 
 **Metrics:**
+
 - CPU Usage percentage
 - RAM Usage percentage
 - Disk Usage percentage
@@ -37,6 +41,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Process and Thread counts
 
 #### 3. **NetworkOptimizer.cs**
+
 - TCP stack tuning (65535 connections, SACK enabled)
 - Buffer size optimization
 - Socket window scaling
@@ -46,6 +51,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - TSO (TCP Segment Offloading)
 
 **Optimizations:**
+
 - Increased TCP connection backlog
 - Optimized TCP timed-wait delay
 - TCP Chimney offloading enabled
@@ -54,6 +60,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - ECN enabled for congestion awareness
 
 #### 4. **GPUOptimizer.cs**
+
 - Automatic GPU detection (NVIDIA, AMD, Intel)
 - Hardware acceleration enabling
 - VRAM allocation optimization
@@ -62,6 +69,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Temperature monitoring
 
 **Capabilities:**
+
 - GPU vendor detection
 - VRAM optimization to 90% usage
 - DirectX multi-threading optimizations
@@ -69,6 +77,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Real-time GPU monitoring
 
 #### 5. **PowerProfiler.cs**
+
 - Automatic profile detection (Gaming, Work, Dev, Server)
 - Power plan application
 - CPU frequency configuration
@@ -77,6 +86,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Laptop battery optimization support
 
 **Profiles:**
+
 - Gaming: Maximum performance, 100% CPU frequency
 - Work: Balanced power/performance
 - Development: High CPU for compilation
@@ -84,6 +94,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Balanced: Default optimization
 
 #### 6. **MonitoringDashboard.cs**
+
 - Real-time performance metrics collection
 - Background monitoring task
 - Performance history tracking (1000 last metrics)
@@ -92,6 +103,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 - Integration with HELIOS UI
 
 **Monitored Metrics:**
+
 - CPU Usage (current and average)
 - RAM Usage (current and average)
 - Disk Usage
@@ -139,7 +151,7 @@ Phase 10G implements a comprehensive system optimization suite designed to deliv
 
 ### Basic Usage
 
-`csharp
+```csharp
 // Create optimizer with default profile
 var optimizer = new SystemOptimizer();
 await optimizer.InitializeAsync();
@@ -155,19 +167,19 @@ foreach (var metric in metrics)
 {
     Console.WriteLine($"{metric.Key}: {metric.Value}");
 }
-`
+```
 
 ### With Custom Profile
 
-`csharp
+```csharp
 var profile = OptimizationProfiles.GamingProfile;
 var optimizer = new PerformanceTuner(profile);
 var result = await optimizer.OptimizeAsync();
-`
+```
 
 ### Monitoring Dashboard
 
-`csharp
+```csharp
 var dashboard = new MonitoringDashboard();
 await dashboard.InitializeAsync();
 
@@ -176,11 +188,11 @@ await dashboard.InitializeAsync();
 // Can query at any time
 
 var metrics = await dashboard.GetMetricsAsync();
-`
+```
 
 ### Rollback Changes
 
-`csharp
+```csharp
 var optimizer = new SystemOptimizer();
 var result = await optimizer.OptimizeAsync();
 
@@ -189,7 +201,7 @@ if (something_went_wrong)
 {
     await optimizer.RollbackAsync();
 }
-`
+```
 
 ## Performance Metrics
 
@@ -204,6 +216,7 @@ if (something_went_wrong)
 ### Monitoring
 
 All services expose:
+
 - Real-time metrics via GetMetricsAsync()
 - Service status via GetStatusAsync()
 - Performance history via MonitoringDashboard
@@ -221,6 +234,7 @@ The optimizer works with Phase 8 AI Learning to:
 ## Error Handling
 
 All services include:
+
 - Comprehensive exception handling
 - Error logging with timestamps
 - Graceful degradation
@@ -230,25 +244,30 @@ All services include:
 ## Registry Keys Modified
 
 ### System Optimizer
+
 - HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
 - HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects
 
 ### Performance Tuner
+
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\PriorityControl
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem
 
 ### Network Optimizer
+
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces
 
 ### GPU Optimizer
+
 - HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\DirectX
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers
 - HKEY_CURRENT_USER\Software\Microsoft\Direct3D
 
 ### Power Profiler
+
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power
 - HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerSettings
 
@@ -265,9 +284,9 @@ All services include:
 
 ### Running Tests
 
-`powershell
+```powershell
 dotnet test HELIOS.Platform.Phase10.Optimizer.Tests
-`
+```
 
 ## Best Practices
 
@@ -304,24 +323,28 @@ dotnet test HELIOS.Platform.Phase10.Optimizer.Tests
 ## Troubleshooting
 
 ### High CPU Usage
+
 - Check background processes
 - Verify CPU affinity settings
 - Monitor thermal conditions
 - Use Development profile if compiling
 
 ### Memory Issues
+
 - Increase paging file size
 - Disable memory compression if causing issues
 - Monitor memory usage trends
 - Check for memory leaks in applications
 
 ### Network Slowness
+
 - Verify DNS resolution speed
 - Check TCP window scaling
 - Enable jumbo frames if supported
 - Monitor network usage patterns
 
 ### GPU Issues
+
 - Verify GPU detection
 - Check DirectX version
 - Monitor GPU temperature
@@ -337,7 +360,7 @@ dotnet test HELIOS.Platform.Phase10.Optimizer.Tests
 
 ## Performance Report Example
 
-`
+```text
 === HELIOS Performance Report ===
 Generated: 2024-01-15 14:30:45
 
@@ -360,11 +383,12 @@ System Information:
 
 Optimization Opportunities:
   ✓ System performing optimally
-`
+```
 
 ## Support
 
 For issues or questions:
+
 1. Check error logs in ServiceStatus.Errors
 2. Review performance report
 3. Use appropriate profile for workload

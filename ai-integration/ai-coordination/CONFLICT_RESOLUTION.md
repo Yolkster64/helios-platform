@@ -9,21 +9,25 @@ Conflicts occur when different AI services suggest contradictory approaches. The
 ### Conflict Categories
 
 **Type 1: Security vs. Performance**
+
 - ChatGPT favors: Granular rules, comprehensive logging
 - Codex favors: Consolidated rules, optimized code
 - Resolution: Security wins by default
 
 **Type 2: Audit vs. Enforcement**
+
 - ChatGPT favors: Longer audit phases (4-8 weeks)
 - Codex generates: Quick enforcement scripts
 - Resolution: Risk assessment determines timeline
 
 **Type 3: Consolidation vs. Granularity**
+
 - ChatGPT: Suggests consolidating rules
 - Codex: Generates many granular rules
 - Resolution: Balance based on maintenance capacity
 
 **Type 4: Readability vs. Performance**
+
 - ChatGPT: Recommends verbose, readable code
 - Codex: Generates compact, optimized code
 - Resolution: Code review determines winner
@@ -31,6 +35,7 @@ Conflicts occur when different AI services suggest contradictory approaches. The
 ## Evaluation Criteria
 
 ### Security Criteria
+
 ```
 - No credential exposure
 - No privilege escalation
@@ -40,6 +45,7 @@ Conflicts occur when different AI services suggest contradictory approaches. The
 ```
 
 ### Performance Criteria
+
 ```
 - CPU usage acceptable
 - Memory footprint acceptable
@@ -49,6 +55,7 @@ Conflicts occur when different AI services suggest contradictory approaches. The
 ```
 
 ### Maintainability Criteria
+
 ```
 - Code is readable
 - Error handling comprehensive
@@ -58,6 +65,7 @@ Conflicts occur when different AI services suggest contradictory approaches. The
 ```
 
 ### Compliance Criteria
+
 ```
 - Meets SOC 2 requirements
 - Meets ISO 27001 requirements
@@ -179,15 +187,18 @@ function Test-CodeFunctionality {
 ### Example 1: Rule Consolidation Conflict
 
 **Situation:**
+
 - ChatGPT (Security): "Use 100 granular rules"
 - Codex: Generates 20 consolidated rules
 
 **Analysis:**
+
 - Security benefit: 100 rules = more precise control
 - Performance benefit: 20 rules = 5x faster evaluation
 - Conflict severity: Medium (valid tradeoff)
 
 **Resolution:**
+
 ```
 Test both approaches:
 1. Deploy 100 rules in audit mode
@@ -200,14 +211,17 @@ Test both approaches:
 ### Example 2: Deployment Timeline Conflict
 
 **Situation:**
+
 - ChatGPT (Build Advisor): "Audit for 8 weeks"
 - ChatGPT (Performance): "Move to enforcement after 2 weeks"
 
 **Analysis:**
+
 - Risk: 8 weeks = thorough but slow
 - Risk: 2 weeks = fast but risky
 
 **Resolution:**
+
 ```
 Compromise approach:
 - Pilot with small group: 8 weeks (2% of users)
@@ -218,15 +232,18 @@ Compromise approach:
 ### Example 3: Code Style Conflict
 
 **Situation:**
+
 - ChatGPT (Code Reviewer): "Verbose, readable code"
 - Codex: "Compact, optimized code"
 
 **Analysis:**
+
 - Maintainability: Verbose is better
 - Performance: Compact is better
 - Conflict severity: Low (both valid)
 
 **Resolution:**
+
 ```
 Implement code review standard:
 1. Use Codex as starting point

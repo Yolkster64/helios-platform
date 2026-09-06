@@ -29,6 +29,7 @@ The `code-checks.yml` workflow performs comprehensive code quality validation fo
 ## Workflow Purpose
 
 **Goals**:
+
 - ✅ Validate PowerShell syntax correctness
 - ✅ Detect hardcoded secrets and credentials
 - ✅ Validate registry modification documentation
@@ -61,11 +62,13 @@ on:
 ```
 
 **Triggers when**:
+
 - PowerShell files are modified
 - Batch files are modified
 - Workflow file itself is modified
 
 **Does not trigger**:
+
 - Documentation-only changes
 - Image/binary changes
 - Configuration file changes (unrelated)
@@ -77,12 +80,14 @@ on:
 ### 1. PowerShell Syntax Validation ⚙️
 
 **What it checks**:
+
 - Valid PowerShell syntax for all `.ps1` files
 - Proper script structure and formatting
 - Valid variable declarations
 - Correct function definitions
 
 **How to run locally**:
+
 ```powershell
 $Files = Get-ChildItem -Recurse -Filter "*.ps1"
 foreach ($File in $Files) {
@@ -100,6 +105,7 @@ foreach ($File in $Files) {
 ```
 
 **Failure Example**:
+
 ```
 ✗ Deploy-Script.ps1: Unexpected token '"' in expression or statement.
 ```
@@ -111,12 +117,14 @@ foreach ($File in $Files) {
 ### 2. Security Scanning 🔒
 
 **What it checks**:
+
 - Hardcoded passwords
 - Hardcoded API keys
 - Hardcoded secrets
 - Hardcoded tokens
 
 **Patterns detected**:
+
 ```regex
 password\s*=\s*['"][^'"]*['"]
 apikey\s*=\s*['"][^'"]*['"]
@@ -125,6 +133,7 @@ token\s*=\s*['"][^'"]*['"]
 ```
 
 **Examples of issues**:
+
 ```powershell
 # ❌ FAIL
 $password = "MySecurePass123"
@@ -136,6 +145,7 @@ $apiKey = $env:NUGET_API_KEY
 ```
 
 **How to fix**:
+
 1. Use environment variables
 2. Use GitHub Secrets
 3. Use credential objects
@@ -146,17 +156,20 @@ $apiKey = $env:NUGET_API_KEY
 ### 3. Registry Modification Validation 📋
 
 **What it checks**:
+
 - All registry modifications are documented
 - Registry changes include `# Registry:` comment
 - Registry operations are properly commented
 
 **Requirement**:
+
 ```powershell
 # Registry: Description of what is being changed and why
 New-Item -Path "HKCU:\Software\MyApp" -Force | Out-Null
 ```
 
 **Examples**:
+
 ```powershell
 # ✅ PASS
 # Registry: Creating application configuration key
@@ -171,11 +184,13 @@ Set-ItemProperty -Path "HKCU:\Software\HELIOS" -Name "Setting" -Value "Value"
 ### 4. File Path Validation 📁
 
 **What it checks**:
+
 - Hardcoded user paths
 - Invalid path characters
 - Path consistency
 
 **Examples of issues**:
+
 ```powershell
 # ⚠️  WARNING
 $path = "C:\Users\John\AppData"  # Consider using $env:APPDATA
@@ -186,6 +201,7 @@ $path = Join-Path $env:TEMP "myfile.txt"
 ```
 
 **Valid patterns**:
+
 ```powershell
 $env:PROGRAMFILES     # System Program Files
 $env:APPDATA          # User AppData
@@ -200,6 +216,7 @@ $env:USERPROFILE      # User profile
 **Applies to**: `Phase-*.ps1` files
 
 **Required elements**:
+
 ```powershell
 <#
     .SYNOPSIS
@@ -215,11 +232,13 @@ param(
 ```
 
 **Validation**:
+
 - Presence of `<#`
 - Presence of `.SYNOPSIS`
 - Presence of `.DESCRIPTION`
 
 **Example of compliant script**:
+
 ```powershell
 <#
     .SYNOPSIS
@@ -245,11 +264,13 @@ Write-Host "Setting up Phase 0: Foundation..."
 ### 6. Test Coverage Verification 🧪
 
 **What it checks**:
+
 - Discovers test files (`test-*.ps1`)
 - Counts number of test files
 - Reports coverage
 
 **Expected pattern**:
+
 ```
 test-phase-0-foundation.ps1
 test-phase-1-security.ps1
@@ -261,11 +282,13 @@ test-phase-2-optimization.ps1
 ### 7. Unit Test Execution 🧬
 
 **What it runs**:
+
 - Executes all `test-*-unit.ps1` files
 - Uses Pester for test framework
 - Reports pass/fail counts
 
 **Pester test example**:
+
 ```powershell
 Describe "Phase 0 Foundation Tests" {
     It "Should create required directories" {
@@ -302,6 +325,7 @@ jobs:
 ```
 
 **Runner**: `windows-latest`
+
 - Windows Server 2022
 - PowerShell 5.1 (+ PowerShell Core 7 installed)
 - Chocolatey package manager
@@ -321,6 +345,7 @@ jobs:
 ```
 
 **Why PowerShell 7?**:
+
 - Modern features
 - Better error handling
 - Cross-platform compatibility
@@ -344,6 +369,7 @@ jobs:
 ### Excluded Files
 
 Test files are excluded from certain checks:
+
 ```powershell
 if ($File.Name -notmatch '^test-' -and $Content -notmatch '# EXAMPLE CODE') {
     # Run security checks
@@ -362,6 +388,7 @@ $PatternMap = @{
 ```
 
 **To add custom patterns**:
+
 1. Edit `.github/workflows/code-checks.yml`
 2. Add pattern to `$PatternMap`
 3. Commit and push
@@ -371,6 +398,7 @@ $PatternMap = @{
 ## Success Criteria
 
 ✅ **All checks must pass**:
+
 - [ ] Syntax validation passes
 - [ ] No security issues found
 - [ ] Registry modifications documented
@@ -409,12 +437,14 @@ $PatternMap = @{
 ### Test Everything Locally
 
 **1. Clone the repository**:
+
 ```bash
 git clone https://github.com/YOUR_ORG/helios-platform.git
 cd helios-platform
 ```
 
 **2. Run syntax validation**:
+
 ```powershell
 $Files = Get-ChildItem -Recurse -Filter "*.ps1"
 foreach ($File in $Files) {
@@ -433,6 +463,7 @@ foreach ($File in $Files) {
 ```
 
 **3. Run security scan**:
+
 ```powershell
 $Files = Get-ChildItem -Recurse -Filter "*.ps1"
 $PatternMap = @{
@@ -455,6 +486,7 @@ Write-Host "✓ No security issues found"
 ```
 
 **4. Run tests locally**:
+
 ```powershell
 Install-Module -Name Pester -RequiredVersion 5.4.0 -Force
 Invoke-Pester -Path "tests/" -Verbose
@@ -467,11 +499,13 @@ Invoke-Pester -Path "tests/" -Verbose
 ### PowerShell Not Found
 
 **Error**:
+
 ```
 PowerShell is not installed
 ```
 
 **Solution**:
+
 ```powershell
 # Install PowerShell Core
 choco install powershell-core
@@ -481,11 +515,13 @@ choco install powershell-core
 ### Pester Module Not Found
 
 **Error**:
+
 ```
 The specified module 'Pester' was not loaded because no valid module file
 ```
 
 **Solution**:
+
 ```powershell
 Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck
 ```
@@ -493,22 +529,26 @@ Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck
 ### Syntax Check False Positives
 
 **Error**:
+
 ```
 False positive on valid code
 ```
 
 **Solution**:
+
 - Mark file as test: `test-*.ps1`
 - Add exclusion comment: `# EXAMPLE CODE`
 
 ### Tests Timing Out
 
 **Error**:
+
 ```
 Timeout waiting for test completion
 ```
 
 **Solution**:
+
 - Run tests locally to check performance
 - Reduce test complexity or data size
 - Increase workflow timeout
@@ -516,11 +556,13 @@ Timeout waiting for test completion
 ### File Path Issues on Windows
 
 **Error**:
+
 ```
 Path contains invalid characters
 ```
 
 **Solutions**:
+
 1. Use absolute paths with proper escaping
 2. Use `Join-Path` cmdlet
 3. Use environment variables
@@ -531,12 +573,14 @@ Path contains invalid characters
 ## Performance Tips
 
 ⚡ **Optimization**:
+
 - ✅ Cache PSParser results if many files
 - ✅ Run checks in parallel when possible
 - ✅ Skip non-script file patterns
 - ✅ Use native .NET parsing over regex
 
 📊 **Typical Performance**:
+
 - Syntax validation: ~1 min (100 files)
 - Security scan: ~1 min
 - Registry check: ~30 sec
@@ -549,6 +593,7 @@ Path contains invalid characters
 ## Best Practices
 
 ✅ **Do**:
+
 - Write tests for critical scripts
 - Document all registry modifications
 - Use environment variables for credentials
@@ -556,6 +601,7 @@ Path contains invalid characters
 - Follow PowerShell best practices
 
 ❌ **Don't**:
+
 - Hardcode secrets
 - Use absolute user paths
 - Skip security checks

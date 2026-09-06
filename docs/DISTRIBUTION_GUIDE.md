@@ -7,6 +7,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 ## Distribution Channels
 
 ### 1. NuGet.org (Primary Channel)
+
 - **Package Name**: `HELIOS.Platform`
 - **Installation**: `nuget install HELIOS.Platform -Version 1.0.0`
 - **URL**: https://www.nuget.org/packages/HELIOS.Platform/
@@ -17,6 +18,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
   - .NET 6.0+
 
 ### 2. GitHub Releases
+
 - **URL**: https://github.com/HELIOS-Platform/helios-platform/releases
 - **Tag Format**: `v1.0.0`
 - **Artifacts**:
@@ -27,18 +29,21 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
   - Documentation
 
 ### 3. Chocolatey Package Manager
+
 - **Package**: `helios-platform`
 - **Installation**: `choco install helios-platform`
 - **Repository**: https://community.chocolatey.org/packages/helios-platform
 - **Support**: Windows 7 SP1+
 
 ### 4. Windows Package Manager (Winget)
+
 - **Package**: `HELIOS.Platform`
 - **Installation**: `winget install HELIOS.Platform`
 - **Repository**: Microsoft Store
 - **Support**: Windows 10 Build 1809+
 
 ### 5. Direct Download
+
 - **Location**: https://github.com/HELIOS-Platform/helios-platform/releases
 - **File**: HELIOS-Setup.exe
 - **Size**: Typically 50-100 MB
@@ -49,6 +54,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 ### Phase 1: Preparation (Before Release)
 
 1. **Version Management**
+
    ```powershell
    # Tag the release
    git tag -a v1.0.0 -m "HELIOS Platform v1.0.0 Release"
@@ -56,6 +62,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
    ```
 
 2. **Build Verification**
+
    ```powershell
    dotnet build -c Release
    dotnet test -c Release
@@ -98,6 +105,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 ### Phase 3: Manual Submission (Package Managers)
 
 1. **Chocolatey Submission**
+
    ```powershell
    cd choco-package
    choco pack
@@ -111,6 +119,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 ## Distribution Checklist
 
 ### Pre-Release
+
 - [ ] All tests passing
 - [ ] Code review completed
 - [ ] Documentation updated
@@ -120,6 +129,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 - [ ] Git tag created locally
 
 ### During Release
+
 - [ ] Verify NuGet publishing workflow
 - [ ] Check GitHub Release creation
 - [ ] Verify artifact uploads
@@ -127,6 +137,7 @@ This guide covers the complete distribution process for HELIOS Platform v1.0.0 a
 - [ ] Monitor for errors in workflows
 
 ### Post-Release
+
 - [ ] Verify NuGet.org package
 - [ ] Verify GitHub Release
 - [ ] Test Chocolatey installation
@@ -166,6 +177,7 @@ dist/
 ## Deployment Scripts
 
 ### 1. prepare-distribution.ps1
+
 Prepares all distribution files and packages.
 
 ```powershell
@@ -176,6 +188,7 @@ Prepares all distribution files and packages.
 ```
 
 ### 2. verify-distribution.ps1
+
 Verifies all distribution files are present and valid.
 
 ```powershell
@@ -185,6 +198,7 @@ Verifies all distribution files are present and valid.
 ```
 
 ### 3. publish-nuget.ps1
+
 Publishes NuGet package to NuGet.org.
 
 ```powershell
@@ -195,6 +209,7 @@ $env:NUGET_API_KEY = "your-api-key"
 ```
 
 ### 4. create-release.ps1
+
 Creates GitHub Release with artifacts.
 
 ```powershell
@@ -216,6 +231,7 @@ Required secrets in GitHub:
 | `CHOCO_API_KEY` | Chocolatey publishing | https://community.chocolatey.org/account |
 
 Configure in GitHub:
+
 1. Go to: Settings → Secrets and variables → Actions
 2. Click: New repository secret
 3. Add each secret with corresponding value
@@ -223,18 +239,21 @@ Configure in GitHub:
 ## Troubleshooting
 
 ### NuGet Publishing Fails
+
 - Verify API key is correct
 - Check package ID uniqueness
 - Review NuSpec XML formatting
 - Ensure version is not already published
 
 ### GitHub Release Issues
+
 - Verify GitHub token has write permissions
 - Check artifact file sizes
 - Ensure tag name matches expected format
 - Review release notes formatting
 
 ### Package Manager Submissions
+
 - Chocolatey: Wait 10-30 minutes for approval
 - Winget: Submit PR, wait for community review
 - Keep package descriptions updated
@@ -244,12 +263,14 @@ Configure in GitHub:
 If issues are discovered after release:
 
 ### 1. NuGet.org Rollback
+
 ```powershell
 # Unlist package (keeps history)
 nuget delete HELIOS.Platform 1.0.0 -Source https://api.nuget.org/v3/index.json -ApiKey $key
 ```
 
 ### 2. GitHub Release Rollback
+
 ```powershell
 git tag -d v1.0.0
 git push origin :v1.0.0
@@ -257,10 +278,12 @@ git push origin :v1.0.0
 ```
 
 ### 3. Chocolatey Rollback
+
 - Contact Chocolatey support for unlisting
 - Or submit updated package with patch version
 
 ### 4. Communication
+
 - Notify all users via:
   - GitHub Release notes (correction)
   - Email to subscribers
@@ -270,12 +293,14 @@ git push origin :v1.0.0
 ## Monitoring & Analytics
 
 ### Track Distribution
+
 - NuGet.org: View package statistics
 - GitHub: Monitor release downloads
 - Chocolatey: Check installation metrics
 - Winget: Review store analytics
 
 ### Common Metrics
+
 - Downloads per day
 - Active installations
 - Version adoption
@@ -292,6 +317,7 @@ git push origin :v1.0.0
 ## Support
 
 For distribution-related questions:
+
 - 📧 Email: support@helios-platform.org
 - 🐛 Issues: https://github.com/HELIOS-Platform/helios-platform/issues
 - 💬 Discussions: https://github.com/HELIOS-Platform/helios-platform/discussions

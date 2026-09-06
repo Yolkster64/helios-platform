@@ -10,6 +10,7 @@ Get the HELIOS Platform up and running in 5 minutes.
 - Visual Studio Code or Visual Studio 2022 (optional)
 
 **Verify Installation**:
+
 ```powershell
 dotnet --version
 git --version
@@ -54,6 +55,7 @@ dotnet run
 ```
 
 Expected output:
+
 ```
 info: HELIOS.Platform[0]
       API Gateway listening on http://localhost:5000
@@ -66,6 +68,7 @@ curl http://localhost:5000/api/v1/health
 ```
 
 Expected response:
+
 ```json
 {
   "success": true,
@@ -92,7 +95,8 @@ dotnet clean         # Clean build
 
 ## Troubleshooting
 
-**Build fails**: 
+**Build fails**:
+
 ```powershell
 dotnet clean
 dotnet restore
@@ -100,6 +104,7 @@ dotnet build
 ```
 
 **Port 5000 in use**:
+
 ```powershell
 dotnet run -- --port 5002
 ```

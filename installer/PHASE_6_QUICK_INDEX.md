@@ -13,6 +13,7 @@
 ## 📖 Documentation by Audience
 
 ### For Developers
+
 - 📄 `PHASE_6_OVERVIEW.md` - Architecture, components, technical specifications
 - 📄 `installer/wix/product.wxs` - WiX product definition source code
 - 📄 `installer/build-installer.ps1` - Build automation and compilation
@@ -21,6 +22,7 @@
 **Start here**: `PHASE_6_OVERVIEW.md`
 
 ### For QA/Testers
+
 - 📄 `PHASE_6_SAFETY_PROTOCOLS.md` - Testing matrix and procedures
 - 📄 `installer/scripts/pre-install-checks.ps1` - Pre-installation verification
 - 📄 `installer/scripts/conflict-detection.ps1` - Conflict detection
@@ -29,6 +31,7 @@
 **Start here**: `PHASE_6_SAFETY_PROTOCOLS.md` → Run the test matrix
 
 ### For IT Administrators
+
 - 📄 `PHASE_6_INSTALLATION_GUIDE.md` - Installation, configuration, troubleshooting
 - 📄 `README-PHASE6.md` - Deployment scenarios and enterprise integration
 - 📄 `installer/scripts/` - Diagnostic and verification scripts
@@ -36,6 +39,7 @@
 **Start here**: `PHASE_6_INSTALLATION_GUIDE.md`
 
 ### For End Users
+
 - 📄 `PHASE_6_INSTALLATION_GUIDE.md` - User guide (sections 1-3)
 - 📄 `README-PHASE6.md` - Quick start section
 
@@ -48,35 +52,43 @@
 ### I Want To...
 
 #### ...Understand the Project
+
 → Read `README-PHASE6.md` (5 min overview)
 → Read `PHASE_6_OVERVIEW.md` (30 min deep dive)
 
 #### ...Build the Installer
+
 → Review `PHASE_6_BUILD_MANIFEST.md`
 → Run `.\installer\build-installer.ps1`
 
 #### ...Test the Installer
+
 → Run `.\installer\scripts\pre-install-checks.ps1`
 → Run `.\installer\scripts\conflict-detection.ps1`
 → Run `.\installer\scripts\post-install-verify.ps1`
 
 #### ...Install HELIOS
+
 → Execute `HELIOS-Platform-2.0-Setup.exe`
 → Or follow `PHASE_6_INSTALLATION_GUIDE.md` (section 2)
 
 #### ...Create a USB
+
 → Run `.\usb-image\USB-Creator-Tool.ps1`
 → Or follow `PHASE_6_INSTALLATION_GUIDE.md` (USB section)
 
 #### ...Deploy Across Enterprise
+
 → Read `PHASE_6_INSTALLATION_GUIDE.md` (Enterprise Deployment section)
 → Use provided scripts or SCCM templates
 
 #### ...Troubleshoot Issues
+
 → Read `PHASE_6_INSTALLATION_GUIDE.md` (Troubleshooting section)
 → Run diagnostic scripts from `.\installer\scripts\`
 
 #### ...Rollback Installation
+
 → Read `PHASE_6_INSTALLATION_GUIDE.md` (Rollback Procedures section)
 → Execute `.\deployment\rollback.ps1`
 
@@ -119,12 +131,14 @@ BUILD ARTIFACTS (Generated)
 ## ⚡ Fast Track - 5 Minute Overview
 
 **What is Phase 6?**
+
 - Professional Windows installer for HELIOS Platform 2.0
 - USB bootable image for easy deployment
 - Complete safety infrastructure with pre-flight checks
 - Multi-platform support (Windows 7, 10, 11)
 
 **What's Included?**
+
 - ✅ WiX-based installer (~50MB)
 - ✅ USB bootable image (~500MB)
 - ✅ Pre/post-installation verification
@@ -133,6 +147,7 @@ BUILD ARTIFACTS (Generated)
 - ✅ Complete documentation
 
 **What Can I Do Now?**
+
 - ✅ Read documentation
 - ✅ Review architecture
 - ✅ Run verification scripts
@@ -140,6 +155,7 @@ BUILD ARTIFACTS (Generated)
 - ✅ Prepare test environment
 
 **What Happens Next?**
+
 - Build installer artifacts
 - Execute test matrix (30+ scenarios)
 - Create USB image
@@ -164,21 +180,25 @@ BUILD ARTIFACTS (Generated)
 ## 🎓 Learning Path
 
 ### Level 1: Executive Overview (15 min)
+
 1. `README-PHASE6.md` - Why Phase 6 matters
 2. `PHASE_6_OVERVIEW.md` - What's included
 3. `PHASE_6_BUILD_MANIFEST.md` - Current status
 
 ### Level 2: Technical Understanding (45 min)
+
 1. `PHASE_6_OVERVIEW.md` - Architecture deep dive
 2. `installer/wix/product.wxs` - Code review
 3. `installer/build-installer.ps1` - Build process
 
 ### Level 3: Operational Skills (60 min)
+
 1. `PHASE_6_INSTALLATION_GUIDE.md` - Installation procedures
 2. `installer/scripts/` - Run the verification scripts
 3. `PHASE_6_SAFETY_PROTOCOLS.md` - Testing procedures
 
 ### Level 4: Deployment Mastery (90 min)
+
 1. Full documentation review
 2. Multi-platform testing
 3. Enterprise deployment scenarios
@@ -198,6 +218,7 @@ Before you begin, ensure you have:
 - [ ] Ports 5000-6000 available (or can be redirected)
 
 **Run this first**:
+
 ```powershell
 .\installer\scripts\pre-install-checks.ps1 -Verbose
 ```
@@ -207,6 +228,7 @@ Before you begin, ensure you have:
 ## 🚀 Installation Fast Track (5 Minutes)
 
 ### Standard Installation
+
 ```powershell
 # 1. Run pre-checks (should return PASS)
 .\installer\scripts\pre-install-checks.ps1
@@ -222,11 +244,13 @@ Before you begin, ensure you have:
 ```
 
 ### Silent Installation
+
 ```powershell
 .\installer\build\HELIOS-Platform-2.0-Setup.exe /S /D=C:\Program\ Files\HELIOS
 ```
 
 ### USB Installation
+
 ```powershell
 # 1. Create bootable USB
 .\usb-image\USB-Creator-Tool.ps1
@@ -270,21 +294,25 @@ Before you begin, ensure you have:
 ## 💡 Tips & Tricks
 
 ### For Faster Installation
+
 - Use Minimal installation type (Core only)
 - Disable optional features
 - Pre-stage on high-speed USB if needed
 
 ### For Cleaner Uninstall
+
 - Data in C:\ProgramData\HELIOS is preserved
 - To remove data: manually delete folder
 - Run cleanup scripts after uninstall
 
 ### For Enterprise Deployment
+
 - Use silent mode: `/S /D=path`
 - Create deployment share on network
 - Use Group Policy or SCCM for distribution
 
 ### For Troubleshooting
+
 - Always run `pre-install-checks.ps1` first
 - Check Event Log for HELIOS entries
 - Run `post-install-verify.ps1` after any changes
@@ -322,6 +350,7 @@ Installation is successful when:
 ## 🎓 Getting Help
 
 **Before asking for help:**
+
 1. Run `pre-install-checks.ps1`
 2. Run `conflict-detection.ps1`
 3. Run `post-install-verify.ps1`
@@ -329,6 +358,7 @@ Installation is successful when:
 5. Review troubleshooting section in `PHASE_6_INSTALLATION_GUIDE.md`
 
 **When reporting issues:**
+
 - Include diagnostic reports
 - Specify Windows version
 - Include error messages (exact text)
@@ -340,22 +370,26 @@ Installation is successful when:
 ## ✨ What's Next?
 
 ### Immediate (Today)
+
 - [ ] Read `README-PHASE6.md` (10 min)
 - [ ] Review `PHASE_6_OVERVIEW.md` (30 min)
 - [ ] Run verification scripts locally (5 min)
 
 ### This Week
+
 - [ ] Build installer artifacts
 - [ ] Test on Windows 10/11
 - [ ] Test on Windows 7 (if needed)
 - [ ] Create USB image
 
 ### This Month
+
 - [ ] Execute full test matrix (30+ scenarios)
 - [ ] Enterprise deployment planning
 - [ ] Production release preparation
 
 ### This Quarter
+
 - [ ] Roll out to production
 - [ ] Monitor installations
 - [ ] Plan Phase 7 improvements

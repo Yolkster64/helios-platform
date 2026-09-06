@@ -327,15 +327,18 @@ public void MetricsCollection_Should_Return_Valid_Data()
 ## 🆘 Troubleshooting
 
 **High Memory Usage**
+
 - Clear old alerts: `dashboard.ClearOldAlerts(7)`
 - Clear old data: `analytics.ClearOldData(7)`
 
 **Slow Dashboard**
+
 - Increase refresh interval
 - Reduce number of active widgets
 - Review extension count
 
 **Metrics Not Updating**
+
 - Verify service initialization
 - Check system permissions
 - Review event subscribers

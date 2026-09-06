@@ -20,17 +20,20 @@ Helios Platform v2.5.1 introduces significant performance improvements across do
 ## 1. Download Parallelization (4-Concurrent Batching)
 
 ### Overview
+
 Download parallelization accelerates update deployment by downloading multiple files simultaneously in 4-concurrent batches instead of sequential processing.
 
 ### How It Works
 
 **Sequential Download (Pre-v2.5.1):**
+
 ```
 Update Files: [File1] → [File2] → [File3] → [File4] → [File5] → [File6] → [File7] → [File8]
 Time:         1s      1s      1s      1s      1s      1s      1s      1s      = 8 seconds
 ```
 
 **Parallel Download (v2.5.1):**
+
 ```
 Batch 1: [File1] [File2] [File3] [File4]  = 1s
 Batch 2: [File5] [File6] [File7] [File8]  = 1s
@@ -40,6 +43,7 @@ Total Time: 2 seconds (75% faster!)
 ### Implementation Details
 
 **Configuration:**
+
 ```csharp
 public class UpdateService {
     private const int MaxConcurrentDownloads = 4;
@@ -66,6 +70,7 @@ public class UpdateService {
 ### Usage Example
 
 **Manual Download with Progress:**
+
 ```csharp
 var service = new UpdateService();
 var progress = new Progress<ProgressReport>(report => {
@@ -97,6 +102,7 @@ await service.DownloadUpdate(update, progress);
 | 200 Mbps | 32 seconds | 8 seconds | 4x |
 
 **Real-World Example:**
+
 - **Before**: 45 minutes (10 Mbps, 800MB)
 - **After**: 11 minutes (10 Mbps, 800MB)
 - **Improvement**: 73% time reduction
@@ -104,6 +110,7 @@ await service.DownloadUpdate(update, progress);
 ### Configuration Options
 
 **Adjust Concurrent Downloads:**
+
 ```csharp
 // In UpdateService configuration
 public class UpdateServiceConfig {
@@ -123,11 +130,13 @@ var service = new UpdateService(new UpdateServiceConfig {
 ## 2. GUI Rendering Optimization (StringBuilder)
 
 ### Overview
+
 GUI rendering optimization replaces string concatenation with StringBuilder, reducing memory allocations and GC pressure. This improves UI responsiveness by approximately 60%.
 
 ### The Problem
 
 **Naive String Concatenation (Pre-v2.5.1):**
+
 ```csharp
 string status = "";
 for (int i = 0; i < 1000; i++) {
@@ -137,6 +146,7 @@ for (int i = 0; i < 1000; i++) {
 ```
 
 **Memory Impact:**
+
 - String 1: 10 bytes (allocated)
 - String 2: 20 bytes (new allocation, String 1 garbage)
 - String 3: 30 bytes (new allocation, Strings 1-2 garbage)
@@ -147,6 +157,7 @@ for (int i = 0; i < 1000; i++) {
 ### The Solution
 
 **StringBuilder Optimization (v2.5.1):**
+
 ```csharp
 var statusBuilder = new StringBuilder();
 for (int i = 0; i < 1000; i++) {
@@ -159,6 +170,7 @@ string status = statusBuilder.ToString();  // Single allocation
 ### Implementation Example
 
 **Before (Pre-v2.5.1):**
+
 ```csharp
 public class USBManagementGUI {
     public string GenerateStatusReport() {
@@ -182,6 +194,7 @@ public class USBManagementGUI {
 ```
 
 **After (v2.5.1):**
+
 ```csharp
 public class USBManagementGUI {
     public string GenerateStatusReport() {
@@ -215,6 +228,7 @@ public class USBManagementGUI {
 | **Improvement** | **47x faster** | **56x less memory** | **12 fewer GCs** |
 
 **UI Responsiveness Impact:**
+
 - **Before**: 850ms lag when rendering status
 - **After**: 18ms (imperceptible)
 - **User Experience**: 60% perceived improvement
@@ -222,12 +236,14 @@ public class USBManagementGUI {
 ### Best Practices
 
 **Use StringBuilder When:**
+
 - Building strings in loops
 - Concatenating 10+ strings
 - Rendering large UI components
 - Building log messages or reports
 
 **Example - Logging System:**
+
 ```csharp
 public class LogRenderer {
     public string FormatLogs(List<LogEntry> logs) {
@@ -250,17 +266,20 @@ public class LogRenderer {
 ## 3. Build Compilation Optimization (Parallel Enabled)
 
 ### Overview
+
 Build compilation with parallel compilation enabled reduces total build time by ~40% on multi-core systems by compiling multiple assemblies simultaneously.
 
 ### How It Works
 
 **Sequential Compilation (Pre-v2.5.1):**
+
 ```
 Core → UI → Services → Tools → Tests → Utilities
 4s     3s    2s        1s      2s      1s       = 13 seconds
 ```
 
 **Parallel Compilation (v2.5.1):**
+
 ```
 Core                    4s
 UI, Services, Tools     3s (parallel)
@@ -271,6 +290,7 @@ Total: 9 seconds (31% faster!)
 ### Build Configuration
 
 **MSBuild Parallel Settings (.csproj):**
+
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Enable parallel builds -->
@@ -290,6 +310,7 @@ Total: 9 seconds (31% faster!)
 ### Build Command
 
 **With Parallelization:**
+
 ```bash
 # Using 4 concurrent processors
 dotnet build -m:4 -c Release
@@ -309,6 +330,7 @@ dotnet build -m -c Release
 | 16-core CPU | 52 seconds | 12 seconds | 8 seconds |
 
 **Real Project Results:**
+
 - **Before**: 52 seconds on 8-core system
 - **After**: 14 seconds with parallel enabled
 - **Improvement**: 73% faster (3.7x speedup)
@@ -316,18 +338,21 @@ dotnet build -m -c Release
 ### Optimization Tips
 
 **1. Clean Build Cache:**
+
 ```bash
 dotnet clean
 dotnet build -m -c Release
 ```
 
 **2. Use Incremental Builds:**
+
 ```bash
 # Only rebuilds changed files
 dotnet build -c Release  # Subsequent runs
 ```
 
 **3. Profile Build Time:**
+
 ```bash
 # Detailed timing information
 dotnet build -c Release /verbosity:detailed
@@ -351,11 +376,13 @@ dotnet build -c Release /verbosity:detailed
 ### Error Handling
 
 **Improvements:**
+
 - Added 15+ new exception scenarios
 - Improved error messages with actionable guidance
 - Enhanced logging for debugging
 
 **Example:**
+
 ```csharp
 // Old error message
 throw new Exception("Download failed");
@@ -373,6 +400,7 @@ throw new UpdateException(
 ### Code Complexity Reduction
 
 **Cyclomatic Complexity:**
+
 - Average reduced from 8.2 to 4.7
 - Max complexity reduced from 28 to 15
 - Better code readability and maintainability
@@ -457,21 +485,25 @@ dotnet clean && dotnet build -m -c Release
 ### Download Parallelization Issues
 
 **Problem**: Downloads still slow
+
 - **Solution**: Check network speed with `Test-Connection google.com -Repeat 4`
 - Increase `MaxConcurrentDownloads` if network allows
 
 **Problem**: Memory usage high during download
+
 - **Solution**: Reduce `MaxConcurrentDownloads` to 2-3
 
 ### GUI Rendering Issues
 
 **Problem**: UI still lags
+
 - **Solution**: Ensure StringBuilder is used for all string building
 - Check for event handlers that rebuild UI on every change
 
 ### Build Optimization Issues
 
 **Problem**: Parallel build fails
+
 - **Solution**: Try `-m:1` to identify problematic dependencies
 - Clear NuGet cache: `dotnet nuget locals all --clear`
 
@@ -480,6 +512,7 @@ dotnet clean && dotnet build -m -c Release
 ## Advanced Configuration
 
 **Create custom optimization profile:**
+
 ```csharp
 public class OptimizationProfile {
     public int MaxConcurrentDownloads { get; set; } = 4;

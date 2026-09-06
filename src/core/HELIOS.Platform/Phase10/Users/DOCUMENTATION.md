@@ -9,9 +9,11 @@ The Advanced User & Account Management System for Phase 10 (USB Builder System) 
 ### Core Components
 
 #### 1. UserAccountProvisioner.cs
+
 **Purpose**: Creates and manages system user accounts
 
 **Key Features**:
+
 - Create Administrator accounts with strong security
 - Create Primary User accounts for gaming/work/dev
 - Create Guest accounts with restricted permissions
@@ -21,6 +23,7 @@ The Advanced User & Account Management System for Phase 10 (USB Builder System) 
 - Account management (enable/disable)
 
 **Public Methods**:
+
 ```csharp
 Task<bool> CreateAdministratorAsync(string username, string fullName, string password)
 Task<bool> CreatePrimaryUserAsync(string username, string fullName, string password)
@@ -32,6 +35,7 @@ Task<bool> DisableAccountAsync(string username)
 ```
 
 **Example Usage**:
+
 ```csharp
 var provisioner = new UserAccountProvisioner();
 await provisioner.CreateAdministratorAsync("admin", "Administrator", "P@ssw0rd!");
@@ -41,15 +45,18 @@ await provisioner.CreateServiceAccountAsync("helios-service", "ServiceP@ss123!")
 ```
 
 #### 2. AccountPermissionManager.cs
+
 **Purpose**: Implements Role-Based Access Control (RBAC)
 
 **Account Roles**:
+
 - **Administrator**: Full system access, can modify all users/groups
 - **StandardUser**: Limited access, can't modify system files/registry
 - **Guest**: Very limited, sandbox-like restrictions
 - **Service**: System service permissions only
 
 **Key Features**:
+
 - Role-based permission assignment
 - Local group management
 - NTFS file system permissions
@@ -58,6 +65,7 @@ await provisioner.CreateServiceAccountAsync("helios-service", "ServiceP@ss123!")
 - Permission revocation
 
 **Public Methods**:
+
 ```csharp
 Task<bool> ApplyRolePermissionsAsync(string username, AccountRole role)
 Task<bool> RevokeAllPermissionsAsync(string username)
@@ -66,6 +74,7 @@ Task<UserPermissions> GetUserPermissionsAsync(string username)
 ```
 
 **Example Usage**:
+
 ```csharp
 var permManager = new AccountPermissionManager();
 await permManager.ApplyRolePermissionsAsync("john", AccountPermissionManager.AccountRole.StandardUser);
@@ -76,9 +85,11 @@ var permissions = await permManager.GetUserPermissionsAsync("john");
 ```
 
 #### 3. UserDataDirectorySetup.cs
+
 **Purpose**: Creates organized user directory structures
 
 **Standard Directories Created**:
+
 - Desktop
 - Documents
 - Downloads
@@ -91,6 +102,7 @@ var permissions = await permManager.GetUserPermissionsAsync("john");
 - OneDrive sync folders (optional)
 
 **Key Features**:
+
 - Automatic directory structure creation
 - Media folder organization (Artists, Albums, etc.)
 - Document categorization (Work, Personal, Projects)
@@ -100,6 +112,7 @@ var permissions = await permManager.GetUserPermissionsAsync("john");
 - Directory size calculation
 
 **Public Methods**:
+
 ```csharp
 Task<bool> SetupUserDirectoriesAsync(string username)
 Task<bool> CreateDocumentFoldersAsync(string username)
@@ -112,6 +125,7 @@ string GetUserProfilePath(string username)
 ```
 
 **Example Usage**:
+
 ```csharp
 var dirSetup = new UserDataDirectorySetup();
 await dirSetup.SetupUserDirectoriesAsync("john");
@@ -124,9 +138,11 @@ long size = await dirSetup.GetUserDirectorySizeAsync("john");
 ```
 
 #### 4. MultiProfileCoordinator.cs
+
 **Purpose**: Manages user profile switching and multi-user coordination
 
 **Key Features**:
+
 - Switch between user profiles gracefully
 - Save/load profile states
 - Apply profile-specific settings
@@ -137,12 +153,14 @@ long size = await dirSetup.GetUserDirectorySizeAsync("john");
 - Display and accessibility settings
 
 **Profile State Management**:
+
 - Tracks active processes
 - Stores user-specific settings
 - Manages service continuity
 - Logs profile switches
 
 **Public Methods**:
+
 ```csharp
 Task<bool> SwitchUserProfileAsync(string targetUsername, bool gracefulShutdown = true)
 Task<bool> KeepServicesRunningAsync()
@@ -152,6 +170,7 @@ List<ProfileState> GetAllProfiles()
 ```
 
 **Example Usage**:
+
 ```csharp
 var profileCoord = new MultiProfileCoordinator();
 
@@ -167,9 +186,11 @@ var profileState = profileCoord.GetProfileState("john");
 ```
 
 #### 5. UserSecurityInitializer.cs
+
 **Purpose**: Implements comprehensive security initialization and policies
 
 **Security Configuration**:
+
 - Password requirements and complexity
 - Account lockout policies
 - Password history tracking
@@ -179,6 +200,7 @@ var profileState = profileCoord.GetProfileState("john");
 - Recovery codes generation
 
 **Default Password Requirements**:
+
 - Minimum length: 12 characters
 - Complexity: Required (upper, lower, numbers, special chars)
 - History: 5 passwords
@@ -187,6 +209,7 @@ var profileState = profileCoord.GetProfileState("john");
 - 30-minute lockout duration
 
 **Public Methods**:
+
 ```csharp
 Task<bool> InitializeUserSecurityAsync(string username, PasswordRequirements requirements = null)
 Task<bool> SetupPasswordHistoryAsync(string username, int historyCount = 5)
@@ -196,6 +219,7 @@ Task<SecurityStatus> GetSecurityStatusAsync(string username)
 ```
 
 **Example Usage**:
+
 ```csharp
 var securityInit = new UserSecurityInitializer();
 
@@ -220,9 +244,11 @@ Console.WriteLine($"Security Score: {status.SecurityScore}/100");
 ```
 
 #### 6. AccountActivityMonitor.cs
+
 **Purpose**: Tracks and audits all user account activity
 
 **Tracked Events**:
+
 - Account creation
 - Successful/failed logins
 - Logouts
@@ -232,6 +258,7 @@ Console.WriteLine($"Security Score: {status.SecurityScore}/100");
 - Anomalous activities
 
 **Activity Reports**:
+
 - Login statistics
 - Privilege escalation tracking
 - Anomalous activity detection
@@ -239,6 +266,7 @@ Console.WriteLine($"Security Score: {status.SecurityScore}/100");
 - Activity archiving
 
 **Public Methods**:
+
 ```csharp
 Task<bool> LogAccountCreationAsync(string username, string fullName, string accountType)
 Task<bool> LogLoginAttemptAsync(string username, bool successful, string ipAddress = null)
@@ -252,6 +280,7 @@ Task<bool> ArchiveOldLogsAsync(int daysToKeep = 90)
 ```
 
 **Example Usage**:
+
 ```csharp
 var activityMonitor = new AccountActivityMonitor();
 
@@ -303,6 +332,7 @@ public interface IUserAccountManagementService
 ## Setup Guide
 
 ### Prerequisites
+
 - .NET 8.0 or higher
 - Windows (Server or Desktop)
 - Administrator privileges for initial setup
@@ -311,11 +341,13 @@ public interface IUserAccountManagementService
 ### Installation
 
 1. **Add NuGet package** (when published):
+
    ```bash
    dotnet add package HELIOS.Platform.Phase10.Users
    ```
 
 2. **Initialize services**:
+
    ```csharp
    var provisioner = new UserAccountProvisioner();
    var permManager = new AccountPermissionManager();
@@ -326,6 +358,7 @@ public interface IUserAccountManagementService
    ```
 
 3. **Create system accounts**:
+
    ```csharp
    // Create administrator account
    await provisioner.CreateAdministratorAsync("admin", "System Administrator", "StrongP@ssw0rd!");
@@ -341,6 +374,7 @@ public interface IUserAccountManagementService
    ```
 
 4. **Setup permissions and directories**:
+
    ```csharp
    // Apply permissions
    await permManager.ApplyRolePermissionsAsync("admin", AccountPermissionManager.AccountRole.Administrator);
@@ -352,6 +386,7 @@ public interface IUserAccountManagementService
    ```
 
 5. **Initialize security**:
+
    ```csharp
    await securityInit.InitializeUserSecurityAsync("admin");
    await securityInit.InitializeUserSecurityAsync("user1");
@@ -360,6 +395,7 @@ public interface IUserAccountManagementService
 ## Security Considerations
 
 ### Password Policy
+
 - Minimum 12 characters (configurable)
 - Require uppercase letters
 - Require lowercase letters
@@ -369,11 +405,13 @@ public interface IUserAccountManagementService
 - Maximum age: 90 days
 
 ### Account Lockout
+
 - Failed attempt threshold: 5
 - Lockout duration: 30 minutes
 - Reset counter: 30 minutes of inactivity
 
 ### Audit Logging
+
 - All account operations logged
 - Daily log rotation
 - 90-day retention (configurable)
@@ -381,6 +419,7 @@ public interface IUserAccountManagementService
 - Anomaly detection enabled
 
 ### Two-Factor Authentication
+
 - TOTP support
 - Recovery codes (10 per account)
 - Backup methods configurable
@@ -394,6 +433,7 @@ dotnet test Phase10.Users.Tests --verbosity detailed
 ```
 
 ### Test Coverage
+
 - **UserAccountProvisioner**: 5 tests
   - User existence checks
   - Account listing
@@ -434,6 +474,7 @@ dotnet test Phase10.Users.Tests --verbosity detailed
 ## Logging
 
 All services implement comprehensive logging to:
+
 - `%APPDATA%\HELIOS\Logs\UserProvisioning.log`
 - `%APPDATA%\HELIOS\Logs\Permissions.log`
 - `%APPDATA%\HELIOS\Logs\DirectorySetup.log`
@@ -446,13 +487,16 @@ Logs include timestamps, severity levels, and detailed messages for troubleshoot
 ## Integration Points
 
 ### With Other Phase 10 Systems
+
 - **Partitioning System**: Coordinates user-specific partitions
 - **Vault System**: Secures user credentials and recovery codes
 - **Sandbox System**: Manages guest/restricted user environments
 - **Quarantine System**: Tracks suspicious user activities
 
 ### Event Publishing
+
 Services publish events for integration with central audit system:
+
 - User creation events
 - Permission changes
 - Security policy updates
@@ -469,6 +513,7 @@ Services publish events for integration with central audit system:
 ## Error Handling
 
 All services implement robust error handling:
+
 - Exceptions logged but don't crash services
 - Graceful fallbacks
 - Detailed error messages
@@ -490,21 +535,25 @@ All services implement robust error handling:
 ### Common Issues
 
 **WMI Errors**
+
 - Ensure WMI service is running
 - Check user has administrator privileges
 - Verify Windows security policies allow WMI access
 
 **Permission Denied**
+
 - Run with administrator privileges
 - Check file system ACLs
 - Verify registry access permissions
 
 **User Creation Fails**
+
 - Username already exists
 - Invalid username format
 - Username length exceeds limits
 
 **Security Policy Application**
+
 - Group policy conflicts
 - Missing registry paths
 - Insufficient permissions

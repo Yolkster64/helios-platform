@@ -1,6 +1,9 @@
 #################################################################################
+
 # HELIOS Platform - Backup and Recovery System - Complete Documentation
+
 # Generated: $(Get-Date)
+
 #################################################################################
 
 ## HELIOS PLATFORM COMPREHENSIVE BACKUP & RECOVERY SYSTEM
@@ -105,6 +108,7 @@ D:\HELIOS\Logs\Backup/
 **Priority**: 7/10
 
 **Contents**:
+
 1. All 5 SQL Server databases (HELIOS_Core, HELIOS_Users, HELIOS_Analytics, HELIOS_Config, HELIOS_Audit)
 2. Complete configuration backup (C:\HELIOS\Config, C:\HELIOS\Settings, C:\HELIOS\SSL)
 3. Registry backups (HELIOS keys)
@@ -113,6 +117,7 @@ D:\HELIOS\Logs\Backup/
 6. System state (Event logs, system info)
 
 **Output**:
+
 - Full database backup files (*.bak)
 - Complete config directory copies
 - Full file system copies
@@ -128,6 +133,7 @@ D:\HELIOS\Logs\Backup/
 **Priority**: 8/10
 
 **Contents**:
+
 1. Transaction log backups for all databases (*.trn)
 2. Only changed files since last backup
 3. Modified configuration files only
@@ -136,6 +142,7 @@ D:\HELIOS\Logs\Backup/
 **Dependencies**: Requires a previous Full or Incremental backup
 
 **Output**:
+
 - Transaction log files
 - Changed files only
 - Minimal metadata
@@ -149,6 +156,7 @@ D:\HELIOS\Logs\Backup/
 **Priority**: 7/10
 
 **Contents**:
+
 1. Differential database backup files (*.dif) - all changes since full
 2. All files changed since last full backup
 3. Changed configuration files since full backup
@@ -157,6 +165,7 @@ D:\HELIOS\Logs\Backup/
 **Dependencies**: Requires a Full backup as base
 
 **Output**:
+
 - Differential backup files
 - All changed data since full
 - Complete recovery chain info
@@ -170,6 +179,7 @@ D:\HELIOS\Logs\Backup/
 **Priority**: 5/10
 
 **Features**:
+
 - Syncs completed backups to Azure
 - Automatic compression before upload
 - GPG encryption (if available)
@@ -178,6 +188,7 @@ D:\HELIOS\Logs\Backup/
 - Metadata tracking in cloud
 
 **Azure Configuration**:
+
 ```powershell
 Storage Account: heliosbackup
 Container: helios-backups
@@ -201,6 +212,7 @@ Authentication: Storage Account Key
 ### Backup Procedures
 
 **Full Database Backup**:
+
 ```sql
 BACKUP DATABASE [DatabaseName] 
 TO DISK = N'path\DatabaseName.bak'
@@ -209,6 +221,7 @@ WITH NOFORMAT, NOINIT, NAME = N'DatabaseName-FullBackup',
 ```
 
 **Transaction Log Backup** (Incremental):
+
 ```sql
 BACKUP LOG [DatabaseName] 
 TO DISK = N'path\DatabaseName.trn'
@@ -217,6 +230,7 @@ WITH NOFORMAT, NOINIT, NAME = N'DatabaseName-IncrementalBackup',
 ```
 
 **Differential Database Backup**:
+
 ```sql
 BACKUP DATABASE [DatabaseName] 
 TO DISK = N'path\DatabaseName.dif'
@@ -225,6 +239,7 @@ WITH DIFFERENTIAL, NOFORMAT, NOINIT, NAME = N'DatabaseName-DifferentialBackup',
 ```
 
 **Verification**:
+
 ```sql
 RESTORE VERIFYONLY FROM DISK = N'path\DatabaseName.bak';
 ```
@@ -232,6 +247,7 @@ RESTORE VERIFYONLY FROM DISK = N'path\DatabaseName.bak';
 ### Recovery Chain
 
 For point-in-time recovery:
+
 1. Restore full backup (*.bak)
 2. Restore differential backup (*.dif) if available
 3. Restore transaction logs (*.trn) in chronological order
@@ -244,18 +260,21 @@ For point-in-time recovery:
 ### Backed Up Items
 
 **Application Configuration**:
+
 - C:\HELIOS\Config\ - All application settings
 - C:\HELIOS\Settings\ - System settings
 - C:\HELIOS\SSL\ - SSL certificates
 - All JSON/XML configuration files
 
 **System Configuration**:
+
 - HKLM:\SOFTWARE\HELIOS - Application registry
 - HKLM:\SYSTEM\CurrentControlSet\Services\HELIOS* - Service configs
 - C:\Windows\System32\drivers\etc\hosts - Host mappings
 - IIS Configuration (applicationHost.config, web.config)
 
 **Backup Strategy**:
+
 - Includes registry exports (.reg files)
 - Full directory copies for file-based configs
 - Change detection for differential backups
@@ -268,23 +287,27 @@ For point-in-time recovery:
 ### Backed Up Directories
 
 **Primary Data**:
+
 - D:\HELIOS\Data\ - Primary application data
 - D:\HELIOS\Documents\ - Document storage
 - D:\HELIOS\Reports\ - Generated reports
 - D:\HELIOS\Media\ - Media files
 
 **Exclusions**:
+
 - *.tmp files (temporary)
 - *.log files (local logs - captured elsewhere)
 - System temp directories
 - Cache directories
 
 **Change Tracking**:
+
 - Full backup: copies everything
 - Incremental: tracks LastWriteTime, copies only changed
 - Differential: all changes since full backup
 
 **Typical Sizes**:
+
 - Full backup: 200-500 GB
 - Incremental: 10-50 GB
 - Differential: 30-100 GB
@@ -304,12 +327,14 @@ Local Backup → Compression → Encryption → Azure Upload
 ### Configuration
 
 **Environment Variables** (Set on backup server):
+
 ```powershell
 $env:AZURE_ACCOUNT = "heliosbackup"
 $env:AZURE_KEY = "<storage-account-key>"
 ```
 
 **Azure Setup**:
+
 1. Create storage account: `heliosbackup`
 2. Create container: `helios-backups`
 3. Configure access key for automated access
@@ -317,22 +342,26 @@ $env:AZURE_KEY = "<storage-account-key>"
 ### Features
 
 **Compression**:
+
 - Uses 7-Zip for optimal compression
 - Typical ratio: 2:1 to 4:1
 - Fallback to Windows native compression if 7-Zip unavailable
 
 **Encryption** (Optional):
+
 - GPG symmetric encryption (AES-256)
 - Passphrase stored securely
 - Only if GPG tool available
 
 **Upload Management**:
+
 - Hourly sync of completed backups
 - Bandwidth throttling support
 - Failed upload retry (3 attempts)
 - Metadata stored in both local and cloud
 
 **Lifecycle**:
+
 - Backups uploaded after local completion
 - Optional local cleanup after successful cloud sync
 - Cloud copies retain indefinitely (per policy)
@@ -348,6 +377,7 @@ Restore the system to any previous point in time by using the appropriate combin
 ### Recovery Process
 
 **1. Identify Recovery Point**
+
 ```powershell
 $recoveryTime = [DateTime]"2024-04-10 14:30:00"
 
@@ -360,6 +390,7 @@ C:\HELIOS\Scripts\Backup\Recovery\1_PointInTimeRecovery.ps1 `
 **2. Recovery Chain Selection**
 
 The system automatically selects:
+
 - Full backup closest to (but before) recovery time
 - Differential backup (if available after full)
 - Transaction logs in chronological order up to recovery time
@@ -367,6 +398,7 @@ The system automatically selects:
 **3. Restore Execution**
 
 For each component:
+
 - **Databases**: RESTORE statements in correct order
 - **Configurations**: Restore to original paths
 - **File System**: Restore to original locations
@@ -404,27 +436,32 @@ Complete restoration of the HELIOS Platform from scratch using a backup set.
 ### Process
 
 **Phase 1: Pre-Restore Validation**
+
 - Verify backup integrity
 - Check backup components exist
 - Validate checksums
 
 **Phase 2: Database Restoration**
+
 - Restore all 5 databases
 - Run integrity checks
 - Verify transaction logs
 
 **Phase 3: Configuration Restoration**
+
 - Restore application configs
 - Restore system registry settings
 - Restore IIS configuration
 - Configure SSL certificates
 
 **Phase 4: File System Restoration**
+
 - Restore all directories
 - Restore permissions
 - Verify file integrity
 
 **Phase 5: Post-Restore Validation**
+
 - Start all services
 - Verify connectivity
 - Run smoke tests
@@ -456,21 +493,25 @@ C:\HELIOS\Scripts\Backup\Recovery\2_DisasterRecovery.ps1 `
 ### Verification Components
 
 **1. File Integrity**
+
 - SHA256 checksums calculated for all files
 - Stored in backup metadata
 - Verified on restore
 
 **2. Database Backups**
+
 - RESTORE VERIFYONLY for each database backup
 - Checks backup header and structure
 - Verifies backup can be restored
 
 **3. Archive Integrity**
+
 - 7-Zip integrity check for compressed backups
 - Verifies all files can be extracted
 - Detects corruption
 
 **4. Test Restore** (Optional)
+
 - Extract backup to test location
 - Verify file count and structure
 - Check key configuration files
@@ -499,6 +540,7 @@ C:\HELIOS\Scripts\Backup\Utilities\1_BackupVerification.ps1 `
 ### Reporting
 
 Verification results stored in metadata:
+
 - `VerificationStatus`: Passed/Failed/Error
 - `LastVerified`: Timestamp
 - `Details`: Specific issues found
@@ -510,6 +552,7 @@ Verification results stored in metadata:
 ### Windows Task Scheduler Integration
 
 **Setup**:
+
 ```powershell
 C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Setup
 ```
@@ -529,11 +572,13 @@ This creates 7 scheduled tasks:
 ### Task Management
 
 **View Status**:
+
 ```powershell
 C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action List
 ```
 
 **Disable All**:
+
 ```powershell
 C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Disable
 ```
@@ -553,6 +598,7 @@ C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Disable
 ### Alert Types
 
 **Status Alerts**:
+
 - Backup Started
 - Backup Completed
 - Backup Failed
@@ -562,6 +608,7 @@ C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Disable
 **Destinations**:
 
 1. **Email**
+
    ```powershell
    $env:SMTP_SERVER = "smtp.example.com"
    $env:SMTP_PORT = "587"
@@ -570,6 +617,7 @@ C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Disable
    ```
 
 2. **Slack**
+
    ```powershell
    $env:SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/..."
    ```
@@ -583,6 +631,7 @@ C:\HELIOS\Scripts\Backup\Utilities\3_HealthCheck.ps1
 ```
 
 **Monitors**:
+
 - Backup directory structure (OK/FAILED)
 - Disk space usage (OK/WARNING if >80%, CRITICAL if >95%)
 - Last backup age (OK/WARNING if >24 hours)
@@ -615,10 +664,12 @@ C:\HELIOS\Scripts\Backup\Utilities\3_HealthCheck.ps1
 ### Storage Requirements
 
 **Local Storage** (D:\HELIOS\Backups):
+
 - 1 Full + 1 Differential + 6 Incremental = ~700-800 GB
 - Retention policy: 90 days = ~2-3 TB
 
 **Cloud Storage** (Azure):
+
 - Same as compressed local = 150-300 GB
 
 ---
@@ -698,12 +749,14 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
 ## FILE INVENTORY
 
 ### Core Infrastructure
+
 - **0_BackupCore.ps1** (15.8 KB)
   - Core backup infrastructure and utility functions
   - Logging, metadata management, compression, checksums
   - Health checks and storage management
 
 ### Backup Scripts
+
 - **1_FullBackup.ps1** (6.1 KB)
   - Complete system backup (databases, configs, files, system state)
   
@@ -717,6 +770,7 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
   - Azure replication with compression and encryption
 
 ### Recovery Scripts
+
 - **Recovery/1_PointInTimeRecovery.ps1** (6.7 KB)
   - Restore to any point in time using backup chain
   
@@ -724,6 +778,7 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
   - Full system restoration from scratch
 
 ### Utilities
+
 - **Utilities/1_BackupVerification.ps1** (8.9 KB)
   - Backup integrity and recoverability verification
   
@@ -737,6 +792,7 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
   - Email/Slack/Teams notifications
 
 ### Orchestration & Configuration
+
 - **MasterOrchestrator.ps1** (5.3 KB)
   - Central operation controller
   
@@ -793,18 +849,21 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
 ### Common Issues
 
 **Backup Fails to Start**
+
 - Check backup drive space (min 50% free recommended)
 - Verify SQL Server service is running
 - Check D:\HELIOS\Logs\Backup\FullBackup\*.log for details
 - Verify account permissions (runs as SYSTEM)
 
 **Verification Failures**
+
 - Check backup file integrity
 - Verify compression wasn't interrupted
 - Run RESTORE VERIFYONLY manually
 - Test backup restore to alternate location
 
 **Cloud Upload Issues**
+
 - Verify Azure credentials (storage account + key)
 - Check network connectivity to Azure
 - Verify container exists in Azure
@@ -812,18 +871,21 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
 - Review firewall rules
 
 **Scheduled Tasks Not Running**
+
 - Verify Task Scheduler service is running
 - Check task history in Event Viewer
 - Test manual script execution
 - Verify PowerShell execution policy
 
 **Low Storage Space**
+
 - Check retention policy (currently 30-90 days)
 - Run cleanup: `2_BackupCleanup.ps1`
 - Consider archiving old backups
 - Increase storage or move to external
 
 **High CPU/Network Usage During Backup**
+
 - Schedule backups during low-usage windows
 - Reduce compression level
 - Enable bandwidth throttling for cloud
@@ -843,6 +905,7 @@ C:\HELIOS\Scripts\Backup\MasterOrchestrator.ps1 `
 ### Monitoring Dashboard Topics
 
 Create monitoring for:
+
 - Backup completion status (success/failure)
 - Backup size trends
 - Backup duration trends

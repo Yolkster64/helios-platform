@@ -3,6 +3,7 @@
 ## 5-Minute Setup
 
 ### 1. Initialize Components
+
 ```csharp
 using HELIOS.Platform.Core.Server;
 using HELIOS.Platform.Core.Server.Models;
@@ -21,6 +22,7 @@ var deploymentService = new DeploymentService();
 ```
 
 ### 2. Register and Start a Service
+
 ```csharp
 // Create service
 var service = new ServiceInfo
@@ -40,6 +42,7 @@ await serviceManager.StartServiceAsync("my-app");
 ```
 
 ### 3. Start Health Monitoring
+
 ```csharp
 // Configure and start
 healthMonitor.Start();
@@ -53,6 +56,7 @@ healthMonitor.ServiceRestarted += (s, e) =>
 ```
 
 ### 4. Deploy an Application
+
 ```csharp
 // Start deployment
 var deploymentId = await deploymentService.StartDeploymentAsync(
@@ -70,6 +74,7 @@ Console.WriteLine($"Status: {deployment.Status}, Progress: {deployment.Completio
 ## Common Tasks
 
 ### Manage Service Lifecycle
+
 ```csharp
 // Start
 await serviceManager.StartServiceAsync("service-id");
@@ -88,6 +93,7 @@ await serviceManager.ResumeServiceAsync("service-id");
 ```
 
 ### Monitor Processes
+
 ```csharp
 // Get all processes
 var processes = processManager.GetAllProcesses();
@@ -106,6 +112,7 @@ processManager.SetCpuLimit(pid, 50.0);                    // 50% CPU
 ```
 
 ### Control Process Priority
+
 ```csharp
 // Set priority
 processManager.SetProcessPriority(pid, ProcessPriority.High);
@@ -120,6 +127,7 @@ processManager.SetProcessPriority(pid, ProcessPriority.High);
 ```
 
 ### Set CPU Affinity
+
 ```csharp
 // Bind to cores 0-3
 processManager.SetProcessAffinity(pid, 0x0F);
@@ -132,6 +140,7 @@ processManager.SetProcessAffinity(pid, 0x15);
 ```
 
 ### Check Service Health
+
 ```csharp
 // Manual health check
 var result = await healthMonitor.CheckServiceHealthAsync("service-id");
@@ -151,6 +160,7 @@ var lastCheck = healthMonitor.GetLastHealthCheck("service-id");
 ### Deploy Applications
 
 **Standard Deployment** (Fastest)
+
 ```csharp
 await deploymentService.StartDeploymentAsync(
     "MyApp", "2.0.0", 
@@ -160,6 +170,7 @@ await deploymentService.StartDeploymentAsync(
 ```
 
 **Rolling Update** (Staged)
+
 ```csharp
 await deploymentService.StartDeploymentAsync(
     "MyApp", "2.0.0",
@@ -170,6 +181,7 @@ await deploymentService.StartDeploymentAsync(
 ```
 
 **Blue/Green** (Zero-downtime)
+
 ```csharp
 await deploymentService.StartDeploymentAsync(
     "MyApp", "2.0.0",
@@ -180,6 +192,7 @@ await deploymentService.StartDeploymentAsync(
 ```
 
 **Canary** (Safe rollout)
+
 ```csharp
 await deploymentService.StartDeploymentAsync(
     "MyApp", "2.0.0",
@@ -190,6 +203,7 @@ await deploymentService.StartDeploymentAsync(
 ```
 
 ### Rollback Deployment
+
 ```csharp
 // Rollback failed deployment
 await deploymentService.RollbackDeployment(deploymentId);
@@ -203,6 +217,7 @@ if (deployment.Status == DeploymentStatus.RolledBack)
 ## Performance Tips
 
 ### Service Management
+
 ```csharp
 // Optimize for 100+ services
 // - Use unique ServiceIds
@@ -212,6 +227,7 @@ if (deployment.Status == DeploymentStatus.RolledBack)
 ```
 
 ### Process Management
+
 ```csharp
 // Optimize for 1000+ processes
 // - Register only critical processes
@@ -221,6 +237,7 @@ if (deployment.Status == DeploymentStatus.RolledBack)
 ```
 
 ### Health Monitoring
+
 ```csharp
 // Optimize health checks
 var monitor = new ServiceHealthMonitor(
@@ -233,6 +250,7 @@ var monitor = new ServiceHealthMonitor(
 ## Configuration Presets
 
 ### High Availability
+
 ```csharp
 var service = new ServiceInfo
 {
@@ -245,6 +263,7 @@ var service = new ServiceInfo
 ```
 
 ### Resource Constrained
+
 ```csharp
 var service = new ServiceInfo
 {
@@ -258,6 +277,7 @@ processManager.SetCpuLimit(pid, 25.0);                  // 25% CPU
 ```
 
 ### Development
+
 ```csharp
 var monitor = new ServiceHealthMonitor(
     serviceManager,
@@ -301,6 +321,7 @@ deploymentService.DeploymentError += (s, e) =>
 ## Status Values
 
 ### Service Status
+
 ```
 Stopped = 0      - Service is not running
 Running = 1      - Service is running
@@ -309,6 +330,7 @@ Unknown = 3      - Unknown status
 ```
 
 ### Health Status
+
 ```
 Healthy = 0      - All checks passed
 Unhealthy = 1    - Critical issues
@@ -317,6 +339,7 @@ Unknown = 3      - Unable to check
 ```
 
 ### Deployment Status
+
 ```
 Pending = 0      - Waiting to start
 InProgress = 1   - Currently deploying

@@ -14,6 +14,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ## Architecture & Components
 
 ### 1. BuilderUIHost.cs (Service 1)
+
 **Main WPF Application Host**
 
 ```csharp
@@ -27,6 +28,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Initialize UI and services
 - `ApplyXenbladTheme()` - Apply theme styling
 - `UpdateProgress()` - Update progress display
@@ -34,6 +36,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `HandleDeploymentCompleted()` - Completion handling
 
 **BuilderViewModel**:
+
 - `CurrentStep` - Track wizard step
 - `OverallProgress` - Overall progress percentage
 - `SubtaskProgress` - Current subtask progress
@@ -43,6 +46,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 2. StepWizardEngine.cs (Service 2)
+
 **7-Step Wizard Navigation & Validation**
 
 ```csharp
@@ -57,6 +61,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Setup all steps and validators
 - `GetCurrentStepAsync()` - Get current step info
 - `GoToNextStepAsync()` - Navigate forward with validation
@@ -65,11 +70,13 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `ValidateCurrentStepAsync()` - Validate step requirements
 
 **Navigation Properties**:
+
 - `CanGoBack` - Check if back navigation allowed
 - `CanGoForward` - Check if forward navigation allowed
 - `CurrentStep` - Current step number
 
 **Validators**:
+
 - Target step validation (drive selected)
 - Version step validation (version selected)
 - Profile step validation (profile selected)
@@ -78,6 +85,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 3. OptionsPanel.cs (Service 3)
+
 **Step-Specific Configuration UI**
 
 ```csharp
@@ -92,6 +100,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Initialize with service
 - `LoadStepOptionsAsync(stepNumber)` - Load step-specific controls
 - `GenerateWelcomeControlsAsync()` - Welcome screen
@@ -105,6 +114,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 4. ProgressMonitor.cs (Service 4)
+
 **Real-Time Progress Display**
 
 ```csharp
@@ -120,6 +130,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Setup with service
 - `UpdateProgressAsync()` - Update progress display
 - `ShowError()` - Display error alerts
@@ -128,6 +139,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `Reset()` - Reset all progress values
 
 **UI Elements**:
+
 - Progress bars with percentage display
 - Real-time log viewer (auto-scrolling)
 - Operation status text
@@ -137,6 +149,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 5. DriveSelector.cs (Service 5)
+
 **USB/Disk Drive Selection (Step 2)**
 
 ```csharp
@@ -151,6 +164,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Initialize with service
 - `LoadDrivesAsync()` - Load available drives
 - `CheckDriveHealthAsync()` - Verify drive health
@@ -158,6 +172,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `DriveSelected` event - Notify drive selection
 
 **Drive Information Displayed**:
+
 - Drive name and type
 - Total capacity
 - Free space
@@ -168,6 +183,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 6. PackageSelector.cs (Service 6)
+
 **Package Selection with Categories (Step 4)**
 
 ```csharp
@@ -182,6 +198,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Load packages
 - `LoadPackagesAsync()` - Load grouped packages
 - `SelectPresetAsync(presetName)` - Apply preset
@@ -191,11 +208,13 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `GetSelectedPackagesAsync()` - Get selection
 
 **Preset Options**:
+
 - Minimal: System packages only
 - Standard: System + Dev + Security
 - Complete: All packages
 
 **Package Dependencies**:
+
 - Auto-select required dependencies
 - Show dependency information
 - Recursive dependency resolution
@@ -203,6 +222,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 7. ProfileSelector.cs (Service 7)
+
 **Optimization Profile Selection (Step 5)**
 
 ```csharp
@@ -216,12 +236,14 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Profiles Included**:
+
 - Balanced (Recommended)
 - Gaming (Maximum performance)
 - Power Saver (Battery efficiency)
 - Custom (User-created)
 
 **Key Methods**:
+
 - `InitializeAsync()` - Load profiles
 - `LoadProfilesAsync()` - Display available profiles
 - `SelectProfileAsync(profileId)` - Select and preview
@@ -229,6 +251,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `GetSelectedProfileId()` - Get selection
 
 **Profile Preview**:
+
 - Shows included packages
 - Displays optimizations applied
 - Lists package sizes
@@ -237,6 +260,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ---
 
 ### 8. SummaryReview.cs (Service 8)
+
 **Final Review & Deployment (Step 7)**
 
 ```csharp
@@ -251,6 +275,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ```
 
 **Key Methods**:
+
 - `InitializeAsync()` - Setup reviewer
 - `LoadSummaryAsync()` - Load summary data
 - `DeployButton_Click()` - Handle deployment
@@ -258,6 +283,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 - `SetLogLink()` - Set log file location
 
 **Summary Display**:
+
 - Target drive
 - Windows version
 - Optimization profile
@@ -271,6 +297,7 @@ Phase 10H implements a beautiful, interactive USB builder setup wizard for the H
 ## Data Models
 
 ### DriveInfo
+
 ```csharp
 public class DriveInfo
 {
@@ -288,6 +315,7 @@ public class DriveInfo
 ```
 
 ### Package
+
 ```csharp
 public class Package
 {
@@ -303,6 +331,7 @@ public class Package
 ```
 
 ### OptimizationProfile
+
 ```csharp
 public class OptimizationProfile
 {
@@ -317,6 +346,7 @@ public class OptimizationProfile
 ```
 
 ### DeploymentSummary
+
 ```csharp
 public class DeploymentSummary
 {
@@ -332,6 +362,7 @@ public class DeploymentSummary
 ```
 
 ### BuilderProgressUpdate
+
 ```csharp
 public class BuilderProgressUpdate
 {
@@ -350,6 +381,7 @@ public class BuilderProgressUpdate
 ## Xenblade Theme
 
 ### Colors
+
 ```
 Primary: #0F0F23 (Deep Purple-Black)
 Primary Light: #1A1A3E (Lighter Purple)
@@ -360,6 +392,7 @@ Light Text: #E0E0E0 (Light Gray)
 ```
 
 ### Styled Components
+
 - Window: Dark background with cyan border
 - Buttons: Purple background, cyan accent on hover
 - Progress Bars: Cyan progress on dark background
@@ -368,6 +401,7 @@ Light Text: #E0E0E0 (Light Gray)
 - GroupBox: Bordered grouping with cyan accents
 
 ### Theme Features
+
 - Monado effects (cyan/lime green accents)
 - Smooth color transitions on interactions
 - Consistent styling across all components
@@ -380,6 +414,7 @@ Light Text: #E0E0E0 (Light Gray)
 ## MVVM Pattern Implementation
 
 ### BuilderViewModel
+
 ```csharp
 public class BuilderViewModel : INotifyPropertyChanged
 {
@@ -398,6 +433,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 ```
 
 ### Data Binding
+
 - Two-way binding for user inputs
 - One-way binding for status displays
 - Observable collections for lists
@@ -411,6 +447,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 ### Test Categories
 
 **StepWizardEngine Tests (8)**
+
 - Initialize wizard with 7 steps
 - Get current step
 - Navigate to next step
@@ -421,6 +458,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 - Validate step requirements
 
 **DriveSelector Tests (6)**
+
 - Initialize and load drives
 - Select drive
 - Check drive health
@@ -429,6 +467,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 - Handle empty drive list
 
 **PackageSelector Tests (8)**
+
 - Initialize and load packages
 - Select package
 - Deselect package
@@ -439,6 +478,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 - Handle preset selections
 
 **ProfileSelector Tests (6)**
+
 - Get available profiles
 - Select profile
 - Get recommended profile
@@ -447,11 +487,13 @@ public class BuilderViewModel : INotifyPropertyChanged
 - Handle profile changes
 
 **Windows Version Tests (3)**
+
 - Get all versions
 - Select version
 - Get selected version
 
 **Deployment & Summary Tests (7)**
+
 - Get deployment summary
 - Accept terms
 - Start deployment
@@ -461,6 +503,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 - Get deployment progress
 
 **Edge Cases & Error Handling (8)**
+
 - Handle empty drive list
 - Handle null summary
 - Handle invalid step number
@@ -475,6 +518,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 ## Integration Points
 
 ### With Phase 10A-G Services
+
 - **Phase 10A**: Package management integration
 - **Phase 10B**: System verification
 - **Phase 10C**: Deployment coordination
@@ -484,6 +528,7 @@ public class BuilderViewModel : INotifyPropertyChanged
 - **Phase 10G**: Performance monitoring
 
 ### External Integrations
+
 - Windows drive enumeration
 - Disk space calculation
 - Drive health monitoring
@@ -533,6 +578,7 @@ await builderService.StartDeploymentAsync();
 ## Error Handling
 
 ### Validation Errors
+
 - Drive not selected
 - Windows version not selected
 - Profile not selected
@@ -540,6 +586,7 @@ await builderService.StartDeploymentAsync();
 - Invalid package dependencies
 
 ### Runtime Errors
+
 - Drive disconnection detection
 - Insufficient disk space
 - Permission errors
@@ -547,6 +594,7 @@ await builderService.StartDeploymentAsync();
 - Network interruption handling
 
 ### User Feedback
+
 - Visual error indicators
 - Detailed error messages
 - Suggestion for resolution
@@ -619,6 +667,7 @@ Total: ~4,000 Lines of Code
 ## Conclusion
 
 Phase 10H delivers a complete, production-ready USB builder GUI with:
+
 - ✅ 8 core services
 - ✅ 40+ unit tests
 - ✅ Xenblade theming

@@ -7,6 +7,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
 ## Components Implemented
 
 ### 1. Core CLI Engine (`CLIEngine.cs`)
+
 - **Purpose**: Main orchestration engine for command execution
 - **Features**:
   - Command initialization and parsing
@@ -16,6 +17,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Help system
 
 ### 2. Command Parser (`CommandParser.cs`)
+
 - **Purpose**: Parse command-line arguments into structured options
 - **Features**:
   - Long option parsing (`--option value`)
@@ -25,6 +27,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Mixed argument handling
 
 ### 3. Command Executor (`CommandExecutor.cs`)
+
 - **Purpose**: Route and execute commands
 - **Commands Implemented**:
   1. `deploy` - Deploy components/applications
@@ -41,6 +44,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   12. `schedule` - Schedule tasks
 
 ### 4. Command History (`CommandHistory.cs`)
+
 - **Purpose**: Track and manage command execution history
 - **Features**:
   - Persistent history in `%APPDATA%/HELIOS/history.json`
@@ -49,6 +53,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Load/save operations
 
 ### 5. Output Formatter (`OutputFormatter.cs`)
+
 - **Purpose**: Format command output in multiple formats
 - **Formats**:
   - Default: Clean, readable output
@@ -56,6 +61,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Verbose: Detailed output with timestamps and metadata
 
 ### 6. Batch Processor (`BatchProcessor.cs`)
+
 - **Purpose**: Execute multiple commands from batch files
 - **Features**:
   - JSON batch file format
@@ -65,6 +71,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Success/failure tracking
 
 ### 7. Task Scheduler (`TaskScheduler.cs`)
+
 - **Purpose**: Manage scheduled task execution
 - **Features**:
   - Schedule management (create, update, delete)
@@ -74,6 +81,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Task status management
 
 ### 8. Main Program (`Program.cs`)
+
 - **Purpose**: CLI entry point
 - **Features**:
   - Standard command execution
@@ -82,6 +90,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   - Error handling and exit codes
 
 ### 9. PowerShell Module (`HELIOS.CLI.psm1`)
+
 - **Purpose**: PowerShell integration and cmdlets
 - **Cmdlets Implemented**:
   1. `Get-HeliosStatus` - Get platform status
@@ -99,6 +108,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
   13. `Invoke-HeliosCLI` - Direct CLI invocation
 
 ### 10. Bash Shell Script (`helios-cli.sh`)
+
 - **Purpose**: Shell/bash integration
 - **Features**:
   - Cross-platform compatibility
@@ -110,6 +120,7 @@ A complete, production-ready Command-Line Interface (CLI) for the HELIOS Platfor
 ## Output Files
 
 ### Core Implementation
+
 ```
 src/HELIOS.Platform/Core/CLI/
 ├── CLIEngine.cs                  (6.1 KB)
@@ -123,6 +134,7 @@ src/HELIOS.Platform/Core/CLI/
 ```
 
 ### Scripts
+
 ```
 scripts/
 ├── HELIOS.CLI.psm1               (6.5 KB) - PowerShell module
@@ -131,6 +143,7 @@ scripts/
 ```
 
 ### Documentation
+
 ```
 docs/
 ├── CLI_REFERENCE_NEW.md          (11 KB)  - Complete reference
@@ -143,6 +156,7 @@ docs/
 ```
 
 ### Tests
+
 ```
 tests/HELIOS.Platform.Tests/CLI/
 └── CLITests.cs                   (14.2 KB) - Comprehensive test suite
@@ -151,6 +165,7 @@ tests/HELIOS.Platform.Tests/CLI/
 ## Feature Summary
 
 ### 12 Major Commands ✅
+
 - [x] Deploy - Deploy components
 - [x] Config - Manage configuration
 - [x] Status - Platform status
@@ -165,6 +180,7 @@ tests/HELIOS.Platform.Tests/CLI/
 - [x] Schedule - Task scheduling
 
 ### Core Features ✅
+
 - [x] Full CLI engine with command routing
 - [x] Command-line argument parsing
 - [x] Multiple output formats (default, JSON, verbose)
@@ -176,6 +192,7 @@ tests/HELIOS.Platform.Tests/CLI/
 - [x] Error handling with exit codes
 
 ### Integration ✅
+
 - [x] PowerShell module with 13 cmdlets
 - [x] Bash/shell script wrapper
 - [x] Cross-platform support
@@ -183,6 +200,7 @@ tests/HELIOS.Platform.Tests/CLI/
 - [x] JSON input support
 
 ### Advanced Features ✅
+
 - [x] Batch processing from JSON files
 - [x] Interactive mode
 - [x] Task scheduling
@@ -191,6 +209,7 @@ tests/HELIOS.Platform.Tests/CLI/
 - [x] Async command support
 
 ### Documentation ✅
+
 - [x] CLI reference documentation (complete command reference)
 - [x] Usage guide (practical examples)
 - [x] Example batch files (deployment, maintenance)
@@ -198,6 +217,7 @@ tests/HELIOS.Platform.Tests/CLI/
 - [x] In-line help system
 
 ### Testing ✅
+
 - [x] Unit tests for all components
 - [x] Parser tests (arguments, options, parameters)
 - [x] Executor tests (all 12 commands)
@@ -209,6 +229,7 @@ tests/HELIOS.Platform.Tests/CLI/
 ## Usage Examples
 
 ### Command Line
+
 ```bash
 # Get status
 helios-cli status
@@ -233,6 +254,7 @@ helios-cli -i
 ```
 
 ### PowerShell
+
 ```powershell
 Import-Module .\HELIOS.CLI.psm1
 
@@ -250,6 +272,7 @@ New-HeliosScheduledTask -TaskName "daily-backup" -Command "backup" -Schedule "da
 ```
 
 ### Bash
+
 ```bash
 #!/bin/bash
 
@@ -266,6 +289,7 @@ helios-cli deploy --config app.json && helios-cli health
 ## Architecture
 
 ### Command Flow
+
 ```
 User Input (CLI Arguments)
     ↓
@@ -283,6 +307,7 @@ User Output (Display to console/file)
 ```
 
 ### Batch Processing Flow
+
 ```
 Batch File (JSON)
     ↓
@@ -299,6 +324,7 @@ Display (Table or JSON)
 ```
 
 ## Exit Codes
+
 - `0` - Success
 - `1` - General error
 - `2` - Command not found
@@ -307,21 +333,26 @@ Display (Table or JSON)
 - `5` - Configuration error
 
 ## Configuration
+
 CLI configuration stored in:
+
 - Windows: `%APPDATA%/HELIOS/config.json`
 - Linux/macOS: `~/.config/HELIOS/config.json`
 
 History stored in:
+
 - Windows: `%APPDATA%/HELIOS/history.json`
 - Linux/macOS: `~/.local/share/HELIOS/history.json`
 
 ## Performance Characteristics
+
 - Command execution: < 100ms (typical)
 - Batch processing: Configurable per-command
 - History operations: < 10ms
 - JSON parsing: < 50ms
 
 ## Production Readiness Checklist ✅
+
 - [x] All 12 commands implemented and tested
 - [x] Error handling for all scenarios
 - [x] Cross-platform support (Windows, Linux, macOS)
@@ -340,17 +371,20 @@ History stored in:
 ## Deployment Instructions
 
 ### 1. Build the CLI
+
 ```bash
 cd src/HELIOS.Platform/Core/CLI
 dotnet build -c Release
 ```
 
 ### 2. Create executable
+
 ```bash
 dotnet publish -c Release
 ```
 
 ### 3. Install on Windows
+
 ```powershell
 # Copy executable to PATH location
 Copy-Item "bin/Release/net6.0/HELIOS.Platform.CLI.exe" "C:\Program Files\HELIOS\helios-cli.exe"
@@ -360,6 +394,7 @@ Import-Module .\scripts\HELIOS.CLI.psm1
 ```
 
 ### 4. Install on Linux/macOS
+
 ```bash
 # Copy shell script to PATH
 sudo cp scripts/helios-cli.sh /usr/local/bin/helios-cli

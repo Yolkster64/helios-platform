@@ -10,7 +10,7 @@ HELIOS Platform is fully integrated with GitHub. This guide walks you through se
 
 ### Step 1: Create GitHub Project
 
-1. Go to: https://github.com/M0nado/helios-platform
+1. Go to: https://github.com/Yolkster64/helios-platform
 2. Click **Projects** tab
 3. Click **New project** button
 4. Choose **Table** template
@@ -39,17 +39,21 @@ In your new project, add these custom fields:
 Create different views for different purposes:
 
 **View 1: By Phase**
+
 - Group by: Phase
 - Sort by: Priority (desc)
 
 **View 2: By Work Track**
+
 - Group by: Work Track
 - Sort by: Priority (desc)
 
 **View 3: By Owner**
+
 - Filter by: Owner = [specific person]
 
 **View 4: By Priority**
+
 - Group by: Priority
 - Filter by: Status ≠ Done
 
@@ -64,14 +68,15 @@ All workflows are already configured! ✅
 **Location**: `.github/workflows/`
 
 **Existing workflows**:
+
 1. ✅ `ci-validation.yml` - Runs on push/PR
 2. ✅ `phase-build.yml` - Manual trigger
-3. ✅ `documentation-update.yml` - Runs on doc changes
-4. ✅ `deploy.yml` - Manual deployment
+3. ✅ `wiki-generator.yml` - Syncs curated docs to the repository wiki
+4. ✅ `helios-deploy.yml` - Manual Azure what-if/deploy flow
 
 ### Verify Workflows
 
-1. Go to: https://github.com/M0nado/helios-platform/actions
+1. Go to: https://github.com/Yolkster64/helios-platform/actions
 2. You should see all workflows listed
 3. No setup needed - they run automatically!
 
@@ -82,8 +87,9 @@ Update your `README.md` with badges:
 ```markdown
 # HELIOS Platform
 
-[![CI Validation](https://github.com/M0nado/helios-platform/actions/workflows/ci-validation.yml/badge.svg)](https://github.com/M0nado/helios-platform/actions/workflows/ci-validation.yml)
-[![Documentation](https://github.com/M0nado/helios-platform/actions/workflows/documentation-update.yml/badge.svg)](https://github.com/M0nado/helios-platform/actions/workflows/documentation-update.yml)
+[![CI Validation](https://github.com/Yolkster64/helios-platform/actions/workflows/ci-validation.yml/badge.svg)](https://github.com/Yolkster64/helios-platform/actions/workflows/ci-validation.yml)
+[![Wiki Generator](https://github.com/Yolkster64/helios-platform/actions/workflows/wiki-generator.yml/badge.svg)](https://github.com/Yolkster64/helios-platform/actions/workflows/wiki-generator.yml)
+[![HELIOS Deploy](https://github.com/Yolkster64/helios-platform/actions/workflows/helios-deploy.yml/badge.svg)](https://github.com/Yolkster64/helios-platform/actions/workflows/helios-deploy.yml)
 ```
 
 ---
@@ -93,7 +99,8 @@ Update your `README.md` with badges:
 ### Launch Codespaces
 
 **Option 1: Via Web** (Easiest)
-1. Go to: https://github.com/M0nado/helios-platform
+
+1. Go to: https://github.com/Yolkster64/helios-platform
 2. Click green **Code** button
 3. Click **Codespaces** tab
 4. Click **Create codespace on main**
@@ -101,6 +108,7 @@ Update your `README.md` with badges:
 6. VS Code opens in browser - ready to code!
 
 **Option 2: Via Local VS Code**
+
 1. Install "GitHub Copilot" extension
 2. Install "Remote - Codespaces" extension
 3. Press Ctrl+Shift+P
@@ -108,15 +116,16 @@ Update your `README.md` with badges:
 5. Select repository and branch
 
 **Option 3: Via GitHub CLI**
+
 ```bash
 # List existing codespaces
 gh codespace list
 
 # Create new codespace
-gh codespace create --repo M0nado/helios-platform --branch main
+gh codespace create --repo Yolkster64/helios-platform --branch main
 
 # Open in VS Code
-gh codespace code --repo M0nado/helios-platform
+gh codespace code --repo Yolkster64/helios-platform
 ```
 
 ### Configure Codespaces Settings
@@ -134,6 +143,7 @@ Already configured! ✅
 **File**: `.devcontainer/devcontainer.json`
 
 **Includes**:
+
 - ✅ PowerShell 7.x
 - ✅ GitHub CLI
 - ✅ Docker-in-Docker
@@ -153,12 +163,13 @@ Already created! ✅
 **Location**: `.github/ISSUE_TEMPLATE/`
 
 **Available templates**:
+
 - `bug_report.md` - Report bugs
 - `feature_request.md` - Request features
 
 ### Create Issues Manually
 
-1. Go to: https://github.com/M0nado/helios-platform/issues
+1. Go to: https://github.com/Yolkster64/helios-platform/issues
 2. Click **New issue**
 3. Choose template (bug or feature)
 4. Fill in details
@@ -219,7 +230,7 @@ foreach ($issue in $issues) {
         labels = $issue.labels
     } | ConvertTo-Json
 
-    $response = Invoke-RestMethod -Uri "https://api.github.com/repos/M0nado/helios-platform/issues" `
+    $response = Invoke-RestMethod -Uri "https://api.github.com/repos/Yolkster64/helios-platform/issues" `
         -Method POST `
         -Headers @{
             Authorization = "token $token"
@@ -239,7 +250,7 @@ Save as `scripts/utilities/create-github-issues.ps1` and run once.
 
 ### Add Team Members
 
-1. Go to: https://github.com/M0nado/helios-platform/settings/access
+1. Go to: https://github.com/Yolkster64/helios-platform/settings/access
 2. Click **Invite a collaborator**
 3. Enter GitHub username
 4. Select role:
@@ -249,7 +260,7 @@ Save as `scripts/utilities/create-github-issues.ps1` and run once.
 
 ### Branch Protection Rules
 
-1. Go to: https://github.com/M0nado/helios-platform/settings/branches
+1. Go to: https://github.com/Yolkster64/helios-platform/settings/branches
 2. Click **Add rule**
 3. Apply to branch: `main`
 4. Enable:
@@ -275,7 +286,7 @@ Suggested roles:
 
 ### Enable Wiki
 
-1. Go to: https://github.com/M0nado/helios-platform/settings
+1. Go to: https://github.com/Yolkster64/helios-platform/settings
 2. Scroll to **Features**
 3. Check **Wikis** if not already checked
 4. Click **Save**
@@ -284,15 +295,16 @@ Suggested roles:
 
 GitHub Wikis are separate from the main repo.
 
-**Access Wiki**: https://github.com/M0nado/helios-platform/wiki
+**Access Wiki**: https://github.com/Yolkster64/helios-platform/wiki
 
 ### Auto-Sync Documentation to Wiki
 
 A workflow already does this! ✅
 
-**Workflow**: `documentation-update.yml`
+**Workflow**: `wiki-generator.yml`
 
 **What it does**:
+
 - Monitors `.md` files in main repo
 - Auto-syncs to GitHub Wiki
 - Updates wiki indexes
@@ -306,13 +318,13 @@ No action needed - it's automatic!
 
 ### Enable Discussions
 
-1. Go to: https://github.com/M0nado/helios-platform/settings
+1. Go to: https://github.com/Yolkster64/helios-platform/settings
 2. Scroll to **Features**
 3. Check **Discussions** if not already checked
 
 ### Create Categories
 
-1. Go to: https://github.com/M0nado/helios-platform/discussions
+1. Go to: https://github.com/Yolkster64/helios-platform/discussions
 2. Click **New discussion**
 3. Create categories:
    - **General** - General discussion
@@ -326,17 +338,17 @@ No action needed - it's automatic!
 
 ### View Repository Statistics
 
-1. Go to: https://github.com/M0nado/helios-platform/graphs/contributors
+1. Go to: https://github.com/Yolkster64/helios-platform/graphs/contributors
 2. See contributor activity
 
 ### View Pulse
 
-1. Go to: https://github.com/M0nado/helios-platform/pulse
+1. Go to: https://github.com/Yolkster64/helios-platform/pulse
 2. See recent activity summary
 
 ### View Network
 
-1. Go to: https://github.com/M0nado/helios-platform/network
+1. Go to: https://github.com/Yolkster64/helios-platform/network
 2. See branch and commit history
 
 ---
@@ -344,12 +356,14 @@ No action needed - it's automatic!
 ## 📋 GitHub Setup Checklist
 
 ### Before Launch
+
 - [ ] Repository created
 - [ ] README.md exists
 - [ ] Initial commit pushed
 - [ ] Documentation files in place
 
 ### Project Board
+
 - [ ] Project board created
 - [ ] Custom fields added
 - [ ] Views configured
@@ -357,30 +371,35 @@ No action needed - it's automatic!
 - [ ] Issues assigned to project
 
 ### GitHub Actions
+
 - [ ] Workflows exist in `.github/workflows/`
 - [ ] Status badges added to README
 - [ ] Workflows triggered successfully
 - [ ] No failed checks
 
 ### Codespaces
+
 - [ ] `.devcontainer/` configured
 - [ ] Codespace created and tested
 - [ ] Extensions installed
 - [ ] PowerShell working
 
 ### Collaborators
+
 - [ ] Team members invited
 - [ ] Appropriate roles assigned
 - [ ] Branch protection rules set
 - [ ] Merge requirements configured
 
 ### Documentation
+
 - [ ] Wiki enabled
 - [ ] Auto-sync workflow running
 - [ ] Pages appear in wiki
 - [ ] Links validated
 
 ### Discussions
+
 - [ ] Discussions enabled
 - [ ] Categories created
 - [ ] Community guidelines posted
@@ -396,32 +415,32 @@ No action needed - it's automatic!
 gh auth login
 
 # Clone repo
-gh repo clone M0nado/helios-platform
+gh repo clone Yolkster64/helios-platform
 
 # View issues
-gh issue list --repo M0nado/helios-platform
+gh issue list --repo Yolkster64/helios-platform
 
 # Create issue
-gh issue create --repo M0nado/helios-platform --title "My Issue"
+gh issue create --repo Yolkster64/helios-platform --title "My Issue"
 
 # View project
-gh project view 1 --repo M0nado/helios-platform
+gh project view 1 --repo Yolkster64/helios-platform
 
 # Create PR
-gh pr create --repo M0nado/helios-platform --title "My PR" --body "Description"
+gh pr create --repo Yolkster64/helios-platform --title "My PR" --body "Description"
 
 # View workflow runs
-gh run list --repo M0nado/helios-platform
+gh run list --repo Yolkster64/helios-platform
 
 # Watch workflow
-gh run watch <run-id> --repo M0nado/helios-platform
+gh run watch <run-id> --repo Yolkster64/helios-platform
 ```
 
 ### Git Workflow (Local)
 
 ```bash
 # Clone repo locally
-git clone https://github.com/M0nado/helios-platform.git
+git clone https://github.com/Yolkster64/helios-platform.git
 cd helios-platform
 
 # Create feature branch
@@ -450,18 +469,21 @@ git branch -d feature/my-feature
 ## 🚀 First Day Workflow
 
 ### Morning: Setup (30 min)
+
 1. [ ] Create GitHub Project board
 2. [ ] Create first batch of issues (10)
 3. [ ] Setup Codespaces
 4. [ ] Test a workflow run
 
 ### Midday: Configure Team (20 min)
+
 1. [ ] Invite first team members
 2. [ ] Set branch protection rules
 3. [ ] Create team roles
 4. [ ] Setup wiki
 
 ### Afternoon: Start Development (30 min)
+
 1. [ ] Create first feature branch
 2. [ ] Make sample change
 3. [ ] Submit first PR
@@ -469,6 +491,7 @@ git branch -d feature/my-feature
 5. [ ] Merge PR
 
 ### End of Day: Verify
+
 1. [ ] All systems working
 2. [ ] Team can access everything
 3. [ ] Workflows running
@@ -479,33 +502,38 @@ git branch -d feature/my-feature
 ## 📚 Reference Links
 
 ### Project Management
-- **Project Board**: https://github.com/M0nado/helios-platform/projects
-- **Issues**: https://github.com/M0nado/helios-platform/issues
-- **Pull Requests**: https://github.com/M0nado/helios-platform/pulls
-- **Milestones**: https://github.com/M0nado/helios-platform/milestones
+
+- **Project Board**: https://github.com/Yolkster64/helios-platform/projects
+- **Issues**: https://github.com/Yolkster64/helios-platform/issues
+- **Pull Requests**: https://github.com/Yolkster64/helios-platform/pulls
+- **Milestones**: https://github.com/Yolkster64/helios-platform/milestones
 
 ### Development
-- **Code**: https://github.com/M0nado/helios-platform
-- **Actions**: https://github.com/M0nado/helios-platform/actions
+
+- **Code**: https://github.com/Yolkster64/helios-platform
+- **Actions**: https://github.com/Yolkster64/helios-platform/actions
 - **Codespaces**: https://github.com/codespaces
-- **Wiki**: https://github.com/M0nado/helios-platform/wiki
+- **Wiki**: https://github.com/Yolkster64/helios-platform/wiki
 
 ### Configuration
-- **Settings**: https://github.com/M0nado/helios-platform/settings
-- **Branches**: https://github.com/M0nado/helios-platform/settings/branches
-- **Secrets**: https://github.com/M0nado/helios-platform/settings/secrets/actions
-- **Access**: https://github.com/M0nado/helios-platform/settings/access
+
+- **Settings**: https://github.com/Yolkster64/helios-platform/settings
+- **Branches**: https://github.com/Yolkster64/helios-platform/settings/branches
+- **Secrets**: https://github.com/Yolkster64/helios-platform/settings/secrets/actions
+- **Access**: https://github.com/Yolkster64/helios-platform/settings/access
 
 ### Community
-- **Discussions**: https://github.com/M0nado/helios-platform/discussions
-- **Insights**: https://github.com/M0nado/helios-platform/insights
-- **Pulse**: https://github.com/M0nado/helios-platform/pulse
+
+- **Discussions**: https://github.com/Yolkster64/helios-platform/discussions
+- **Insights**: https://github.com/Yolkster64/helios-platform/insights
+- **Pulse**: https://github.com/Yolkster64/helios-platform/pulse
 
 ---
 
 ## ✅ Everything is Ready!
 
 GitHub infrastructure is fully set up:
+
 - ✅ Project board configured
 - ✅ Actions workflows deployed
 - ✅ Codespaces ready

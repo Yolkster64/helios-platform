@@ -72,6 +72,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ## 📋 System Requirements
 
 ### Minimum
+
 - **Windows:** 11 Pro or Enterprise
 - **.NET:** 8.0 SDK or later
 - **PowerShell:** 7.0 or later
@@ -80,6 +81,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 - **Admin:** Required
 
 ### Recommended
+
 - **Windows:** 11 Pro, Build 22621+
 - **.NET:** 8.0 LTS or 9.0
 - **PowerShell:** 7.4 or later
@@ -116,6 +118,7 @@ For automated enterprise deployments without user interaction.
 ```
 
 **Options:**
+
 - `/S` - Silent mode (no UI)
 - `/D=path` - Installation directory
 - `/AUTOSTART=1` - Enable auto-start
@@ -180,6 +183,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ## 📥 Installation Process
 
 ### Step 1: Pre-Installation Checks
+
 - System requirements validated
 - Administrator privileges verified
 - .NET SDK availability confirmed
@@ -187,12 +191,14 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 - Registry access verified
 
 ### Step 2: File Extraction
+
 - Application files copied
 - Configuration directories created
 - Support files placed
 - Default configuration initialized
 
 ### Step 3: System Integration
+
 - Registry entries created
 - Start Menu shortcuts added
 - Desktop shortcuts created
@@ -200,12 +206,14 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 - Auto-start configured (if selected)
 
 ### Step 4: Initialization
+
 - Platform components loaded
 - Configuration validated
 - System baseline established
 - Installation logged
 
 ### Step 5: Completion
+
 - Summary displayed
 - Registry entries confirmed
 - Shortcuts verified
@@ -222,6 +230,7 @@ Automatically verify installation success:
 ```
 
 **Verification checks:**
+
 - Installation path exists
 - Required files present
 - Registry entries created
@@ -513,18 +522,21 @@ Select-String -Path "$env:ProgramFiles\HELIOS Platform\logs\*.log" -Pattern "err
 ## 🎯 Deployment Tiers
 
 ### Professional Tier
+
 - Standard enterprise deployment
 - Email support (business hours)
 - Security updates only
 - $0 (included)
 
 ### Enterprise Tier
+
 - Advanced features enabled
 - Email support (24/5)
 - All updates included
 - Priority response
 
 ### Ultimate Tier
+
 - Complete feature set
 - 24/7 phone support
 - Premium features

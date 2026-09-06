@@ -1,11 +1,13 @@
 # HELIOS Windows Context Menu Integration Documentation
 
 ## Overview
+
 The Context Menu Integration system provides deep Windows integration including file associations, context menu items, shell extensions, preview handlers, and Windows Explorer integration for seamless desktop experience.
 
 ## Features Implemented
 
 ### 1. Right-click "Open with HELIOS" Integration
+
 - **Functionality**: Add HELIOS to Windows context menu
 - **Implementation**: `IContextMenuIntegration.AddContextMenuItemAsync()`
 - **Features**:
@@ -15,6 +17,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Conditional visibility
 
 ### 2. File Type Associations Setup
+
 - **Functionality**: Register file type associations
 - **Implementation**: `RegisterFileAssociationAsync()`, `UnregisterFileAssociationAsync()`
 - **Features**:
@@ -24,6 +27,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Action definition (open, edit, print, etc.)
 
 ### 3. Shell Extension Integration
+
 - **Functionality**: Integrate with Windows Shell
 - **Implementation**: `RegisterShellExtensionAsync()`, `UnregisterShellExtensionAsync()`
 - **Features**:
@@ -34,6 +38,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Drag & drop handlers
 
 ### 4. Context Menu Shortcuts
+
 - **Functionality**: Add keyboard shortcuts to context menu items
 - **Implementation**: `ContextMenuItem.Shortcut` property
 - **Features**:
@@ -43,6 +48,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - User-configurable shortcuts
 
 ### 5. File Preview Handler
+
 - **Functionality**: Display file previews in Windows Explorer
 - **Implementation**: `RegisterPreviewHandlerAsync()`, `UnregisterPreviewHandlerAsync()`
 - **Features**:
@@ -52,6 +58,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Performance optimization
 
 ### 6. Windows Explorer Integration
+
 - **Functionality**: Integrate custom columns and info in Explorer
 - **Implementation**: `AddExplorerColumnAsync()`, `RemoveExplorerColumnAsync()`
 - **Features**:
@@ -61,6 +68,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Formatted data display
 
 ### 7. Shell Toolbar Integration
+
 - **Functionality**: Add toolbar buttons to Explorer
 - **Implementation**: `AddToolbarItemAsync()`, `RemoveToolbarItemAsync()`
 - **Features**:
@@ -70,6 +78,7 @@ The Context Menu Integration system provides deep Windows integration including 
   - Dynamic visibility
 
 ### 8. Registry Entries for Associations
+
 - **Functionality**: Manage Windows registry for associations
 - **Implementation**: `SetRegistryValueAsync()`, `GetRegistryValueAsync()`
 - **Features**:
@@ -138,6 +147,7 @@ await contextMenu.RefreshShellAsync();
 ## Registry Paths Used
 
 Standard Windows registry locations:
+
 - File Associations: `HKEY_CURRENT_USER\Software\Classes`
 - Context Menu: `HKEY_CURRENT_USER\Software\Classes\*\shell`
 - Shell Extensions: `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers`
@@ -154,6 +164,7 @@ Standard Windows registry locations:
 ## Configuration
 
 Context menu configuration options:
+
 - Show/hide context menu items
 - Menu item ordering
 - Keyboard shortcuts
@@ -163,6 +174,7 @@ Context menu configuration options:
 ## Testing
 
 Comprehensive unit tests cover:
+
 - File association registration
 - Context menu items
 - Shell extensions
@@ -176,6 +188,7 @@ All tests in: `ContextMenuTests\ContextMenuIntegrationTests.cs`
 ## Deployment
 
 Context menu registration requires:
+
 1. Admin privileges during installation
 2. Registry write permissions
 3. DLL/Extension files in Program Files
@@ -184,6 +197,7 @@ Context menu registration requires:
 ## Troubleshooting
 
 Common issues and solutions:
+
 - **Menu not appearing**: Check registry entries and shell restart
 - **Association not working**: Verify DLL path and permissions
 - **Performance issues**: Profile extension DLL execution time

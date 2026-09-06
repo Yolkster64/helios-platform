@@ -36,28 +36,33 @@ Phase 1 Security Scripts
 | **Rollback Script** | `01-applocker-rollback.ps1` |
 
 ### What It Does
+
 - Creates AppLocker policy rules
 - Whitelists system programs (Windows, Office, etc.)
 - Sets enforcement mode (audit or enforce)
 - Generates rule report
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\01-applocker-setup.ps1 -EnforcementMode Audit
 ```
 
 ### Parameters
+
 - `-EnforcementMode` : Audit (test mode) or Enforce (block mode)
 - `-WhitelistPath` : Path to custom whitelist XML (optional)
 - `-GenerateReport` : Save rule report to file (default: true)
 
 ### Output
+
 - `applocker-rules.xml` - Generated rule file
 - `applocker-report.txt` - Audit log of what was whitelisted
 - Console output showing status
 
 ### Common Issues
+
 - "AppLocker not available" = Enterprise Services required
 - "Rule already exists" = Safe, will skip duplicates
 - Program blocked unexpectedly = Add exception via `01-applocker-add-exception.ps1`
@@ -78,28 +83,33 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 | **Rollback Script** | `02-firewall-rollback.ps1` |
 
 ### What It Does
+
 - Blocks dangerous inbound ports (3389, 445, 135, etc.)
 - Restricts outbound to high-risk destinations
 - Configures inbound/outbound policies to "block by default"
 - Enables logging
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\02-firewall-hardening.ps1 -Profile StandardProfile
 ```
 
 ### Parameters
+
 - `-Profile` : StandardProfile, DomainProfile, or PublicProfile
 - `-EnableLogging` : Enable detailed firewall logging (default: true)
 - `-BackupRules` : Save current rules before applying (default: true)
 
 ### Output
+
 - `firewall-rules-backup.json` - Backup of original rules
 - `firewall-rules-applied.json` - New rules applied
 - Console output showing rules added
 
 ### Common Issues
+
 - "Network is unavailable after running" = May have blocked too much
 - Run rollback: `.\02-firewall-rollback.ps1`
 
@@ -119,6 +129,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 | **Rollback Script** | `03-vault-decryption.ps1` |
 
 ### What It Does
+
 - Creates `C:\Users\ADMIN\Vault\` directory
 - Encrypts with BitLocker (if TPM available) or VeraCrypt
 - Creates recovery key (⚠️ SAVE THIS!)
@@ -126,30 +137,36 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - Generates recovery key backup
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\03-vault-encryption-setup.ps1 -EncryptionMethod BitLocker
 ```
 
 ### Parameters
+
 - `-EncryptionMethod` : BitLocker or VeraCrypt
 - `-VaultPath` : Custom vault location (default: C:\Users\ADMIN\Vault)
 - `-Password` : VeraCrypt password (if not BitLocker)
 - `-SaveRecoveryKey` : Save recovery key (default: true)
 
 ### Output
+
 - `C:\Users\ADMIN\Vault\` directory created
 - `Recovery-Key.txt` - **SAVE IN SAFE PLACE!**
 - `vault-setup-report.txt` - Setup details
 - Console output with encryption status
 
 ### Important Notes
+
 ⚠️ **SAVE YOUR RECOVERY KEY!**
+
 - Write it down and store it physically
 - Store in safe deposit box
 - Without it, encrypted data is unrecoverable
 
 ### Common Issues
+
 - "BitLocker requires TPM" = Use VeraCrypt instead
 - "Recovery key missing" = Can't recover if forgotten
 
@@ -169,6 +186,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 | **Rollback Script** | `04-quarantine-cleanup.ps1` |
 
 ### What It Does
+
 - Creates `C:\Vault\Quarantine\` directory structure
 - Configures antivirus to use this directory
 - Sets up archive system (daily backups)
@@ -176,23 +194,27 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - Configures auto-cleanup policies
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\04-quarantine-system-init.ps1 -QuarantineSize 5GB
 ```
 
 ### Parameters
+
 - `-QuarantineSize` : 1GB, 5GB, or 10GB (default: 1GB)
 - `-AutoCleanupDays` : Days before auto-delete (default: 180)
 - `-EnableArchive` : Keep daily archives (default: true)
 
 ### Output
+
 - `C:\Vault\Quarantine\` directory structure created
 - `quarantine-config.json` - Configuration file
 - `quarantine-setup-report.txt` - Setup details
 - Console output with status
 
 ### Common Issues
+
 - "C:\Vault does not exist" = Run script 3 first
 - "Quarantine full" = Increase size or enable auto-cleanup
 
@@ -212,6 +234,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 | **Rollback Script** | `05-user-account-cleanup.ps1` |
 
 ### What It Does
+
 - Creates ADMIN-Master account (admin only)
 - Creates Standard-User account (everyday use)
 - Creates Restricted-Guest account (limited use)
@@ -220,12 +243,14 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - Applies Group Policy restrictions
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\05-user-account-protection.ps1 -CreateAllAccounts
 ```
 
 ### Parameters
+
 - `-CreateAllAccounts` : Create all three tiers (default: true)
 - `-AdminPassword` : Password for ADMIN-Master (prompted if not provided)
 - `-StandardPassword` : Password for Standard-User (prompted)
@@ -233,18 +258,21 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - `-ApplyGroupPolicy` : Apply restrictions (default: true)
 
 ### Output
+
 - Three new user accounts created
 - `account-setup-report.txt` - Account details
 - Group Policy applied
 - Console output with instructions
 
 ### Important Notes
+
 - **Save passwords** for each account in Vault
 - ADMIN-Master is for maintenance only
 - Use Standard-User for everyday work
 - Use Restricted-Guest for untrusted activities
 
 ### Common Issues
+
 - "Account already exists" = Safe, script will skip
 - "Group Policy failed to apply" = May require additional restart
 
@@ -264,6 +292,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 | **Rollback Script** | `06-threat-detection-disable.ps1` |
 
 ### What It Does
+
 - Enables Windows Defender with aggressive settings
 - Installs Malwarebytes (if not present)
 - Updates threat definitions
@@ -272,12 +301,14 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - Enables advanced threat protection features
 
 ### Usage
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 .\06-threat-detection-config.ps1 -ScanFrequency Daily -ScanType Full
 ```
 
 ### Parameters
+
 - `-ScanFrequency` : Daily, Weekly, Monthly (default: Daily)
 - `-ScanType` : Quick, Full, Custom (default: Quick)
 - `-ScanTime` : Hour of day for scan (default: 2)
@@ -285,6 +316,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - `-EnableBehavioralDetection` : Enable behavior-based detection (default: true)
 
 ### Output
+
 - Windows Defender enabled and configured
 - Malwarebytes installed (if available)
 - `threat-detection-config.json` - Configuration file
@@ -292,6 +324,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 - Console output with status
 
 ### Common Issues
+
 - "Malwarebytes download failed" = Check internet connection
 - "Antivirus conflict" = May need to disable other antiviruses
 - "Scan takes very long" = Switch to Quick scan instead of Full
@@ -332,6 +365,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 ## Execution Order
 
 ### Recommended Order
+
 ```
 1. Read PLAIN_ENGLISH_GUIDE.md
 2. Read BEFORE_AND_AFTER.md
@@ -347,6 +381,7 @@ cd C:\Users\ADMIN\helios-platform\phases\1-security\scripts
 ```
 
 ### Why This Order
+
 - **AppLocker First**: Needs to be active before threats detected
 - **Firewall Second**: Network protection before data encryption
 - **Vault Third**: Data must be secured before threats isolated
@@ -462,6 +497,7 @@ Test-FirewallRules
 ## Rollback Procedures
 
 ### Individual Rollbacks
+
 ```powershell
 # Undo AppLocker
 .\01-applocker-rollback.ps1
@@ -483,6 +519,7 @@ Test-FirewallRules
 ```
 
 ### Full Rollback (if needed)
+
 ```powershell
 # Run in reverse order
 .\06-threat-detection-disable.ps1
@@ -498,6 +535,7 @@ Test-FirewallRules
 ## Troubleshooting
 
 ### Script Won't Run
+
 ```powershell
 # Check admin privileges
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
@@ -511,6 +549,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 ```
 
 ### Script Errors
+
 ```powershell
 # Enable verbose output
 $VerbosePreference = "Continue"

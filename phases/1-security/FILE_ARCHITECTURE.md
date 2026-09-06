@@ -67,6 +67,7 @@ C:\
 ## 1. AppLocker Configuration
 
 ### Primary Location
+
 ```
 HKLM:\Software\Policies\Microsoft\Windows\SrpV2
 ```
@@ -183,6 +184,7 @@ Windows Logs
 ## 2. Firewall Configuration
 
 ### Primary Location
+
 ```
 HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy
 ```
@@ -303,6 +305,7 @@ Log Format:
 ## 3. Vault Encryption
 
 ### Primary Location
+
 ```
 C:\Users\ADMIN\Vault\
 (Or C:\Vault\ for system-wide vault)
@@ -413,6 +416,7 @@ File Properties in Explorer:
 ## 4. Quarantine System
 
 ### Primary Location
+
 ```
 C:\Vault\Quarantine\
 ```
@@ -515,6 +519,7 @@ Quarantined File Structure:
 ## 5. User Account Protection
 
 ### Primary Location
+
 ```
 HKLM:\SAM\SAM\Domains\Account\Users\
 ```
@@ -660,6 +665,7 @@ HKLM:\Software\Policies\Microsoft\Windows\
 ## 6. Threat Detection Configuration
 
 ### Primary Location
+
 ```
 HKLM:\Software\Microsoft\Windows Defender
 ```

@@ -467,6 +467,7 @@ Describe "Component A and Component B Interaction" {
 ## Integration Test Best Practices
 
 ✓ **Do:**
+
 - Test complete phase sequences
 - Verify data persistence across phases
 - Check resource availability
@@ -475,6 +476,7 @@ Describe "Component A and Component B Interaction" {
 - Run integration tests after unit tests pass
 
 ✗ **Don't:**
+
 - Mix phases in wrong order
 - Skip phase setup/verification
 - Assume unit test success means integration success
@@ -484,6 +486,7 @@ Describe "Component A and Component B Interaction" {
 ## Success Criteria
 
 Integration tests pass when:
+
 - ✅ All phases execute in sequence without errors
 - ✅ Phase changes are preserved after subsequent phases
 - ✅ No resource conflicts between phases

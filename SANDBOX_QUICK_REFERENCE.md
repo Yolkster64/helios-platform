@@ -45,6 +45,7 @@ await orchestrator.ShutdownAsync();
 ## 🔧 Common Tasks
 
 ### Task 1: Initialize Sandbox
+
 ```csharp
 var setup = new SandboxEnvironmentSetup();
 await setup.InitializeAsync();
@@ -52,6 +53,7 @@ var config = await setup.GetCurrentConfigurationAsync();
 ```
 
 ### Task 2: Launch Sandbox
+
 ```csharp
 var launcher = new SandboxLauncher();
 var options = new SandboxLaunchOptions { SandboxName = "Analysis_001" };
@@ -59,6 +61,7 @@ var sandbox = await launcher.LaunchSandboxAsync(options);
 ```
 
 ### Task 3: Transfer File
+
 ```csharp
 var fileTransfer = new SandboxFileTransfer();
 await fileTransfer.TransferFileToSandboxAsync(
@@ -66,6 +69,7 @@ await fileTransfer.TransferFileToSandboxAsync(
 ```
 
 ### Task 4: Monitor Activity
+
 ```csharp
 var monitor = new SandboxMonitor();
 await monitor.StartMonitoringAsync(sandbox);
@@ -73,6 +77,7 @@ var threat = await monitor.DetectMalwareBehaviorAsync(sandbox);
 ```
 
 ### Task 5: Create Snapshot
+
 ```csharp
 var snapshotManager = new SandboxSnapshotManager();
 var snapshot = await snapshotManager.CreateSnapshotAsync(sandbox, "clean");
@@ -262,6 +267,7 @@ Console.WriteLine($"Threats: {threats}");
 ---
 
 **Quick Links:**
+
 - [README](SANDBOX_README.md)
 - [Configuration Guide](SANDBOX_CONFIGURATION_GUIDE.md)
 - [Complete Documentation](SANDBOX_DOCUMENTATION.md)

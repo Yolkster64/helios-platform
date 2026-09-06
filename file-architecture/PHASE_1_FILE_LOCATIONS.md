@@ -24,6 +24,7 @@ Phase 1 deploys comprehensive security controls including AppLocker rules, firew
 **Purpose**: Define executable application policies via AppLocker
 
 **Registry Structure Created**:
+
 ```
 HKLM:\Software\Policies\Microsoft\Windows\SrpV2\
 ├── Exe\                                # Executable rules
@@ -80,6 +81,7 @@ HKLM:\Software\Policies\Microsoft\Windows\SrpV2\
 ```
 
 **Examples**:
+
 ```
 HKLM:\Software\Policies\Microsoft\Windows\SrpV2\Exe\{GUID-1}\Name = "Allow Windows System Executables"
 HKLM:\Software\Policies\Microsoft\Windows\SrpV2\Exe\EnforcementMode = 2
@@ -99,6 +101,7 @@ HKLM:\Software\Policies\Microsoft\Windows\SrpV2\Dll\EnforcementMode = 1
 **Purpose**: Network security rules and host file configuration
 
 **Files Created/Modified**:
+
 ```
 C:\Windows\System32\drivers\etc\
 ├── hosts                               # Host file (modified)
@@ -115,6 +118,7 @@ C:\Windows\System32\drivers\etc\
 ```
 
 **Firewall Registry Rules**:
+
 ```
 HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\
 ├── StandardProfile\
@@ -140,6 +144,7 @@ HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\
 ```
 
 **Example Host File Additions**:
+
 ```
 # Added by HELIOS Phase 1 Security
 127.0.0.1 malicious-domain.com
@@ -162,6 +167,7 @@ HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\
 **Purpose**: Encrypted user vault for sensitive data storage
 
 **Files Created**:
+
 ```
 C:\Users\[USERNAME]\AppData\Local\HELIOS\Vault\
 ├── Vault.db                            # Encrypted vault database
@@ -201,6 +207,7 @@ C:\Users\[USERNAME]\AppData\Local\HELIOS\Vault\
 ```
 
 **Examples**:
+
 ```
 C:\Users\Administrator\AppData\Local\HELIOS\Vault\Vault.db
 C:\Users\jsmith\AppData\Local\HELIOS\Vault\Vault.config
@@ -212,6 +219,7 @@ C:\Users\Administrator\AppData\Local\HELIOS\Vault\certificates\user-cert.pfx
 **Size**: 20-50 MB per vault (database + backups)
 
 **Key Vault Features**:
+
 - Master password protected
 - AES-256 encryption
 - Auto-lock after 15 minutes inactivity
@@ -219,6 +227,7 @@ C:\Users\Administrator\AppData\Local\HELIOS\Vault\certificates\user-cert.pfx
 - Access audit logging
 
 **Vault Contents** (Vault.db structure):
+
 ```
 VAULT.DB Tables:
 ├── secrets
@@ -264,6 +273,7 @@ VAULT.DB Tables:
 **Purpose**: Windows event logs and HELIOS security audit trail
 
 **Files Created/Modified**:
+
 ```
 C:\Windows\System32\winevt\Logs\
 ├── Security.evtx                       # Security event log (modified/enhanced)
@@ -291,6 +301,7 @@ C:\Windows\System32\winevt\Logs\
 ```
 
 **Registry Event Log Configuration**:
+
 ```
 HKLM:\System\CurrentControlSet\Services\EventLog\
 ├── Security\
@@ -327,6 +338,7 @@ HKLM:\System\CurrentControlSet\Services\EventLog\
 **Purpose**: Isolated storage for suspicious or blocked files
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Security\Quarantine\
 ├── Quarantine.db                       # Quarantine database (SQLite)
@@ -360,6 +372,7 @@ C:\ProgramData\HELIOS\Security\Quarantine\
 ```
 
 **Quarantine.db Structure**:
+
 ```
 Table: quarantined_files
 ├── id INTEGER PRIMARY KEY
@@ -384,6 +397,7 @@ Table: quarantine_history
 ```
 
 **Example Quarantine Entries**:
+
 ```
 Original: C:\Users\jsmith\Downloads\suspicious.exe
 Quarantine: C:\ProgramData\HELIOS\Security\Quarantine\Active\File_2024-01-15_001.qtn
@@ -405,6 +419,7 @@ Date: 2024-01-15 14:23:45
 **Purpose**: Local security policies and configurations
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Security\Policies\
 ├── AppLocker-Rules.xml                 # AppLocker policy export
@@ -419,6 +434,7 @@ C:\ProgramData\HELIOS\Security\Policies\
 ```
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Security\Policies\AppLocker-Rules.xml
 C:\ProgramData\HELIOS\Security\Policies\Password-Policy.cfg
@@ -437,6 +453,7 @@ C:\ProgramData\HELIOS\Security\Policies\Password-Policy.cfg
 **Purpose**: Threat detection and analysis results
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Security\Analysis\
 ├── Threat-Database.db                  # Threat signatures and definitions
@@ -454,6 +471,7 @@ C:\ProgramData\HELIOS\Security\Analysis\
 ```
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Security\Analysis\Threat-Database.db
 C:\ProgramData\HELIOS\Security\Analysis\Threat-Scan-2024-01-15.report
@@ -472,6 +490,7 @@ C:\ProgramData\HELIOS\Security\Analysis\Threat-Scan-2024-01-15.report
 **Purpose**: Phase 1 deployment and operations diagnostic logs
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Logs\
 ├── Phase1.log                          # Main Phase 1 log
@@ -489,6 +508,7 @@ C:\ProgramData\HELIOS\Logs\
 **Size**: 50-100 MB with verbose logging
 
 **Log Examples**:
+
 ```
 [2024-01-15 10:30:15.234] [INFO] Phase 1 Security Deployment Started
 [2024-01-15 10:30:16.456] [INFO] Configuring AppLocker rules...
@@ -509,6 +529,7 @@ C:\ProgramData\HELIOS\Logs\
 **Purpose**: Security-related Windows policies
 
 **Keys Modified/Created**:
+
 ```
 HKLM:\Software\Policies\Microsoft\Windows\
 ├── Defender\Real-Time Protection\
@@ -544,6 +565,7 @@ HKLM:\Software\Policies\Microsoft\Windows\
 **Purpose**: Backups of files modified by Phase 1
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Security\Backups\
 ├── hosts.backup                        # Original hosts file
@@ -644,6 +666,7 @@ HKLM:\Software\Policies\Microsoft\Windows\
 ## Next Steps
 
 After Phase 1 completes:
+
 - Security controls are active
 - Vault systems operational
 - Event logging enhanced

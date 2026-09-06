@@ -23,10 +23,12 @@ Complete verification checklist for the AI Integration Layer.
 - [ ] Set environment variable: `$env:OPENAI_API_KEY = "sk-..."`
 - [ ] Verify key by running: `Write-Host $env:OPENAI_API_KEY`
 - [ ] Test API connectivity:
+
   ```powershell
   . .\scripts\ask-chatgpt.ps1
   $test = Invoke-ChatGPT -Prompt "Hello" -Model "gpt-3.5-turbo"
   ```
+
 - [ ] Confirm response received (should be non-empty)
 
 ## ✅ ChatGPT Integration Setup
@@ -34,19 +36,25 @@ Complete verification checklist for the AI Integration Layer.
 - [ ] Read `chatgpt-integration/README.md`
 - [ ] Review `chatgpt-integration/SYSTEM_PROMPTS.md`
 - [ ] Test basic ChatGPT function:
+
   ```powershell
   . .\scripts\ask-chatgpt.ps1
   Invoke-ChatGPT -Prompt "What is AppLocker?" -Model "gpt-3.5-turbo"
   ```
+
 - [ ] Test with gpt-4 model (if available):
+
   ```powershell
   Invoke-ChatGPT -Prompt "Explain AppLocker phases" -Model "gpt-4"
   ```
+
 - [ ] Test caching:
+
   ```powershell
   Invoke-ChatGPT -Prompt "Hello" -UseCache $true
   Invoke-ChatGPT -Prompt "Hello" -UseCache $true  # Should be cached
   ```
+
 - [ ] Verify logs created: `Test-Path "$env:LOCALAPPDATA\helios-ai-logs\chatgpt-*.log"`
 - [ ] Review log entries (should show timestamp, model, status)
 
@@ -55,18 +63,24 @@ Complete verification checklist for the AI Integration Layer.
 - [ ] Read `codex-integration/README.md`
 - [ ] Review `codex-integration/CODE_GENERATION_TEMPLATES.md`
 - [ ] Test basic Codex function:
+
   ```powershell
   . .\scripts\ask-codex.ps1
   Invoke-Codex -Spec "Generate hello world in PowerShell"
   ```
+
 - [ ] Test with safety checks:
+
   ```powershell
   Invoke-Codex -Spec "Generate function" -AddSafetyChecks $true
   ```
+
 - [ ] Test with error handling:
+
   ```powershell
   Invoke-Codex -Spec "Generate function" -IncludeErrorHandling $true
   ```
+
 - [ ] Verify generated code includes AI header
 - [ ] Verify logs created: `Test-Path "$env:LOCALAPPDATA\helios-ai-logs\codex-*.log"`
 
@@ -76,6 +90,7 @@ Complete verification checklist for the AI Integration Layer.
 - [ ] Review `ai-coordination/CONFLICT_RESOLUTION.md`
 - [ ] Review `ai-coordination/VERSION_CONTROL.md`
 - [ ] Test coordination function:
+
   ```powershell
   . .\scripts\ask-chatgpt.ps1
   . .\scripts\ask-codex.ps1
@@ -85,11 +100,14 @@ Complete verification checklist for the AI Integration Layer.
   $codex = Invoke-Codex -Spec "Test"
   $coord = Invoke-AICoordination -ChatGPTResponse $gpt -CodexResponse $codex
   ```
+
 - [ ] Test conflict detection
 - [ ] Generate coordination report:
+
   ```powershell
   Invoke-AICoordination -GenerateReport $true
   ```
+
 - [ ] Verify report generated correctly
 - [ ] Verify logs created: `Test-Path "$env:LOCALAPPDATA\helios-ai-logs\coordination-*.log"`
 

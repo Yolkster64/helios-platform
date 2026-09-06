@@ -24,6 +24,7 @@ Phase 2 deploys system optimization configurations, manages services, controls s
 **Purpose**: Define and configure Windows services for optimization
 
 **Registry Structure**:
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\
 ├── HELIOSMonitor                       # Main HELIOS monitoring service
@@ -87,6 +88,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\
 ```
 
 **Examples**:
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\HELIOSMonitor\ImagePath = 
   "C:\Program Files\HELIOS\Monitor\HELIOSMonitor.exe"
@@ -109,6 +111,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\HELIOSOptimizer\Parameters\CleanupInterv
 **Purpose**: Programs to run automatically when user logs in
 
 **Files Created**:
+
 ```
 C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ├── HELIOS-Monitor.lnk                  # Shortcut to monitoring app
@@ -128,6 +131,7 @@ C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ```
 
 **Examples**:
+
 ```
 C:\Users\Administrator\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\HELIOS-Monitor.lnk
 C:\Users\jsmith\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\HELIOS-Vault-Monitor.lnk
@@ -146,6 +150,7 @@ C:\Users\jsmith\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\HELIOS-Vaul
 **Purpose**: System-wide startup items (runs for all users)
 
 **Registry Entries Created**:
+
 ```
 HKLM:\Software\Microsoft\Windows\CurrentVersion\
 ├── Run\
@@ -162,6 +167,7 @@ HKLM:\Software\Microsoft\Windows\CurrentVersion\
 ```
 
 **Examples**:
+
 ```
 HKLM:\Software\Microsoft\Windows\CurrentVersion\Run\HELIOSMonitor = 
   "C:\Program Files\HELIOS\Monitor\HELIOSMonitor.exe"
@@ -179,6 +185,7 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run\HELIOSVaultMonitor =
 **Purpose**: System optimization configuration profiles
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Optimization\Profiles\
 ├── Default-Profile.opt                 # Default optimization profile
@@ -226,6 +233,7 @@ C:\ProgramData\HELIOS\Optimization\Profiles\
 ```
 
 **Profile Configuration Format** (JSON):
+
 ```json
 {
   "profile_name": "Default-Profile",
@@ -259,6 +267,7 @@ C:\ProgramData\HELIOS\Optimization\Profiles\
 **Size**: Each profile ~10-50 KB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Optimization\Profiles\Default-Profile.opt
 C:\ProgramData\HELIOS\Optimization\Profiles\Performance-Profile.opt
@@ -274,6 +283,7 @@ C:\ProgramData\HELIOS\Optimization\Profiles\Active-Profile.txt
 **Purpose**: Temporary file and cache cleanup rules
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Optimization\Cleanup\
 ├── Cleanup-Rules.cfg                   # Main cleanup rules file
@@ -309,6 +319,7 @@ C:\ProgramData\HELIOS\Optimization\Cleanup\
 ```
 
 **Cleanup Rules Format**:
+
 ```
 [CLEANUP_RULE_1]
 Name=Windows Temporary Files
@@ -350,6 +361,7 @@ Exclude=.nolog
 **Purpose**: Manage system and application caches
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Optimization\Cache\
 ├── Cache-Policy.cfg                    # Cache management policies
@@ -384,6 +396,7 @@ C:\ProgramData\HELIOS\Optimization\Cache\
 ```
 
 **Cache Locations Managed**:
+
 ```
 C:\Users\[USERNAME]\AppData\Local\Cache\
 ├── Chrome Cache
@@ -415,6 +428,7 @@ C:\ProgramData\
 **Purpose**: Performance snapshots for comparison
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Optimization\Baselines\
 ├── Baseline-Pre-Optimization.snapshot   # Before Phase 2 optimizations
@@ -453,6 +467,7 @@ C:\ProgramData\HELIOS\Optimization\Baselines\
 ```
 
 **Performance Snapshot Contents**:
+
 ```json
 {
   "timestamp": "2024-01-15T08:00:00Z",
@@ -487,6 +502,7 @@ C:\ProgramData\HELIOS\Optimization\Baselines\
 **Purpose**: Automated optimization tasks
 
 **Files Created**:
+
 ```
 C:\Windows\System32\Tasks\HELIOS\
 ├── Daily-Optimization.xml              # Daily optimization task
@@ -528,6 +544,7 @@ C:\Windows\System32\Tasks\HELIOS\
 ```
 
 **Task Scheduler Registry**:
+
 ```
 HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Schedule\
 ├── TaskCache\Tree\
@@ -543,6 +560,7 @@ HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Schedule\
 ```
 
 **Example Task XML Structure**:
+
 ```xml
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -588,6 +606,7 @@ HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Schedule\
 **Purpose**: Phase 2 deployment and optimization diagnostic logs
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Logs\
 ├── Phase2.log                          # Main Phase 2 log
@@ -680,18 +699,21 @@ C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ## Service Optimization Examples
 
 ### Disabled Services (Reduced Resource Usage)
+
 - Windows Search Indexer (if not needed)
 - Diagnostic Tracking Service
 - dmwappushservice
 - DiagTrack
 
 ### Optimized Services (Auto-start)
+
 - HELIOSMonitor
 - HELIOSOptimizer
 - HELIOSVaultMonitor
 - HELIOSAnalyzer
 
 ### Critical Services (Unchanged)
+
 - Windows Update
 - Security Essentials
 - Network services
@@ -702,6 +724,7 @@ C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ## Next Steps
 
 After Phase 2 completes:
+
 - System services optimized
 - Automatic cleanup active
 - Performance profiles applied

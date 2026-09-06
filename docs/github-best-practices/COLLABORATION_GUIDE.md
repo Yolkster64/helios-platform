@@ -5,6 +5,7 @@ Standards for team communication, decision-making, and conflict resolution.
 ---
 
 ## Table of Contents
+
 1. [Team Communication](#team-communication)
 2. [Decision-Making Process](#decision-making-process)
 3. [Escalation Procedure](#escalation-procedure)
@@ -79,32 +80,38 @@ If you can't respond in time:
 ### Decision Types
 
 **Type A: Individual (1 person)**
+
 - Internal implementation details
 - Local code organization
 - Personal workflow choices
 
 Process:
+
 1. Decide based on guidelines
 2. No approval needed
 3. Can be overridden if feedback given
 
 **Type B: Team (3+ people)**
+
 - Feature design
 - API changes
 - Architecture decisions
 
 Process:
+
 1. Create GitHub Discussion
 2. Present options and reasoning
 3. Allow 48 hours for feedback
 4. Team lead decides if no consensus
 
 **Type C: Organization (whole company)**
+
 - Release timing
 - Major strategy shifts
 - Policy changes
 
 Process:
+
 1. Create RFC (Request for Comments)
 2. Present to leadership
 3. Allow one week for feedback
@@ -178,6 +185,7 @@ Step 5: Document
 ### When to Escalate
 
 Escalate when:
+
 - Blocked on someone's decision
 - Team deadlocked on issue
 - Needs authority to decide
@@ -255,16 +263,19 @@ Related Issues: #123, #456
 ### Types of Conflicts
 
 **Technical Disagreement**
+
 - Two approaches to solve a problem
 - Different opinions on best practice
 - Architecture vs practicality trade-offs
 
 **Interpersonal**
+
 - Misunderstanding between team members
 - Different communication styles
 - Work style conflicts
 
 **Process**
+
 - Disagreement on how to work
 - Different priority opinions
 - Schedule/deadline conflicts
@@ -272,26 +283,31 @@ Related Issues: #123, #456
 ### Resolution Framework
 
 **Step 1: Understand**
+
 - Listen to all perspectives
 - Ask clarifying questions
 - Make sure you understand fully
 
 **Step 2: Find Common Ground**
+
 - What do you agree on?
 - What's the shared goal?
 - What principles matter to everyone?
 
 **Step 3: Generate Options**
+
 - Brainstorm solutions
 - Consider compromises
 - Look for win-wins
 
 **Step 4: Evaluate Options**
+
 - Pros and cons of each
 - Impact on team and project
 - Feasibility
 
 **Step 5: Decide & Commit**
+
 - Make clear decision
 - Communicate rationale
 - Move forward together
@@ -334,6 +350,7 @@ Result: Team adopts TypeScript, both developers support the decision
 ### Escalation Red Flags
 
 If these occur, escalate immediately:
+
 - Repeated disrespect or hostility
 - Someone won't commit to decision
 - Trust has broken down
@@ -448,6 +465,7 @@ Continuous:
 ### Celebrating Wins
 
 **Immediate Recognition (same day):**
+
 ```markdown
 On Slack #general:
 "🎉 Great work by @developer on the performance optimization!
@@ -457,6 +475,7 @@ Better than just "good job" - be specific about what was good.
 ```
 
 **Weekly Recognition:**
+
 ```markdown
 Every Friday afternoon:
 - Highlight significant accomplishments
@@ -465,6 +484,7 @@ Every Friday afternoon:
 ```
 
 **Monthly Awards:**
+
 ```markdown
 Recognition categories:
 - 🚀 Innovation: Most creative solution
@@ -475,6 +495,7 @@ Recognition categories:
 ```
 
 **Annual Recognition:**
+
 ```markdown
 Company awards:
 - Engineer of the Year
@@ -512,6 +533,7 @@ Specific recognition:
 ### Contributor Onboarding Checklist
 
 **Day 1 - Welcome**
+
 ```markdown
 □ Send welcome email with links
 □ Add to GitHub team
@@ -522,6 +544,7 @@ Specific recognition:
 ```
 
 **Week 1 - Orientation**
+
 ```markdown
 □ Meet core team members
 □ Overview of project/goals
@@ -533,6 +556,7 @@ Specific recognition:
 ```
 
 **Week 1-2 - Setup**
+
 ```markdown
 □ Development environment working
 □ Can run tests locally
@@ -545,6 +569,7 @@ Specific recognition:
 ```
 
 **Week 2-3 - Small Tasks**
+
 ```markdown
 □ Assign "good first issue"
 □ Create first PR
@@ -556,6 +581,7 @@ Specific recognition:
 ```
 
 **Week 3-4 - Onboarding**
+
 ```markdown
 □ Assigned to first real feature
 □ Pairing session with senior dev
@@ -566,6 +592,7 @@ Specific recognition:
 ```
 
 **Month 2 - Integration**
+
 ```markdown
 □ Lead code review
 □ Own feature from start to release
@@ -576,6 +603,7 @@ Specific recognition:
 ```
 
 **Month 3 - Independence**
+
 ```markdown
 □ Own multiple features
 □ Mentor new contributor
@@ -616,6 +644,7 @@ Create onboarding documentation:
 ### Onboarding Buddy Role
 
 Assigned buddy should:
+
 - Answer questions (no question too small)
 - Point to documentation
 - Do code review for first PR
@@ -631,6 +660,7 @@ Assigned buddy should:
 ## Team Rituals
 
 ### Daily Stand-up (15 minutes)
+
 ```markdown
 What did I do yesterday?
 What am I doing today?
@@ -638,6 +668,7 @@ What am I blocked on?
 ```
 
 ### Weekly Planning (1 hour)
+
 ```markdown
 Review previous week
 Discuss upcoming week
@@ -646,6 +677,7 @@ Answer questions
 ```
 
 ### Sprint Review (1 hour)
+
 ```markdown
 Demo completed work
 Discuss lessons learned
@@ -654,6 +686,7 @@ Plan next steps
 ```
 
 ### Retrospective (1 hour)
+
 ```markdown
 What went well?
 What could improve?

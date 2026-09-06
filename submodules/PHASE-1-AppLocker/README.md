@@ -47,12 +47,15 @@ Implements application whitelisting through AppLocker:
 ### Public Functions
 
 #### Enable-AppLocker
+
 ```
 Enable-AppLocker -RuleSet <string> -Mode <string> [-Backup]
 ```
+
 Enables AppLocker on the system.
 
 **Parameters**:
+
 - RuleSet: "Developer" | "Standard" | "Strict"
 - Mode: "Audit" | "Enforce"
 - Backup: Save current policy before enabling
@@ -60,17 +63,21 @@ Enables AppLocker on the system.
 **Returns**: Object with Status, RulesLoaded, Mode
 
 **Example**:
+
 ```powershell
 Enable-AppLocker -RuleSet "Standard" -Mode "Audit" -Backup
 ```
 
 #### New-AppLockerRule
+
 ```
 New-AppLockerRule -Name <string> -Path <string> -RuleType <string> [-Action <string>]
 ```
+
 Creates a new AppLocker rule.
 
 **Parameters**:
+
 - Name: Descriptive rule name
 - Path: File path pattern (e.g., "C:\Program Files\*")
 - RuleType: "Executable" | "DLL" | "Script" | "Installer"
@@ -79,32 +86,39 @@ Creates a new AppLocker rule.
 **Returns**: Rule object with Id, Name, Path, RuleType
 
 **Example**:
+
 ```powershell
 New-AppLockerRule -Name "Allow Office" -Path "C:\Program Files\Microsoft Office\*" -RuleType "Executable"
 ```
 
 #### Get-AppLockerStatus
+
 ```
 Get-AppLockerStatus [-Detailed]
 ```
+
 Gets current AppLocker status.
 
 **Returns**: Object with Enabled, Mode, RulesLoaded, ViolationCount
 
 **Example**:
+
 ```powershell
 Get-AppLockerStatus -Detailed | Format-Table
 ```
 
 #### Invoke-AppLockerValidation
+
 ```
 Invoke-AppLockerValidation -RuleSet <string>
 ```
+
 Validates AppLocker ruleset for conflicts/issues.
 
 **Returns**: Object with Valid, Issues, Warnings
 
 **Example**:
+
 ```powershell
 Invoke-AppLockerValidation -RuleSet "Standard"
 ```
@@ -156,18 +170,21 @@ A: Standard rulesets include built-in app rules. Create custom rules as needed.
 ## Development Roadmap
 
 ### Week 5: Design & Framework
+
 - [ ] Design AppLocker policy format
 - [ ] Design API contracts
 - [ ] Define integration points
 - [ ] Create test framework
 
 ### Week 6: Core Implementation
+
 - [ ] Implement Enable-AppLocker
 - [ ] Implement New-AppLockerRule
 - [ ] Implement Get-AppLockerStatus
 - [ ] Write unit tests
 
 ### Week 7: Testing & Integration
+
 - [ ] Complete Invoke-AppLockerValidation
 - [ ] Write integration tests
 - [ ] Test with Vault integration

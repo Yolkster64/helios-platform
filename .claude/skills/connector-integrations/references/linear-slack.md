@@ -27,7 +27,7 @@ lands (`docs/architecture/ROADMAP_MULTI_LLM.md:31-34` — PR4; nothing under
 |---|---|---|
 | `apiKeyEnv` | `LINEAR_API_KEY` | `linear-sync.yml:40` maps the secret of that name into the job env |
 | `teamKey` | `JOH` | Team lookup, `linear-sync.yml:55,88-93` |
-| `titlePrefix` | `[GH-{number}] ` | Mirror title + identity lookup, `linear-sync.yml:56-57,101-104` |
+| `titlePrefix` | `"[GH-{number}] "` (including the trailing space) | Mirror title + identity lookup, `linear-sync.yml:56-57,101-104` |
 | `syncLabels` | `bug`, `enhancement`, `infra`, `ai-hub`, `absorption`, `build-ci` (`connectors.json:27`) | Crossing gate, `linear-sync.yml:66-79` |
 | `githubLabelToLinear` | `bug`→`Bug`, `enhancement`→`Feature`, `infra`→`Infra`, `ai-hub`→`AIHub`, `absorption`→`Absorption`, `build-ci`→`BuildCI` (`connectors.json:28-35`) | Label mapping, `linear-sync.yml:120-135` |
 

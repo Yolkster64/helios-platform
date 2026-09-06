@@ -9,6 +9,7 @@ Cloud integration enabling hybrid and cloud-native deployments of HELIOS Platfor
 Cloud Bridge seamlessly integrates HELIOS with Azure, AWS, and GCP. Enables hybrid deployments, cloud backup, and disaster recovery.
 
 **Key Facts:**
+
 - **Phase:** 3
 - **Standalone:** ⚠️ Partial (needs security-engine + vault-dynamics)
 - **Requires:** security-engine, vault-dynamics, cloud SDKs (bundled)

@@ -9,6 +9,7 @@ Learn how to use components from later phases in earlier phases. Borrowing lets 
 **Borrowing** is using a component from a later phase in an earlier phase. Instead of installing all of Phase 3 just to use the AI Dashboard, you can "borrow" just the dashboard into Phase 1 or Phase 0.
 
 ### Traditional Flow (Non-Borrowing)
+
 ```
 Want Dashboard (Phase 3)?
 → Install Phase 0 (security-engine)
@@ -19,6 +20,7 @@ Want Dashboard (Phase 3)?
 ```
 
 ### Borrowing Flow
+
 ```
 Want Dashboard (Phase 3)?
 → Borrow just ai-dashboard to current phase
@@ -421,16 +423,19 @@ Get-ComponentResourceUsage -Name "ai-dashboard"
 ## Best Practices for Borrowing
 
 1. **Always check prerequisites first**
+
    ```powershell
    .\check-borrowing-prerequisites.ps1 -ComponentName "name" -ToPhase "phase"
    ```
 
 2. **Test borrowed component immediately after installation**
+
    ```powershell
    .\components\<component-name>\test-component.ps1
    ```
 
 3. **Keep a record of borrowed components**
+
    ```powershell
    Get-BorrowedComponents | Export-Csv "borrowed-components.csv"
    ```
@@ -440,6 +445,7 @@ Get-ComponentResourceUsage -Name "ai-dashboard"
    - Risky: 5+ borrowed components
 
 5. **Document your custom setup**
+
    ```
    # My HELIOS Setup
    Phase 0: security-engine (native)
@@ -451,11 +457,13 @@ Get-ComponentResourceUsage -Name "ai-dashboard"
    ```
 
 6. **Test after system updates**
+
    ```powershell
    Test-AllBorrowedComponents -Verbose
    ```
 
 7. **Backup before major borrows**
+
    ```powershell
    .\backup-components.ps1 -BackupPath "C:\Backups\pre-borrow-$(Get-Date -Format 'yyyy-MM-dd-HHmmss')"
    ```
@@ -546,6 +554,7 @@ Get-BorrowHistory
 ## Summary
 
 Borrowing allows you to:
+
 - ✅ Use specific components without full phases
 - ✅ Build custom lightweight configurations
 - ✅ Save installation time and disk space

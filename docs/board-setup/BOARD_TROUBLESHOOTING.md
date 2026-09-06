@@ -22,6 +22,7 @@
 ## Issue Not Appearing on Board
 
 ### Symptoms
+
 - Created issue but can't find it on board
 - Issue exists in repository but not in projects
 - Different views not showing the issue
@@ -51,6 +52,7 @@ Step 3: Verify issue meets view criteria
 ### Solutions
 
 **Add Issue to Project:**
+
 ```
 1. Open issue in repository
 2. Right side panel → Projects
@@ -62,6 +64,7 @@ Step 3: Verify issue meets view criteria
 ```
 
 **Clear Filters:**
+
 ```
 1. Open board
 2. Look for Filter icon (funnel shape)
@@ -72,6 +75,7 @@ Step 3: Verify issue meets view criteria
 ```
 
 **Try Different View:**
+
 ```
 1. If not in By Component view
 2. Try "By Status" view
@@ -96,6 +100,7 @@ Step 3: Verify issue meets view criteria
 ## Status Not Updating When PR Created
 
 ### Symptoms
+
 - Created PR linked to issue
 - Issue still in "In Progress" or wrong column
 - Manual column move required
@@ -126,6 +131,7 @@ Step 3: Check automation logs
 ### Solutions
 
 **Link PR Correctly:**
+
 ```
 In your PR Description, include:
   Fixes #456
@@ -139,6 +145,7 @@ PR auto-detection looks for "Fixes #" pattern
 ```
 
 **Manual Column Move:**
+
 ```
 If automation failed:
 1. Open issue on board
@@ -153,6 +160,7 @@ Then:
 ```
 
 **Force Automation Retry:**
+
 ```
 1. Go to Actions tab
 2. Find Board Automation workflow
@@ -176,6 +184,7 @@ Then:
 ## Custom Fields Not Auto-Populating
 
 ### Symptoms
+
 - Applied label but field not auto-filled
 - Component not set automatically
 - Priority not assigned
@@ -206,6 +215,7 @@ Step 3: Check automation running
 ### Solutions
 
 **Apply Correct Labels:**
+
 ```
 For Phase 1 assignment:
   Use: phase-1 (lowercase, no quotes)
@@ -223,6 +233,7 @@ Labels must be exact - check label list in repo
 ```
 
 **Manually Set Fields (temporary):**
+
 ```
 1. Open issue in project view
 2. Find field on right panel
@@ -234,6 +245,7 @@ This is temporary - labels still recommended
 ```
 
 **Verify Labels Exist:**
+
 ```
 1. Go to repository Settings
 2. Click Labels
@@ -256,6 +268,7 @@ This is temporary - labels still recommended
 ## Automation Rules Not Triggering
 
 ### Symptoms
+
 - Fields not auto-updating
 - Columns not auto-moving
 - Tier not auto-assigned
@@ -264,6 +277,7 @@ This is temporary - labels still recommended
 ### Common Causes & Fixes
 
 **Rule 1: Phase Assignment Not Triggering**
+
 ```
 ✓ Check: Label applied? (phase-*, component-*)
 ✓ Check: Spelled correctly? (case-sensitive)
@@ -283,6 +297,7 @@ If still not working:
 ```
 
 **Rule 2: PR Status Sync Not Triggering**
+
 ```
 ✓ Check: PR linked in issue? (Fixes #XXX)
 ✓ Check: Linked correctly? (Not "related to")
@@ -297,6 +312,7 @@ Fix:
 ```
 
 **Rule 3: Auto-Done Not Triggering**
+
 ```
 ✓ Check: Issue in "Review" column?
 ✓ Check: All checkboxes checked?
@@ -313,6 +329,7 @@ Fix:
 ```
 
 **Rule 4: Tier Assignment Not Working**
+
 ```
 ✓ Check: Component set?
 ✓ Check: Priority set?
@@ -329,6 +346,7 @@ Fix:
 ### Debug Procedures
 
 **Check Automation Logs:**
+
 ```
 1. Repository → Actions tab
 2. Look for "Board Automation" workflow
@@ -340,6 +358,7 @@ Fix:
 ```
 
 **Manual Trigger:**
+
 ```
 To manually trigger automation:
 1. Remove then re-add label
@@ -358,6 +377,7 @@ Or:
 ## Board View Not Loading or Displaying Correctly
 
 ### Symptoms
+
 - View takes too long to load
 - Issues not showing in view
 - View stuck/frozen
@@ -366,6 +386,7 @@ Or:
 ### Solutions
 
 **View Won't Load:**
+
 ```
 1. Refresh browser (F5)
 2. Clear browser cache (Ctrl+Shift+Del)
@@ -381,6 +402,7 @@ If still not loading:
 ```
 
 **Issues Not Showing:**
+
 ```
 1. Check active filters (blue Filter icon)
 2. Clear all filters
@@ -395,6 +417,7 @@ If specific issue missing:
 ```
 
 **Drag-and-Drop Not Working:**
+
 ```
 1. Try table view instead of board view
 2. Click issue to open details
@@ -404,6 +427,7 @@ If specific issue missing:
 ```
 
 **View Performance:**
+
 ```
 If view is slow:
 1. Clear filters to reduce items
@@ -418,6 +442,7 @@ If view is slow:
 ## Permission & Access Issues
 
 ### Symptoms
+
 - Can't see board
 - Can't edit issue
 - Can't add label
@@ -426,6 +451,7 @@ If view is slow:
 ### Solutions
 
 **Can't See Board:**
+
 ```
 1. Check: Are you a collaborator on repo?
    Settings → Collaborators
@@ -443,6 +469,7 @@ If view is slow:
 ```
 
 **Can't Edit Issue:**
+
 ```
 1. Check: Are you collaborator? (see above)
 2. Check: Is issue locked?
@@ -454,6 +481,7 @@ If view is slow:
 ```
 
 **Can't Assign People:**
+
 ```
 1. Check: Are they collaborators?
    If not: Add them to repository first
@@ -526,6 +554,7 @@ For PR link not working:
 ### Reporting an Issue
 
 **Template for Board Admin:**
+
 ```
 Title: [Issue Type] - Brief description
 
@@ -555,21 +584,25 @@ Contact: [Your Slack handle]
 ### Where to Get Help
 
 **Slack:** #project-board channel
+
 - Quick questions
 - General usage help
 - Tips and tricks
 
 **GitHub Issues:** DevOps repo
+
 - Technical issues
 - Bug reports
 - Feature requests
 
 **Email:** board-admin@company.com
+
 - Urgent issues
 - Access problems
 - Formal complaints
 
 **Wiki:** Team's GitHub Wiki
+
 - Documented workflows
 - Team-specific guides
 - Best practices
@@ -581,24 +614,28 @@ Contact: [Your Slack handle]
 ### Avoid Common Problems
 
 **When Creating Issues:**
+
 - ✓ Apply labels immediately (phase-*, component-*)
 - ✓ Set priority to enable automation
 - ✓ Use clear titles and descriptions
 - ✓ Add acceptance criteria
 
 **When Creating PRs:**
+
 - ✓ Include "Fixes #XXX" in description
 - ✓ Link to main issue
 - ✓ Request specific reviewers
 - ✓ Describe changes clearly
 
 **When Working on Board:**
+
 - ✓ Keep status updated
 - ✓ Move issues through workflow
 - ✓ Flag blockers immediately
 - ✓ Don't let issues stall
 
 **For Team:**
+
 - ✓ Regular check-ins on blocked items
 - ✓ Review metrics weekly
 - ✓ Provide feedback on process
@@ -607,6 +644,7 @@ Contact: [Your Slack handle]
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Common Issues Covered: 10+

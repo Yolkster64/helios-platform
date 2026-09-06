@@ -9,7 +9,9 @@
 ## 🎯 What Was Created
 
 ### 1. Dashboard Module (1,248 lines)
+
 ✅ Real-time system monitoring dashboard
+
 - `dashboard-core.ps1` - Main dashboard display (251 lines)
 - `real-time-metrics.ps1` - Live metrics collection (292 lines)
 - `health-overview.ps1` - Comprehensive health checks (349 lines)
@@ -17,6 +19,7 @@
 - `dashboard-themes.ps1` - UI theme system (312 lines)
 
 **Features:**
+
 - Real-time CPU, memory, disk, and network monitoring
 - Service status indicators
 - Color-coded health visualization
@@ -24,11 +27,14 @@
 - CSS export capabilities
 
 ### 2. On-Premises Monitoring (612 lines)
+
 ✅ Windows system and infrastructure monitoring
+
 - `system-health.ps1` - OS health and status (307 lines)
 - `resource-tracking.ps1` - Performance metrics (305 lines)
 
 **Features:**
+
 - Windows OS information and boot tracking
 - CPU, memory, disk utilization per-process
 - Network adapter statistics
@@ -37,10 +43,13 @@
 - Configurable alert thresholds
 
 ### 3. Azure Cloud Monitoring (258 lines)
+
 ✅ Azure resource and service monitoring
+
 - `azure-monitor-integration.ps1` - Azure Monitor integration (258 lines)
 
 **Features:**
+
 - Subscription health tracking
 - VM performance metrics
 - App Service monitoring
@@ -50,10 +59,13 @@
 - Alert aggregation
 
 ### 4. Microsoft 365 Monitoring (267 lines)
+
 ✅ M365 service health and usage
+
 - `m365-health.ps1` - M365 services monitoring (267 lines)
 
 **Features:**
+
 - Exchange Online mail flow metrics
 - Teams usage and activity
 - SharePoint storage and performance
@@ -62,10 +74,13 @@
 - Compliance alert aggregation
 
 ### 5. Compliance & Governance (286 lines)
+
 ✅ Compliance monitoring and risk assessment
+
 - `purview-alerts.ps1` - Compliance and DLP monitoring (286 lines)
 
 **Features:**
+
 - DLP policy violation tracking
 - Audit trail logging
 - Compliance framework status (GDPR, HIPAA, SOC2, ISO27001)
@@ -73,10 +88,13 @@
 - Policy violation trends
 
 ### 6. AI-Driven Analytics (240 lines)
+
 ✅ Machine learning and predictive analytics
+
 - `anomaly-detection.ps1` - Anomaly detection and forecasting (240 lines)
 
 **Features:**
+
 - Z-score based anomaly detection
 - Statistical baseline analysis
 - Predictive alerting with linear regression
@@ -84,10 +102,13 @@
 - Trend analysis
 
 ### 7. Reporting System (311 lines)
+
 ✅ Comprehensive report generation
+
 - `executive-reports.ps1` - Report generation and scheduling (311 lines)
 
 **Features:**
+
 - Executive summary reports (KPIs, uptime, incidents)
 - Technical performance reports (detailed metrics)
 - Compliance reports (framework status, DLP)
@@ -95,10 +116,13 @@
 - HTML export with styling
 
 ### 8. Shared Library (462 lines)
+
 ✅ Common functions and utilities
+
 - `monitoring-library.ps1` - Core library functions (462 lines)
 
 **Features:**
+
 - Configuration management
 - Logging and event tracking
 - Metrics aggregation
@@ -110,10 +134,13 @@
 - Health endpoint testing
 
 ### 9. Main Orchestrator (7.64 KB)
+
 ✅ Central command and control
+
 - `monitoring-orchestrator.ps1` - Main entry point
 
 **Features:**
+
 - Module selection and launching
 - Configuration validation
 - Help system
@@ -167,16 +194,19 @@ C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring/
 ## 🚀 Getting Started
 
 ### Step 1: Navigate to Directory
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring
 ```
 
 ### Step 2: View Help
+
 ```powershell
 .\monitoring-orchestrator.ps1 -Help
 ```
 
 ### Step 3: Configure (Optional)
+
 ```powershell
 # Edit main configuration
 notepad config\monitoring-config.json
@@ -189,6 +219,7 @@ notepad config\report-templates.json
 ```
 
 ### Step 4: Start Monitoring
+
 ```powershell
 # Dashboard
 .\monitoring-orchestrator.ps1 -StartModule Dashboard
@@ -218,7 +249,9 @@ notepad config\report-templates.json
 ## ⚙️ Configuration
 
 ### monitoring-config.json
+
 Primary configuration file with settings for:
+
 - Environment (production/development)
 - Dashboard refresh intervals
 - Alert thresholds (CPU, memory, disk)
@@ -231,7 +264,9 @@ Primary configuration file with settings for:
 - Security settings
 
 ### alert-policies.json
+
 Alert policy definitions:
+
 - Severity levels (Critical, High, Medium, Low, Info)
 - Policy rules (threshold, condition, duration)
 - Escalation procedures
@@ -240,7 +275,9 @@ Alert policy definitions:
 - Alert grouping
 
 ### report-templates.json
+
 Report template definitions:
+
 - Report types (executive, technical, compliance, capacity)
 - Report sections and charts
 - Data sources
@@ -250,6 +287,7 @@ Report template definitions:
 ## 📊 Metrics Collected
 
 ### System Performance
+
 - CPU: Usage %, load, per-process metrics
 - Memory: Used MB, free MB, percentage, page file
 - Disk: Space per volume, I/O metrics, usage trends
@@ -257,18 +295,21 @@ Report template definitions:
 - Processes: Top processes by CPU/memory
 
 ### Service Health
+
 - Windows service status
 - Service startup type
 - Service uptime
 - Service health events
 
 ### Cloud Resources
+
 - Azure VM metrics
 - App Service metrics
 - Storage metrics
 - Quota utilization
 
 ### Microsoft 365
+
 - Service status
 - Mail flow metrics
 - Teams activity
@@ -276,6 +317,7 @@ Report template definitions:
 - User activity
 
 ### Compliance
+
 - DLP violations
 - Audit events
 - Risk scores
@@ -284,6 +326,7 @@ Report template definitions:
 ## 🔔 Alert System
 
 ### Alert Lifecycle
+
 1. **Detection** - Metric exceeds threshold
 2. **Creation** - Unique alert ID generated
 3. **Escalation** - If not acknowledged
@@ -292,6 +335,7 @@ Report template definitions:
 6. **Resolution** - Issue resolved
 
 ### Severity Levels
+
 - **Critical** (5) - Red - 15-min escalation
 - **High** (4) - Orange - 30-min escalation
 - **Medium** (3) - Yellow - 60-min escalation
@@ -299,6 +343,7 @@ Report template definitions:
 - **Info** (1) - Blue - No escalation
 
 ### Notification Channels
+
 - Email (SMTP/Office 365)
 - Teams webhooks
 - Slack webhooks
@@ -310,6 +355,7 @@ Report template definitions:
 ### Report Types
 
 **Executive Summary**
+
 - Uptime % (gauge chart)
 - Alert summary
 - Service health overview
@@ -317,6 +363,7 @@ Report template definitions:
 - Compliance status
 
 **Technical Report**
+
 - CPU utilization trend
 - Memory usage history
 - Disk I/O performance
@@ -325,6 +372,7 @@ Report template definitions:
 - Service errors
 
 **Compliance Report**
+
 - Framework compliance status
 - DLP violations
 - Audit trail
@@ -332,12 +380,14 @@ Report template definitions:
 - Remediation actions
 
 **Capacity Planning**
+
 - 12-month projections
 - Growth trends
 - Quota analysis
 - Recommendations
 
 ### Scheduling
+
 - Daily: 02:00 UTC
 - Weekly: Sunday 03:00 UTC
 - Monthly: 1st day 04:00 UTC
@@ -355,20 +405,24 @@ Report template definitions:
 ## 📝 Logging
 
 ### Log Location
+
 `C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring\logs\`
 
 ### Log Format
+
 ```
 [YYYY-MM-DD HH:MM:SS.fff] [LEVEL] [COMPONENT] Message
 ```
 
 ### Log Levels
+
 - INFO - General information
 - WARNING - Non-critical issues
 - ERROR - Error conditions
 - DEBUG - Detailed debugging
 
 ### Retention
+
 - 30 days by default (configurable)
 - Daily log rotation
 - Auto-cleanup of old logs
@@ -376,6 +430,7 @@ Report template definitions:
 ## 🛠️ Customization
 
 ### Adding Custom Alerts
+
 ```powershell
 $alert = New-AlertEvent `
     -AlertId "CUSTOM-001" `
@@ -386,6 +441,7 @@ $alert = New-AlertEvent `
 ```
 
 ### Adding Custom Metrics
+
 ```powershell
 $metric = New-MetricValue `
     -Name "CustomMetric" `
@@ -395,6 +451,7 @@ $metric = New-MetricValue `
 ```
 
 ### Exporting Data
+
 ```powershell
 Export-MetricsToJSON -Metrics $metrics -OutputPath "export.json"
 Export-MetricsToCSV -Metrics $metrics -OutputPath "export.csv"
@@ -403,6 +460,7 @@ Export-MetricsToCSV -Metrics $metrics -OutputPath "export.csv"
 ## 🐛 Troubleshooting
 
 ### Verify Installation
+
 ```powershell
 # Check if all files exist
 Test-Path "C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring\*"
@@ -417,21 +475,25 @@ Get-Content "logs\$(Get-Date -Format 'yyyy-MM-dd').log"
 ### Common Issues
 
 **Module won't load:**
+
 - Check file paths
 - Verify PowerShell version
 - Check execution policy: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned`
 
 **Azure connection fails:**
+
 - Install Azure PowerShell: `Install-Module -Name Az`
 - Authenticate: `Connect-AzAccount`
 
 **M365 authentication errors:**
+
 - Install Microsoft Graph SDK: `Install-Module Microsoft.Graph`
 - Clear cached credentials: `Remove-Item "$env:APPDATA\Microsoft\*" -Force`
 
 ## 📞 Support
 
 For issues:
+
 1. Check logs for error messages
 2. Verify configuration files
 3. Review module-specific documentation

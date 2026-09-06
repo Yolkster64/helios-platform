@@ -133,65 +133,78 @@ Complete guide to all GitHub-related best practices for the HELIOS Platform.
 ### 👨‍💻 For Developers
 
 **Daily use:**
+
 - [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md) - How to work with branches/commits
 - [PULL_REQUEST_GUIDE.md](PULL_REQUEST_GUIDE.md) - Creating and updating PRs
 - [CODE_REVIEW_STANDARDS.md](CODE_REVIEW_STANDARDS.md) - Reviewing others' code
 
 **Setup & onboarding:**
+
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Overall best practices
 - [COLLABORATION_GUIDE.md](COLLABORATION_GUIDE.md) - Team interactions
 
 **Important:**
+
 - [SECURITY_PRACTICES.md](SECURITY_PRACTICES.md) - Never commit secrets!
 
 ### 👀 For Code Reviewers
 
 **Primary:**
+
 - [CODE_REVIEW_STANDARDS.md](CODE_REVIEW_STANDARDS.md) - Complete review checklist
 - [PULL_REQUEST_GUIDE.md](PULL_REQUEST_GUIDE.md) - Understand PR process
 
 **Supporting:**
+
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Context and standards
 - [DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md) - Verify docs are good
 
 ### 📋 For Project Managers
 
 **Primary:**
+
 - [PROJECT_BOARD_GUIDE.md](PROJECT_BOARD_GUIDE.md) - Sprint management
 - [ISSUE_MANAGEMENT_GUIDE.md](ISSUE_MANAGEMENT_GUIDE.md) - Issue triage and tracking
 
 **Supporting:**
+
 - [COLLABORATION_GUIDE.md](COLLABORATION_GUIDE.md) - Team coordination
 - [RELEASE_PROCESS.md](RELEASE_PROCESS.md) - Release planning
 
 ### 🔐 For Security Team
 
 **Critical:**
+
 - [SECURITY_PRACTICES.md](SECURITY_PRACTICES.md) - Complete security guide
 - [MONITORING_GUIDE.md](MONITORING_GUIDE.md) - Security scanning setup
 
 **Supporting:**
+
 - [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md) - CI/CD security
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Repository security
 
 ### 🚀 For DevOps/Infrastructure
 
 **Primary:**
+
 - [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md) - CI/CD workflows
 - [RELEASE_PROCESS.md](RELEASE_PROCESS.md) - Release automation
 - [MONITORING_GUIDE.md](MONITORING_GUIDE.md) - Monitoring & maintenance
 
 **Supporting:**
+
 - [SECURITY_PRACTICES.md](SECURITY_PRACTICES.md) - Security scanning
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Repository setup
 
 ### 📚 For Documentation Team
 
 **Primary:**
+
 - [DOCUMENTATION_STANDARDS.md](DOCUMENTATION_STANDARDS.md) - All documentation formats
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Documentation standards
 
 **Supporting:**
+
 - [PULL_REQUEST_GUIDE.md](PULL_REQUEST_GUIDE.md) - Reviewing docs
 - [COLLABORATION_GUIDE.md](COLLABORATION_GUIDE.md) - Team coordination
 
@@ -352,6 +365,7 @@ Complete guide to all GitHub-related best practices for the HELIOS Platform.
 ### Escalation
 
 If stuck for > 1 hour:
+
 1. Post in relevant Slack channel
 2. Include what you tried
 3. Tag a team lead
@@ -404,6 +418,7 @@ Team Engagement:
 ## Related Documentation
 
 Outside GitHub best practices:
+
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) - Project contribution guide
 - [README.md](../../README.md) - Project overview
 - [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) - System design

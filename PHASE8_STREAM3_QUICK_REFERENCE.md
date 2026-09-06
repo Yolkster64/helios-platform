@@ -7,41 +7,49 @@
 ## 📦 8 Core Components
 
 ### 1. Volume Control Bar
+
 - **Location**: `src/gui/MonadoBlade.GUI/Controls/Volume/`
 - **Features**: System volume sync, gradient UI, keyboard shortcuts
 - **Usage**: Create instance and show to control system volume in real-time
 
 ### 2. Dynamic Lighting Controller
+
 - **Location**: `src/core/HELIOS.Platform/SystemIntegration/DynamicLightingController.cs`
 - **Features**: RGB lighting, Pulse/Flash/Gradient effects, battery mode
 - **Usage**: Set theme colors and notification effects across devices
 
 ### 3. System Tray Icon
+
 - **Location**: `src/gui/MonadoBlade.GUI/SystemTray/TrayIconController.cs`
 - **Features**: Dynamic icons, context menu, notifications
 - **Usage**: Display app status and provide quick access to features
 
 ### 4. Settings Panel
+
 - **Location**: `src/gui/MonadoBlade.GUI/Views/Settings/`
 - **Features**: 5 categories, 11 settings, persistence
 - **Usage**: Allow users to customize appearance, performance, and system options
 
 ### 5. Hotkey Manager
+
 - **Location**: `src/core/HELIOS.Platform/SystemIntegration/HotkeyManager.cs`
 - **Features**: 7 default hotkeys, conflict detection, customizable
 - **Usage**: Register global keyboard shortcuts for quick app access
 
 ### 6. Typography System
+
 - **Location**: `src/gui/MonadoBlade.GUI/Styles/Typography.xaml`
 - **Features**: Material Design 3 scale, native fonts, accessibility
 - **Usage**: Apply consistent typography across the application
 
 ### 7. GPU Accelerator
+
 - **Location**: `src/gui/MonadoBlade.GUI/Rendering/GpuAccelerator.cs`
 - **Features**: DirectX 11, memory monitoring, quality scaling
 - **Usage**: Enable hardware-accelerated rendering with fallback support
 
 ### 8. Device Controller
+
 - **Location**: `src/core/HELIOS.Platform/SystemIntegration/DeviceController.cs`
 - **Features**: Device enumeration, power state, metrics, thermal monitoring
 - **Usage**: Monitor and control system devices and power states
@@ -93,12 +101,14 @@ var metrics = devices.CollectSystemMetrics();
 ## 🚀 Key Features
 
 ### Volume Control
+
 - Real-time system volume adjustment
 - Monado theme gradient visualization
 - Keyboard shortcuts (Vol+, Vol-, Ctrl+M mute)
 - Smooth animations with glow effects
 
 ### Lighting Integration
+
 - Windows Devices.Lights API integration
 - Three notification effects:
   - **Pulse**: Sine wave intensity animation
@@ -107,32 +117,40 @@ var metrics = devices.CollectSystemMetrics();
 - Automatic battery mode dimming (50% intensity reduction)
 
 ### System Tray
+
 - Custom gradient icon generation
 - Status-based colors (Ready, Active, Warning, Error)
 - Context menu with 5 quick-access items
 - Notification badges and balloon tips
 
 ### Settings Panel
+
 **Appearance**:
+
 - Theme selection (4 themes)
 - Accent color picker
 - Window transparency slider
 
 **Performance**:
+
 - GPU acceleration toggle
 - Animation quality level
 
 **System**:
+
 - Startup behavior
 - Global hotkeys toggle
 
 **Accessibility**:
+
 - Text scaling
 - High contrast mode
 - Reduce animations
 
 ### Hotkey Manager
+
 Default bindings:
+
 - `Alt+Ctrl+M` - Show main window
 - `Ctrl++` - Volume up
 - `Ctrl+-` - Volume down
@@ -142,7 +160,9 @@ Default bindings:
 - `Ctrl+PrintScreen` - Screen capture
 
 ### Device Management
+
 Capabilities:
+
 - Device enumeration (Audio, Camera, Network, Storage)
 - Power state monitoring (AC/Battery)
 - System metrics (CPU, Memory, Working set)
@@ -152,6 +172,7 @@ Capabilities:
 ## 🧪 Testing
 
 All components thoroughly tested:
+
 ```
 ✓ DynamicLightingControllerTests (8 tests)
 ✓ HotkeyManagerTests (6 tests)
@@ -160,6 +181,7 @@ All components thoroughly tested:
 ```
 
 Run tests:
+
 ```bash
 dotnet test tests/HELIOS.Platform.Tests/
 ```
@@ -184,6 +206,7 @@ dotnet test tests/HELIOS.Platform.Tests/
 ## 🔗 Windows APIs Used
 
 ### Modern APIs (WinRT)
+
 - `Windows.Devices.Lights` - Dynamic lighting
 - `Windows.Devices.Power` - Battery monitoring
 - `Windows.Devices.Enumeration` - Device discovery
@@ -191,11 +214,13 @@ dotnet test tests/HELIOS.Platform.Tests/
 - `Windows.System` - Shutdown/Restart
 
 ### Legacy APIs (P/Invoke)
+
 - `RegisterHotKey` / `UnregisterHotKey` - Global hotkeys
 - `GetSystemPowerStatus` - Battery status
 - `PerformanceCounter` - System metrics
 
 ### Graphics APIs
+
 - **Direct3D 11** - GPU acceleration
 - **Direct2D** - Hardware rendering
 - **SharpDX** - Managed DirectX
@@ -242,6 +267,7 @@ Error Red:        #FF4545 (255, 69, 69)
 ## 🔄 Error Handling
 
 All components implement graceful error handling:
+
 - Try-catch with logging to Debug output
 - Event-based error reporting
 - Automatic fallback mechanisms

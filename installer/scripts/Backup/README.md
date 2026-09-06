@@ -1,7 +1,11 @@
 #################################################################################
+
 # HELIOS Platform - Backup README
+
 # Purpose: Documentation for backup and recovery system
+
 # Version: 1.0.0
+
 #################################################################################
 
 # HELIOS Platform - Comprehensive Backup & Recovery System
@@ -92,6 +96,7 @@ The system backs up all 5 HELIOS databases:
 5. **HELIOS_Audit**: Audit logging
 
 Each database backup includes:
+
 - Full backup for full system backups
 - Transaction log backups for incremental recovery
 - Differential backups for point-in-time recovery
@@ -118,6 +123,7 @@ Backed up directories:
 - D:\HELIOS\Media\ - Media files
 
 Exclusions:
+
 - *.tmp files (temporary)
 - *.log files (logs)
 
@@ -220,6 +226,7 @@ Backup alerts can be sent via:
 - **Teams**: Can be added (see future enhancements)
 
 Environment variables:
+
 ```powershell
 $env:SMTP_SERVER = "smtp.example.com"
 $env:SMTP_PORT = "587"
@@ -301,6 +308,7 @@ PS> C:\HELIOS\Scripts\Backup\Utilities\3_HealthCheck.ps1
 ```
 
 Monitors:
+
 - Backup directory structure
 - Disk space usage
 - Last backup age

@@ -25,6 +25,7 @@ Verify you have the following installed:
 ```
 
 **Expected Output:**
+
 ```
 {{EXPECTED_OUTPUT_1}}
 {{EXPECTED_OUTPUT_2}}
@@ -57,6 +58,7 @@ notepad {{CONFIG_PATH}}
 ```
 
 **Default Configuration:**
+
 ```json
 {
   "{{CONFIG_KEY_1}}": "{{CONFIG_VALUE_1}}",
@@ -100,6 +102,7 @@ notepad {{CONFIG_PATH}}
 ```
 
 **Expected Result:**
+
 ```
 {{TASK_EXPECTED_RESULT}}
 ```
@@ -182,6 +185,7 @@ Run the built-in health check:
 **Error**: `{{ERROR_MESSAGE_1}}`
 
 **Solution**:
+
 ```powershell
 {{SOLUTION_CMD_1}}
 ```
@@ -191,6 +195,7 @@ Run the built-in health check:
 **Error**: `{{ERROR_MESSAGE_2}}`
 
 **Solution**:
+
 ```powershell
 # Check logs
 {{LOG_CHECK_CMD}}
@@ -202,6 +207,7 @@ Run the built-in health check:
 ### Issue: {{COMMON_ISSUE_3}}
 
 **Solution**:
+
 1. {{STEP_1}}
 2. {{STEP_2}}
 3. {{STEP_3}}

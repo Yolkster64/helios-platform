@@ -26,11 +26,13 @@
 HELIOS CLI provides comprehensive command-line interface for all platform operations. Commands follow standard PowerShell conventions.
 
 **Installation:**
+
 ```powershell
 Import-Module HELIOS.CLI
 ```
 
 **Get Help:**
+
 ```powershell
 Get-Help Get-HeliosDeployment -Full
 ```
@@ -81,12 +83,14 @@ Get-HeliosLogStream -Component "AI-Service" -Follow
 **Description:** List all deployments or get specific deployment details
 
 **Syntax:**
+
 ```powershell
 Get-HeliosDeployment [-Name <String>] [-Status <String>] [-Region <String>] 
                      [-OutputFormat <String>] [-Verbose]
 ```
 
 **Parameters:**
+
 - `-Name`: Filter by deployment name
 - `-Status`: Filter by status (Running, Completed, Failed, Rollback)
 - `-Region`: Filter by region
@@ -112,6 +116,7 @@ Get-HeliosDeployment -Region "eastus"
 ```
 
 **Output Example:**
+
 ```
 Name           Status     Tier        Region   CreatedAt            Progress
 ----           ------     ----        ------   ---------            --------
@@ -127,6 +132,7 @@ test-1         Failed     Lite        eastus   2024-01-13 14:22:00  40%
 **Description:** Create new deployment
 
 **Syntax:**
+
 ```powershell
 New-HeliosDeployment -Name <String> -Tier <String> [-Region <String>] 
                      [-Environment <String>] [-Config <Object>] 
@@ -134,6 +140,7 @@ New-HeliosDeployment -Name <String> -Tier <String> [-Region <String>]
 ```
 
 **Parameters:**
+
 - `-Name`: Deployment name (required)
 - `-Tier`: Deployment tier (Lite, Standard, Enterprise) (required)
 - `-Region`: Azure region (default: eastus)
@@ -164,6 +171,7 @@ New-HeliosDeployment -Name "prod-3" -Tier Enterprise -Confirm
 ```
 
 **Output Example:**
+
 ```
 DeploymentId : 550e8400-e29b-41d4-a716-446655440000
 Name         : prod-1
@@ -181,6 +189,7 @@ EstimatedTime: 35 minutes
 **Description:** Update deployment configuration
 
 **Syntax:**
+
 ```powershell
 Set-HeliosDeployment -Name <String> -Config <Object> 
                      [-Wait] [-WhatIf] [-Confirm]
@@ -204,11 +213,13 @@ Set-HeliosDeployment -Name "prod-1" -Config @{ autoScaling = $false }
 **Description:** Delete deployment
 
 **Syntax:**
+
 ```powershell
 Remove-HeliosDeployment -Name <String> [-Force] [-WhatIf] [-Confirm]
 ```
 
 **Parameters:**
+
 - `-Force`: Skip confirmation
 - `-WhatIf`: Show what would be deleted
 
@@ -232,17 +243,20 @@ Remove-HeliosDeployment -Name "test-1" -WhatIf
 **Description:** Start deployment phase
 
 **Syntax:**
+
 ```powershell
 Start-HeliosDeployment -Name <String> -Phase <Int32> [-Wait] [-Timeout <Int32>]
 ```
 
 **Parameters:**
+
 - `-Name`: Deployment name (required)
 - `-Phase`: Phase number (0-6) (required)
 - `-Wait`: Wait for completion
 - `-Timeout`: Timeout in seconds
 
 **Phases:**
+
 - Phase 0: Pre-flight checks
 - Phase 1: Infrastructure
 - Phase 2: Agent Fleet
@@ -268,6 +282,7 @@ Start-HeliosDeployment -Name "prod-1" -Phase 2 -Wait -Timeout 1800
 **Description:** Get detailed deployment status
 
 **Syntax:**
+
 ```powershell
 Get-HeliosDeploymentStatus -Name <String> [-Verbose]
 ```
@@ -283,6 +298,7 @@ Get-HeliosDeploymentStatus -Name "prod-1" -Verbose
 ```
 
 **Output Example:**
+
 ```
 Deployment     : prod-1
 Status         : Running
@@ -309,12 +325,14 @@ Phase6-Verify  : ⏳ Pending
 **Description:** List AI services or get service details
 
 **Syntax:**
+
 ```powershell
 Get-HeliosAIService [-Name <String>] [-Status <String>] 
                     [-Tier <String>] [-OutputFormat <String>]
 ```
 
 **Parameters:**
+
 - `-Name`: Service name filter
 - `-Status`: Service status (Active, Inactive, Error)
 - `-Tier`: Service tier (Tier1-Free, Tier2-Standard, Tier3-Specialist)
@@ -336,6 +354,7 @@ Get-HeliosAIService -OutputFormat Json
 ```
 
 **Output Example:**
+
 ```
 Name            Status  Tier               Requests  AvgLatency  CacheHit
 ----            ------  ----               --------  ----------  --------
@@ -352,12 +371,14 @@ gemini          Active  Tier1-Free         4,321     523ms       45%
 **Description:** Configure primary AI model
 
 **Syntax:**
+
 ```powershell
 Set-HeliosAIModel -Model <String> [-RoutingStrategy <String>] 
                   [-Fallbacks <String[]>] [-CachingEnabled <Boolean>]
 ```
 
 **Parameters:**
+
 - `-Model`: Primary model name (required)
 - `-RoutingStrategy`: CostOptimized, PerformanceOptimized, BalancedOptimized
 - `-Fallbacks`: Array of fallback model names
@@ -384,12 +405,14 @@ Set-HeliosAIModel -CachingEnabled $true
 **Description:** Get AI service performance metrics
 
 **Syntax:**
+
 ```powershell
 Get-HeliosAIMetrics [-Service <String>] [-Period <String>] 
                     [-OutputFormat <String>]
 ```
 
 **Parameters:**
+
 - `-Service`: Service name
 - `-Period`: Time period (Hour, Day, Week, Month)
 
@@ -407,6 +430,7 @@ Get-HeliosAIMetrics -OutputFormat Json
 ```
 
 **Output Example:**
+
 ```
 Service         Requests  AvgLatency  P95Latency  CacheHit  Cost
 -------         --------  ----------  ----------  --------  ----
@@ -425,12 +449,14 @@ gemini          4,321     523ms       2100ms      45%       $47
 **Description:** Retrieve dashboard data
 
 **Syntax:**
+
 ```powershell
 Get-HeliosDashboard -Name <String> [-Period <String>] 
                     [-OutputFormat <String>]
 ```
 
 **Dashboard Names:**
+
 - Cost
 - Performance
 - Security
@@ -459,12 +485,14 @@ Get-HeliosDashboard -Name "Security" -OutputFormat Json
 **Description:** Get system metrics
 
 **Syntax:**
+
 ```powershell
 Get-HeliosMetrics [-Metric <String>] [-Period <String>] 
                   [-Interval <String>]
 ```
 
 **Available Metrics:**
+
 - CPU
 - Memory
 - Disk
@@ -493,6 +521,7 @@ Get-HeliosMetrics
 **Description:** Get active alerts
 
 **Syntax:**
+
 ```powershell
 Get-HeliosAlert [-Severity <String>] [-Status <String>] 
                 [-OutputFormat <String>]
@@ -518,6 +547,7 @@ Get-HeliosAlert -Status Resolved
 **Description:** Retrieve audit logs
 
 **Syntax:**
+
 ```powershell
 Get-HeliosAuditLog [-Last <Int32>] [-Since <DateTime>] 
                    [-Filter <String>] [-OutputFormat <String>]
@@ -545,6 +575,7 @@ Get-HeliosAuditLog -Filter "security" -OutputFormat Json
 **Description:** Get security status
 
 **Syntax:**
+
 ```powershell
 Get-HeliosSecurityStatus [-Verbose]
 ```
@@ -560,6 +591,7 @@ Get-HeliosSecurityStatus -Verbose
 ```
 
 **Output Example:**
+
 ```
 Physical        : ✅ Enabled (TPM 2.0, USB Token)
 Authentication  : ✅ Enabled (MFA, Entra ID)
@@ -579,12 +611,14 @@ ComplianceScore : 98%
 **Description:** Update security policy
 
 **Syntax:**
+
 ```powershell
 Set-HeliosSecurityPolicy -Policy <String> [-Strict <Boolean>] 
                          [-MfaEnabled <Boolean>]
 ```
 
 **Policy Options:**
+
 - SOC2
 - ISO27001
 - HIPAA
@@ -613,12 +647,14 @@ Set-HeliosSecurityPolicy -MfaEnabled $true
 **Description:** List deployment agents
 
 **Syntax:**
+
 ```powershell
 Get-HeliosAgent [-Name <String>] [-Status <String>] 
                 [-OutputFormat <String>]
 ```
 
 **Agent Types:**
+
 - Storage
 - Security
 - Software
@@ -643,6 +679,7 @@ Get-HeliosAgent -OutputFormat Json
 ```
 
 **Output Example:**
+
 ```
 Name           Type        Status    CPU    Memory  Uptime
 ----           ----        ------    ---    ------  ------
@@ -661,6 +698,7 @@ Testing-01     Testing     Running   10%    35%     42 days
 **Description:** Restart agent
 
 **Syntax:**
+
 ```powershell
 Restart-HeliosAgent -Name <String> [-Wait] [-Timeout <Int32>]
 ```
@@ -684,11 +722,13 @@ Restart-HeliosAgent -Name "Security-01" -Wait -Timeout 300
 **Description:** Get configuration
 
 **Syntax:**
+
 ```powershell
 Get-HeliosConfig [-Section <String>] [-OutputFormat <String>]
 ```
 
 **Sections:**
+
 - Deployment
 - Security
 - AI
@@ -715,6 +755,7 @@ Get-HeliosConfig -Section Security -OutputFormat Json
 **Description:** Update configuration
 
 **Syntax:**
+
 ```powershell
 Set-HeliosConfig -Section <String> -Setting <String> -Value <Object> 
                  [-WhatIf]
@@ -742,12 +783,14 @@ Set-HeliosConfig -Section AI -Setting "CachingEnabled" -Value $true -WhatIf
 **Description:** Stream logs in real-time
 
 **Syntax:**
+
 ```powershell
 Get-HeliosLogStream [-Component <String>] [-Level <String>] 
                     [-Follow] [-Tail <Int32>]
 ```
 
 **Log Levels:**
+
 - Debug
 - Information
 - Warning
@@ -774,6 +817,7 @@ Get-HeliosLogStream -Component "Deployment" -Tail 50
 **Description:** Check system health
 
 **Syntax:**
+
 ```powershell
 Get-HeliosHealth [-Verbose]
 ```
@@ -789,6 +833,7 @@ Get-HeliosHealth -Verbose
 ```
 
 **Output Example:**
+
 ```
 Status            : Healthy
 Score             : 95/100
@@ -838,18 +883,21 @@ Get-HeliosDeployment -OutputFormat Xml | Out-File deployments.xml
 ### Common Errors
 
 **Error:** Unauthorized access
+
 ```powershell
 # Solution: Re-authenticate
 Add-HeliosCredential -Interactive
 ```
 
 **Error:** Deployment not found
+
 ```powershell
 # Solution: List all deployments
 Get-HeliosDeployment -Verbose
 ```
 
 **Error:** Operation timeout
+
 ```powershell
 # Solution: Increase timeout
 Start-HeliosDeployment -Name "prod-1" -Phase 2 -Timeout 3600

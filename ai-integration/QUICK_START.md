@@ -299,7 +299,7 @@ The GitHub Actions workflow (`.github/workflows/ai-code-review.yml`) provides:
 1. **Automatic security scanning** on all PR code
 2. **Credential detection** to prevent leaks
 3. **Syntax validation** for PowerShell code
-4. **Documentation checks** 
+4. **Documentation checks**
 5. **Flags AI-generated code** for required review
 
 To enable:

@@ -5,6 +5,7 @@
 ## Prerequisites
 
 ### Required Modules
+
 ```powershell
 # Install Microsoft Graph module
 Install-Module Microsoft.Graph -Force
@@ -18,6 +19,7 @@ Update-Module ExchangeOnlineManagement
 ```
 
 ### Required Permissions
+
 - Global Administrator (for initial setup)
 - Teams Administrator (for Teams configuration)
 - Exchange Administrator (for email setup)

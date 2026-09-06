@@ -5,6 +5,7 @@ Complete setup and usage guide for integrating OpenAI's ChatGPT Pro (GPT-4) with
 ## Overview
 
 ChatGPT Pro integration enables intelligent assistance for:
+
 - Build phase planning and optimization
 - Security analysis and risk assessment
 - Component conflict detection
@@ -64,6 +65,7 @@ Write-Host "API Status: Success" -ForegroundColor Green
 ### Endpoints
 
 **Chat Completions Endpoint**
+
 ```
 POST https://api.openai.com/v1/chat/completions
 ```
@@ -331,6 +333,7 @@ What are the impacts of this change?
 ### Prompt Engineering
 
 1. **Be Specific**: Provide detailed context
+
    ```
    ❌ Bad: "Give me AppLocker advice"
    ✅ Good: "I have 500 AppLocker rules for Office. Current issues: 50 duplicates, 
@@ -339,18 +342,21 @@ What are the impacts of this change?
    ```
 
 2. **Provide Context**: Include constraints and requirements
+
    ```
    ✅ "We must maintain compatibility with legacy app XYZ. We're migrating 
         to cloud. We need audit logging for compliance."
    ```
 
 3. **Request Specific Format**: Ask for structured responses
+
    ```
    ✅ "Provide your analysis as JSON with fields: issues, solutions, 
         risk_level, testing_approach"
    ```
 
 4. **Reference System Prompts**: Use our predefined personas
+
    ```
    ✅ Use the "Security Architect" system prompt for security concerns
    ```
@@ -363,18 +369,21 @@ What are the impacts of this change?
    - Estimated savings: 50-70%
 
 2. **Batch Requests**: Group related questions
+
    ```
    ❌ Send 10 separate API calls for 10 questions
    ✅ Combine into single well-structured prompt
    ```
 
 3. **Use Appropriate Models**
+
    ```
    gpt-3.5-turbo  → Quick questions, general guidance ($0.0005/1K tokens)
    gpt-4          → Complex analysis, security decisions ($0.03/1K tokens)
    ```
 
 4. **Set Token Limits**
+
    ```powershell
    # Limit responses to save money
    "max_tokens" = 1000  # Instead of default 2000+
@@ -388,6 +397,7 @@ What are the impacts of this change?
    - Analysis: Cross-reference with official documentation
 
 2. **Temperature Settings**
+
    ```
    Temperature 0.3-0.5   → Analytical, factual responses (analysis, code)
    Temperature 0.7       → Balanced creativity and accuracy (planning)
@@ -395,6 +405,7 @@ What are the impacts of this change?
    ```
 
 3. **Request Follow-ups**: Build multi-turn conversations
+
    ```
    - Initial question: Get overview
    - Follow-up: Deep dive into specific area

@@ -116,12 +116,14 @@
 **When**: {{INTERACTION_TRIGGER}}
 
 **How**:
+
 1. {{COMPONENT_A}} initializes {{EVENT_TYPE}} with {{PARAMS}}
 2. {{COMPONENT_B}} receives and validates
 3. Processing occurs at {{PROCESSING_LOCATION}}
 4. Result returned to {{COMPONENT_A}}
 
 **Failure Handling**:
+
 ```
 {{FAILURE_SCENARIO}} → {{FALLBACK_ACTION}} → {{RETRY_STRATEGY}}
 ```
@@ -165,6 +167,7 @@
 ```
 
 **Flow**:
+
 1. User provides {{CREDENTIAL_TYPE}}
 2. {{AUTH_COMPONENT}} validates against {{AUTH_SOURCE}}
 3. {{TOKEN_TYPE}} issued with {{TOKEN_CLAIMS}}

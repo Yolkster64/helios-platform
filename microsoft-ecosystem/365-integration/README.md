@@ -17,6 +17,7 @@ Microsoft 365 provides integrated productivity, communication, and security serv
 ### 1. Teams Integration
 
 **Channels for HELIOS**:
+
 ```
 HELIOS-Platform (Team)
 ├── #announcements          → System updates and notices
@@ -30,6 +31,7 @@ HELIOS-Platform (Team)
 ```
 
 **Key Features**:
+
 - Real-time deployment notifications
 - Automated alert routing
 - Team collaboration on HELIOS management
@@ -37,6 +39,7 @@ HELIOS-Platform (Team)
 - Scheduled status reports
 
 **Example Notification Flow**:
+
 ```
 1. Deployment Triggered
    ↓
@@ -52,6 +55,7 @@ HELIOS-Platform (Team)
 ### 2. OneDrive Integration
 
 **File Structure**:
+
 ```
 OneDrive/HELIOS-Platform/
 ├── Configurations/
@@ -70,6 +74,7 @@ OneDrive/HELIOS-Platform/
 ```
 
 **Features**:
+
 - Automatic backup syncing every 4 hours
 - Version history (30 days retention)
 - Sharing with external partners (with encryption)
@@ -79,6 +84,7 @@ OneDrive/HELIOS-Platform/
 ### 3. SharePoint Integration
 
 **Site Structure**:
+
 ```
 HELIOS Platform Hub (Communication Site)
 ├── Home
@@ -101,6 +107,7 @@ HELIOS Platform Hub (Communication Site)
 ```
 
 **Features**:
+
 - Document versioning and approval workflows
 - Search and discovery
 - Metadata tagging
@@ -121,6 +128,7 @@ HELIOS Platform Hub (Communication Site)
 | Security Alert | Security Team | Security Event Alert |
 
 **Email Example**:
+
 ```
 From: noreply@helios-platform.onmicrosoft.com
 To: helios-admins@company.com
@@ -143,6 +151,7 @@ Questions? Contact: helios-admins@company.com
 ### 5. Microsoft Defender Integration
 
 **Protections for HELIOS**:
+
 - Real-time malware scanning
 - Phishing protection for emails
 - Device threat detection
@@ -150,6 +159,7 @@ Questions? Contact: helios-admins@company.com
 - Incident response automation
 
 **Threat Dashboard**:
+
 ```
 HELIOS Threat Status Dashboard
 ├── Active Threats: 0
@@ -300,6 +310,7 @@ HELIOS Platform Devices (Example):
 ### DLP Policies for HELIOS
 
 **1. Sensitive Information Protection**
+
 ```
 Policy: Detect HELIOS Credentials
 ├── Trigger: Contains
@@ -310,6 +321,7 @@ Policy: Detect HELIOS Credentials
 ```
 
 **2. File Sharing Restrictions**
+
 ```
 Policy: Restrict External File Sharing
 ├── Scope: HELIOS configuration files
@@ -319,6 +331,7 @@ Policy: Restrict External File Sharing
 ```
 
 **3. Email Protection**
+
 ```
 Policy: Monitor Outgoing Emails
 ├── Detect: HELIOS data in external emails
@@ -369,6 +382,7 @@ New-DlpComplianceRule -Policy $policy -Name "Detect-API-Keys" `
 ### Configuration Examples
 
 **GDPR Data Retention Policy**:
+
 ```powershell
 # Delete user data after 90 days
 Set-RetentionCompliancePolicy -Identity "HELIOS-GDPR-Policy" `
@@ -377,6 +391,7 @@ Set-RetentionCompliancePolicy -Identity "HELIOS-GDPR-Policy" `
 ```
 
 **HIPAA Audit Logging**:
+
 ```powershell
 # Enable unified audit log
 Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true `

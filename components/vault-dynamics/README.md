@@ -9,6 +9,7 @@ Enterprise-grade encryption and key management system for the HELIOS Platform.
 Vault Dynamics provides AES-256-GCM encryption with secure key management. Encrypt files, database fields, or custom data with automatic key rotation and optional hardware security module support.
 
 **Key Facts:**
+
 - **Phase:** 1 (can be borrowed to other phases)
 - **Standalone:** ✅ Yes - Fully independent
 - **Dependencies:** .NET Framework 4.6.1+, Windows CNG (built-in)
@@ -75,6 +76,7 @@ Vault Dynamics provides AES-256-GCM encryption with secure key management. Encry
 ### Hardware Security Module (Optional)
 
 Supported HSMs:
+
 - Thales Luna HSM
 - Yubico HSM
 - PKCS#11 compatible devices
@@ -170,6 +172,7 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 ### Common Configuration Changes
 
 **Disable Master Password Requirement:**
+
 ```json
 {
   "vault": {
@@ -179,6 +182,7 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 ```
 
 **Change Key Rotation Schedule:**
+
 ```json
 {
   "vault": {
@@ -189,6 +193,7 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 ```
 
 **Enable HSM:**
+
 ```json
 {
   "storage": {

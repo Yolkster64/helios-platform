@@ -32,6 +32,7 @@ HELIOS.Platform.Phase10.Profiles/
 Manages profile creation, reading, updating, and deletion with JSON storage.
 
 **Key Methods:**
+
 - `CreateProfileAsync(name, settings)` - Create new profile
 - `ReadProfileAsync(name)` - Read profile settings
 - `UpdateProfileAsync(name, settings)` - Update profile
@@ -41,10 +42,12 @@ Manages profile creation, reading, updating, and deletion with JSON storage.
 - `ImportProfileAsync(name, json)` - Import from JSON
 
 **Storage:**
+
 - Default: `%AppData%\HELIOS\Profiles\`
 - Each profile: `{name}.json`
 
 **Example:**
+
 ```csharp
 var manager = new ProfileManager();
 var settings = new Dictionary<string, object> 
@@ -60,24 +63,28 @@ await manager.CreateProfileAsync("MyGaming", settings);
 Analyzes hardware and usage patterns to recommend optimal profile.
 
 **Key Methods:**
+
 - `DetectOptimalProfileAsync()` - Recommends profile
 - `AnalyzeHardwareAsync()` - Analyzes CPU, RAM, GPU
 - `DetectUsageAsync()` - Detects running apps
 - `LearnBehaviorAsync(profile, duration, metrics)` - ML learning
 
 **Hardware Analysis:**
+
 - CPU cores and name
 - RAM availability
 - Dedicated GPU detection
 - OS version and architecture
 
 **Usage Detection:**
+
 - Running processes
 - Installed applications
 - Gaming/Dev/Productivity app detection
 - Security focus detection
 
 **Example:**
+
 ```csharp
 var detector = new ProfileDetector();
 var optimal = await detector.DetectOptimalProfileAsync();
@@ -92,6 +99,7 @@ var hardware = await detector.AnalyzeHardwareAsync();
 Optimizes system for maximum gaming performance.
 
 **Settings Applied:**
+
 - GPU drivers optimized
 - GPU priority: 100%
 - CPU affinity to P-cores
@@ -105,6 +113,7 @@ Optimizes system for maximum gaming performance.
 - Screen timeout disabled
 
 **Example:**
+
 ```csharp
 var gamingProfile = new GamingProfile();
 if (await gamingProfile.ValidateAsync())
@@ -118,6 +127,7 @@ if (await gamingProfile.ValidateAsync())
 Optimizes system for work and collaboration.
 
 **Settings Applied:**
+
 - MS Teams configured
 - Outlook configured
 - Office optimized
@@ -130,6 +140,7 @@ Optimizes system for work and collaboration.
 - Auto-launch work apps
 
 **Example:**
+
 ```csharp
 var workProfile = new WorkProfile();
 await workProfile.ApplyAsync();
@@ -140,6 +151,7 @@ await workProfile.ApplyAsync();
 Optimizes system for software development.
 
 **Settings Applied:**
+
 - VS Code configured
 - Git configured
 - Node.js PATH set
@@ -154,6 +166,7 @@ Optimizes system for software development.
 - Build cache configured
 
 **Example:**
+
 ```csharp
 var devProfile = new DevelopmentProfile();
 await devProfile.ApplyAsync();
@@ -164,6 +177,7 @@ await devProfile.ApplyAsync();
 Implements strict security lockdown and hardening.
 
 **Settings Applied:**
+
 - Firewall: Strict rules
 - VPN: Mandatory
 - Disk encryption: Enforced (BitLocker)
@@ -178,6 +192,7 @@ Implements strict security lockdown and hardening.
 - Remote Registry: Disabled
 
 **Example:**
+
 ```csharp
 var secureProfile = new SecureProfile();
 if (await secureProfile.ValidateAsync())
@@ -191,17 +206,20 @@ if (await secureProfile.ValidateAsync())
 Switches between profiles with rollback capability.
 
 **Key Methods:**
+
 - `SwitchProfileAsync(name)` - Switch to profile
 - `GetCurrentProfileAsync()` - Get active profile
 - `UndoProfileSwitchAsync()` - Rollback to previous
 
 **Features:**
+
 - Profile history tracking
 - Rollback on failure
 - Validation before switching
 - User notification support
 
 **Example:**
+
 ```csharp
 var switcher = new ProfileSwitcher();
 await switcher.SwitchProfileAsync("Gaming");
@@ -218,17 +236,20 @@ await switcher.UndoProfileSwitchAsync();
 Analyzes performance after profile application.
 
 **Key Methods:**
+
 - `AnalyzePerformanceAsync(profile, duration)` - Measure performance
 - `GenerateReportAsync()` - Generate report
 - `RecommendTuningAsync(profile)` - Recommend optimizations
 
 **Metrics by Profile:**
+
 - **Gaming**: FPS, GPU usage, network latency, CPU usage
 - **Work**: Response time, file access time, memory usage
 - **Development**: Build time, compilation speed, disk usage
 - **Secure**: Security score, firewall status, antivirus status
 
 **Example:**
+
 ```csharp
 var analyzer = new ProfileAnalyzer();
 
@@ -245,6 +266,7 @@ var recommendations = await analyzer.RecommendTuningAsync("Gaming");
 ## Interfaces
 
 ### IProfileService
+
 ```csharp
 public interface IProfileService
 {
@@ -257,6 +279,7 @@ public interface IProfileService
 ```
 
 ### IProfileManager
+
 ```csharp
 public interface IProfileManager
 {
@@ -271,6 +294,7 @@ public interface IProfileManager
 ```
 
 ### IProfileDetector
+
 ```csharp
 public interface IProfileDetector
 {
@@ -282,6 +306,7 @@ public interface IProfileDetector
 ```
 
 ### IProfileSwitcher
+
 ```csharp
 public interface IProfileSwitcher
 {
@@ -292,6 +317,7 @@ public interface IProfileSwitcher
 ```
 
 ### IProfileAnalyzer
+
 ```csharp
 public interface IProfileAnalyzer
 {
@@ -304,12 +330,14 @@ public interface IProfileAnalyzer
 ## Usage Examples
 
 ### Quick Start: Switch to Gaming Profile
+
 ```csharp
 var switcher = new ProfileSwitcher();
 await switcher.SwitchProfileAsync("Gaming");
 ```
 
 ### Auto-Detect and Apply Optimal Profile
+
 ```csharp
 var detector = new ProfileDetector();
 var optimalProfile = await detector.DetectOptimalProfileAsync();
@@ -319,6 +347,7 @@ await switcher.SwitchProfileAsync(optimalProfile);
 ```
 
 ### Analyze Performance and Get Recommendations
+
 ```csharp
 var analyzer = new ProfileAnalyzer();
 
@@ -338,6 +367,7 @@ foreach (var rec in recommendations)
 ```
 
 ### Create Custom Profile
+
 ```csharp
 var manager = new ProfileManager();
 
@@ -363,6 +393,7 @@ await manager.ImportProfileAsync("MyCustom", json);
 The implementation includes **40+ comprehensive unit tests** covering:
 
 ### ProfileManager Tests (15+ tests)
+
 - ✅ Create profile with valid/invalid settings
 - ✅ Read profile settings
 - ✅ Update profile settings
@@ -372,24 +403,28 @@ The implementation includes **40+ comprehensive unit tests** covering:
 - ✅ Error handling
 
 ### ProfileDetector Tests (6+ tests)
+
 - ✅ Hardware analysis
 - ✅ Usage detection
 - ✅ Optimal profile detection
 - ✅ Behavior learning
 
 ### Profile Tests (5+ tests each)
+
 - ✅ Gaming profile apply/validate/revert
 - ✅ Work profile apply/validate/revert
 - ✅ Development profile apply/validate/revert
 - ✅ Secure profile apply/validate/revert
 
 ### ProfileSwitcher Tests (7+ tests)
+
 - ✅ Switch to profile
 - ✅ Get current profile
 - ✅ Undo profile switch
 - ✅ Multiple switches
 
 ### ProfileAnalyzer Tests (9+ tests)
+
 - ✅ Performance analysis for all profiles
 - ✅ Report generation
 - ✅ Tuning recommendations
@@ -398,6 +433,7 @@ The implementation includes **40+ comprehensive unit tests** covering:
 ## Configuration Files
 
 ### gaming-profile.json
+
 ```json
 {
   "name": "Gaming",
@@ -411,6 +447,7 @@ The implementation includes **40+ comprehensive unit tests** covering:
 ```
 
 ### work-profile.json
+
 ```json
 {
   "name": "Work",
@@ -423,6 +460,7 @@ The implementation includes **40+ comprehensive unit tests** covering:
 ```
 
 ### dev-profile.json
+
 ```json
 {
   "name": "Development",
@@ -435,6 +473,7 @@ The implementation includes **40+ comprehensive unit tests** covering:
 ```
 
 ### secure-profile.json
+
 ```json
 {
   "name": "Secure",

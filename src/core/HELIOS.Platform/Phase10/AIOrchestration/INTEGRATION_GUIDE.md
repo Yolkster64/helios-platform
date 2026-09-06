@@ -95,6 +95,7 @@ while(true)
 ### IToolOrchestratorEngine
 
 #### InitializeAsync()
+
 Initializes the orchestration engine and all dependencies.
 
 **Returns:** `Task`
@@ -108,6 +109,7 @@ await orchestrator.InitializeAsync();
 ---
 
 #### ShutdownAsync()
+
 Gracefully shuts down the orchestrator and stops all tools.
 
 **Returns:** `Task`
@@ -119,9 +121,11 @@ await orchestrator.ShutdownAsync();
 ---
 
 #### RegisterToolAsync(ToolInfo tool)
+
 Registers a new tool for orchestration.
 
 **Parameters:**
+
 - `tool`: ToolInfo object with tool metadata
 
 **Returns:** `Task<bool>` - true if successful
@@ -136,9 +140,11 @@ bool success = await orchestrator.RegisterToolAsync(tool);
 ---
 
 #### UnregisterToolAsync(string toolId)
+
 Unregisters and removes a tool from orchestration.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<bool>` - true if successful
@@ -152,9 +158,11 @@ bool success = await orchestrator.UnregisterToolAsync("my-tool");
 ---
 
 #### GetToolInfoAsync(string toolId)
+
 Retrieves information about a specific tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<ToolInfo>` or null if not found
@@ -171,6 +179,7 @@ if (toolInfo != null)
 ---
 
 #### GetAllToolsAsync()
+
 Retrieves all registered tools.
 
 **Returns:** `Task<IEnumerable<ToolInfo>>`
@@ -186,9 +195,11 @@ foreach (var tool in allTools)
 ---
 
 #### StartToolAsync(string toolId)
+
 Starts a registered tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<bool>` - true if successful
@@ -200,9 +211,11 @@ bool success = await orchestrator.StartToolAsync("razer-synapse");
 ---
 
 #### StopToolAsync(string toolId)
+
 Stops a running tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<bool>` - true if successful
@@ -214,9 +227,11 @@ bool success = await orchestrator.StopToolAsync("razer-synapse");
 ---
 
 #### SwitchProfileAsync(OrchestrationProfile profile)
+
 Instantly switches the orchestration profile and reconfigures all tools.
 
 **Parameters:**
+
 - `profile`: OrchestrationProfile enum (Gaming, Development, Work, Secure)
 
 **Returns:** `Task`
@@ -230,6 +245,7 @@ await orchestrator.SwitchProfileAsync(OrchestrationProfile.Gaming);
 ---
 
 #### GetCurrentProfileAsync()
+
 Retrieves the current active profile.
 
 **Returns:** `Task<OrchestrationProfile>`
@@ -242,6 +258,7 @@ Console.WriteLine($"Active profile: {currentProfile}");
 ---
 
 #### GetStatsAsync()
+
 Retrieves system-wide statistics.
 
 **Returns:** `Task<OrchestrationStats>`
@@ -259,6 +276,7 @@ Console.WriteLine($"Avg Memory: {stats.AverageMemoryUtilization}MB");
 ---
 
 #### IsHealthyAsync()
+
 Performs a system health check.
 
 **Returns:** `Task<bool>` - true if system is healthy
@@ -276,6 +294,7 @@ if (!isHealthy)
 ### IToolOptimizationProfiler
 
 #### InitializeAsync()
+
 Initializes the optimization profiler and default profiles.
 
 **Returns:** `Task`
@@ -287,9 +306,11 @@ await profiler.InitializeAsync();
 ---
 
 #### ProfileToolAsync(string toolId)
+
 Profiles a tool's performance characteristics.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task`
@@ -301,9 +322,11 @@ await profiler.ProfileToolAsync("razer-synapse");
 ---
 
 #### GetPerformanceMetricsAsync(string toolId)
+
 Retrieves detailed performance metrics for a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<ToolPerformanceMetrics>`
@@ -319,9 +342,11 @@ Console.WriteLine($"Throughput: {metrics.ThroughputOpsPerSec} ops/sec");
 ---
 
 #### AnalyzeToolAsync(string toolId)
+
 Analyzes a tool and generates optimization recommendations.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<List<OptimizationRecommendation>>`
@@ -339,9 +364,11 @@ foreach (var rec in recommendations.OrderByDescending(r => r.Priority))
 ---
 
 #### ApplyOptimizationAsync(string toolId, OptimizationRecommendation recommendation)
+
 Applies an optimization recommendation to a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 - `recommendation`: OptimizationRecommendation to apply
 
@@ -358,9 +385,11 @@ if (recommendations.Count > 0)
 ---
 
 #### OptimizeAllocationAsync(string toolId, OrchestrationProfile profile)
+
 Calculates optimal resource allocation for a tool based on profile.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 - `profile`: OrchestrationProfile
 
@@ -376,9 +405,11 @@ Console.WriteLine($"GPU: {allocation.MaxGpuPercent}%");
 ---
 
 #### SaveProfileConfigAsync(string toolId, ToolProfileConfig config)
+
 Saves a profile configuration for a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 - `config`: ToolProfileConfig to save
 
@@ -396,9 +427,11 @@ await profiler.SaveProfileConfigAsync("razer-synapse", config);
 ---
 
 #### LoadProfileConfigAsync(string toolId, string profileName)
+
 Loads a saved profile configuration for a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 - `profileName`: Profile name (Gaming, Development, Work, Secure)
 
@@ -418,6 +451,7 @@ if (config != null)
 ### IToolHealthMonitorCoordinator
 
 #### InitializeAsync()
+
 Initializes the health monitor.
 
 **Returns:** `Task`
@@ -429,9 +463,11 @@ await healthMonitor.InitializeAsync();
 ---
 
 #### GetHealthMetricsAsync(string toolId)
+
 Retrieves health metrics for a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<ToolHealthMetrics>`
@@ -447,9 +483,11 @@ Console.WriteLine($"Uptime: {health.Uptime} hours");
 ---
 
 #### IsToolHealthyAsync(string toolId)
+
 Checks if a specific tool is healthy.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<bool>`
@@ -461,6 +499,7 @@ bool isHealthy = await healthMonitor.IsToolHealthyAsync("razer-synapse");
 ---
 
 #### DetectConflictsAsync()
+
 Detects all inter-tool conflicts.
 
 **Returns:** `Task<List<ToolConflict>>`
@@ -478,9 +517,11 @@ foreach (var conflict in conflicts)
 ---
 
 #### ResolveConflictAsync(string conflictId)
+
 Resolves a detected conflict.
 
 **Parameters:**
+
 - `conflictId`: Unique conflict identifier
 
 **Returns:** `Task<bool>` - true if resolved successfully
@@ -492,9 +533,11 @@ bool resolved = await healthMonitor.ResolveConflictAsync(conflictId);
 ---
 
 #### RestartToolAsync(string toolId)
+
 Restarts a failed or unresponsive tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 
 **Returns:** `Task<bool>`
@@ -506,9 +549,11 @@ bool restarted = await healthMonitor.RestartToolAsync("razer-synapse");
 ---
 
 #### ScheduleMaintenanceAsync(string toolId, MaintenanceType type)
+
 Schedules maintenance for a tool.
 
 **Parameters:**
+
 - `toolId`: Unique tool identifier
 - `type`: MaintenanceType (Update, Restart, MemoryCleanup, CacheReset, ConfigUpdate, DependencyUpdate)
 
@@ -521,6 +566,7 @@ await healthMonitor.ScheduleMaintenanceAsync("razer-synapse", MaintenanceType.Up
 ---
 
 #### GetMaintenancePredictionsAsync()
+
 Retrieves maintenance predictions.
 
 **Returns:** `Task<List<MaintenancePrediction>>`
@@ -537,9 +583,11 @@ foreach (var pred in predictions)
 ---
 
 #### GetRecentEventsAsync(int count = 100)
+
 Retrieves recent orchestration events.
 
 **Parameters:**
+
 - `count`: Number of events to retrieve (default 100)
 
 **Returns:** `Task<List<OrchestrationEvent>>`
@@ -557,6 +605,7 @@ foreach (var evt in events)
 ## Enums
 
 ### OrchestrationProfile
+
 ```csharp
 public enum OrchestrationProfile
 {
@@ -568,6 +617,7 @@ public enum OrchestrationProfile
 ```
 
 ### ToolStatus
+
 ```csharp
 public enum ToolStatus
 {
@@ -576,6 +626,7 @@ public enum ToolStatus
 ```
 
 ### OptimizationCategory
+
 ```csharp
 public enum OptimizationCategory
 {
@@ -585,6 +636,7 @@ public enum OptimizationCategory
 ```
 
 ### ConflictType
+
 ```csharp
 public enum ConflictType
 {
@@ -594,6 +646,7 @@ public enum ConflictType
 ```
 
 ### ConflictSeverity
+
 ```csharp
 public enum ConflictSeverity
 {
@@ -602,6 +655,7 @@ public enum ConflictSeverity
 ```
 
 ### MaintenanceType
+
 ```csharp
 public enum MaintenanceType
 {
@@ -648,24 +702,28 @@ catch (Exception ex)
 ## Performance Tuning
 
 ### For Gaming Profile
+
 - High CPU/GPU allocation
 - Disable security overhead
 - Enable GPU acceleration
 - Minimize latency
 
 ### For Development Profile
+
 - Balanced resources
 - Enable debug logging
 - Moderate performance
 - Development tools enabled
 
 ### For Work Profile
+
 - Conservative resources
 - Stability focus
 - Power saving enabled
 - Standard performance
 
 ### For Secure Profile
+
 - Minimal resources
 - Security auditing
 - Strict isolation

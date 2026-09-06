@@ -292,6 +292,7 @@ Write-Host "Snapshot created: $($snapshot.Name)"
 ## Troubleshooting
 
 ### Check Logs
+
 ```powershell
 # View recent Azure logs
 Get-Content "C:\Logs\HELIOS\Azure\resource-mgmt-$(Get-Date -Format 'yyyyMMdd').log" -Tail 20
@@ -301,6 +302,7 @@ Get-Content "C:\Logs\HELIOS\Entra\user-mgmt-$(Get-Date -Format 'yyyyMMdd').log" 
 ```
 
 ### Connection Issues
+
 ```powershell
 # Clear cached credentials
 Remove-Item -Path "$env:APPDATA\AzureDataStudio" -Recurse -Force -ErrorAction SilentlyContinue

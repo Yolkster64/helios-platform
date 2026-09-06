@@ -9,12 +9,14 @@ A comprehensive, production-ready Microsoft enterprise integration suite for the
 ## 📂 Quick Navigation
 
 ### 📊 Documentation (Start Here!)
+
 - **[README.md](./README.md)** - Main documentation with module descriptions
 - **[DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md)** - Step-by-step deployment guide
 - **[QUICK-REFERENCE.md](./QUICK-REFERENCE.md)** - Quick reference card
 - **[INDEX.md](./INDEX.md)** - This file
 
 ### 🔷 Azure Integration (7 scripts)
+
 ```
 azure/
 ├── azure-auth.ps1              ✅ Multi-method authentication (400+ lines)
@@ -27,6 +29,7 @@ azure/
 ```
 
 ### 🔷 Azure Entra Integration (6 scripts)
+
 ```
 entra/
 ├── entra-sync.ps1              ✅ Directory sync (240+ lines)
@@ -38,6 +41,7 @@ entra/
 ```
 
 ### 🔷 Microsoft 365 Integration (6 scripts)
+
 ```
 m365/
 ├── teams-provisioning.ps1      ✅ Teams management (280+ lines)
@@ -49,6 +53,7 @@ m365/
 ```
 
 ### 🔷 Copilot Integration (1 script + stubs)
+
 ```
 copilot/
 ├── copilot-integration.ps1     ✅ Copilot API (90+ lines)
@@ -58,6 +63,7 @@ copilot/
 ```
 
 ### 🔷 Microsoft Purview (1 script + stubs)
+
 ```
 purview/
 ├── data-governance.ps1         ✅ Data classification (90+ lines)
@@ -67,6 +73,7 @@ purview/
 ```
 
 ### 🔷 Microsoft Fabric (1 script + stubs)
+
 ```
 fabric/
 ├── workspace-management.ps1    ✅ Workspace setup (90+ lines)
@@ -76,6 +83,7 @@ fabric/
 ```
 
 ### 🔷 Power Platform (1 script + stubs)
+
 ```
 power/
 ├── power-apps.ps1              ✅ Power Apps (90+ lines)
@@ -85,6 +93,7 @@ power/
 ```
 
 ### ⚙️ Configuration Files (5 files)
+
 ```
 ├── azure-config.json           ✅ Azure configuration (3.75 KB)
 ├── entra-config.json           ✅ Entra configuration (1.61 KB)
@@ -94,6 +103,7 @@ power/
 ```
 
 ### 📋 Utilities
+
 ```
 └── stubs.ps1                   ✅ Additional stub functions (3 KB)
 ```
@@ -101,7 +111,9 @@ power/
 ## 🎯 Module Breakdown
 
 ### Azure (7 Scripts - 2,840+ lines)
+
 **Purpose**: Complete Azure infrastructure management
+
 - **azure-auth.ps1** (400 lines): Multi-method authentication
   - Service Principal
   - Interactive
@@ -149,7 +161,9 @@ power/
   - Cost trend analysis
 
 ### Azure Entra (6 Scripts - 1,440+ lines)
+
 **Purpose**: Identity and access management
+
 - **entra-sync.ps1** (240 lines): Directory synchronization
 - **user-management.ps1** (270 lines): User lifecycle
 - **group-management.ps1** (260 lines): Group management with dynamic groups
@@ -158,7 +172,9 @@ power/
 - **mfa-enforcement.ps1** (190 lines): Multi-factor authentication
 
 ### Microsoft 365 (6 Scripts - 1,010+ lines)
+
 **Purpose**: Collaboration and compliance
+
 - **teams-provisioning.ps1** (280 lines): Teams and channels
 - **sharepoint-setup.ps1** (100 lines): SharePoint sites
 - **exchange-config.ps1** (140 lines): Exchange online
@@ -167,6 +183,7 @@ power/
 - **compliance-setup.ps1** (90 lines): DLP and compliance
 
 ### Other Platforms (4 Scripts - 360+ lines)
+
 - **copilot-integration.ps1** (90 lines): Copilot API management
 - **data-governance.ps1** (90 lines): Purview data governance
 - **workspace-management.ps1** (90 lines): Fabric workspaces
@@ -175,23 +192,27 @@ power/
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
+
 ```powershell
 # Install modules
 Install-Module -Name Az.Accounts, AzureAD, MicrosoftTeams -Force
 ```
 
 ### 2. Configure Environment
+
 ```powershell
 $env:AZURE_SUBSCRIPTION_ID = "your-subscription-id"
 $env:AZURE_TENANT_ID = "your-tenant-id"
 ```
 
 ### 3. Review Documentation
+
 - Start with [README.md](./README.md) for overview
 - Follow [DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md) for deployment
 - Use [QUICK-REFERENCE.md](./QUICK-REFERENCE.md) for common tasks
 
 ### 4. Deploy Infrastructure
+
 ```powershell
 . .\azure\azure-auth.ps1                    # Authenticate
 . .\azure\resource-manager.ps1              # Manage resources
@@ -228,6 +249,7 @@ $env:AZURE_TENANT_ID = "your-tenant-id"
 ## 📚 Function Reference
 
 ### Azure Authentication
+
 ```powershell
 Connect-AzureServicePrincipal
 Connect-AzureInteractive
@@ -239,6 +261,7 @@ Disconnect-Azure
 ```
 
 ### Resource Management
+
 ```powershell
 New-ResourceGroup
 Get-ResourceGroupDetails
@@ -248,6 +271,7 @@ Get-ResourceHealth
 ```
 
 ### VM Orchestration
+
 ```powershell
 New-VirtualMachine
 Start-VirtualMachine
@@ -259,6 +283,7 @@ Backup-VirtualMachine
 ```
 
 ### Entra Management
+
 ```powershell
 New-EntraUser
 Get-EntraUser
@@ -270,6 +295,7 @@ Enable-MFAForUser
 ```
 
 ### Microsoft 365
+
 ```powershell
 New-Team
 Get-Team
@@ -282,6 +308,7 @@ New-DLPPolicy
 ## 🔧 Customization
 
 All scripts are modular and customizable:
+
 - Update configuration JSON files for your environment
 - Modify parameter defaults in scripts
 - Add custom logging
@@ -291,11 +318,13 @@ All scripts are modular and customizable:
 ## 🆘 Support
 
 ### Documentation
+
 - [README.md](./README.md) - Module documentation
 - [DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md) - Deployment steps
 - [QUICK-REFERENCE.md](./QUICK-REFERENCE.md) - Command reference
 
 ### External Resources
+
 - Azure: https://learn.microsoft.com/azure/
 - Entra: https://learn.microsoft.com/entra/
 - Microsoft 365: https://learn.microsoft.com/microsoft-365/
@@ -340,7 +369,8 @@ All scripts are modular and customizable:
 
 The HELIOS Microsoft Enterprise Integration Suite provides a complete, production-ready solution for enterprise-scale Azure, Entra ID, Microsoft 365, Copilot, Purview, Fabric, and Power Platform deployment and management.
 
-**Ready for**: 
+**Ready for**:
+
 - Enterprise deployment
 - Cloud migrations
 - Identity management

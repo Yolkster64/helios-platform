@@ -8,6 +8,7 @@
 ### 🎉 Major Features
 
 #### Cloud Synchronization (v1.0)
+
 - Multi-cloud provider support (OneDrive, Azure Storage, AWS S3, Google Drive)
 - Real-time change detection using FileSystemWatcher
 - Intelligent conflict resolution (Last-Write-Wins, Manual Selection)
@@ -17,6 +18,7 @@
 - Delta sync for bandwidth optimization
 
 #### Plugin System (v2.0)
+
 - Marketplace integration with 100+ plugins
 - AppDomain-based plugin isolation
 - Plugin lifecycle hooks (Initialize, Execute, Shutdown)
@@ -26,6 +28,7 @@
 - One-click install/update/uninstall
 
 #### AI/ML Integration (v1.0)
+
 - Centralized model registry with versioning
 - Multi-framework support (TensorFlow, PyTorch, ONNX)
 - Batch and real-time inference engines
@@ -35,6 +38,7 @@
 - GPU acceleration support
 
 #### Developer Dashboard (v1.0)
+
 - Real-time system metrics (CPU, Memory, Disk, Network)
 - Historical performance data with trends
 - Real-time log streaming with filtering
@@ -44,6 +48,7 @@
 - Alert management and configuration
 
 #### Dark Mode (v1.0)
+
 - System theme detection and automatic switching
 - Manual Light/Dark/Auto theme selection
 - Custom theme creator with color picker
@@ -52,6 +57,7 @@
 - Theme persistence across sessions
 
 #### Performance Monitoring (v1.0)
+
 - Detailed metrics collection (system and application level)
 - Bottleneck identification with recommendations
 - Operation profiling with granular timing
@@ -145,6 +151,7 @@
 ### 🔄 Migration Guide
 
 Upgrading from v3.5.0:
+
 1. Backup current installation and database
 2. Run provided migration script
 3. Update plugins to v2 API (most auto-updated)

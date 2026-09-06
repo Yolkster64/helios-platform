@@ -38,6 +38,7 @@ HKLM:\Software\HELIOS\Foundation\AppLocker-Baseline\
 ### Steps
 
 1. Export AppLocker from Phase 1 system:
+
 ```powershell
 Get-AppLockerPolicy -Effective -Xml | Out-File `
   "C:\ProgramData\HELIOS\Security\Policies\AppLocker-Rules.xml"
@@ -46,6 +47,7 @@ Get-AppLockerPolicy -Effective -Xml | Out-File `
 2. Copy to Phase 0 installation media
 
 3. Apply in Phase0-Foundation.ps1:
+
 ```powershell
 if (Test-Path "C:\HELIOS-Source\AppLocker-Rules.xml") {
     Set-AppLockerPolicy -XmlPolicy "C:\HELIOS-Source\AppLocker-Rules.xml"
@@ -53,6 +55,7 @@ if (Test-Path "C:\HELIOS-Source\AppLocker-Rules.xml") {
 ```
 
 4. Verify:
+
 ```powershell
 Get-AppLockerPolicy -Effective | Format-Table
 ```
@@ -74,6 +77,7 @@ C:\ProgramData\HELIOS\Foundation\Network-Policies\hosts.baseline
 ### Steps
 
 1. Export firewall configuration:
+
 ```powershell
 reg export "HKLM\System\CurrentControlSet\Services\SharedAccess" `
   "C:\ProgramData\HELIOS\Foundation\Firewall-Registry.reg"
@@ -100,6 +104,7 @@ C:\ProgramData\HELIOS\Optimization\AI-Models-Test\*
 ### Steps
 
 1. Staging AI models in Phase 2:
+
 ```powershell
 $phase3Models = "C:\ProgramData\HELIOS\Capability\AI-Models\Core-Models"
 $phase2Test = "C:\ProgramData\HELIOS\Optimization\AI-Models-Test"
@@ -110,6 +115,7 @@ if (Test-Path $phase3Models) {
 ```
 
 2. Reference in Phase 2 optimization profiles:
+
 ```json
 {
   "threat_detection_enabled": true,
@@ -139,12 +145,14 @@ C:\ProgramData\HELIOS\Security\Cleanup-Rules-Backup.cfg
 ### Steps
 
 1. Export Phase 2 cleanup config:
+
 ```powershell
 Copy-Item "C:\ProgramData\HELIOS\Optimization\Cleanup\Cleanup-Rules.cfg" `
   "C:\ProgramData\HELIOS\Security\Cleanup-Rules-Backup.cfg" -Force
 ```
 
 2. Modify to preserve security data:
+
 ```
 [EXCLUSION]
 Pattern=Security.evtx
@@ -177,6 +185,7 @@ HKLM:\Software\HELIOS\Paths\VaultLocation =
 ### Steps
 
 1. Dashboard reads vault location from registry:
+
 ```csharp
 // In Dashboard code
 string vaultPath = Registry.LocalMachine.OpenSubKey(
@@ -203,6 +212,7 @@ C:\ProgramData\HELIOS\Capability\Reports\Baseline-Reference-Data\
 ### Steps
 
 1. Copy performance baselines:
+
 ```powershell
 $source = "C:\ProgramData\HELIOS\Optimization\Baselines"
 $dest = "C:\ProgramData\HELIOS\Capability\Reports\Baseline-Reference-Data"
@@ -213,6 +223,7 @@ Copy-Item -Path "$source\*" -Destination $dest -Recurse -Force
 2. Reports reference this data for comparisons
 
 3. Dashboard shows improvements:
+
 ```
 Before Optimization (from Phase 2 baseline):
   Boot Time: 45 seconds
@@ -246,6 +257,7 @@ C:\ProgramData\HELIOS\Security\Baseline-Reference\
 ### Steps
 
 1. Copy Phase 0 baselines:
+
 ```powershell
 $phase0 = "C:\ProgramData\HELIOS\Foundation\Baselines"
 $phase1 = "C:\ProgramData\HELIOS\Security"
@@ -254,6 +266,7 @@ Copy-Item "$phase0\*" "$phase1\Baseline-Reference\" -Recurse
 ```
 
 2. Phase 1 compares current state to baseline:
+
 ```powershell
 # During Phase 1 security scan
 Compare-SystemState -Baseline "$phase1\Baseline-Reference\System-Baseline.snapshot" `
@@ -285,6 +298,7 @@ HKLM:\Software\HELIOS\Analysis-Settings\DefaultProfile =
 ### Steps
 
 1. AI reads active profile from registry:
+
 ```csharp
 // Phase 3 AI Console
 string activeProfile = RegistryKey.OpenSubKey(
@@ -292,6 +306,7 @@ string activeProfile = RegistryKey.OpenSubKey(
 ```
 
 2. AI adjusts threat detection sensitivity based on profile:
+
 ```json
 {
   "profile": "Enterprise-High-Security",
@@ -322,6 +337,7 @@ C:\Windows\System32\Tasks\HELIOS\
 ### Steps
 
 1. Export workflows as scheduled tasks:
+
 ```powershell
 $workflows = Get-ChildItem "C:\ProgramData\HELIOS\Capability\Workflows\Built-In-Workflows"
 
@@ -334,6 +350,7 @@ foreach ($wf in $workflows) {
 ```
 
 2. Register with Task Scheduler:
+
 ```powershell
 Register-ScheduledTask -TaskPath "\HELIOS\" -Xml (
   Get-Content "C:\Windows\System32\Tasks\HELIOS\Daily-Security-Scan.xml"
@@ -360,6 +377,7 @@ C:\ProgramData\HELIOS\Database\audit.db
 ### Steps
 
 1. Consolidate logs into central database:
+
 ```powershell
 $phases = @("Phase0", "Phase1", "Phase2", "Phase3")
 
@@ -449,17 +467,19 @@ Remove-Item "HKLM:\Software\HELIOS\Foundation\AppLocker-Baseline" -Force -Recurs
 ### Custom Enterprise Build
 
 Borrow from all phases to create security-first system:
+
 - Phase 0: Foundation
-- + Phase 1: AppLocker rules (borrow)
-- + Phase 1: Firewall (borrow)
-- + Phase 2: Service optimization (borrow)
-- + Phase 3: AI monitoring (borrow)
+- \+ Phase 1: AppLocker rules (borrow)
+- \+ Phase 1: Firewall (borrow)
+- \+ Phase 2: Service optimization (borrow)
+- \+ Phase 3: AI monitoring (borrow)
 
 Result: Full system in single Phase 0 deployment
 
 ### Fast Testing
 
 Test Phase 3 AI without full Phase 3 deployment:
+
 - Phase 1: Run normally (security enabled)
 - Borrow: Phase 3 AI models into Phase 1
 - Run threat scans with Phase 3 AI models
@@ -470,9 +490,9 @@ Result: AI threat detection working before dashboard ready
 ### Graduated Rollout
 
 Deploy to different user groups:
+
 - Group 1: Phase 0 + Phase 1 (borrow)
 - Group 2: Phase 0 + Phase 1 + Phase 2 (borrow)
 - Group 3: Full Phase 0-3 (no borrowing)
 
 Result: Phased rollout with early access to specific features
-

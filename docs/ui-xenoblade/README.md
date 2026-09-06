@@ -10,7 +10,7 @@
 
 A stunning WPF application featuring Xenoblade Chronicles-inspired aesthetics with advanced Monado visual effects, professional system monitoring, and enterprise-grade performance.
 
-**[Design Guidelines](DESIGN_GUIDELINES.md)** • **[Performance Report](PERFORMANCE_ACCESSIBILITY_REPORT.md)** • **[Component Library](#component-library)**
+**[Design Guidelines](DESIGN_GUIDELINES.md)** • **[Performance Report](PERFORMANCE_ACCESSIBILITY_REPORT.md)** • **[Component Library](#-component-library)**
 
 </div>
 
@@ -19,6 +19,7 @@ A stunning WPF application featuring Xenoblade Chronicles-inspired aesthetics wi
 ## 🎮 Features
 
 ### Visual Design
+
 - ✨ **Monado Cyan Glow Effects**: Radial gradient glows with smooth 60 FPS animations
 - 🌌 **Holographic Interface**: Scan line overlays creating authentic Xenoblade aesthetics
 - ⚡ **Smooth Animations**: 1.5Hz pulse frequency, cubic easing functions
@@ -26,6 +27,7 @@ A stunning WPF application featuring Xenoblade Chronicles-inspired aesthetics wi
 - 🔆 **Energy Discharge Effects**: Dynamic particle trails on interactions
 
 ### Performance
+
 - 🚀 **60 FPS Sustained**: Consistent frame rate with <16ms frame time
 - 💾 **Efficient Memory**: ~85MB base + minimal per-component overhead
 - ⚡ **Hardware Accelerated**: Full GPU utilization for effects rendering
@@ -33,6 +35,7 @@ A stunning WPF application featuring Xenoblade Chronicles-inspired aesthetics wi
 - 📊 **Real-time Monitoring**: Dynamic metrics updates without stuttering
 
 ### Accessibility
+
 - ♿ **WCAG 2.1 Level AA Compliant**: All contrast ratios exceed minimums
 - ⌨️ **Full Keyboard Navigation**: Tab, Escape, Enter, custom shortcuts
 - 🎯 **Visible Focus Indicators**: Cyan glow highlights on focus
@@ -40,6 +43,7 @@ A stunning WPF application featuring Xenoblade Chronicles-inspired aesthetics wi
 - 🎨 **Color Blind Friendly**: Distinct visual patterns beyond color alone
 
 ### Architecture
+
 - 🏗️ **Modular Components**: Reusable XAML components with isolated styles
 - 🎨 **Theme System**: Centralized color, brush, and animation definitions
 - 📦 **Custom Controls**: MonadoGlowBorder, AnimatedProgressRing, holographic effects
@@ -131,6 +135,7 @@ HELIOS.WPF/
 | **Bright White** | #F5F5F5 | (245, 245, 245) | Primary text |
 
 ### Status Colors
+
 - **Success**: #00FF00 (Bright Green)
 - **Warning**: #FFB300 (Orange)
 - **Error**: #FF3D3D (Bright Red)
@@ -153,8 +158,11 @@ HELIOS.WPF/
 ## 🧩 Component Library
 
 ### Buttons
+
 #### GlowButton
+
 Cyan electric blue button with hover glow intensity and smooth transitions.
+
 ```xaml
 <Button Style="{StaticResource GlowButtonStyle}"
         Content="ACTIVATE"
@@ -162,14 +170,19 @@ Cyan electric blue button with hover glow intensity and smooth transitions.
 ```
 
 #### StateButton
+
 Active/inactive visual states with color changes and persistent glow.
 
 #### AnimatedButton
+
 Energy particle effects on click with scale animation.
 
 ### Panels
+
 #### HolographicPanel
+
 Cyan border + drop shadow + scan line overlay (10% opacity).
+
 ```xaml
 <Border BorderBrush="{StaticResource MonadoCyanBrush}"
         BorderThickness="2" CornerRadius="8">
@@ -178,27 +191,35 @@ Cyan border + drop shadow + scan line overlay (10% opacity).
 ```
 
 #### GlassPanel
+
 Frosted glass effect with transparency and subtle cyan border.
 
 ### Cards
+
 #### ServiceCard
+
 - Service name with status indicator
 - Resource metrics (CPU, Memory)
 - Manage button with glow effect
 
 #### MetricCard
+
 - Large metric display (35.2%, 52.8%)
 - Animated progress bar with color coding
 - Real-time update capability
 
 #### AlertCard
+
 - Slide-in animation on appearance
 - Left border accent color
 - Time stamp display
 
 ### Custom Controls
+
 #### MonadoGlowBorder.cs
+
 Advanced glow effect with smooth 1.5Hz pulse animation.
+
 ```csharp
 var glow = new MonadoGlowBorder
 {
@@ -209,6 +230,7 @@ var glow = new MonadoGlowBorder
 ```
 
 #### AnimatedProgressRing.cs
+
 Circular progress indicator with determinate/indeterminate modes.
 
 ---
@@ -216,28 +238,33 @@ Circular progress indicator with determinate/indeterminate modes.
 ## ⚡ Animation System
 
 ### Pulse Animation
+
 - **Frequency**: 1.5Hz (666ms per cycle)
 - **Easing**: Cubic EaseInOut
 - **Opacity Range**: 1.0 → 0.6 → 1.0
 - **Used On**: All glowing elements
 
 ### Slide In Animation
+
 - **Duration**: 500ms
 - **Origin**: Top (-50px) or Right (200px)
 - **Easing**: Cubic EaseOut
 - **Used On**: Alert notifications, new content
 
 ### Fade In/Out
+
 - **Duration**: 300ms
 - **Easing**: Cubic EaseOut (in) / EaseIn (out)
 - **Used On**: Element appearance/disappearance
 
 ### Color Transition
+
 - **Duration**: 500ms
 - **Repeat**: Forever with AutoReverse
 - **Used On**: Status indicators
 
 ### Energy Discharge
+
 - **Duration**: 800ms
 - **Scale**: 1.0 → 2.0
 - **Opacity**: 1.0 → 0.0
@@ -276,17 +303,20 @@ Circular progress indicator with determinate/indeterminate modes.
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Windows 7+ (Windows 10/11 recommended)
 - .NET 8.0 SDK or Runtime
 - GPU with DirectX 12 support (or software fallback)
 
 ### Building
+
 ```bash
 cd HELIOS.WPF
 dotnet build -c Release
 ```
 
 ### Running
+
 ```bash
 dotnet run
 # or
@@ -294,6 +324,7 @@ HELIOS.WPF.exe
 ```
 
 ### Development
+
 ```bash
 # Build in debug mode
 dotnet build -c Debug
@@ -307,22 +338,26 @@ dotnet run --configuration Debug
 ## 📈 Performance Characteristics
 
 ### Frame Rate
+
 - **Target**: 60 FPS
 - **Achieved**: 59-60 FPS average
 - **Frame Time**: 15.8ms average (max 18.3ms)
 
 ### Memory Usage
+
 - **Base**: 85 MB
 - **Per Dashboard**: 12 MB
 - **Per Service Card**: 200-300 KB
 - **Typical Session**: ~125 MB (50 services + 30 alerts)
 
 ### CPU/GPU Utilization
+
 - **CPU Idle**: 10-12% (animations)
 - **CPU Active**: 15-28% (monitoring)
 - **GPU**: 3-6% (effects rendering)
 
 ### Startup Time
+
 - **Cold Start**: ~1.0 second
 - **Warm Start**: ~600ms
 
@@ -331,6 +366,7 @@ dotnet run --configuration Debug
 ## ♿ Accessibility
 
 ### WCAG 2.1 Level AA Compliant
+
 - ✓ Contrast ratios 4.5:1 or higher
 - ✓ Keyboard navigation (Tab, Escape, Enter)
 - ✓ Visible focus indicators
@@ -338,6 +374,7 @@ dotnet run --configuration Debug
 - ✓ Reduced motion support
 
 ### Color Contrast
+
 ```
 Bright White on Dark Slate:     13.4:1 ✓
 Cyan on Dark Slate:               6.7:1 ✓
@@ -346,6 +383,7 @@ Electric Blue on Dark Slate:     5.8:1 ✓
 ```
 
 ### Screen Reader Support
+
 - ✓ NVDA (NonVisual Desktop Access)
 - ✓ JAWS (Freedom Scientific)
 - ✓ Narrator (Windows built-in)
@@ -355,10 +393,12 @@ Electric Blue on Dark Slate:     5.8:1 ✓
 ## 📚 Documentation
 
 ### Complete Guides
+
 - **[DESIGN_GUIDELINES.md](DESIGN_GUIDELINES.md)** - Complete design system documentation with component specifications
 - **[PERFORMANCE_ACCESSIBILITY_REPORT.md](PERFORMANCE_ACCESSIBILITY_REPORT.md)** - Detailed performance metrics and accessibility compliance report
 
 ### Key Sections
+
 - Design Palette & Colors
 - Component Library Reference
 - Animation Specifications
@@ -411,7 +451,9 @@ Electric Blue on Dark Slate:     5.8:1 ✓
 ## 📝 File Structure Details
 
 ### Theme System
+
 All theme definitions are centralized and reusable:
+
 - **Colors.xaml**: 20+ color definitions
 - **Brushes.xaml**: Solid, radial, linear gradients
 - **Styles.xaml**: Default component styles
@@ -419,14 +461,18 @@ All theme definitions are centralized and reusable:
 - **Fonts.xaml**: Typography scale (10-48px)
 
 ### Component Organization
+
 Each component is self-contained with:
+
 - XAML markup file (visual definition)
 - C# code-behind (logic)
 - Local resource dictionary (if needed)
 - Documentation in DESIGN_GUIDELINES.md
 
 ### Custom Controls
+
 Pure C# implementations with:
+
 - Dependency properties for customization
 - Hardware-accelerated rendering
 - Smooth animation support
@@ -449,6 +495,7 @@ This project is part of the HELIOS system monitoring platform.
 ## 📞 Support
 
 For issues, questions, or feature requests:
+
 1. Review [DESIGN_GUIDELINES.md](DESIGN_GUIDELINES.md)
 2. Check [PERFORMANCE_ACCESSIBILITY_REPORT.md](PERFORMANCE_ACCESSIBILITY_REPORT.md)
 3. Review component documentation in this README

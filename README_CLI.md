@@ -21,6 +21,7 @@ The HELIOS CLI is a comprehensive command-line management tool for the HELIOS Pl
 ### Installation
 
 #### Windows
+
 ```powershell
 # Using PowerShell module
 Import-Module .\scripts\HELIOS.CLI.psm1
@@ -28,6 +29,7 @@ Get-HeliosStatus
 ```
 
 #### Linux/macOS
+
 ```bash
 chmod +x scripts/helios-cli.sh
 ./scripts/helios-cli.sh status
@@ -120,6 +122,7 @@ helios-cli --batch deployment.json
 ## 📦 Batch Processing
 
 Create `deployment.json`:
+
 ```json
 {
   "name": "Full Deployment",
@@ -132,6 +135,7 @@ Create `deployment.json`:
 ```
 
 Execute:
+
 ```bash
 helios-cli --batch deployment.json
 ```
@@ -146,11 +150,13 @@ helios-cli --batch deployment.json
 ## 🧪 Testing
 
 Run tests:
+
 ```bash
 dotnet test tests/HELIOS.Platform.Tests/CLI/CLITests.cs
 ```
 
 Test coverage:
+
 - Parser tests (10+ tests)
 - Executor tests (6+ tests)
 - History tests (3+ tests)
@@ -161,16 +167,19 @@ Test coverage:
 ## 📝 Configuration
 
 Configuration stored in:
+
 - Windows: `%APPDATA%/HELIOS/config.json`
 - Linux/macOS: `~/.config/HELIOS/config.json`
 
 Command history stored in:
+
 - Windows: `%APPDATA%/HELIOS/history.json`
 - Linux/macOS: `~/.local/share/HELIOS/history.json`
 
 ## 🎯 Common Workflows
 
 ### Daily Maintenance
+
 ```bash
 helios-cli health --verbose
 helios-cli status --json > status.json
@@ -178,6 +187,7 @@ helios-cli backup --path /backups --compress
 ```
 
 ### Deployment
+
 ```bash
 helios-cli health --checks critical
 helios-cli backup --compress
@@ -186,6 +196,7 @@ helios-cli health --deep
 ```
 
 ### Scaling
+
 ```bash
 helios-cli status
 helios-cli scale web --instances 5
@@ -194,6 +205,7 @@ helios-cli health
 ```
 
 ### Batch Deployment
+
 ```bash
 helios-cli --batch full-deployment.json
 helios-cli --batch full-deployment.json --continue  # Continue on error
@@ -202,6 +214,7 @@ helios-cli --batch full-deployment.json --continue  # Continue on error
 ## 🔍 Troubleshooting
 
 ### Command not found
+
 ```bash
 # Add to PATH or use full path
 export PATH=$PATH:/usr/local/bin
@@ -209,12 +222,14 @@ helios-cli --version
 ```
 
 ### Timeout
+
 ```bash
 # Increase timeout
 helios-cli deploy --config app.json --timeout 300
 ```
 
 ### Debug mode
+
 ```bash
 # Verbose output
 helios-cli status --verbose
@@ -272,6 +287,7 @@ Output (Display result)
 ## 📦 Deliverables
 
 ### Core Components (8 files)
+
 - CLIEngine.cs
 - CommandParser.cs
 - CommandExecutor.cs (12 commands)
@@ -282,22 +298,26 @@ Output (Display result)
 - Program.cs
 
 ### Integration (3 files)
+
 - HELIOS.CLI.psm1 (PowerShell module)
 - helios-cli.sh (Bash wrapper)
 - build-cli.sh (Build script)
 
 ### Documentation (3 files)
+
 - CLI_REFERENCE_NEW.md
 - CLI_USAGE_GUIDE.md
 - CLI_IMPLEMENTATION_COMPLETE.md
 
 ### Examples (4 files)
+
 - deployment-batch.json
 - maintenance-batch.json
 - deploy.sh
 - deploy.ps1
 
 ### Tests (1 file)
+
 - CLITests.cs (32+ tests)
 
 ## 🔐 Security
@@ -311,11 +331,13 @@ Output (Display result)
 ## 🚀 Deployment
 
 ### Prerequisites
+
 - .NET 6.0 or later
 - PowerShell 5.0+ (optional)
 - Bash 4.0+ (optional)
 
 ### Steps
+
 1. Build: `dotnet build -c Release`
 2. Publish: `dotnet publish -c Release`
 3. Install executable to PATH
@@ -347,6 +369,7 @@ Ready for deployment
 ---
 
 **For detailed documentation, see:**
+
 - CLI Reference: `docs/CLI_REFERENCE_NEW.md`
 - Usage Guide: `docs/CLI_USAGE_GUIDE.md`
 - Implementation Summary: `docs/CLI_IMPLEMENTATION_COMPLETE.md`

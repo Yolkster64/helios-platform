@@ -18,12 +18,14 @@ Microsoft Copilot AI integration provides intelligent assistance for HELIOS Plat
 ### 1. System Analysis
 
 **Analyze HELIOS Configuration**:
+
 - Review current deployment architecture
 - Identify redundancies and inefficiencies
 - Suggest architecture improvements
 - Check compliance against best practices
 
 **Performance Review**:
+
 - Analyze Azure metrics and logs
 - Identify bottlenecks and capacity issues
 - Suggest scaling strategies
@@ -32,11 +34,13 @@ Microsoft Copilot AI integration provides intelligent assistance for HELIOS Plat
 ### 2. Automation & Code Generation
 
 **Generate Deployment Scripts**:
+
 - Create PowerShell scripts for Azure infrastructure
 - Generate Terraform for IaC
 - Produce Ansible playbooks for orchestration
 
 **Create Monitoring Configurations**:
+
 - Generate Application Insights queries
 - Create alert rules
 - Build custom dashboards
@@ -44,12 +48,14 @@ Microsoft Copilot AI integration provides intelligent assistance for HELIOS Plat
 ### 3. Security & Compliance
 
 **Security Assessment**:
+
 - Review security posture
 - Identify vulnerabilities
 - Suggest hardening measures
 - Recommend compliance improvements
 
 **Compliance Remediation**:
+
 - Generate compliance reports
 - Suggest policy updates
 - Create audit procedures
@@ -57,6 +63,7 @@ Microsoft Copilot AI integration provides intelligent assistance for HELIOS Plat
 ### 4. Documentation
 
 **Auto-Generate Guides**:
+
 - Create runbooks for common tasks
 - Generate disaster recovery procedures
 - Build troubleshooting guides
@@ -80,6 +87,7 @@ Microsoft Copilot AI integration provides intelligent assistance for HELIOS Plat
 ### Use Case 1: Optimize Azure Deployment
 
 **Prompt**:
+
 ```
 I have a HELIOS Platform deployment in Azure with:
 - 10 Standard_D4s_v3 VMs running 24/7
@@ -95,6 +103,7 @@ Analyze for optimization opportunities. Suggest:
 ```
 
 **Copilot Output**:
+
 ```
 Cost Optimization Analysis for HELIOS Platform:
 
@@ -126,6 +135,7 @@ Implementation Plan:
 ### Use Case 2: Security Hardening
 
 **Prompt**:
+
 ```
 Review our HELIOS Platform security configuration:
 - Entra ID with MFA for admins only
@@ -138,6 +148,7 @@ Provide security recommendations with priority levels.
 ```
 
 **Copilot Output**:
+
 ```
 Security Review - HELIOS Platform
 
@@ -193,6 +204,7 @@ HELIOS Platform Team
 ### 2. Azure Integration
 
 Copilot can analyze:
+
 - Azure Monitor metrics and logs
 - Application Insights data
 - Security Center recommendations
@@ -201,6 +213,7 @@ Copilot can analyze:
 ### 3. Documentation Generation
 
 Generate automated documents:
+
 - Deployment runbooks
 - Troubleshooting guides
 - Security policies

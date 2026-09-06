@@ -13,6 +13,7 @@ This build manager suite provides 8 comprehensive scripts for managing build var
 Interactive build variant selector with 7 pre-configured variants.
 
 **Features:**
+
 - Display 7 build variants with detailed descriptions
 - Interactive selection menu with descriptions and metrics
 - Show what components will be added/removed
@@ -22,6 +23,7 @@ Interactive build variant selector with 7 pre-configured variants.
 - Comprehensive error handling and rollback
 
 **Build Variants:**
+
 1. **Minimal** - 256 MB, 2 min (resource-constrained environments)
 2. **Standard** - 1.2 GB, 8 min (recommended for most users)
 3. **Developer** - 2.4 GB, 12 min (includes dev tools)
@@ -31,6 +33,7 @@ Interactive build variant selector with 7 pre-configured variants.
 7. **All-Features** - 5.2 GB, 25 min (complete build)
 
 **Usage:**
+
 ```powershell
 # Interactive menu
 .\select-build.ps1
@@ -49,6 +52,7 @@ Interactive build variant selector with 7 pre-configured variants.
 Enable/disable individual components with dependency checking and validation.
 
 **Features:**
+
 - Toggle single components on/off
 - Dependency checking and validation
 - Preview mode (-WhatIf) for safe testing
@@ -59,6 +63,7 @@ Enable/disable individual components with dependency checking and validation.
 - Detailed logging and error reporting
 
 **Component Dependency Map:**
+
 - `gpu-acceleration` → core, advanced-ui
 - `ml-toolkit` → core, gpu-acceleration, compute-libraries
 - `clustering` → core, network-stack, enterprise-security
@@ -66,6 +71,7 @@ Enable/disable individual components with dependency checking and validation.
 - And 6+ more dependency relationships
 
 **Usage:**
+
 ```powershell
 # Enable component
 .\toggle-feature.ps1 -Component gpu-acceleration -Enable
@@ -81,6 +87,7 @@ Enable/disable individual components with dependency checking and validation.
 ```
 
 **Batch JSON Format:**
+
 ```json
 [
   {"component": "gpu-acceleration", "action": "enable"},
@@ -95,6 +102,7 @@ Enable/disable individual components with dependency checking and validation.
 Side-by-side comparison of build variants with detailed analytics.
 
 **Features:**
+
 - Compare any two build variants
 - Show differences and similarities
 - Component-by-feature breakdown
@@ -105,6 +113,7 @@ Side-by-side comparison of build variants with detailed analytics.
 - Component matrix visualization
 
 **Analysis Includes:**
+
 - Total size differences and percentages
 - Installation time differences
 - Shared components highlighting
@@ -113,6 +122,7 @@ Side-by-side comparison of build variants with detailed analytics.
 - Detailed metrics comparison
 
 **Usage:**
+
 ```powershell
 # Console comparison
 .\compare-builds.ps1 -Variant1 developer -Variant2 enterprise
@@ -128,6 +138,7 @@ Side-by-side comparison of build variants with detailed analytics.
 ```
 
 **Output Reports:**
+
 - HTML: Professional styled comparison report
 - Markdown: Portable markdown-formatted report
 - Console: Color-coded terminal display
@@ -139,6 +150,7 @@ Side-by-side comparison of build variants with detailed analytics.
 Displays current build contents with detailed composition analysis.
 
 **Features:**
+
 - Show all enabled features
 - Show all disabled features (with -ShowDisabled)
 - Component version tracking
@@ -150,6 +162,7 @@ Displays current build contents with detailed composition analysis.
 - Real-time metrics
 
 **Metrics Displayed:**
+
 - Total components in build
 - Enabled/disabled component counts
 - Installed size (MB)
@@ -158,6 +171,7 @@ Displays current build contents with detailed composition analysis.
 - Build variant information
 
 **Usage:**
+
 ```powershell
 # Display current composition
 .\show-build-composition.ps1
@@ -182,6 +196,7 @@ Displays current build contents with detailed composition analysis.
 Creates snapshots of the current build state.
 
 **Features:**
+
 - Save complete build configuration
 - Timestamped snapshot naming
 - Custom snapshot names and descriptions
@@ -191,6 +206,7 @@ Creates snapshots of the current build state.
 - Success confirmation
 
 **Usage:**
+
 ```powershell
 # Create default snapshot
 .\create-snapshot.ps1
@@ -204,6 +220,7 @@ Creates snapshots of the current build state.
 
 **Snapshot Files:**
 Located in `snapshots/` directory with JSON format containing:
+
 - Snapshot ID and name
 - Creation timestamp
 - Variant information
@@ -217,6 +234,7 @@ Located in `snapshots/` directory with JSON format containing:
 Lists all available snapshots with metadata and filtering.
 
 **Features:**
+
 - Display all snapshots with details
 - Sort by date, name, or component count
 - Show detailed information mode
@@ -226,6 +244,7 @@ Lists all available snapshots with metadata and filtering.
 - Creation date and variant info
 
 **Usage:**
+
 ```powershell
 # List all snapshots
 .\list-snapshots.ps1
@@ -244,6 +263,7 @@ Lists all available snapshots with metadata and filtering.
 ```
 
 **Output Formats:**
+
 - Compact table view (default)
 - Detailed view with full information
 - Sorted and filtered results
@@ -255,6 +275,7 @@ Lists all available snapshots with metadata and filtering.
 Restores build state from saved snapshots.
 
 **Features:**
+
 - Restore from specific snapshot ID
 - Interactive snapshot selection by index
 - Pre-restoration backup creation
@@ -265,6 +286,7 @@ Restores build state from saved snapshots.
 - Detailed success reporting
 
 **Usage:**
+
 ```powershell
 # Restore by ID
 .\restore-snapshot.ps1 -SnapshotId "pre-deployment"
@@ -283,6 +305,7 @@ Restores build state from saved snapshots.
 ```
 
 **Backup Strategy:**
+
 - Automatic pre-restore backup
 - Rollback on validation failure
 - Backup location in `backups/` directory
@@ -295,6 +318,7 @@ Restores build state from saved snapshots.
 Creates custom build variants with component selection.
 
 **Features:**
+
 - Interactive component selection menu
 - JSON configuration file input
 - Component dependency validation
@@ -305,6 +329,7 @@ Creates custom build variants with component selection.
 - Component grouping by type
 
 **Component Types:**
+
 - Core (required): core, network-stack
 - UI: basic-ui, advanced-ui, lightweight-ui
 - Optional: logging, monitoring, database-client, etc.
@@ -312,6 +337,7 @@ Creates custom build variants with component selection.
 - Accelerators: gpu-acceleration, ml-toolkit, compute-libraries
 
 **Usage:**
+
 ```powershell
 # Interactive custom build
 .\create-custom-build.ps1
@@ -327,6 +353,7 @@ Creates custom build variants with component selection.
 ```
 
 **Custom Config JSON:**
+
 ```json
 {
   "components": [
@@ -347,17 +374,20 @@ Creates custom build variants with component selection.
 All scripts include:
 
 ### Parameters
+
 - `-Verbose` - Enable detailed logging output
 - `-WhatIf` - Preview changes without applying (where applicable)
 - `-Confirm` - Prompt for confirmation (where applicable)
 
 ### Logging
+
 - Timestamped log files in `logs/` directory
 - Color-coded console output
 - Detailed error messages
 - Operation history tracking
 
 ### Error Handling
+
 - Comprehensive exception handling
 - Automatic rollback capabilities
 - Backup creation before changes
@@ -365,6 +395,7 @@ All scripts include:
 - User-friendly error messages
 
 ### Manifest Management
+
 - Automatic BUILD_MANIFEST.json updates
 - Backup before modifications
 - Validation after changes
@@ -372,6 +403,7 @@ All scripts include:
 - Metadata preservation
 
 ### Data Formats
+
 - JSON for all configuration files
 - UTF-8 encoding
 - Pretty-printed output
@@ -423,6 +455,7 @@ build-manager/
 ## Workflow Examples
 
 ### Example 1: Quick Build Selection
+
 ```powershell
 # Run interactive selection
 .\select-build.ps1
@@ -432,6 +465,7 @@ build-manager/
 ```
 
 ### Example 2: Custom Development Build
+
 ```powershell
 # Create custom build
 .\create-custom-build.ps1
@@ -448,6 +482,7 @@ build-manager/
 ```
 
 ### Example 3: Snapshot Workflow
+
 ```powershell
 # Create snapshot before changes
 .\create-snapshot.ps1 -Name "stable-v1"
@@ -463,6 +498,7 @@ build-manager/
 ```
 
 ### Example 4: Build Analysis
+
 ```powershell
 # Compare two variants
 .\compare-builds.ps1 -Variant1 minimal -Variant2 enterprise -ExportHtml
@@ -502,6 +538,7 @@ build-manager/
 ## Troubleshooting
 
 ### Manifest Not Found
+
 ```powershell
 # Create a default manifest
 $manifest = @{
@@ -513,6 +550,7 @@ $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path "BUILD_MANIFEST.json"
 ```
 
 ### Snapshot Issues
+
 ```powershell
 # List snapshots to verify
 .\list-snapshots.ps1 -ShowDetails
@@ -522,6 +560,7 @@ Get-ChildItem .\snapshots\
 ```
 
 ### Component Dependency Errors
+
 ```powershell
 # Use WhatIf to preview
 .\toggle-feature.ps1 -Component gpu-acceleration -Enable -WhatIf
@@ -547,6 +586,7 @@ Get-ChildItem .\snapshots\
 ## Version History
 
 **v1.0** - Initial Release
+
 - All 8 scripts fully functional
 - Complete production-ready implementation
 - Comprehensive error handling
@@ -557,6 +597,7 @@ Get-ChildItem .\snapshots\
 ## Support
 
 For issues or questions about these scripts:
+
 1. Check the logs in `logs/` directory
 2. Use `-Verbose` flag for detailed output
 3. Use `-WhatIf` to preview operations

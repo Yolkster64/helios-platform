@@ -228,7 +228,7 @@ the script silently probing nothing.
 
 What makes it a test rather than a script: `set -euo pipefail` (`pipefail` so a failure inside a
 pipe isn't swallowed by a successful `jq`); `${VAR:?message}` so missing config fails immediately
-instead of sending `Bearer ` and getting a confusing 401; an **explicit expected status per check
+instead of sending `Bearer` and getting a confusing 401; an **explicit expected status per check
 including a negative case** (a suite that only asserts 200s won't notice authorization stopped
 working); `--max-time` everywhere; and messages naming the broken thing. Run it after every deploy
 *and* against production on a schedule — deploy-time-only never detects drift.

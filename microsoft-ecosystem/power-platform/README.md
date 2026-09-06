@@ -19,6 +19,7 @@ Power Platform enables low-code applications and automation for HELIOS:
 Custom app for platform management:
 
 **Features**:
+
 - VM management (start/stop/restart)
 - User provisioning dashboard
 - Configuration viewer
@@ -27,6 +28,7 @@ Custom app for platform management:
 - Alert management
 
 **Architecture**:
+
 ```
 Power Apps Canvas App
 ├── Data Connection: Azure SQL Database
@@ -50,6 +52,7 @@ Power Apps Canvas App
 Real-time analytics and reporting:
 
 **Executive Dashboard**:
+
 - System health status
 - Cost trending
 - User metrics
@@ -57,6 +60,7 @@ Real-time analytics and reporting:
 - Alert summary
 
 **Operational Dashboard**:
+
 - VM utilization
 - Database performance
 - API response times
@@ -64,6 +68,7 @@ Real-time analytics and reporting:
 - Deployment status
 
 **Security Dashboard**:
+
 - Failed login attempts
 - Policy violations
 - Data access anomalies
@@ -73,6 +78,7 @@ Real-time analytics and reporting:
 ### Data Sources
 
 Connect Power BI to:
+
 - SQL Database (helios-db-prod)
 - Application Insights
 - Azure Monitor
@@ -93,6 +99,7 @@ Connect Power BI to:
 ### Automation Workflows
 
 **Workflow 1: New User Provisioning**
+
 ```
 Trigger: New user added to Entra ID
 Step 1: Get user details
@@ -104,6 +111,7 @@ End: Notify manager
 ```
 
 **Workflow 2: Daily Health Check**
+
 ```
 Schedule: Daily at 8 AM UTC
 Step 1: Query Azure Monitor metrics
@@ -118,6 +126,7 @@ Step 6: Generate daily report
 ```
 
 **Workflow 3: Security Alert Response**
+
 ```
 Trigger: High-risk sign-in detected
 Step 1: Get user details
@@ -130,6 +139,7 @@ Step 7: Trigger investigation workflow
 ```
 
 **Workflow 4: Backup Verification**
+
 ```
 Schedule: Daily at 2 AM UTC
 Step 1: Query backup status for all VMs
@@ -145,16 +155,19 @@ Step 5: Log results to database
 ### Cloud Flows
 
 **Automated flows**:
+
 - Trigger on event (new file, approval, etc.)
 - Immediate execution
 - Auto-retry on failure
 
 **Scheduled flows**:
+
 - Run on schedule (daily, weekly, monthly)
 - Batch operations
 - Cost optimization
 
 **Instant flows**:
+
 - Manual trigger from button
 - On-demand execution
 - Quick actions
@@ -164,6 +177,7 @@ Step 5: Log results to database
 ### Public Portals
 
 **Status Page**:
+
 - System status (operational, degraded, maintenance)
 - Incident history
 - Planned maintenance schedule
@@ -171,6 +185,7 @@ Step 5: Log results to database
 - Subscribe for updates
 
 **Customer Portal**:
+
 - Ticket submission
 - Knowledge base search
 - Live chat support
@@ -178,6 +193,7 @@ Step 5: Log results to database
 - API documentation
 
 **Partner Portal**:
+
 - API access management
 - Usage analytics
 - Billing information
@@ -191,6 +207,7 @@ Step 5: Log results to database
 **HELIOS Support Bot**:
 
 Common questions handled:
+
 - How do I reset my password?
 - How do I access HELIOS?
 - What's the current system status?
@@ -199,6 +216,7 @@ Common questions handled:
 - Who can I contact for help?
 
 Escalation process:
+
 - Complex issues → Live support
 - After hours → Create ticket
 - Critical issues → Alert on-call team

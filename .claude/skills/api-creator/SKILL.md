@@ -38,7 +38,7 @@ Three extension points, one checklist each. Everything ships in a single PR with
 
 1. Method on `HeliosAiTools` (src/mcp/HELIOS.Mcp/): `[McpServerTool(Name = "helios_<verb>_<noun>",
    ReadOnly = <true if no side effects>, Idempotent = …, OpenWorld = <true if it calls LLMs>)]`
-   + `[Description]` on the method and every parameter (agents choose tools by these).
+   plus `[Description]` on the method and every parameter (agents choose tools by these).
 2. Take `AIHubService hub` as the first parameter (DI-injected); return JSON via
    `JsonSerializer` — structured, parseable, no prose.
 3. Errors: throw `McpException` with an actionable message ("Set X", "Run Y first").

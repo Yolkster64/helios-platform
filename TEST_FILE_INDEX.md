@@ -7,6 +7,7 @@
 ## Quick Navigation
 
 ### Unit Tests (8 files, 53 tests)
+
 - [ConfigManagerTests.cs](#configmanagertests) (5 tests)
 - [DriverInstallerTests.cs](#driverinstallertests) (8 tests)
 - [ThreatIntelligenceUpdaterTests.cs](#threatintelligenceupdatertests) (6 tests)
@@ -17,41 +18,46 @@
 - [ConstantsValidationTests.cs](#constantsvalidationtests) (3 tests)
 
 ### Integration Tests (7 files, 45 tests)
-- [ConfigInitializationTests.cs](#configinitialization) (5 tests)
-- [SecurityThreatQuarantineTests.cs](#securitythreatquarantine) (8 tests)
-- [DriverProfileIntegrationTests.cs](#driverprofileintegration) (6 tests)
-- [SettingsStateIntegrationTests.cs](#settingsstateintegration) (7 tests)
-- [AsyncCancellationIntegrationTests.cs](#asynccancellationintegration) (8 tests)
-- [DatabaseFileSystemIntegrationTests.cs](#databasefilesystemintegration) (5 tests)
-- [GuiServiceIntegrationTests.cs](#guiserviceintegration) (6 tests)
+
+- [ConfigInitializationTests.cs](#configinitializationtests) (5 tests)
+- [SecurityThreatQuarantineTests.cs](#securitythreatquarantinetests) (8 tests)
+- [DriverProfileIntegrationTests.cs](#driverprofileintegrationtests) (6 tests)
+- [SettingsStateIntegrationTests.cs](#settingsstateintegrationtests) (7 tests)
+- [AsyncCancellationIntegrationTests.cs](#asynccancellationintegrationtests) (8 tests)
+- [DatabaseFileSystemIntegrationTests.cs](#databasefilesystemintegrationtests) (5 tests)
+- [GuiServiceIntegrationTests.cs](#guiserviceintegrationtests) (6 tests)
 
 ### System/E2E Tests (9 files, 45 tests)
-- [UserLoginOnboardingE2ETests.cs](#userloginboardinge2e) (5 tests)
-- [ThreatWorkflowE2ETests.cs](#threatworkflowe2e) (6 tests)
-- [DriverUpdateE2ETests.cs](#driverupdatee2e) (5 tests)
-- [ProfileSwitchE2ETests.cs](#profileswitche2e) (5 tests)
-- [CloudSyncE2ETests.cs](#cloudssynce2e) (5 tests)
-- [PerformanceReportE2ETests.cs](#performancereporte2e) (4 tests)
-- [AccessibilityE2ETests.cs](#accessibilitye2e) (5 tests)
-- [ErrorRecoveryE2ETests.cs](#errorrecoverye2e) (5 tests)
-- [ConcurrencyE2ETests.cs](#concurrencye2e) (5 tests)
+
+- [UserLoginOnboardingE2ETests.cs](#userloginonboardinge2etests) (5 tests)
+- [ThreatWorkflowE2ETests.cs](#threatworkflowe2etests) (6 tests)
+- [DriverUpdateE2ETests.cs](#driverupdatee2etests) (5 tests)
+- [ProfileSwitchE2ETests.cs](#profileswitche2etests) (5 tests)
+- [CloudSyncE2ETests.cs](#cloudsynce2etests) (5 tests)
+- [PerformanceReportE2ETests.cs](#performancereporte2etests) (4 tests)
+- [AccessibilityE2ETests.cs](#accessibilitye2etests) (5 tests)
+- [ErrorRecoveryE2ETests.cs](#errorrecoverye2etests) (5 tests)
+- [ConcurrencyE2ETests.cs](#concurrencye2etests) (5 tests)
 
 ### Accessibility Tests (4 files, 25 tests)
-- [KeyboardNavigationA11yTests.cs](#keyboardnavigationa11y) (8 tests)
-- [ScreenReaderA11yTests.cs](#screenreadera11y) (8 tests)
-- [ColorContrastA11yTests.cs](#colorcontrasta11y) (5 tests)
-- [FocusManagementA11yTests.cs](#focusmanagementa11y) (4 tests)
+
+- [KeyboardNavigationA11yTests.cs](#keyboardnavigationa11ytests) (8 tests)
+- [ScreenReaderA11yTests.cs](#screenreadera11ytests) (8 tests)
+- [ColorContrastA11yTests.cs](#colorcontrasta11ytests) (5 tests)
+- [FocusManagementA11yTests.cs](#focusmanagementa11ytests) (4 tests)
 
 ---
 
 ## Unit Tests
 
 ### ConfigManagerTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/ConfigManagerTests.cs`  
 **Tests:** 5  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `LoadConfiguration_ValidPath_ReturnsConfiguration` - Tests loading valid config files
 2. `LoadConfiguration_InvalidPath_ThrowsException` - Tests error handling for invalid paths
 3. `SaveConfiguration_ValidConfig_ReturnSuccess` - Tests saving configuration
@@ -63,11 +69,13 @@
 ---
 
 ### DriverInstallerTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/DriverInstallerTests.cs`  
 **Tests:** 8  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `InstallDriver_ValidDriver_ReturnsSuccess` - Tests driver installation
 2. `InstallDriver_InvalidDriver_ReturnsFalse` - Tests failure handling
 3. `UninstallDriver_ValidDriver_ReturnsSuccess` - Tests driver uninstallation
@@ -82,11 +90,13 @@
 ---
 
 ### ThreatIntelligenceUpdaterTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/ThreatIntelligenceUpdaterTests.cs`  
 **Tests:** 6  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `CheckForUpdates_NewThreatDataAvailable_ReturnsTrue` - Tests update availability
 2. `UpdateThreatDatabase_NewData_ReturnsSuccess` - Tests database updates
 3. `GetLastUpdateTime_ValidDatabase_ReturnsDateTime` - Tests timestamp retrieval
@@ -99,11 +109,13 @@
 ---
 
 ### ProfileAnalyzerTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/ProfileAnalyzerTests.cs`  
 **Tests:** 8  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `AnalyzeProfile_ValidProfile_ReturnsAnalysis` - Tests profile analysis
 2. `CompareProfiles_TwoProfiles_ReturnsComparison` - Tests profile comparison
 3. `GetProfileMetrics_ValidProfile_ReturnsMetrics` - Tests metric retrieval
@@ -118,11 +130,13 @@
 ---
 
 ### AsyncMethodsTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/AsyncMethodsTests.cs`  
 **Tests:** 10  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `AsyncMethod_WithTimeout_CompletesBeforeTimeout` - Tests normal async completion
 2. `AsyncMethod_ExceededTimeout_ThrowsOperationCanceledException` - Tests timeout exception
 3. `MultipleAsyncOperations_RunInParallel_AllComplete` - Tests parallel operations
@@ -139,11 +153,13 @@
 ---
 
 ### MonadoMainWindowTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/MonadoMainWindowTests.cs`  
 **Tests:** 8  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `Initialize_ValidWindow_IsVisible` - Tests window initialization
 2. `ShowWindow_ValidWindow_DisplaysWindow` - Tests show functionality
 3. `CloseWindow_ValidWindow_ClosesSuccessfully` - Tests close functionality
@@ -158,11 +174,13 @@
 ---
 
 ### AdvancedSettingsPanelTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/AdvancedSettingsPanelTests.cs`  
 **Tests:** 5  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `LoadSettings_ValidSettings_LoadsSuccessfully` - Tests loading settings
 2. `SaveSettings_ModifiedSettings_SavesSuccessfully` - Tests saving settings
 3. `ValidateSettings_ValidInput_ReturnsTrue` - Tests validation
@@ -174,11 +192,13 @@
 ---
 
 ### ConstantsValidationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Unit/ConstantsValidationTests.cs`  
 **Tests:** 3  
 **Category:** Unit  
 
 **Test Cases:**
+
 1. `ApplicationConstants_AreNotNull` - Tests app constants defined
 2. `ConfigurationConstants_HaveValidValues` - Tests config constants valid
 3. `PathConstants_AreWellFormed` - Tests path constants well-formed
@@ -190,6 +210,7 @@
 ## Integration Tests
 
 ### ConfigInitializationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/ConfigInitializationTests.cs`  
 **Tests:** 5  
 **Category:** Integration  
@@ -197,6 +218,7 @@
 **Workflow:** Configuration Loading → Service Initialization
 
 **Test Cases:**
+
 1. `LoadConfig_ThenInitializeServices_AllServicesReady` - Full workflow
 2. `ConfigurationValidation_FailsEarly_PreventsBadInitialization` - Validation prevents bad init
 3. `MissingConfigFile_FallsBackToDefaults_ServicesInitializeWithDefaults` - Fallback to defaults
@@ -206,6 +228,7 @@
 ---
 
 ### SecurityThreatQuarantineTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/SecurityThreatQuarantineTests.cs`  
 **Tests:** 8  
 **Category:** Integration  
@@ -213,6 +236,7 @@
 **Workflow:** Security → Threat Detection → Quarantine
 
 **Test Cases:**
+
 1. `DetectThreat_AnalyzeIt_QuarantineIfMalicious_FullWorkflow` - Full threat response
 2. `ThreatDetectionAlert_NotifiesSecurityService` - Alert notifications
 3. `QuarantinedFile_CanBeRestored_IfNotMalicious` - File restoration
@@ -225,6 +249,7 @@
 ---
 
 ### DriverProfileIntegrationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/DriverProfileIntegrationTests.cs`  
 **Tests:** 6  
 **Category:** Integration  
@@ -232,6 +257,7 @@
 **Workflow:** Driver Installation → Profile Update
 
 **Test Cases:**
+
 1. `InstallDriver_ThenUpdateProfile_ProfileReflectsNewDriver` - Install & update
 2. `DriverCompatibility_CheckedBeforeInstall_IncompatibleRejected` - Compatibility check
 3. `ProfileRollback_AfterFailedDriverUpdate_RestoresPreviousState` - Rollback
@@ -242,6 +268,7 @@
 ---
 
 ### SettingsStateIntegrationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/SettingsStateIntegrationTests.cs`  
 **Tests:** 7  
 **Category:** Integration  
@@ -249,6 +276,7 @@
 **Workflow:** Settings Persistence → Application State
 
 **Test Cases:**
+
 1. `SaveSettings_ThenRestoreAppState_StateMatches` - Save/restore workflow
 2. `LoadSettings_ApplicationStartup_RestoresLastKnownState` - App startup
 3. `SettingsChanged_StateUpdated_Persisted` - Change tracking
@@ -260,6 +288,7 @@
 ---
 
 ### AsyncCancellationIntegrationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/AsyncCancellationIntegrationTests.cs`  
 **Tests:** 8  
 **Category:** Integration  
@@ -267,6 +296,7 @@
 **Workflow:** Async Operations → CancellationToken Coordination
 
 **Test Cases:**
+
 1. `MultipleAsyncOperations_CancelOne_OthersCompleted` - Partial cancellation
 2. `CancellationToken_LinkedTokens_CascadingCancel` - Token linking
 3. `AsyncOperation_WithTimeout_Cancels` - Timeout cancellation
@@ -279,6 +309,7 @@
 ---
 
 ### DatabaseFileSystemIntegrationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/DatabaseFileSystemIntegrationTests.cs`  
 **Tests:** 5  
 **Category:** Integration  
@@ -286,6 +317,7 @@
 **Workflow:** Database Operations → File System Sync
 
 **Test Cases:**
+
 1. `SaveToDatabase_ThenSyncToFileSystem_DataMatches` - DB to FS sync
 2. `FileSystemChange_DetectedAndSyncedToDatabase` - FS to DB sync
 3. `SyncConflict_DatabaseVsFileSystem_ResolvesCorrectly` - Conflict resolution
@@ -294,6 +326,7 @@
 ---
 
 ### GuiServiceIntegrationTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Integration/GuiServiceIntegrationTests.cs`  
 **Tests:** 6  
 **Category:** Integration  
@@ -301,6 +334,7 @@
 **Workflow:** GUI → Service Layer Communication
 
 **Test Cases:**
+
 1. `UserClicksButton_ServiceCallInitiated_ResultDisplayed` - Button action
 2. `ServiceNotification_UpdatesGui_UserSees` - Service notifications
 3. `UserInput_ValidatedByGui_SentToService_OnlyIfValid` - Input validation
@@ -312,6 +346,7 @@
 ## System/E2E Tests
 
 ### UserLoginOnboardingE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/UserLoginOnboardingE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -321,6 +356,7 @@
 ---
 
 ### ThreatWorkflowE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/ThreatWorkflowE2ETests.cs`  
 **Tests:** 6  
 **Category:** System  
@@ -330,6 +366,7 @@
 ---
 
 ### DriverUpdateE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/DriverUpdateE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -339,6 +376,7 @@
 ---
 
 ### ProfileSwitchE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/ProfileSwitchE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -348,6 +386,7 @@
 ---
 
 ### CloudSyncE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/CloudSyncE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -357,6 +396,7 @@
 ---
 
 ### PerformanceReportE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/PerformanceReportE2ETests.cs`  
 **Tests:** 4  
 **Category:** System  
@@ -366,6 +406,7 @@
 ---
 
 ### AccessibilityE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/AccessibilityE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -375,6 +416,7 @@
 ---
 
 ### ErrorRecoveryE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/ErrorRecoveryE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -384,6 +426,7 @@
 ---
 
 ### ConcurrencyE2ETests
+
 **Path:** `tests/HELIOS.Platform.Tests/System/ConcurrencyE2ETests.cs`  
 **Tests:** 5  
 **Category:** System  
@@ -395,6 +438,7 @@
 ## Accessibility Tests
 
 ### KeyboardNavigationA11yTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Accessibility/KeyboardNavigationA11yTests.cs`  
 **Tests:** 8  
 **Category:** Accessibility  
@@ -403,6 +447,7 @@
 ---
 
 ### ScreenReaderA11yTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Accessibility/ScreenReaderA11yTests.cs`  
 **Tests:** 8  
 **Category:** Accessibility  
@@ -411,6 +456,7 @@
 ---
 
 ### ColorContrastA11yTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Accessibility/ColorContrastA11yTests.cs`  
 **Tests:** 5  
 **Category:** Accessibility  
@@ -419,6 +465,7 @@
 ---
 
 ### FocusManagementA11yTests
+
 **Path:** `tests/HELIOS.Platform.Tests/Accessibility/FocusManagementA11yTests.cs`  
 **Tests:** 4  
 **Category:** Accessibility  
@@ -432,6 +479,7 @@
 **Total Test Cases:** 168  
 
 **By Category:**
+
 - Unit Tests: 8 files, 53 tests
 - Integration Tests: 7 files, 45 tests
 - System Tests: 9 files, 45 tests

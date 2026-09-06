@@ -41,10 +41,12 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 ### What It Changes
 
 **Files Modified**:
+
 - `C:\Windows\System32\drivers\etc\hosts` - May add safe-list entries
 - Group Policy Objects (Computer Configuration → Windows Settings → Security Settings)
 
 **Registry Changes**:
+
 ```
 HKLM:\Software\Policies\Microsoft\Windows\SrpV2
 ├── AppIdExt (AppLocker extension)
@@ -53,10 +55,12 @@ HKLM:\Software\Policies\Microsoft\Windows\SrpV2
 ```
 
 **New Files Created**:
+
 - `C:\ProgramData\AppLocker\` - AppLocker policy storage
 - `C:\Users\ADMIN\helios-platform\phases\1-security\applocker-whitelist.xml` - Your approved programs list
 
 **Visible Changes**:
+
 - Nothing obvious at first
 - Program launches may pause for 2-3 seconds (validation time)
 - Blocked programs show error dialog: "This program has been blocked by your administrator"
@@ -76,6 +80,7 @@ Set-AppLockerPolicy -PolicyObject $null -Enforce None -ErrorAction SilentlyConti
 ### Before/After State
 
 **Before AppLocker**:
+
 ```
 User wants to run Firefox
     ↓
@@ -85,6 +90,7 @@ Firefox launches (or malware disguised as Firefox)
 ```
 
 **After AppLocker**:
+
 ```
 User wants to run Firefox
     ↓
@@ -112,12 +118,14 @@ AppLocker checks: "Is Firefox on the approved list?"
 ### Troubleshooting
 
 **"A program I need is blocked"**:
+
 1. Find the program's EXE file
 2. Get its file hash or publisher certificate
 3. Run: `.\01-applocker-add-exception.ps1 "C:\Path\To\Program.exe"`
 4. Restart the program
 
 **"AppLocker won't enable"**:
+
 1. Check Group Policy is running: `gpresult /h report.html`
 2. Verify Enterprise Services is installed
 3. Reboot the system
@@ -162,9 +170,11 @@ Restart-Computer -Force
 ### What It Changes
 
 **Files Modified**:
+
 - No configuration files (it's all in the registry and service)
 
 **Registry Changes**:
+
 ```
 HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy
 ├── StandardProfile (standard user firewall rules)
@@ -178,6 +188,7 @@ HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\F
 ```
 
 **Firewall Rules Added**:
+
 - Block: All inbound connections (except whitelisted)
 - Block: All outbound connections to high-risk ports (445, 139, 135 - SMB/RPC)
 - Allow: Windows Update servers
@@ -185,6 +196,7 @@ HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\F
 - Allow: DNS requests (for domain resolution)
 
 **Visible Changes**:
+
 - Windows Defender Firewall notification area shows changes
 - Network discovery is disabled (can't browse network)
 - File sharing between PCs is blocked
@@ -205,6 +217,7 @@ netsh advfirewall reset
 ### Before/After State
 
 **Before Firewall Hardening**:
+
 ```
 Malware.exe on your PC
     ↓
@@ -218,6 +231,7 @@ Your passwords get stolen
 ```
 
 **After Firewall Hardening**:
+
 ```
 Malware.exe on your PC
     ↓
@@ -242,6 +256,7 @@ Your data stays safe
 | 27017 | MongoDB | Lateral movement | Database servers hidden |
 
 **Allowed Outbound Connections**:
+
 - DNS (port 53) - Domain name resolution
 - HTTP/HTTPS (ports 80, 443) - Web browsing
 - Windows Update (specific Microsoft IPs)
@@ -256,12 +271,14 @@ Your data stays safe
 ### Troubleshooting
 
 **"I can't access the network"**:
+
 1. Open Windows Defender Firewall with Advanced Security (firewall.cpl)
 2. Click "Inbound Rules"
 3. Look for your application
 4. If blocked, right-click → Properties → Change to "Allow"
 
 **"Internet is slow"**:
+
 1. Check if excessive outbound blocking is happening
 2. Review firewall logs: `Get-WinEvent -LogName "Security"`
 3. Some rule may be too broad; adjust if needed
@@ -306,6 +323,7 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 ### What It Changes
 
 **Files Created**:
+
 - `C:\Users\ADMIN\Vault\` - Main vault directory (or `C:\Vault` for system vault)
 - `C:\Users\ADMIN\Vault\.encrypted` - Encryption metadata
 - `C:\Users\ADMIN\Vault\Passwords\` - Passwords and API keys
@@ -314,6 +332,7 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 - `C:\Users\ADMIN\Vault\Recovery-Key.txt` - SAVE THIS SOMEWHERE SAFE!
 
 **Registry Changes**:
+
 ```
 HKLM:\System\CurrentControlSet\Control\FileSystem
 ├── NtfsEncryptionEnabled (set to 1)
@@ -327,6 +346,7 @@ HLKM:\Software\Microsoft\Windows\CurrentVersion\Encryption
 ```
 
 **Visible Changes**:
+
 - Vault folder has a lock icon 🔒
 - First access to vault takes 10-15 seconds (decryption)
 - Blue lock icon appears on encrypted files
@@ -351,6 +371,7 @@ Get-BitLockerVolume -MountPoint "C:\Users\ADMIN\Vault"
 ### Before/After State
 
 **Before Vault Encryption**:
+
 ```
 Hard drive stolen
     ↓
@@ -364,6 +385,7 @@ Bank accounts, email, social media - all compromised
 ```
 
 **After Vault Encryption**:
+
 ```
 Hard drive stolen
     ↓
@@ -409,16 +431,19 @@ C:\Users\ADMIN\Vault\
 ### Troubleshooting
 
 **"I forgot my encryption password"**:
+
 1. Use Recovery Key (hopefully you saved it!)
 2. If no recovery key, data is likely unrecoverable (that's how encryption works)
 3. Restore from backup
 
 **"Vault is locked and won't open"**:
+
 1. Restart the PC (BitLocker key is cached in memory)
 2. Try again
 3. If still locked, use recovery key: `manage-bde -recovery -status`
 
 **"Some programs can't access vault files"**:
+
 1. Vault files need special permissions
 2. Either move file out of vault, or
 3. Give specific program permission: Right-click → Properties → Security → Edit → Add program
@@ -464,6 +489,7 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 ### What It Changes
 
 **Files Created**:
+
 - `C:\Vault\Quarantine\` - Main quarantine directory
 - `C:\Vault\Quarantine\Active\` - Current quarantined files
 - `C:\Vault\Quarantine\Archive\` - Old quarantined files (organized by date)
@@ -471,6 +497,7 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 - `C:\Vault\Quarantine\Recovery\` - Files queued for restoration
 
 **Registry Changes**:
+
 ```
 HKLM:\Software\Microsoft\Windows Security\WindowsDefender\Quarantine
 ├── QuarantinePath (C:\Vault\Quarantine)
@@ -480,6 +507,7 @@ HKLM:\Software\Microsoft\Windows Security\WindowsDefender\Quarantine
 ```
 
 **Visible Changes**:
+
 - New folder at `C:\Vault\Quarantine\`
 - Antivirus now moves files here instead of deleting
 - Can browse quarantined files in Windows Security app
@@ -497,6 +525,7 @@ Remove-Item -Path "C:\Vault\Quarantine" -Recurse -Force
 ### Before/After State
 
 **Before Quarantine System**:
+
 ```
 Malware.exe detected by antivirus
     ↓
@@ -510,6 +539,7 @@ Have to reinstall from scratch
 ```
 
 **After Quarantine System**:
+
 ```
 Malware.exe detected by antivirus
     ↓
@@ -550,11 +580,13 @@ C:\Vault\Quarantine\
 ### Troubleshooting
 
 **"Quarantine folder is full"**:
+
 1. Check `C:\Vault\Quarantine\Archive\`
 2. Delete old files (older than 90 days)
 3. Increase quarantine size: Edit script and rerun
 
 **"I need to restore a quarantined file"**:
+
 1. Open Windows Security app
 2. Go to Virus & threat protection → Quarantine
 3. Select file → Restore
@@ -609,6 +641,7 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 | **Restricted-Guest** | Limited user | Web browsing, email | Read documents, run approved apps | Install anything, access system folders |
 
 **Registry Changes**:
+
 ```
 HKLM:\SAM\SAM\Domains\Account\Users
 ├── 000001F5 (ADMIN-Master account)
@@ -622,6 +655,7 @@ HKLM:\Software\Microsoft\Windows NT\CurrentVersion\ProfileList
 ```
 
 **Local Groups Modified**:
+
 ```
 BUILTIN\Administrators (ADMIN-Master added)
 BUILTIN\PowerUsers (Standard-User added)
@@ -630,6 +664,7 @@ BUILTIN\Guests (empty, not used)
 ```
 
 **Visible Changes**:
+
 - Login screen shows three accounts
 - Each account has different desktop/start menu
 - Some programs ask for admin password when limited account tries to use them
@@ -650,6 +685,7 @@ Remove-LocalUser -Name "ADMIN-Master"
 ### Before/After State
 
 **Before Account Tiers**:
+
 ```
 You log in (admin account)
     ↓
@@ -665,6 +701,7 @@ Ransomware encrypts all files
 ```
 
 **After Account Tiers**:
+
 ```
 You log in (restricted account)
     ↓
@@ -702,12 +739,14 @@ Malware trapped in sandbox, limited damage
 ### Troubleshooting
 
 **"I need to install a program but I'm on Restricted account"**:
+
 1. Switch to Standard or Admin account
 2. Install there
 3. Switch back to Restricted
 4. Approved program now available to all accounts
 
 **"I forgot admin password"**:
+
 1. Boot into Windows Recovery
 2. Open Command Prompt as Admin
 3. Run: `net user ADMIN-Master newpassword`
@@ -720,6 +759,7 @@ Malware trapped in sandbox, limited damage
 ### What It Does
 
 Enables and integrates multiple threat detection engines:
+
 - **Windows Defender**: Built-in antivirus scanning
 - **Malwarebytes**: Specialized anti-malware engine
 - **Scheduled Scans**: Automatic daily/weekly threat checks
@@ -757,11 +797,13 @@ cd "C:\Users\ADMIN\helios-platform\phases\1-security\scripts"
 ### What It Changes
 
 **Files Created**:
+
 - `C:\Windows\System32\drivers\etc\hosts` - Blocked malware domains
 - `C:\ProgramData\Microsoft\Windows Defender\Definition Updates\` - Threat database
 - `C:\Vault\ThreatScans\` - Scan reports and history
 
 **Registry Changes**:
+
 ```
 HKLM:\Software\Microsoft\Windows Defender
 ├── DisableRealtimeMonitoring (set to 0 = enabled)
@@ -778,11 +820,13 @@ HKLM:\Software\Policies\Microsoft\Windows Defender
 ```
 
 **Services Started**:
+
 - `WinDefend` - Windows Defender service
 - `WdNisSvc` - Windows Defender Network Inspection Service
 - `Sense` - Windows Defender Advanced Threat Protection
 
 **Visible Changes**:
+
 - Windows Security app shows "Threat & Virus Protection: Managed"
 - Scan progress bar appears at 2:00 AM (or your set time)
 - Notifications when threats are detected
@@ -804,6 +848,7 @@ Set-MpPreference -ScanScheduleDay Never
 ### Before/After State
 
 **Before Threat Detection**:
+
 ```
 You download infected file
     ↓
@@ -817,6 +862,7 @@ Your PC is now compromised
 ```
 
 **After Threat Detection**:
+
 ```
 You download infected file
     ↓
@@ -867,16 +913,19 @@ Real-time Protection (Defender) checks
 ### Troubleshooting
 
 **"Scan is taking too long"**:
+
 1. Close other programs
 2. Switch to Quick Scan instead of Full
 3. Let it complete (don't interrupt)
 
 **"False positives - clean files marked as threats"**:
+
 1. Check Windows Security → Threat History
 2. Select file → Actions → Restore
 3. File is restored to original location
 
 **"Malwarebytes won't install"**:
+
 1. Ensure Windows Defender isn't blocking installation
 2. Try installing in Safe Mode
 3. Download latest version from malwarebytes.com

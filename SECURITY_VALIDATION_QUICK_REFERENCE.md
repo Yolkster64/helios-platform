@@ -94,6 +94,7 @@ dotnet test SecurityValidationTests.csproj --logger "console;verbosity=detailed"
 ## 📊 Understanding Results
 
 ### Score Ranges
+
 - **90-100**: Excellent (control fully validated)
 - **75-89**: Good (operational with minor issues)
 - **50-74**: Fair (partially operational)
@@ -101,6 +102,7 @@ dotnet test SecurityValidationTests.csproj --logger "console;verbosity=detailed"
 - **0-24**: Critical (not found or failed)
 
 ### Example Output
+
 ```
 [Firmware] Secure Boot Enabled: PASSED (Score: 100/100)
   ✓ UEFI Secure Boot is enabled in firmware
@@ -114,6 +116,7 @@ Overall Score: 87.5/100 (STRONG security posture)
 ## 💻 Basic Usage Examples
 
 ### Example 1: Check Specific Control
+
 ```csharp
 var validator = new SecurityValidator();
 
@@ -126,6 +129,7 @@ else
 ```
 
 ### Example 2: Check Encryption
+
 ```csharp
 var validator = new SecurityValidator();
 var result = validator.ValidateEncryption();
@@ -137,6 +141,7 @@ else
 ```
 
 ### Example 3: Check Updates
+
 ```csharp
 var validator = new SecurityValidator();
 var result = validator.ValidateUpdateSignatures();
@@ -146,6 +151,7 @@ Console.WriteLine($"Details: {result.Details}");
 ```
 
 ### Example 4: Full Audit with Logging
+
 ```csharp
 var validator = new SecurityValidator();
 var results = validator.RunFullAudit();
@@ -164,6 +170,7 @@ foreach (var log in logs)
 ## ⚙️ Configuration
 
 ### Default Signature Path
+
 ```csharp
 // Default: C:\helios-platform\security\signatures
 var validator = new SecurityValidator();
@@ -173,6 +180,7 @@ var validator = new SecurityValidator(@"C:\custom\signatures\path");
 ```
 
 ### Expected Directory Structure
+
 ```
 C:\helios-platform\security\
 ├── signatures\
@@ -207,6 +215,7 @@ C:\helios-platform\security\
 ## 🔧 Adding New Security Checks
 
 **Step 1**: Add validation method to `SecurityAuditChecklist`
+
 ```csharp
 private static ValidationResult ValidateMyControl()
 {
@@ -247,6 +256,7 @@ private static ValidationResult ValidateMyControl()
 ```
 
 **Step 2**: Add item to checklist in constructor
+
 ```csharp
 Items.Add(new AuditItem
 {
@@ -260,6 +270,7 @@ Items.Add(new AuditItem
 ```
 
 **Step 3**: Add unit test
+
 ```csharp
 [Fact]
 public void ValidateMyControl_CanExecute()
@@ -277,18 +288,22 @@ public void ValidateMyControl_CanExecute()
 ## 🐛 Troubleshooting
 
 ### "Cannot verify control" error
+
 **Cause**: Registry key doesn't exist  
 **Solution**: Check if Windows component is installed or run with elevated privileges
 
 ### AES-256 test fails
+
 **Cause**: .NET crypto support issue  
 **Solution**: Update to latest .NET 8.0: `dotnet --version` and update if needed
 
 ### Audit takes > 10 seconds
+
 **Cause**: Slow registry access or disk I/O  
 **Solution**: Normal on systems with heavy background activity; not a failure
 
 ### Tests fail with "Cannot find signature files"
+
 **Cause**: Directory structure doesn't match expected layout  
 **Solution**: Create C:\helios-platform\security\signatures\ directory with test files
 
@@ -301,12 +316,14 @@ public void ValidateMyControl_CanExecute()
 ## 🎯 Integration Examples
 
 ### Integration with CI/CD
+
 ```powershell
 # In build pipeline
 dotnet test tests/SecurityValidationTests.csproj --fail-on-audit-fail
 ```
 
 ### Scheduled Task (Daily Audit)
+
 ```powershell
 $validator = New-Object Helios.Security.Validation.SecurityValidator
 $results = $validator.RunFullAudit()
@@ -321,6 +338,7 @@ if ($results.OverallScore -lt 80) {
 ## ✅ Verification Checklist
 
 Before deploying:
+
 - [ ] All 29 unit tests passing
 - [ ] Build succeeds with 0 errors
 - [ ] Can create ValidationResult objects
@@ -331,6 +349,7 @@ Before deploying:
 ## 📞 Support
 
 For issues or questions:
+
 1. Check SECURITY_VALIDATION_FRAMEWORK.md for detailed documentation
 2. Review SECURITY_VALIDATION_DEPLOYMENT_SUMMARY.md for overview
 3. Check unit tests for usage examples

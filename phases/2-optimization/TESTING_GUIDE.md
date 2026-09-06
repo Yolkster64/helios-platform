@@ -1,4 +1,5 @@
 # HELIOS Phase 2: Testing Guide
+
 ## Measuring Performance Improvements
 
 This guide shows you how to measure performance before and after Phase 2 optimizations so you can see the exact improvements.
@@ -34,6 +35,7 @@ cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 #### Manual Method (Most Accurate)
 
 **Before Phase 2:**
+
 1. Make sure system is fully shut down
 2. Plug in a USB drive with a timer app, or use phone stopwatch
 3. Press power button
@@ -45,11 +47,13 @@ cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 9. Restart system and repeat 3 times for average
 
 **After Phase 2:**
+
 1. Repeat same procedure
 2. Record time (typically 45-60 seconds)
 3. Calculate improvement
 
 **Example:**
+
 ```
 Before:  120 seconds (average of 3 boots)
 After:   58 seconds (average of 3 boots)
@@ -59,6 +63,7 @@ Improvement: 62 seconds (51.7% faster)
 #### Automated Method (Using Script)
 
 **Step 1: Capture Before**
+
 ```powershell
 .\create-baseline-snapshot.ps1
 
@@ -69,16 +74,19 @@ Output:
 ```
 
 **Step 2: Run Phase 2 optimizations**
+
 ```powershell
 .\run-all-optimizations.ps1
 ```
 
 **Step 3: Reboot**
+
 ```powershell
 Restart-Computer
 ```
 
 **Step 4: Check After**
+
 ```powershell
 .\compare-performance.ps1
 
@@ -116,6 +124,7 @@ Output:
 **Before Phase 2:**
 
 Pick 5 common applications:
+
 1. Chrome (or your browser)
 2. Word or NotePad
 3. File Manager
@@ -123,6 +132,7 @@ Pick 5 common applications:
 5. Paint or Photos app
 
 For EACH application:
+
 ```
 1. Close the application completely
 2. Wait 10 seconds
@@ -137,6 +147,7 @@ For EACH application:
 **Example Results:**
 
 **Before Phase 2:**
+
 ```
 Chrome         (3 launches):  5.2, 5.3, 5.1 sec → Average: 5.2 sec
 Word           (3 launches):  8.1, 8.3, 8.0 sec → Average: 8.1 sec
@@ -148,6 +159,7 @@ Overall Average: 5.8 seconds per app
 ```
 
 **After Phase 2:**
+
 ```
 Chrome         (3 launches):  1.5, 1.6, 1.5 sec → Average: 1.5 sec ✓
 Word           (3 launches):  2.0, 2.1, 2.0 sec → Average: 2.0 sec ✓
@@ -163,6 +175,7 @@ Improvement: 5.8 → 1.6 seconds (72% faster!)
 #### Automated Method
 
 **Step 1: Create baseline**
+
 ```powershell
 .\create-baseline-snapshot.ps1
 
@@ -170,11 +183,13 @@ Output includes app launch times for Chrome, Word, VS Code
 ```
 
 **Step 2: Run Phase 2**
+
 ```powershell
 .\run-all-optimizations.ps1
 ```
 
 **Step 3: Restart and compare**
+
 ```powershell
 .\compare-performance.ps1
 
@@ -222,6 +237,7 @@ Output:
 7. Record the "Available" value
 
 **Example Before:**
+
 ```
 Memory tab shows:
   In use: 2.8 GB
@@ -238,6 +254,7 @@ Memory tab shows:
 5. Record the "Available" value
 
 **Example After:**
+
 ```
 Memory tab shows:
   In use: 1.3 GB
@@ -278,11 +295,13 @@ AFTER:  You have 2.7 GB free for applications
 #### Realistic Results
 
 **For 4GB RAM system:**
+
 - Before: 1.0-2.0 GB available (typically 30-50%)
 - After: 2.5-3.5 GB available (typically 60-85%)
 - Gain: +1.0-1.5 GB (50-75% increase)
 
 **For 8GB RAM system:**
+
 - Before: 3-4 GB available (typically 40-50%)
 - After: 5-6 GB available (typically 60-75%)
 - Gain: +2 GB (50% increase)
@@ -306,6 +325,7 @@ AFTER:  You have 2.7 GB free for applications
 7. Note the percentage in top right
 
 **Example Before:**
+
 ```
 CPU shows: 18% usage (idle)
 This means background tasks are using 18% of CPU
@@ -321,6 +341,7 @@ You only have 82% available for your work
 5. Note the percentage
 
 **Example After:**
+
 ```
 CPU shows: 7% usage (idle) ✓
 Background tasks now use only 7%
@@ -385,6 +406,7 @@ AFTER:  System relaxes when you're not using it
 8. Watch the Disk % - note how high it goes and how often
 
 **Example Before:**
+
 ```
 During normal use:
   Idle: 5% disk usage
@@ -404,6 +426,7 @@ Observation: Frequent random slow-downs
 5. Observe disk usage
 
 **Example After:**
+
 ```
 During normal use:
   Idle: 2% disk usage
@@ -492,6 +515,7 @@ Improvement: After - Before = ___
 ```
 
 **Example:**
+
 ```
 Before Average: 2.5/5  (system feels sluggish)
 After Average:  4.7/5  (system feels snappy!)
@@ -515,6 +539,7 @@ Improvement:    +2.2/5 (88% improvement in feel!)
 5. Record it
 
 **Example:**
+
 ```
 Properties shows:
   Total size: 1,000 GB
@@ -528,6 +553,7 @@ Properties shows:
 2. Compare
 
 **Example After:**
+
 ```
 Properties shows:
   Total size: 1,000 GB
@@ -567,6 +593,7 @@ Log file contains detailed breakdown:
 ### Using the Comparison Script
 
 **All in one command:**
+
 ```powershell
 # 1. Baseline (before)
 .\create-baseline-snapshot.ps1
@@ -582,6 +609,7 @@ Log file contains detailed breakdown:
 ```
 
 **Output Example:**
+
 ```
 === HELIOS PHASE 2 PERFORMANCE COMPARISON ===
 
@@ -632,18 +660,21 @@ Detailed report: ..\logs\performance-comparison.log
 ### Expected Outcomes by System Type
 
 **Old/Slow System (5+ years old, HDD, 4GB RAM):**
+
 - Boot: 60-70% faster
 - Apps: 70-80% faster
 - RAM: 80-100% improvement
 - **Overall: Dramatic transformation** 🚀
 
 **Mid-Range System (2-3 years old, HDD, 8GB RAM):**
+
 - Boot: 50-60% faster
 - Apps: 60-70% faster
 - RAM: 50% improvement
 - **Overall: Very noticeable improvement** ⭐
 
 **New/Fast System (SSD, 16GB+ RAM):**
+
 - Boot: 20-30% faster (already fast)
 - Apps: 30-40% faster (already fast)
 - RAM: 20-30% improvement (plenty already)
@@ -656,6 +687,7 @@ Detailed report: ..\logs\performance-comparison.log
 ### "My results aren't showing improvement"
 
 **Check:**
+
 1. Did you restart after Phase 2? (Resource tuning needs restart)
 2. Did you wait 2 minutes after restart before testing? (Background tasks need to settle)
 3. Did you close all other apps during testing? (They interfere with measurements)
@@ -663,6 +695,7 @@ Detailed report: ..\logs\performance-comparison.log
 5. Is your system very new and already optimized? (Less room for improvement)
 
 **Solution:**
+
 - Run tests again following procedure exactly
 - Verify Phase 2 actually ran: Check logs in `logs/` folder
 - Compare with baseline: `compare-performance.ps1`
@@ -670,11 +703,13 @@ Detailed report: ..\logs\performance-comparison.log
 ### "My system is slower after Phase 2!"
 
 **This shouldn't happen, but:**
+
 1. Some visual changes may feel different (transparency disabled looks plainer)
 2. OneDrive/Cloud sync are now manual (may feel like missing automatic sync)
 3. Update checking is throttled (updates take longer)
 
 **Solutions:**
+
 - Undo visual effects: `undo-visual-effects.ps1`
 - Re-enable cloud sync: `.\undo-background-processes.ps1`
 - Run full undo: `.\run-all-undos.ps1`
@@ -682,6 +717,7 @@ Detailed report: ..\logs\performance-comparison.log
 ### "Some tests show no improvement"
 
 **Possible reasons:**
+
 1. Your system is already optimized (less to gain)
 2. SSD system: Defrag test won't show improvement (SSDs don't benefit)
 3. Network test: Depends on ISP speeds (local network only)
@@ -700,6 +736,7 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\logs\
 ```
 
 Key files:
+
 ```
 baseline-before-phase2.log        ← Your before measurements
 performance-comparison.log        ← Your before/after comparison
@@ -707,6 +744,7 @@ phase2-execution.log              ← What Phase 2 did
 ```
 
 **View results:**
+
 ```powershell
 # Open comparison report
 Get-Content "..\logs\performance-comparison.log" | more
@@ -730,6 +768,7 @@ $log | Out-File "C:\Desktop\my-phase2-results.txt"
 ```
 
 **Example to share:**
+
 ```
 My HELIOS Phase 2 Results:
 - Boot time: 50% faster (120 sec → 60 sec)

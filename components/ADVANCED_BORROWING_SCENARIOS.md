@@ -17,6 +17,7 @@ These scenarios show how to mix and match components to create exactly what you 
 **Business Need:** "We need system monitoring with user authentication and data encryption, but we don't need analytics or optimization."
 
 **Traditional Approach:**
+
 - Install Phase 0 (security-engine)
 - Install Phase 1 (vault-dynamics AND unwanted analytics-core)
 - Install Phase 3 (ai-dashboard)
@@ -45,6 +46,7 @@ cd C:\Users\ADMIN\helios-platform\components
 ```
 
 **Component List:**
+
 ```
 Installed: security-engine (P0), vault-dynamics (P1)
 Borrowed: ai-dashboard (from P3)
@@ -52,6 +54,7 @@ Not Installed: analytics-core, performance-ai, cloud-bridge
 ```
 
 **File Locations:**
+
 ```
 C:\Program Files\HELIOS\
 ├── security-engine\ (Phase 0)
@@ -66,6 +69,7 @@ C:\Program Files\HELIOS\
 **Business Need:** "Give us everything except cloud integration - we're on-premises only."
 
 **Traditional Approach:**
+
 - Install Phase 0
 - Install Phase 1
 - Install Phase 2
@@ -95,6 +99,7 @@ C:\Program Files\HELIOS\
 ```
 
 **What You Get:**
+
 ```
 ✅ Security with authentication
 ✅ Encryption and key management
@@ -105,6 +110,7 @@ C:\Program Files\HELIOS\
 ```
 
 **Why This Matters:**
+
 - Smaller footprint (~1.3 GB instead of 1.5 GB)
 - Simpler configuration (no cloud credentials needed)
 - Faster installation (no cloud SDK download)
@@ -147,6 +153,7 @@ C:\Program Files\HELIOS\
 ```
 
 **Perfect For:**
+
 - Development/testing environments
 - Small team deployments
 - Bandwidth-limited environments
@@ -177,6 +184,7 @@ C:\Program Files\HELIOS\
 ```
 
 **Dashboard Shows:**
+
 - Encryption operations (encrypt/decrypt count)
 - Key rotation status
 - Failed decryption attempts (security alerts)
@@ -221,6 +229,7 @@ C:\Program Files\HELIOS\
 **Business Need:** "We have a legacy application that needs secure data storage and a new monitoring interface. We can't modify the legacy app."
 
 **Constraints:**
+
 - Legacy app can't use new security system
 - Only needs encryption and monitoring
 - Can't change legacy app authentication
@@ -251,6 +260,7 @@ C:\Program Files\HELIOS\
 ```
 
 **Architecture:**
+
 ```
 Legacy Application
      ↓
@@ -316,6 +326,7 @@ Operations Team
 ```
 
 **Cost/Resource Benefit:**
+
 - Dev machines: Minimal resources
 - Production machine: Full features
 - Scaling: Easy - add dev instances with light setup
@@ -327,6 +338,7 @@ Operations Team
 **Business Need:** "Compliance requires full audit trail, encryption, and monitoring. Cost isn't a factor."
 
 **Requirements:**
+
 - Every operation logged
 - All data encrypted
 - Real-time monitoring
@@ -381,6 +393,7 @@ $vaultConfig = @{
 ```
 
 **Compliance Features:**
+
 ```
 Security-engine: User actions, login attempts, permission changes
 Vault-dynamics: Key access, encryption operations, approvals
@@ -434,6 +447,7 @@ Performance-ai: System health for audit compliance
 **Business Need:** "Start minimal, add features gradually as the team learns HELIOS."
 
 **Week 1: Foundation**
+
 ```powershell
 # Just security to manage team access
 .\components\security-engine\install.ps1
@@ -443,6 +457,7 @@ Performance-ai: System health for audit compliance
 ```
 
 **Week 2: Add Monitoring**
+
 ```powershell
 # Add dashboard to see system status
 .\borrow-component.ps1 -ComponentName "ai-dashboard" -FromPhase 3 -ToPhase 0
@@ -452,6 +467,7 @@ Performance-ai: System health for audit compliance
 ```
 
 **Week 3: Add Encryption**
+
 ```powershell
 # Add vault when team ready
 .\components\vault-dynamics\install.ps1
@@ -461,6 +477,7 @@ Performance-ai: System health for audit compliance
 ```
 
 **Week 4: Add Analytics**
+
 ```powershell
 # Analytics for insights
 .\components\analytics-core\install.ps1
@@ -470,6 +487,7 @@ Performance-ai: System health for audit compliance
 ```
 
 **Week 5: Add Optimization**
+
 ```powershell
 # Final: performance AI
 .\components\performance-ai\install.ps1
@@ -478,6 +496,7 @@ Performance-ai: System health for audit compliance
 ```
 
 **Progressive Benefits:**
+
 - Team time to learn each component
 - Risk spread over time
 - Easy rollback if any stage fails

@@ -5,6 +5,7 @@ Best practices for GitHub Actions workflows and automation.
 ---
 
 ## Table of Contents
+
 1. [Workflow Best Practices](#workflow-best-practices)
 2. [Job Structure](#job-structure)
 3. [Status Check Requirements](#status-check-requirements)

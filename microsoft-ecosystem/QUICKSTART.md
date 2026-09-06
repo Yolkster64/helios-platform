@@ -55,12 +55,14 @@ microsoft-ecosystem/
 ### Quick Start (15 minutes)
 
 1. **Read Overview**
+
    ```bash
    # Open main README to understand all services
    cat README.md
    ```
 
 2. **Choose Your Architecture**
+
    ```bash
    # Read deployment architectures
    cat DEPLOYMENT_ARCHITECTURES.md
@@ -68,6 +70,7 @@ microsoft-ecosystem/
    ```
 
 3. **Start with Azure Setup**
+
    ```bash
    # Follow step-by-step guide
    cat azure-integration/SETUP_GUIDE.md
@@ -76,26 +79,31 @@ microsoft-ecosystem/
 ### Full Setup (4-6 hours)
 
 **Phase 1: Foundation (1 hour)**
+
 - [ ] Read README.md (overview)
 - [ ] Read INTEGRATION_MATRIX.md (understand integration)
 - [ ] Read azure-integration/README.md
 
 **Phase 2: Azure Setup (1.5 hours)**
+
 - [ ] Follow azure-integration/SETUP_GUIDE.md
 - [ ] Run connect-to-azure.ps1 script
 - [ ] Verify resource creation in Azure Portal
 
 **Phase 3: Identity Setup (1 hour)**
+
 - [ ] Follow entra-id/SETUP_GUIDE.md
 - [ ] Configure MFA and conditional access
 - [ ] Register HELIOS application
 
 **Phase 4: Microsoft 365 Setup (1 hour)**
+
 - [ ] Follow 365-integration/SETUP_GUIDE.md
 - [ ] Create Teams and channels
 - [ ] Provision users
 
 **Phase 5: Automation & Analytics (1 hour)**
+
 - [ ] Set up Power Automate workflows
 - [ ] Configure Power BI dashboards
 - [ ] Deploy Fabric data warehouse
@@ -117,30 +125,35 @@ microsoft-ecosystem/
 ## 🎯 Key Features
 
 ### ✅ Enterprise-Ready
+
 - Production-grade configurations
 - Best practices and security hardening
 - Compliance with GDPR, HIPAA, SOC2
 - Real-world examples and scenarios
 
 ### ✅ Comprehensive
+
 - Covers 8+ Microsoft services
 - Integration between all components
 - Data flow and architecture diagrams
 - Complete setup guides (30-40 pages each)
 
 ### ✅ Automation
+
 - PowerShell scripts for quick setup
 - GitHub Actions CI/CD pipeline
 - Power Automate workflow templates
 - Infrastructure as Code examples
 
 ### ✅ Security-Focused
+
 - MFA and conditional access policies
 - Network segmentation examples
 - Key Vault and secrets management
 - RBAC implementation guide
 
 ### ✅ Practical
+
 - Real cost calculations ($240-28,000/month)
 - Deployment timelines (2-12 weeks)
 - Migration paths from simple to enterprise
@@ -162,6 +175,7 @@ microsoft-ecosystem/
 ## 💰 Cost Planning
 
 ### Small Team Architecture
+
 ```
 Azure:        $55/month
 Microsoft 365: $185/month
@@ -169,6 +183,7 @@ Total:         ~$240/month
 ```
 
 ### Enterprise Architecture
+
 ```
 Azure Primary:    $6,500/month
 Azure Secondary:  $1,500/month
@@ -181,28 +196,33 @@ Total:           ~$28,000/month
 ## 🔧 Scripts Included
 
 ### 1. connect-to-azure.ps1
+
 - Authenticate to Azure subscription
 - Set environment variables
 - Verify connectivity
 - List resources
 
 **Usage**:
+
 ```powershell
 .\scripts\connect-to-azure.ps1 -SubscriptionName "Production"
 ```
 
 ### 2. connect-to-365.ps1
+
 - Connect to Microsoft Graph
 - Connect to Exchange Online
 - Verify user and group access
 - Test connectivity
 
 **Usage**:
+
 ```powershell
 .\scripts\connect-to-365.ps1 -TenantName "company.onmicrosoft.com"
 ```
 
 ### 3. deploy-to-azure.ps1
+
 - Create resource groups
 - Deploy virtual networks
 - Create storage accounts
@@ -211,6 +231,7 @@ Total:           ~$28,000/month
 - Deploy VMs
 
 **Usage**:
+
 ```powershell
 .\scripts\deploy-to-azure.ps1 -Environment "production" -Phases All
 ```
@@ -220,6 +241,7 @@ Total:           ~$28,000/month
 **File**: `.github/workflows/azure-deploy.yml`
 
 **Stages**:
+
 1. **Build** - Docker container build and push
 2. **Test** - Security scanning and Pester tests
 3. **Deploy Staging** - Automated staging deployment
@@ -227,6 +249,7 @@ Total:           ~$28,000/month
 5. **Rollback** - Automatic rollback on failure
 
 **Triggers**:
+
 - Push to main branch (staging)
 - Push to release/* branches (production)
 - Manual workflow dispatch
@@ -234,21 +257,25 @@ Total:           ~$28,000/month
 ## 📈 Deployment Architectures
 
 ### 1. Solo Developer (Local + Cloud)
+
 - Cost: ~$64/month
 - Users: 1
 - Setup time: 2-3 hours
 
 ### 2. Small Team (Teams + SharePoint)
+
 - Cost: ~$240/month
 - Users: 5-10
 - Setup time: 4-6 hours
 
 ### 3. Enterprise Multi-Region
+
 - Cost: ~$28,000/month
 - Users: 100-500
 - Setup time: 4-6 weeks
 
 ### 4. Hybrid On-Premises + Cloud
+
 - Cost: $15,000-20,000/month
 - Users: 100-1,000
 - Setup time: 8-12 weeks
@@ -284,6 +311,7 @@ Purview Governance, Azure Security Center
 ## 📚 Setup Checklists
 
 Each setup guide includes:
+
 - ✅ Prerequisites verification
 - ✅ Step-by-step instructions
 - ✅ Command examples (copy-paste ready)
@@ -294,18 +322,21 @@ Each setup guide includes:
 ## 🎓 Learning Path
 
 **Beginner** (Start here)
+
 1. Read main README.md
 2. Review DEPLOYMENT_ARCHITECTURES.md
 3. Choose your deployment type
 4. Follow appropriate setup guide
 
 **Intermediate**
+
 1. Study INTEGRATION_MATRIX.md
 2. Review SECURITY_COMPLIANCE.md
 3. Understand data flows
 4. Customize for your org
 
 **Advanced**
+
 1. Modify PowerShell scripts
 2. Customize GitHub Actions workflow
 3. Build custom Power Automate flows
@@ -314,12 +345,14 @@ Each setup guide includes:
 ## 🆘 Support Resources
 
 ### Within Documentation
+
 - Troubleshooting sections in each setup guide
 - Common issues and solutions
 - FAQ sections
 - Best practices recommendations
 
 ### External Resources
+
 - **Azure Docs**: https://docs.microsoft.com/azure/
 - **Microsoft 365 Docs**: https://docs.microsoft.com/microsoft-365/
 - **Entra ID Docs**: https://docs.microsoft.com/azure/active-directory/
@@ -328,18 +361,21 @@ Each setup guide includes:
 ## 📝 Maintenance
 
 ### Monthly Tasks
+
 - Review access and permissions
 - Check backup success rates
 - Monitor costs vs budget
 - Review security logs
 
 ### Quarterly Tasks
+
 - Compliance assessment
 - Disaster recovery test
 - Update documentation
 - Review and update policies
 
 ### Annual Tasks
+
 - SOC 2/GDPR audit
 - Penetration testing
 - Update disaster recovery plan
@@ -359,6 +395,7 @@ Each setup guide includes:
 ## 📞 Contact & Support
 
 For questions or issues:
+
 1. Check the troubleshooting section in each setup guide
 2. Review the SECURITY_COMPLIANCE.md for security questions
 3. See DEPLOYMENT_ARCHITECTURES.md for scaling questions

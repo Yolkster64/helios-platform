@@ -3,6 +3,7 @@
 Enterprise-grade cloud integration for the HELIOS Platform connecting:
 
 ## 🏢 Cloud Providers
+
 - **Microsoft Azure** - VMs, App Services, Functions, SQL Database
 - **Microsoft Fabric** - Data warehouse, analytics
 - **Microsoft Copilot** - Code generation, documentation
@@ -106,6 +107,7 @@ Primary: Azure → Fallback1: OpenAI → Fallback2: Claude → Fallback3: Ollama
 ## 📝 Configuration Examples
 
 ### Azure Configuration
+
 ```json
 {
   "service": "azure",
@@ -123,6 +125,7 @@ Primary: Azure → Fallback1: OpenAI → Fallback2: Claude → Fallback3: Ollama
 ```
 
 ### OpenAI Configuration
+
 ```json
 {
   "service": "openai",
@@ -141,12 +144,14 @@ Primary: Azure → Fallback1: OpenAI → Fallback2: Claude → Fallback3: Ollama
 ## 🚀 Usage Examples
 
 ### Initialize Cloud Integration
+
 ```csharp
 var cloudIntegration = new CloudIntegrationService();
 await cloudIntegration.Initialize();
 ```
 
 ### Use LLM with Fallback Chain
+
 ```csharp
 var result = await cloudIntegration.InvokeLLM(
     prompt: "Generate code for...",
@@ -156,6 +161,7 @@ var result = await cloudIntegration.InvokeLLM(
 ```
 
 ### Track Costs
+
 ```csharp
 var costReport = await cloudIntegration.GetCostReport(
     period: "monthly",

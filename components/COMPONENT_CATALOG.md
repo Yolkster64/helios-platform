@@ -13,9 +13,11 @@ Complete reference for all components available in the HELIOS Platform. Each com
 **Status:** Stable
 
 ### What It Does
+
 Web-based GUI dashboard for monitoring HELIOS system performance. Provides real-time metrics, alerts, and system health visualization. Beautiful modern interface with dark mode support.
 
 ### Key Features
+
 - Real-time system monitoring (CPU, memory, disk, network)
 - Performance metrics dashboard
 - Alert management and notifications
@@ -25,6 +27,7 @@ Web-based GUI dashboard for monitoring HELIOS system performance. Provides real-
 - Multi-user support with role-based access
 
 ### System Requirements
+
 - **OS:** Windows Server 2019 or later / Windows 10 Pro or later
 - **.NET Framework:** 4.8 or later
 - **RAM:** Minimum 2 GB, Recommended 4+ GB
@@ -33,6 +36,7 @@ Web-based GUI dashboard for monitoring HELIOS system performance. Provides real-
 - **Browser:** Chrome 90+, Edge 90+, Firefox 88+
 
 ### Dependencies
+
 | Dependency | Type | Required? | Can Work Without? |
 |-----------|------|-----------|------------------|
 | .NET Framework 4.8+ | System | Yes | No |
@@ -40,12 +44,14 @@ Web-based GUI dashboard for monitoring HELIOS system performance. Provides real-
 | IIS (optional) | Application | No | Yes - Uses embedded server |
 
 ### Size & Installation Time
+
 - **Download Size:** 156 MB
 - **Installed Size:** 245 MB
 - **Installation Time:** 5-10 minutes
 - **Uninstall Time:** 2 minutes
 
 ### Installation Procedure
+
 ```powershell
 # Method 1: PowerShell (Recommended)
 cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
@@ -62,6 +68,7 @@ cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 ```
 
 ### Configuration
+
 **Config File:** `C:\Program Files\HELIOS\ai-dashboard\config.json`
 
 ```json
@@ -91,23 +98,28 @@ cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 ```
 
 ### Usage
+
 After installation, access at: `http://localhost:8080`
 
 Default credentials:
+
 - **Username:** admin
 - **Password:** (Generated during installation, check: `C:\Program Files\HELIOS\ai-dashboard\initial-password.txt`)
 
 Change password immediately:
+
 ```
 Dashboard → Settings → Security → Change Password
 ```
 
 ### Troubleshooting
+
 - **Can't access dashboard:** Check if port 8080 is open. See component README.
 - **High memory usage:** Reduce chart history in config.json
 - **Slow performance:** Check system resources and reduce refresh interval
 
 ### File Locations
+
 ```
 C:\Program Files\HELIOS\ai-dashboard\
 ├── bin\
@@ -127,6 +139,7 @@ C:\Program Files\HELIOS\ai-dashboard\
 ```
 
 ### Uninstall
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 .\uninstall.ps1
@@ -146,9 +159,11 @@ cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 **Status:** Stable
 
 ### What It Does
+
 Enterprise-grade encryption and key management system. Securely encrypts/decrypts sensitive data using AES-256-GCM. Manages encryption keys with optional hardware security module (HSM) support.
 
 ### Key Features
+
 - AES-256-GCM encryption standard
 - Secure key generation and management
 - Key rotation policies (automatic or manual)
@@ -158,6 +173,7 @@ Enterprise-grade encryption and key management system. Securely encrypts/decrypt
 - Recovery key backup system
 
 ### System Requirements
+
 - **OS:** Windows Server 2016 or later / Windows 8.1 or later
 - **.NET Framework:** 4.6.1 or later
 - **RAM:** Minimum 1 GB, Recommended 2+ GB
@@ -165,6 +181,7 @@ Enterprise-grade encryption and key management system. Securely encrypts/decrypt
 - **Crypto API:** Windows Cryptographic Service Provider (built-in)
 
 ### Dependencies
+
 | Dependency | Type | Required? | Can Work Without? |
 |-----------|------|-----------|------------------|
 | Windows CNG (Cryptography) | System | Yes | No |
@@ -172,12 +189,14 @@ Enterprise-grade encryption and key management system. Securely encrypts/decrypt
 | HSM (optional) | Hardware | No | Yes - Uses TPM fallback |
 
 ### Size & Installation Time
+
 - **Download Size:** 67 MB
 - **Installed Size:** 89 MB
 - **Installation Time:** 2-3 minutes
 - **Uninstall Time:** 1 minute
 
 ### Installation Procedure
+
 ```powershell
 # Basic installation
 cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
@@ -194,6 +213,7 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 ```
 
 ### Configuration
+
 **Config File:** `C:\Program Files\HELIOS\vault-dynamics\config.json`
 
 ```json
@@ -226,6 +246,7 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 ### Usage Examples
 
 #### Encrypt a File
+
 ```powershell
 # PowerShell example
 $vault = New-Object HeliosPlatform.VaultDynamics.VaultClient
@@ -236,12 +257,14 @@ $encrypted = $vault.EncryptFile("C:\sensitive-data\document.pdf")
 ```
 
 #### Decrypt a File
+
 ```powershell
 $vault.DecryptFile("C:\sensitive-data\document.pdf.encrypted", 
                    "C:\sensitive-data\document.pdf.decrypted")
 ```
 
 #### Encrypt Database String
+
 ```powershell
 $connectionString = "Server=localhost;User=admin;Password=secret"
 $encrypted = $vault.EncryptString($connectionString)
@@ -249,6 +272,7 @@ $encrypted = $vault.EncryptString($connectionString)
 ```
 
 #### List All Keys
+
 ```powershell
 $keys = $vault.GetAllKeyMetadata()
 foreach ($key in $keys) {
@@ -257,6 +281,7 @@ foreach ($key in $keys) {
 ```
 
 ### Backup Encryption Keys
+
 ```powershell
 # Backup all keys to encrypted backup
 $vault.CreateBackup("C:\Backups\vault-backup-$(Get-Date -Format 'yyyy-MM-dd').bak")
@@ -266,6 +291,7 @@ $vault.RestoreBackup("C:\Backups\vault-backup-2024-01-15.bak")
 ```
 
 ### File Locations
+
 ```
 C:\Program Files\HELIOS\vault-dynamics\
 ├── bin\
@@ -284,11 +310,13 @@ C:\Program Files\HELIOS\vault-dynamics\
 ```
 
 ### Troubleshooting
+
 - **Master password required but none set:** Run `.\configure-master-password.ps1`
 - **Key rotation failed:** Check permissions on key storage directory
 - **HSM not connecting:** Verify HSM drivers and network connectivity
 
 ### Uninstall
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 .\uninstall.ps1
@@ -308,9 +336,11 @@ cd C:\Users\ADMIN\helios-platform\components\vault-dynamics
 **Status:** Stable
 
 ### What It Does
+
 Core security foundation for the HELIOS Platform. Provides authentication, authorization, intrusion detection, and security policy enforcement. All other components depend on this for security operations.
 
 ### Key Features
+
 - User authentication and session management
 - Role-based access control (RBAC)
 - Multi-factor authentication (MFA) support
@@ -321,6 +351,7 @@ Core security foundation for the HELIOS Platform. Provides authentication, autho
 - Security event monitoring
 
 ### System Requirements
+
 - **OS:** Windows Server 2016 or later / Windows 7 SP1 or later
 - **.NET Core:** 3.1 or .NET 6.0+
 - **RAM:** Minimum 1 GB, Recommended 2+ GB
@@ -328,6 +359,7 @@ Core security foundation for the HELIOS Platform. Provides authentication, autho
 - **Dependencies:** Windows Security essentials
 
 ### Dependencies
+
 | Dependency | Type | Required? | Can Work Without? |
 |-----------|------|-----------|------------------|
 | .NET Core 3.1 or .NET 6 | Framework | Yes | No |
@@ -335,12 +367,14 @@ Core security foundation for the HELIOS Platform. Provides authentication, autho
 | SQL Server Express (optional) | Database | No | Yes - Uses embedded SQLite |
 
 ### Size & Installation Time
+
 - **Download Size:** 94 MB
 - **Installed Size:** 156 MB
 - **Installation Time:** 3-5 minutes
 - **Uninstall Time:** 1-2 minutes
 
 ### Installation Procedure
+
 ```powershell
 # Basic installation
 cd C:\Users\ADMIN\helios-platform\components\security-engine
@@ -358,6 +392,7 @@ cd C:\Users\ADMIN\helios-platform\components\security-engine
 ```
 
 ### Configuration
+
 **Config File:** `C:\Program Files\HELIOS\security-engine\config.json`
 
 ```json
@@ -393,12 +428,14 @@ cd C:\Users\ADMIN\helios-platform\components\security-engine
 ### Usage Examples
 
 #### Create User Account
+
 ```powershell
 $security = New-Object HeliosPlatform.SecurityEngine.SecurityManager
 $security.CreateUser("john.doe", "john@company.com", "Role:Admin")
 ```
 
 #### Authenticate User
+
 ```powershell
 $authenticated = $security.AuthenticateUser("john.doe", "password123")
 if ($authenticated.Success) {
@@ -409,11 +446,13 @@ if ($authenticated.Success) {
 ```
 
 #### Check Permissions
+
 ```powershell
 $hasPermission = $security.HasPermission($sessionToken, "Deploy.Application")
 ```
 
 ### File Locations
+
 ```
 C:\Program Files\HELIOS\security-engine\
 ├── bin\
@@ -432,11 +471,13 @@ C:\Program Files\HELIOS\security-engine\
 ```
 
 ### Troubleshooting
+
 - **User lockout:** Check audit logs for failed attempts
 - **Authorization denied:** Verify user roles and permissions
 - **Performance issues:** Monitor IDS rules, reduce sensitivity if needed
 
 ### Uninstall
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\security-engine
 .\uninstall.ps1
@@ -456,9 +497,11 @@ cd C:\Users\ADMIN\helios-platform\components\security-engine
 **Status:** Beta
 
 ### What It Does
+
 Machine learning-based performance optimization. Learns system behavior, predicts bottlenecks, and provides automatic tuning recommendations. Continuously adapts to workload patterns.
 
 ### Key Features
+
 - Real-time workload analysis
 - Predictive performance modeling
 - Automatic parameter tuning
@@ -468,6 +511,7 @@ Machine learning-based performance optimization. Learns system behavior, predict
 - Historical trend analysis
 
 ### System Requirements
+
 - **OS:** Windows Server 2019 or later / Windows 10 or later
 - **.NET Framework:** 4.8+ or .NET 6.0+
 - **RAM:** Minimum 4 GB, Recommended 8+ GB
@@ -475,6 +519,7 @@ Machine learning-based performance optimization. Learns system behavior, predict
 - **CPU:** Multi-core recommended
 
 ### Dependencies
+
 | Dependency | Type | Required? | Why? |
 |-----------|------|-----------|------|
 | security-engine | Component | **YES** | For access control and audit logging |
@@ -482,12 +527,14 @@ Machine learning-based performance optimization. Learns system behavior, predict
 | TensorFlow (bundled) | ML Framework | Yes | Model inference |
 
 ### Size & Installation Time
+
 - **Download Size:** 267 MB
 - **Installed Size:** 412 MB
 - **Installation Time:** 8-12 minutes (includes ML model download)
 - **Uninstall Time:** 2 minutes
 
 ### Installation Procedure
+
 ```powershell
 # Requires security-engine first
 cd C:\Users\ADMIN\helios-platform\components\security-engine
@@ -505,6 +552,7 @@ cd ..\performance-ai
 ```
 
 ### Configuration
+
 **Config File:** `C:\Program Files\HELIOS\performance-ai\config.json`
 
 ```json
@@ -536,6 +584,7 @@ cd ..\performance-ai
 ### Usage
 
 #### Get Performance Recommendations
+
 ```powershell
 $perf = New-Object HeliosPlatform.PerformanceAI.PerformanceOptimizer
 $recommendations = $perf.GetOptimizationRecommendations()
@@ -548,6 +597,7 @@ foreach ($rec in $recommendations) {
 ```
 
 #### Apply Recommended Optimization
+
 ```powershell
 $result = $perf.ApplyOptimization($recommendations[0].Id)
 if ($result.Success) {
@@ -556,6 +606,7 @@ if ($result.Success) {
 ```
 
 ### File Locations
+
 ```
 C:\Program Files\HELIOS\performance-ai\
 ├── bin\
@@ -575,11 +626,13 @@ C:\Program Files\HELIOS\performance-ai\
 ```
 
 ### Troubleshooting
+
 - **Models not loading:** Check `$HELIOS\logs\performance-ai.log`
 - **Optimization too aggressive:** Reduce `maxChangePercent` in config
 - **Learning phase stuck:** Set `learningPhase.enabled` to false and restart
 
 ### Uninstall
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\performance-ai
 .\uninstall.ps1
@@ -596,9 +649,11 @@ cd C:\Users\ADMIN\helios-platform\components\performance-ai
 **Status:** Stable
 
 ### What It Does
+
 Comprehensive data collection, analysis, and reporting. Works with any data source - system metrics, application logs, custom data. Generates reports and dashboards.
 
 ### Key Features
+
 - Real-time data collection
 - SQL query builder
 - Custom report generation
@@ -608,6 +663,7 @@ Comprehensive data collection, analysis, and reporting. Works with any data sour
 - Data aggregation and transformation
 
 ### System Requirements
+
 - **OS:** Windows Server 2016 or later / Windows 8.1 or later
 - **.NET Framework:** 4.6.1 or later
 - **RAM:** Minimum 2 GB, Recommended 4+ GB
@@ -615,18 +671,21 @@ Comprehensive data collection, analysis, and reporting. Works with any data sour
 - **Database:** SQL Server Express (free)
 
 ### Dependencies
+
 | Dependency | Type | Required? | Can Work Without? |
 |-----------|------|-----------|------------------|
 | SQL Server Express | Database | No | Yes - Uses embedded DB |
 | .NET Framework 4.6.1+ | Framework | Yes | No |
 
 ### Size & Installation Time
+
 - **Download Size:** 134 MB
 - **Installed Size:** 178 MB
 - **Installation Time:** 4-6 minutes
 - **Uninstall Time:** 1 minute
 
 ### Installation Procedure
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\analytics-core
 .\install.ps1
@@ -637,6 +696,7 @@ cd C:\Users\ADMIN\helios-platform\components\analytics-core
 ```
 
 ### File Locations
+
 ```
 C:\Program Files\HELIOS\analytics-core\
 ├── bin\
@@ -657,9 +717,11 @@ C:\Program Files\HELIOS\analytics-core\
 **Status:** Alpha
 
 ### What It Does
+
 Integrates HELIOS with cloud platforms (Azure, AWS, GCP). Enables hybrid and cloud-native deployments with seamless data synchronization.
 
 ### Key Features
+
 - Multi-cloud support (Azure, AWS, GCP)
 - Automatic data synchronization
 - Hybrid deployment support
@@ -667,24 +729,28 @@ Integrates HELIOS with cloud platforms (Azure, AWS, GCP). Enables hybrid and clo
 - Identity federation
 
 ### System Requirements
+
 - **OS:** Windows Server 2019 or later / Windows 10 or later
 - **RAM:** Minimum 2 GB, Recommended 4+ GB
 - **Internet:** Required
 - **.NET:** .NET 6.0+
 
 ### Dependencies
+
 | Dependency | Type | Required? |
 |-----------|------|-----------|
 | security-engine | Component | **YES** |
 | vault-dynamics | Component | **YES** |
 
 ### Size & Installation Time
+
 - **Download Size:** 178 MB
 - **Installed Size:** 267 MB
 - **Installation Time:** 6-8 minutes
 - **Uninstall Time:** 2 minutes
 
 ### Installation Procedure
+
 ```powershell
 # Must install dependencies first
 .\components\security-engine\install.ps1

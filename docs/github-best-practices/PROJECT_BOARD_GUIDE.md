@@ -5,6 +5,7 @@ Guide for managing GitHub Project Boards and workflow automation.
 ---
 
 ## Table of Contents
+
 1. [Column Definitions](#column-definitions)
 2. [Card Flow](#card-flow)
 3. [Automation Triggers](#automation-triggers)
@@ -20,36 +21,42 @@ Guide for managing GitHub Project Boards and workflow automation.
 ### Standard Project Board Columns
 
 **Backlog**
+
 - Items identified but not committed to sprint
 - Can move to Ready when prioritized
 - No time commitment
 - May be re-prioritized
 
 **Ready**
+
 - Items for current sprint
 - Meeting acceptance criteria
 - Have been estimated
 - Can start immediately
 
 **In Progress**
+
 - Currently being worked on
 - Someone actively coding
 - Progress visible
 - Not blocked
 
 **In Review**
+
 - PR created and under review
 - Waiting for approval
 - Tests passing
 - Ready to merge
 
 **Done**
+
 - Merged to main/develop
 - In production or staging
 - Working as expected
 - Closed and archived
 
 **Blocked**
+
 - Can't proceed without dependency
 - Clear blocker identified
 - Waiting for external issue
@@ -106,6 +113,7 @@ Done:
 ### Moving Cards Through Board
 
 **Backlog → Ready**
+
 ```markdown
 When: During sprint planning
 Owner: Product Manager
@@ -118,6 +126,7 @@ Criteria:
 ```
 
 **Ready → In Progress**
+
 ```markdown
 When: Developer starts work
 Owner: Developer
@@ -130,6 +139,7 @@ Criteria:
 ```
 
 **In Progress → In Review**
+
 ```markdown
 When: PR ready for review
 Owner: Developer
@@ -142,6 +152,7 @@ Criteria:
 ```
 
 **In Review → Done**
+
 ```markdown
 When: PR approved and merged
 Owner: Reviewer/Developer
@@ -154,6 +165,7 @@ Criteria:
 ```
 
 **To Blocked**
+
 ```markdown
 When: Work is blocked
 Owner: Developer
@@ -165,6 +177,7 @@ Criteria:
 ```
 
 **From Blocked**
+
 ```markdown
 When: Blocker resolved
 Owner: Developer
@@ -427,6 +440,7 @@ NOT impediments:
 ### Impediment Process
 
 **Identify:**
+
 ```markdown
 1. Name the impediment clearly
 2. Explain why it's blocking
@@ -435,6 +449,7 @@ NOT impediments:
 ```
 
 **Example:**
+
 ```markdown
 Impediment: Waiting for API documentation from backend team
 Impact: 9/10 (blocking all frontend work)
@@ -445,6 +460,7 @@ Owner: @backend-lead
 ```
 
 **Resolve:**
+
 ```markdown
 1. Escalate if needed
 2. Find workaround if possible
@@ -454,6 +470,7 @@ Owner: @backend-lead
 ```
 
 **Prevention:**
+
 ```markdown
 1. Communicate dependencies early
 2. Get commitments upfront
@@ -469,6 +486,7 @@ Owner: @backend-lead
 ### Sprint Planning (Every 2 weeks)
 
 **Preparation (Day Before):**
+
 ```markdown
 □ Review backlog
 □ Prioritize items
@@ -478,6 +496,7 @@ Owner: @backend-lead
 ```
 
 **Planning Meeting (1 hour):**
+
 ```markdown
 1. Review last sprint results (5 min)
 2. Discuss roadmap (5 min)
@@ -490,6 +509,7 @@ Owner: @backend-lead
 ### Sprint Review (Every 2 weeks)
 
 **Demo Meeting (1 hour):**
+
 ```markdown
 1. Welcome & intro (5 min)
 2. Demo completed items (30 min)
@@ -500,6 +520,7 @@ Owner: @backend-lead
 ### Sprint Retrospective (Every 2 weeks)
 
 **Retro Meeting (1 hour):**
+
 ```markdown
 1. What went well? (15 min)
 2. What could improve? (15 min)
@@ -510,6 +531,7 @@ Owner: @backend-lead
 ### Board Grooming (Weekly)
 
 **Every Thursday (30 minutes):**
+
 ```markdown
 □ Review Done items (can archive)
 □ Review In Review items (any stuck?)
@@ -523,6 +545,7 @@ Owner: @backend-lead
 ### Quarterly Board Review
 
 **Every 3 months (1 hour):**
+
 ```markdown
 □ Review project structure
 □ Are columns still appropriate?

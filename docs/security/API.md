@@ -23,6 +23,7 @@
 **Returns:** {{RETURN_TYPE}}
 
 **Example:**
+
 ```powershell
 {{EXAMPLE_1}}
 ```

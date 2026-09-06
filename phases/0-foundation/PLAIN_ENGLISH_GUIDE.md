@@ -28,6 +28,7 @@ cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 ```
 
 The script will ask you:
+
 1. **Where is your Windows 11 ISO file?** - Point it to the ISO download
 2. **Which USB drive should I use?** - Select from list (be careful!)
 3. **Proceed with formatting?** - Confirm (this erases the USB)
@@ -35,17 +36,20 @@ The script will ask you:
 ### What It Changes
 
 **On Your USB Drive:**
+
 - All existing data is DELETED
 - Windows 11 installation files are copied to USB
 - USB becomes bootable (can be used to start a computer)
 - Approximately 6-8 GB of space used
 
 **On Your Computer:**
+
 - Nothing changes (script only reads the ISO file)
 - Temporary files are created during processing
 - Temporary files are cleaned up when done
 
 **What Gets Added to USB:**
+
 - Windows 11 boot files
 - Windows installation media
 - System drivers
@@ -54,11 +58,13 @@ The script will ask you:
 ### How To Undo
 
 **Option 1: Don't boot from it (easiest)**
+
 - Simply don't use the USB to start your computer
 - Format the USB normally when you're done
 - Use it for regular file storage again
 
 **Option 2: Erase and reformat USB**
+
 ```powershell
 # In PowerShell (as Administrator):
 # First, find your USB drive letter (e.g., E:)
@@ -69,6 +75,7 @@ Format-Volume -DriveLetter E -FileSystem NTFS -NewFileSystemLabel "USB Storage"
 ```
 
 **Option 3: Just lose it**
+
 - USB can be disposed of safely
 - No data recovery issues (it's just Windows files)
 
@@ -92,6 +99,7 @@ This is like building a new house on your land — everything gets wiped clean a
 ### How To Run
 
 **Step 1: Boot from USB**
+
 1. Insert USB drive created by USB Creator script
 2. Restart your computer
 3. As computer starts, hold down or repeatedly press the boot menu key:
@@ -103,12 +111,14 @@ This is like building a new house on your land — everything gets wiped clean a
 4. Select the USB drive from the menu
 
 **Step 2: Windows Setup Wizard**
+
 - Follow the on-screen prompts
 - Accept the Windows 11 license
 - Choose which drive to install on (usually C:)
 - Wait for installation (20-30 minutes)
 
 **Step 3: Initial Configuration**
+
 - Windows will guide you through setup
 - Create a user account when prompted
 - Sign in with your username and password
@@ -116,10 +126,12 @@ This is like building a new house on your land — everything gets wiped clean a
 ### What It Changes
 
 **Before Windows Install:**
+
 - Blank hard drive (if new computer)
 - Or: Old operating system if upgrading
 
 **After Windows Install:**
+
 - Fresh Windows 11 operating system installed
 - New system user account created
 - Approximately 25-30 GB of space used
@@ -127,12 +139,14 @@ This is like building a new house on your land — everything gets wiped clean a
 - Computer ready for Phase 1 customization
 
 **Drive Layout Created:**
+
 - C: drive (main system) - ~100 GB allocated
 - Recovery partition (hidden) - ~500 MB
 
 ### How To Undo
 
 **Option 1: Reinstall fresh (start over)**
+
 ```powershell
 # Boot from USB again and select "Custom Install"
 # Choose "Delete all partitions"
@@ -140,12 +154,14 @@ This is like building a new house on your land — everything gets wiped clean a
 ```
 
 **Option 2: Use System Restore**
+
 - Windows Save restore points (if enabled)
 - Go to Settings > System > Recovery > System Restore
 - Restore to a point before you made changes
 - (Only works if restore points were created)
 
 **Option 3: Factory Reset Windows**
+
 ```powershell
 # Open Settings > System > Recovery
 # Click "Reset this PC"
@@ -154,6 +170,7 @@ This is like building a new house on your land — everything gets wiped clean a
 ```
 
 **Option 4: Go back to previous OS**
+
 - Would require having backup media for old OS
 - Essentially requires reinstalling old OS
 - Not practical for most scenarios
@@ -167,6 +184,7 @@ This is like building a new house on your land — everything gets wiped clean a
 Sets up how your hard drive is divided into sections (partitions). Think of it like dividing a plot of land into different zones.
 
 This creates:
+
 - **C: drive** (main Windows system)
 - **D: drive** (data storage)
 - **Recovery partition** (emergency Windows repair)
@@ -191,6 +209,7 @@ cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 ```
 
 The script will:
+
 1. Show current disk layout
 2. Ask which drive to partition
 3. Ask what size C: and D: drives should be
@@ -200,6 +219,7 @@ The script will:
 ### What It Changes
 
 **Drive Letters Created:**
+
 - **C:** System drive (Windows + Program Files)
   - Size: Usually 100-200 GB
   - Purpose: Operating system and applications
@@ -209,6 +229,7 @@ The script will:
   - Purpose: Personal files and documents
 
 **Partitions Created:**
+
 - **EFI System Partition** (hidden)
   - Purpose: Boot files
   - Size: ~100 MB
@@ -218,11 +239,13 @@ The script will:
   - Size: ~500 MB - 1 GB
 
 **File System:**
+
 - All partitions formatted as NTFS
 - Modern, reliable file system
 - Compatible with Windows 11
 
 **Example Setup on 500GB Drive:**
+
 ```
 Partition 1 (EFI):        100 MB   (hidden)
 Partition 2 (System):     150 GB   → C: drive
@@ -233,6 +256,7 @@ Partition 4 (Data):       349 GB   → D: drive
 ### How To Undo
 
 **Option 1: Repartition from scratch**
+
 ```powershell
 # Run Partition Manager again
 .\partition-manager.ps1
@@ -241,6 +265,7 @@ Partition 4 (Data):       349 GB   → D: drive
 ```
 
 **Option 2: Merge drives back together**
+
 ```powershell
 # Open Disk Management:
 diskpart.exe
@@ -254,6 +279,7 @@ list partition
 ```
 
 **Option 3: Start Windows installation over**
+
 - Reinstall Windows completely
 - During installation, delete all partitions
 - Windows will create default partitions
@@ -287,6 +313,7 @@ cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 ```
 
 The script will:
+
 1. Verify drives exist (C: and D:)
 2. Create directory structure
 3. Set appropriate permissions
@@ -297,6 +324,7 @@ The script will:
 **On C: Drive (System Drive)**
 
 Main folders created in `C:\`:
+
 ```
 C:\HELIOS\                          ← Main HELIOS directory
 ├── phases\                         ← Phase scripts and data
@@ -315,6 +343,7 @@ C:\Windows\System32\                ← System files (already exists)
 **On D: Drive (Data Drive)**
 
 Personal folders created in `D:\`:
+
 ```
 D:\Users\                           ← User data
 ├── Documents\                      ← Documents
@@ -330,6 +359,7 @@ D:\Archive\                         ← Old files
 ```
 
 **Folder Permissions:**
+
 - Current user: Full access to all folders
 - System: Full access (for administration)
 - Other users: Limited access (for security)
@@ -339,6 +369,7 @@ D:\Archive\                         ← Old files
 ### How To Undo
 
 **Option 1: Delete folders one by one**
+
 ```powershell
 # Example: Delete HELIOS folder
 Remove-Item C:\HELIOS -Recurse -Force
@@ -348,6 +379,7 @@ Remove-Item D:\Users -Recurse -Force
 ```
 
 **Option 2: Delete everything and start over**
+
 ```powershell
 # Run the script again
 .\storage-setup.ps1
@@ -355,6 +387,7 @@ Remove-Item D:\Users -Recurse -Force
 ```
 
 **Option 3: Reformat drives (nuclear option)**
+
 ```powershell
 # This erases everything on the drives
 Format-Volume -DriveLetter C -FileSystem NTFS
@@ -390,6 +423,7 @@ cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 ```
 
 The script will:
+
 1. Check Windows version (must be 11)
 2. Enable required Windows features
 3. Disable unnecessary services
@@ -401,6 +435,7 @@ The script will:
 ### What It Changes
 
 **Windows Features Enabled:**
+
 - Hyper-V (virtualization support)
 - Windows Sandbox (isolated environment)
 - .NET Framework (application support)
@@ -408,6 +443,7 @@ The script will:
 - BitLocker support (encryption)
 
 **Windows Services Modified:**
+
 - **Disabled** (to improve performance):
   - OneDrive syncing
   - Cortana background listening
@@ -422,6 +458,7 @@ The script will:
   - Credential Guard (security feature)
 
 **System Settings Changed:**
+
 - Power plan: Performance (don't sleep automatically)
 - File Explorer: Show hidden files and extensions
 - Updates: Automatic (security patches)
@@ -430,12 +467,14 @@ The script will:
 - Virtual memory: Optimized for SSD
 
 **Registry Changes:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\
 - Multiple services set to Disabled or Automatic
 ```
 
 **System Restore Point:**
+
 - Created before changes
 - Can revert to this point if needed
 - Named: "HELIOS-Phase0-Baseline"
@@ -443,6 +482,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\
 ### How To Undo
 
 **Option 1: Revert to Restore Point**
+
 ```powershell
 # Open System Restore
 # Select restore point "HELIOS-Phase0-Baseline"
@@ -451,6 +491,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\
 ```
 
 **Option 2: Manually re-enable services**
+
 ```powershell
 # Example: Re-enable OneDrive sync
 Get-Service OneSyncSvc | Set-Service -StartupType Automatic
@@ -461,11 +502,13 @@ Get-Service CoreMessagingRegistrar | Set-Service -StartupType Automatic
 ```
 
 **Option 3: Reset individual settings**
+
 - Settings > Privacy & Security > (re-enable tracking)
 - Control Panel > Power > (change power plan)
 - Settings > System > (change display/sleep settings)
 
 **Option 4: Complete Windows reset**
+
 ```powershell
 # Remove everything from Phase 0 and start fresh
 # Settings > System > Recovery > Reset this PC
@@ -489,6 +532,7 @@ Get-Service CoreMessagingRegistrar | Set-Service -StartupType Automatic
 ## Common Scenarios
 
 ### "I want to start completely over"
+
 1. Use Windows reinstall USB (from USB Creator)
 2. Delete all partitions during Windows setup
 3. Reinstall Windows fresh
@@ -497,6 +541,7 @@ Get-Service CoreMessagingRegistrar | Set-Service -StartupType Automatic
 6. Run System Baseline again
 
 ### "I messed up partitions"
+
 1. Restart computer from Windows installer USB
 2. Run Windows setup again
 3. Delete existing partitions
@@ -505,12 +550,14 @@ Get-Service CoreMessagingRegistrar | Set-Service -StartupType Automatic
 6. Run Partition Manager to fix layout
 
 ### "I want to keep my files but reset Windows"
+
 1. Back up D: drive to external storage
 2. Reinstall Windows (erases C: drive only)
 3. D: drive data stays intact
 4. Restore D: drive after Windows install
 
 ### "Something broke, I need to undo everything"
+
 1. Try System Restore to HELIOS-Phase0-Baseline
 2. If that fails, use Windows Reset (keeps files option)
 3. If that fails, reinstall Windows completely

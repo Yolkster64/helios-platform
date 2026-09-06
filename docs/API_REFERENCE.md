@@ -23,6 +23,7 @@ HELIOS Platform exposes the following main APIs through its components:
 ## 🎯 Main Entry Point: HeliosDeployment
 
 ### Class: `HeliosDeployment`
+
 **Location**: `src/HELIOS.Platform/HeliosDeployment.cs`
 
 Main orchestrator for the entire HELIOS Platform deployment process.
@@ -55,6 +56,7 @@ public class HeliosDeployment
 ### Key Methods
 
 #### DeployAsync()
+
 ```csharp
 /// <summary>
 /// Executes the complete deployment with all 6 phases.
@@ -65,6 +67,7 @@ public async Task<DeploymentResult> DeployAsync()
 ```
 
 **Phases**:
+
 1. **Preflight** - Configuration validation and prerequisite checks
 2. **Infrastructure** - Azure resource setup and networking
 3. **Security** - Authentication, encryption, and security policies
@@ -77,6 +80,7 @@ public async Task<DeploymentResult> DeployAsync()
 ## 🔐 Authentication: AuthService
 
 ### Class: `AuthService`
+
 **Location**: `src/HELIOS.Platform/BackendServices/AuthService/`
 
 Manages JWT token generation, validation, and refresh.
@@ -84,6 +88,7 @@ Manages JWT token generation, validation, and refresh.
 ### Key Methods
 
 #### GenerateTokenAsync()
+
 ```csharp
 /// <summary>
 /// Generates a new JWT token for the specified user.
@@ -96,6 +101,7 @@ public async Task<string> GenerateTokenAsync(string userId, string[] roles, int 
 ```
 
 **Example**:
+
 ```csharp
 var token = await authService.GenerateTokenAsync(
     "user-123",
@@ -105,6 +111,7 @@ var token = await authService.GenerateTokenAsync(
 ```
 
 #### ValidateTokenAsync()
+
 ```csharp
 /// <summary>
 /// Validates a JWT token and extracts claims.
@@ -115,6 +122,7 @@ public async Task<ClaimsPrincipal> ValidateTokenAsync(string token)
 ```
 
 #### RefreshTokenAsync()
+
 ```csharp
 /// <summary>
 /// Issues a new token using a valid refresh token.
@@ -129,6 +137,7 @@ public async Task<string> RefreshTokenAsync(string refreshToken)
 ## 🛣️ Request Routing: ApiGateway
 
 ### Class: `ApiGateway`
+
 **Location**: `src/HELIOS.Platform/BackendServices/ApiGateway/`
 
 Routes requests, enforces rate limiting, and manages circuit breaking.
@@ -136,6 +145,7 @@ Routes requests, enforces rate limiting, and manages circuit breaking.
 ### Key Methods
 
 #### RouteRequestAsync()
+
 ```csharp
 /// <summary>
 /// Routes an incoming request to the appropriate backend service.
@@ -147,6 +157,7 @@ public async Task<ApiResponse> RouteRequestAsync(ApiRequest request)
 ```
 
 **Example**:
+
 ```csharp
 var response = await apiGateway.RouteRequestAsync(
     new ApiRequest
@@ -160,6 +171,7 @@ var response = await apiGateway.RouteRequestAsync(
 ```
 
 #### GetLimitStatusAsync()
+
 ```csharp
 /// <summary>
 /// Checks current rate limit status for a client.
@@ -174,6 +186,7 @@ public async Task<RateLimitStatus> GetLimitStatusAsync(string clientId)
 ## 💾 Caching: CacheService
 
 ### Class: `CacheService`
+
 **Location**: `src/HELIOS.Platform/BackendServices/CacheService/`
 
 Provides distributed Redis-based caching.
@@ -181,6 +194,7 @@ Provides distributed Redis-based caching.
 ### Key Methods
 
 #### GetAsync()
+
 ```csharp
 /// <summary>
 /// Retrieves a value from cache.
@@ -192,6 +206,7 @@ public async Task<T> GetAsync<T>(string key)
 ```
 
 #### SetAsync()
+
 ```csharp
 /// <summary>
 /// Stores a value in cache with optional expiration.
@@ -204,6 +219,7 @@ public async Task SetAsync<T>(string key, T value, int expirationSeconds = 0)
 ```
 
 **Example**:
+
 ```csharp
 // Cache a user profile for 1 hour
 await cacheService.SetAsync("user-profile:123", userProfile, 3600);
@@ -213,6 +229,7 @@ var profile = await cacheService.GetAsync<UserProfile>("user-profile:123");
 ```
 
 #### RemoveAsync()
+
 ```csharp
 /// <summary>
 /// Removes a value from cache.
@@ -226,6 +243,7 @@ public async Task RemoveAsync(string key)
 ## 📊 Analytics: AnalyticsService
 
 ### Class: `AnalyticsService`
+
 **Location**: `src/HELIOS.Platform/BackendServices/Analytics/`
 
 Tracks performance metrics and system analytics.
@@ -233,6 +251,7 @@ Tracks performance metrics and system analytics.
 ### Key Methods
 
 #### TrackMetricAsync()
+
 ```csharp
 /// <summary>
 /// Records a performance metric.
@@ -244,6 +263,7 @@ public async Task TrackMetricAsync(string metricName, double value, Dictionary<s
 ```
 
 **Example**:
+
 ```csharp
 await analyticsService.TrackMetricAsync(
     "request.latency",
@@ -258,6 +278,7 @@ await analyticsService.TrackMetricAsync(
 ```
 
 #### GetPerformanceStatsAsync()
+
 ```csharp
 /// <summary>
 /// Retrieves performance statistics for a time period.
@@ -269,6 +290,7 @@ public async Task<PerformanceStats> GetPerformanceStatsAsync(DateTime startTime,
 ```
 
 #### QueryMetricsAsync()
+
 ```csharp
 /// <summary>
 /// Advanced metric query with filtering and aggregation.
@@ -283,6 +305,7 @@ public async Task<List<Metric>> QueryMetricsAsync(MetricQuery query)
 ## 🤖 AI Integration: AIIntegration
 
 ### Class: `AIIntegration`
+
 **Location**: `src/HELIOS.Platform/BackendServices/AIIntegration/`
 
 Manages multiple AI services and intelligent routing.
@@ -290,6 +313,7 @@ Manages multiple AI services and intelligent routing.
 ### Key Methods
 
 #### RouteToOptimalServiceAsync()
+
 ```csharp
 /// <summary>
 /// Intelligently routes AI requests to the optimal service based on:
@@ -303,6 +327,7 @@ public async Task<AiResponse> RouteToOptimalServiceAsync(AiRequest request)
 ```
 
 **Supported AI Services**:
+
 - OpenAI GPT-4 (highest quality)
 - Azure OpenAI (enterprise)
 - Anthropic Claude (alternative)
@@ -310,6 +335,7 @@ public async Task<AiResponse> RouteToOptimalServiceAsync(AiRequest request)
 - Local ML Models (cost-effective)
 
 #### ExecuteAITaskAsync()
+
 ```csharp
 /// <summary>
 /// Executes an AI task with specified service and parameters.
@@ -321,6 +347,7 @@ public async Task<AiTaskResult> ExecuteAITaskAsync(string serviceId, AiTask task
 ```
 
 #### GetServiceStatusAsync()
+
 ```csharp
 /// <summary>
 /// Checks health and availability of AI services.
@@ -334,6 +361,7 @@ public async Task<Dictionary<string, ServiceStatus>> GetServiceStatusAsync()
 ## ⚙️ Task Orchestration: TaskOrchestrator
 
 ### Class: `TaskOrchestrator`
+
 **Location**: `src/HELIOS.Platform/BackendServices/TaskOrchestrator/`
 
 Manages workflows and scheduled tasks.
@@ -341,6 +369,7 @@ Manages workflows and scheduled tasks.
 ### Key Methods
 
 #### OrchestrationAsync()
+
 ```csharp
 /// <summary>
 /// Orchestrates a multi-step workflow with error handling and retries.
@@ -351,6 +380,7 @@ public async Task<WorkflowResult> OrchestrationAsync(Workflow workflow)
 ```
 
 **Example Workflow**:
+
 ```csharp
 var workflow = new Workflow
 {
@@ -368,6 +398,7 @@ var result = await taskOrchestrator.OrchestrationAsync(workflow);
 ```
 
 #### ScheduleWorkflowAsync()
+
 ```csharp
 /// <summary>
 /// Schedules a workflow to run at specified times.
@@ -378,6 +409,7 @@ public async Task ScheduleWorkflowAsync(Workflow workflow, string schedule)
 ```
 
 #### MonitorExecutionAsync()
+
 ```csharp
 /// <summary>
 /// Monitors execution of a running workflow.
@@ -392,6 +424,7 @@ public async Task<ExecutionStatus> MonitorExecutionAsync(string executionId)
 ## 🔒 Security System: SecuritySystem
 
 ### Class: `SecuritySystem`
+
 **Location**: `src/HELIOS.Platform/SecuritySystem.cs`
 
 Manages security policies, encryption, and authorization.
@@ -399,6 +432,7 @@ Manages security policies, encryption, and authorization.
 ### Key Methods
 
 #### InitializeAsync()
+
 ```csharp
 /// <summary>
 /// Initializes security policies and loads credentials from Key Vault.
@@ -407,6 +441,7 @@ public async Task InitializeAsync()
 ```
 
 #### VerifyAccessAsync()
+
 ```csharp
 /// <summary>
 /// Verifies user access to a resource based on policies.
@@ -423,6 +458,7 @@ public async Task<bool> VerifyAccessAsync(string userId, string resource, string
 ## 📦 Data Types & Models
 
 ### DeploymentResult
+
 ```csharp
 public class DeploymentResult
 {
@@ -444,6 +480,7 @@ public class DeploymentResult
 ```
 
 ### ComponentStatus
+
 ```csharp
 public class ComponentStatus
 {
@@ -462,6 +499,7 @@ public class ComponentStatus
 ```
 
 ### ApiRequest
+
 ```csharp
 public class ApiRequest
 {
@@ -473,6 +511,7 @@ public class ApiRequest
 ```
 
 ### ApiResponse
+
 ```csharp
 public class ApiResponse
 {
@@ -488,6 +527,7 @@ public class ApiResponse
 ## 🔗 Common Usage Patterns
 
 ### Pattern 1: Complete Deployment
+
 ```csharp
 var deployment = new HeliosDeployment();
 var result = await deployment.DeployAsync();
@@ -506,6 +546,7 @@ else
 ```
 
 ### Pattern 2: Authenticated API Request
+
 ```csharp
 // Get auth token
 var token = await deployment.SecuritySystem.AuthService.GenerateTokenAsync(
@@ -529,6 +570,7 @@ var response = await deployment.APIGateway.RouteRequestAsync(
 ```
 
 ### Pattern 3: AI-Powered Processing
+
 ```csharp
 var aiRequest = new AiRequest
 {
@@ -541,6 +583,7 @@ var response = await deployment.AIOrchestrator.RouteToOptimalServiceAsync(aiRequ
 ```
 
 ### Pattern 4: Performance Monitoring
+
 ```csharp
 // Track metric
 await deployment.AnalyticsService.TrackMetricAsync(

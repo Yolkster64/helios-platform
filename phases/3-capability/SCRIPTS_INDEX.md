@@ -7,21 +7,22 @@ Complete reference of all Phase 3 scripts and commands. Find what you need and h
 ## 📋 Quick Navigation
 
 - **[Deployment Scripts](#-deployment-scripts)** - Install Phase 3
-- **[Dashboard Scripts](#-dashboard-scripts)** - Web UI and monitoring
+- **[Dashboard Scripts](#%EF%B8%8F-dashboard-scripts)** - Web UI and monitoring
 - **[AI Scripts](#-ai-scripts)** - Machine learning and predictions
 - **[Auto-Healing Scripts](#-auto-healing-scripts)** - Automatic fixes
 - **[Profile Scripts](#-profile-scripts)** - Custom configurations
-- **[Workflow Scripts](#-workflow-scripts)** - Automation and scheduling
+- **[Workflow Scripts](#%EF%B8%8F-workflow-scripts)** - Automation and scheduling
 - **[Performance Scripts](#-performance-scripts)** - Optimization
 - **[Reporting Scripts](#-reporting-scripts)** - Reports and metrics
 - **[Testing Scripts](#-testing-scripts)** - Verification and validation
-- **[Utility Scripts](#-utility-scripts)** - Maintenance and tools
+- **[Utility Scripts](#%EF%B8%8F-utility-scripts)** - Maintenance and tools
 
 ---
 
 ## 🚀 Deployment Scripts
 
 ### Main Installation
+
 ```powershell
 Script: deploy-phase3-complete.ps1
 Location: C:\helios\scripts\
@@ -45,6 +46,7 @@ What It Does:
 ```
 
 ### Component-Specific Installers
+
 ```powershell
 Script: install-dashboard.ps1
 Purpose: Dashboard application only
@@ -88,6 +90,7 @@ Usage: .\install-reporting.ps1
 ```
 
 ### Pre-Deployment Verification
+
 ```powershell
 Script: verify-phase2-complete.ps1
 Purpose: Ensure Phase 2 is ready for Phase 3
@@ -105,6 +108,7 @@ Checks:
 ```
 
 ### Uninstall Scripts
+
 ```powershell
 Script: uninstall-phase3-complete.ps1
 Purpose: Remove all Phase 3 components
@@ -129,6 +133,7 @@ Usage: .\uninstall-ai-engine.ps1
 ## 🖥️ Dashboard Scripts
 
 ### Dashboard Service Management
+
 ```powershell
 Script: start-dashboard.ps1
 Purpose: Start Dashboard web service
@@ -167,6 +172,7 @@ Usage:
 ```
 
 ### Dashboard Configuration
+
 ```powershell
 Script: configure-dashboard.ps1
 Purpose: Customize Dashboard settings
@@ -188,6 +194,7 @@ Effect: Forces dashboard reload on next access
 ## 🤖 AI Scripts
 
 ### AI Engine Management
+
 ```powershell
 Script: initialize-ai-learning.ps1
 Purpose: First-time AI setup, create baseline models
@@ -216,6 +223,7 @@ Usage: .\restart-ai-engine.ps1
 ```
 
 ### AI Training & Predictions
+
 ```powershell
 Script: retrain-ai-models.ps1
 Purpose: Immediately retrain AI models (normally daily 1 AM)
@@ -256,6 +264,7 @@ Output:
 ```
 
 ### AI Model Management
+
 ```powershell
 Script: backup-ai-models.ps1
 Purpose: Backup current AI models
@@ -292,6 +301,7 @@ Usage:
 ## 🔧 Auto-Healing Scripts
 
 ### Auto-Healing Management
+
 ```powershell
 Script: deploy-auto-healing.ps1
 Purpose: Deploy auto-healing services
@@ -320,6 +330,7 @@ Output: Service running, rules loaded, detectors active
 ```
 
 ### Healing Rules Management
+
 ```powershell
 Script: get-auto-heal-rules.ps1
 Purpose: List all healing rules
@@ -356,6 +367,7 @@ Usage:
 ```
 
 ### Healing History
+
 ```powershell
 Script: get-auto-heal-history.ps1
 Purpose: See all auto-healing actions
@@ -386,6 +398,7 @@ Note: Safe to run, won't break anything
 ## 👤 Profile Scripts
 
 ### Profile Management
+
 ```powershell
 Script: get-profiles.ps1
 Purpose: List all available profiles
@@ -435,6 +448,7 @@ Output: JSON with all settings
 ```
 
 ### Profile Scheduling
+
 ```powershell
 Script: schedule-profile-change.ps1
 Purpose: Auto-switch profiles on schedule
@@ -460,6 +474,7 @@ Output: All scheduled profile changes
 ## ⚙️ Workflow Scripts
 
 ### Workflow Management
+
 ```powershell
 Script: get-workflows.ps1
 Purpose: List all workflows (built-in + custom)
@@ -498,6 +513,7 @@ Output: Workflow ID for tracking
 ```
 
 ### Workflow Creation
+
 ```powershell
 Script: create-workflow.ps1
 Purpose: Create new custom workflow
@@ -526,6 +542,7 @@ Usage: .\delete-workflow.ps1 -Name "MyWorkflow" -Confirm
 ```
 
 ### Workflow Execution
+
 ```powershell
 Script: get-workflow-history.ps1
 Purpose: See past workflow executions
@@ -552,6 +569,7 @@ Usage: .\retry-workflow-run.ps1 -RunID "WF-2024-02-15-001"
 ## ⚡ Performance Scripts
 
 ### Performance AI Management
+
 ```powershell
 Script: enable-performance-ai.ps1
 Purpose: Start Performance AI optimization
@@ -577,6 +595,7 @@ Output:
 ```
 
 ### Optimization Application
+
 ```powershell
 Script: apply-optimization.ps1
 Purpose: Apply specific optimization
@@ -602,6 +621,7 @@ Output:
 ```
 
 ### Performance Analysis
+
 ```powershell
 Script: analyze-database-performance.ps1
 Purpose: Deep analysis of database queries
@@ -628,6 +648,7 @@ Output: CPU/Memory/Disk bottleneck analysis with fixes
 ## 📊 Reporting Scripts
 
 ### Report Generation
+
 ```powershell
 Script: generate-daily-report.ps1
 Purpose: Create executive summary
@@ -658,6 +679,7 @@ Output: Executive-level ROI and impact analysis
 ```
 
 ### Report Scheduling
+
 ```powershell
 Script: schedule-daily-report.ps1
 Purpose: Automatic daily report generation
@@ -686,6 +708,7 @@ Output: All report schedules
 ```
 
 ### Report Retrieval
+
 ```powershell
 Script: get-last-report.ps1
 Purpose: Get most recent report
@@ -707,6 +730,7 @@ Usage:
 ## ✅ Testing Scripts
 
 ### Comprehensive Testing
+
 ```powershell
 Script: test-phase3-complete.ps1
 Purpose: Run all Phase 3 tests (42 total)
@@ -726,6 +750,7 @@ Tests Include:
 ```
 
 ### Component Testing
+
 ```powershell
 Script: test-dashboard.ps1
 Purpose: Test Dashboard functionality
@@ -762,6 +787,7 @@ Tests: Analysis running, recommendations generated
 ```
 
 ### Health Checks
+
 ```powershell
 Script: health-check-phase3.ps1
 Purpose: Quick system health verification
@@ -781,6 +807,7 @@ Output: Detailed logs and recommendations
 ## 🛠️ Utility Scripts
 
 ### Maintenance
+
 ```powershell
 Script: cleanup-phase3-logs.ps1
 Purpose: Archive old logs, free space
@@ -810,6 +837,7 @@ Usage:
 ```
 
 ### Troubleshooting
+
 ```powershell
 Script: troubleshoot-dashboard.ps1
 Purpose: Diagnose Dashboard issues
@@ -840,6 +868,7 @@ Safe to share: No credentials included
 ```
 
 ### Monitoring
+
 ```powershell
 Script: watch-services.ps1
 Purpose: Monitor Phase 3 services in real-time
@@ -868,13 +897,15 @@ Usage:
 ## 🔍 Finding Scripts
 
 ### By Purpose
+
 - **Need to install?** → See [Deployment Scripts](#-deployment-scripts)
-- **Want to monitor?** → See [Dashboard Scripts](#-dashboard-scripts) + [Utility Scripts](#-utility-scripts)
+- **Want to monitor?** → See [Dashboard Scripts](#%EF%B8%8F-dashboard-scripts) + [Utility Scripts](#%EF%B8%8F-utility-scripts)
 - **Need to verify?** → See [Testing Scripts](#-testing-scripts)
-- **Troubleshooting?** → See [Utility Scripts](#-utility-scripts) Troubleshooting section
-- **Creating automation?** → See [Workflow Scripts](#-workflow-scripts)
+- **Troubleshooting?** → See [Utility Scripts](#%EF%B8%8F-utility-scripts) Troubleshooting section
+- **Creating automation?** → See [Workflow Scripts](#%EF%B8%8F-workflow-scripts)
 
 ### By Component
+
 - **Dashboard:** Dashboard Scripts + Utility Scripts
 - **AI:** AI Scripts + Performance Scripts
 - **Auto-Healing:** Auto-Healing Scripts
@@ -887,6 +918,7 @@ Usage:
 ## 📖 Common Tasks
 
 ### "I want to see what's happening"
+
 ```powershell
 .\test-phase3-complete.ps1
 .\get-dashboard-status.ps1
@@ -894,22 +926,26 @@ Usage:
 ```
 
 ### "Something's wrong, help me diagnose"
+
 ```powershell
 .\troubleshoot-all.ps1
 .\generate-support-bundle.ps1
 ```
 
 ### "I want to enable all AI recommendations"
+
 ```powershell
 .\apply-recommendations.ps1 -MinConfidence 90
 ```
 
 ### "I need to switch to high-traffic profile"
+
 ```powershell
 .\activate-profile.ps1 -Name "HighTraffic"
 ```
 
 ### "Create a new workflow"
+
 ```powershell
 .\create-workflow.ps1 -Name "MyWorkflow"
 .\add-workflow-step.ps1 -Workflow "MyWorkflow"

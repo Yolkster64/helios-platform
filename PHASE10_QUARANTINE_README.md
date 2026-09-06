@@ -256,6 +256,7 @@ Key settings:
 ### Threat Intelligence (threat-intelligence.json)
 
 Includes:
+
 - **Signatures**: 4+ known malware signatures
 - **Heuristic Rules**: 4+ behavioral detection rules
 - **Behavior Patterns**: 4+ malware behavior patterns
@@ -293,6 +294,7 @@ Task<bool> CreateCustomThreatRuleAsync(string ruleName, string definition);
 ## Data Models
 
 ### ThreatCaptureResult
+
 - `FilePath`: Original file path
 - `QuarantinePath`: Path in quarantine
 - `BackupPath`: Backup file path
@@ -302,6 +304,7 @@ Task<bool> CreateCustomThreatRuleAsync(string ruleName, string definition);
 - `Timestamp`: Capture time
 
 ### ThreatAnalysisReport
+
 - `AnalysisId`: Unique analysis ID
 - `FilePath`: File path
 - `StaticAnalysis`: Signature-based results
@@ -312,6 +315,7 @@ Task<bool> CreateCustomThreatRuleAsync(string ruleName, string definition);
 - `RemediationSuggestions`: Recommended actions
 
 ### QuarantineStats
+
 - `ActiveThreatCount`: Number of active threats
 - `ActiveThreatSize`: Total size of active threats
 - `ArchivedThreatCount`: Number of archived threats
@@ -328,6 +332,7 @@ dotnet test HELIOS.Platform.Tests.csproj --filter "Phase10.Quarantine"
 ```
 
 Test Coverage:
+
 - **QuarantineSystemSetup**: 3 tests
 - **ThreatCapture**: 5 tests
 - **ThreatAnalyzer**: 6 tests
@@ -339,20 +344,24 @@ Test Coverage:
 ## Security Considerations
 
 ### Encryption
+
 - Uses AES-256 via VeraCrypt
 - Master key stored securely
 - Encrypted partition for sensitive data
 
 ### Access Control
+
 - Admin-only access
 - Authentication required
 - Audit logging enabled
 
 ### File Deletion
+
 - Secure deletion (3 passes of random overwrite)
 - Prevents recovery of deleted files
 
 ### Backup
+
 - Daily backup scheduling
 - 90-day retention
 - Compressed storage
@@ -368,15 +377,19 @@ Test Coverage:
 ## Troubleshooting
 
 ### Issue: VeraCrypt Not Found
+
 **Solution**: Install VeraCrypt or ensure it's in system PATH
 
 ### Issue: Insufficient Disk Space
+
 **Solution**: Increase partition size or archive old threats
 
 ### Issue: Analysis Timeout
+
 **Solution**: Increase `analysisTimeout` in configuration
 
 ### Issue: Malformed Quarantine Path
+
 **Solution**: Verify I: drive is mounted and accessible
 
 ## Compliance
@@ -399,6 +412,7 @@ Test Coverage:
 ## Support & Contact
 
 For issues or questions:
+
 - Check logs in `I:\analysis-logs\`
 - Review configuration in `config\Phase10\`
 - Enable debug logging for detailed output

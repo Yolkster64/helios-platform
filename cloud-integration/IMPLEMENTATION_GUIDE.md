@@ -45,12 +45,14 @@ This guide provides comprehensive instructions for integrating and deploying the
 ### 1.2 Configuration
 
 1. **Copy configuration templates**
+
    ```bash
    cd cloud-integration/configs
    cp *.config.json ~/your-config-location/
    ```
 
 2. **Set environment variables**
+
    ```bash
    # Azure
    export AZURE_TENANT_ID="your-tenant-id"

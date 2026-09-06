@@ -94,6 +94,7 @@ Send-Report -Distribution "management@org.com"
 ### Dashboard Configuration
 
 **Create Daily Dashboard:**
+
 ```powershell
 $dashboard = New-Dashboard -Name "Daily-Operations" -RefreshInterval 30
 Add-DashboardPanel -Dashboard $dashboard -Name "System Health" -Type "Gauge"
@@ -171,6 +172,7 @@ Compare-Performance -Baseline "Production-Baseline"
 ### Performance Tuning
 
 **CPU Optimization:**
+
 ```powershell
 # Identify high-CPU processes
 Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
@@ -183,6 +185,7 @@ Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
 ```
 
 **Memory Optimization:**
+
 ```powershell
 # Clear working set
 [gc]::Collect()
@@ -196,6 +199,7 @@ Restart-Service -Name "HELIOS*" -Force
 ```
 
 **Disk Optimization:**
+
 ```powershell
 # Find large files
 Get-ChildItem -Path "C:\" -Recurse -File | `
@@ -214,6 +218,7 @@ Optimize-Disk -Defrag
 ### Backup Verification
 
 **Daily Quick Check (5 min):**
+
 ```powershell
 # Status check
 Get-BackupStatus
@@ -225,6 +230,7 @@ Get-BackupStatus
 ```
 
 **Weekly Full Test (30 min):**
+
 ```powershell
 # Restore to test location
 Restore-Backup `
@@ -284,11 +290,13 @@ Test-SystemAfterRecovery
 ### Windows Update Process
 
 **Check for Updates:**
+
 ```powershell
 Get-WindowsUpdate -Available | Format-Table Title, Classification
 ```
 
 **Test Updates (Staging Environment):**
+
 ```powershell
 # 1. Install in staging
 Install-WindowsUpdate -Environment Staging
@@ -305,6 +313,7 @@ Get-EventLog -LogName System -After (Get-Date).AddHours(-2) | Where-Object Level
 ```
 
 **Deploy Updates (Production):**
+
 ```powershell
 # 1. Announce maintenance window
 Send-MaintenanceNotification -StartTime "Saturday 2:00 AM" -Duration "2 hours"

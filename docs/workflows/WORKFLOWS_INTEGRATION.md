@@ -540,6 +540,7 @@ deploy.yml depends on:
 ## Best Practices
 
 ✅ **Do**:
+
 - Monitor workflow execution times
 - Optimize critical path
 - Use parallelization effectively
@@ -548,6 +549,7 @@ deploy.yml depends on:
 - Test workflow locally (act)
 
 ❌ **Don't**:
+
 - Create circular dependencies
 - Over-parallelize (resource limits)
 - Ignore workflow status

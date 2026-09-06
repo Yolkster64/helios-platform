@@ -5,6 +5,7 @@
 ### Installation
 
 #### Windows
+
 ```powershell
 # Add to PATH or use with full path
 helios-cli.exe status
@@ -15,6 +16,7 @@ Get-HeliosStatus
 ```
 
 #### Linux/macOS
+
 ```bash
 # Make executable and add to PATH
 chmod +x /usr/local/bin/helios-cli
@@ -130,6 +132,7 @@ helios-cli execute ./long-task.sh --timeout 300
 ## Output Formatting
 
 ### JSON Output
+
 ```bash
 # Get status in JSON format
 helios-cli status --json
@@ -142,6 +145,7 @@ helios-cli status --json > status.json
 ```
 
 ### Verbose Output
+
 ```bash
 # Get detailed output including timing and metadata
 helios-cli status --verbose
@@ -150,6 +154,7 @@ helios-cli health --verbose
 ```
 
 ### Quiet Mode
+
 ```bash
 # Suppress all output (useful in scripts)
 helios-cli status --quiet
@@ -161,6 +166,7 @@ helios-cli deploy --config app.json --quiet && echo "Deployment succeeded"
 ### Batch Processing
 
 Create a batch file (`deployment-batch.json`):
+
 ```json
 {
   "name": "Full Deployment",
@@ -173,6 +179,7 @@ Create a batch file (`deployment-batch.json`):
 ```
 
 Execute:
+
 ```bash
 helios-cli --batch deployment-batch.json
 helios-cli --batch deployment-batch.json --continue  # Continue on error
@@ -392,6 +399,7 @@ helios-cli execute helm-deploy.sh --args "--config /mnt/config/deployment.json"
 ### Common Issues
 
 **"Command not found"**
+
 ```bash
 # Add to PATH
 export PATH=$PATH:/usr/local/bin
@@ -402,6 +410,7 @@ which helios-cli
 ```
 
 **"Timeout occurred"**
+
 ```bash
 # Increase timeout
 helios-cli deploy --config app.json --timeout 300
@@ -411,6 +420,7 @@ helios-cli health --verbose
 ```
 
 **"Connection refused"**
+
 ```bash
 # Verify endpoint
 helios-cli config get api.endpoint
@@ -420,6 +430,7 @@ curl -v https://api.helios.local/health
 ```
 
 **"Permission denied"**
+
 ```bash
 # Make script executable
 chmod +x helios-cli.sh

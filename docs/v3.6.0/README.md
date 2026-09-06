@@ -9,7 +9,9 @@
 This directory contains comprehensive documentation for HELIOS Platform v3.6.0:
 
 ### 1. **[FEATURES_GUIDE.md](FEATURES_GUIDE.md)** - ~2000 words
+
 Complete guide to v3.6.0 features:
+
 - Cloud Synchronization (OneDrive, Azure, AWS S3)
 - Plugin System (creation, installation, marketplace)
 - AI/ML Integration (models, predictions, training)
@@ -18,7 +20,9 @@ Complete guide to v3.6.0 features:
 - Performance Features (metrics, optimization)
 
 ### 2. **[API_REFERENCE.md](API_REFERENCE.md)** - ~1500 words
+
 Complete API reference documentation:
+
 - CloudSync API - Synchronization operations
 - PluginSystem API - Plugin management
 - MLService API - ML operations
@@ -27,7 +31,9 @@ Complete API reference documentation:
 - Internal Architecture APIs - Core services
 
 ### 3. **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** - ~1000 words
+
 Integration guides for external systems:
+
 - Cloud Provider Setup (OneDrive, Azure, AWS S3)
 - Plugin Marketplace Integration
 - Telemetry Integration
@@ -36,7 +42,9 @@ Integration guides for external systems:
 - ML Model Integration
 
 ### 4. **[USER_GUIDE.md](USER_GUIDE.md)** - ~800 words
+
 Practical user guides:
+
 - Getting Started with v3.6.0
 - Cloud Sync Setup Wizard
 - Installing & Managing Plugins
@@ -45,7 +53,9 @@ Practical user guides:
 - Troubleshooting Guide
 
 ### 5. **[DEPLOYMENT.md](DEPLOYMENT.md)** - ~700 words
+
 Operations and deployment guides:
+
 - Deployment Checklist
 - Configuration Guide
 - Monitoring & Health Checks
@@ -54,7 +64,9 @@ Operations and deployment guides:
 - Performance Tuning
 
 ### 6. **[ARCHITECTURE.md](ARCHITECTURE.md)** - System Design
+
 Technical architecture documentation:
+
 - System components and layers
 - Data flow architecture
 - Deployment architecture (single/HA)
@@ -85,6 +97,7 @@ Technical architecture documentation:
 ## Version History
 
 ### v3.6.0 (Current)
+
 - Cloud Synchronization with multi-provider support
 - Plugin System with marketplace
 - AI/ML Integration framework
@@ -93,12 +106,14 @@ Technical architecture documentation:
 - Performance monitoring and optimization
 
 ### v3.5.0
+
 - Core platform foundation
 - Basic system monitoring
 - Plugin framework (v1)
 - Theme system
 
 ### v3.0.0
+
 - Initial v3 release
 - Major architectural improvements
 - Cloud provider support
@@ -106,6 +121,7 @@ Technical architecture documentation:
 ## Support
 
 For issues or questions:
+
 - **GitHub Issues**: [helios-platform/issues](https://github.com/M0nado/helios-platform/issues)
 - **Discussions**: [GitHub Discussions](https://discussions.github.com/M0nado/helios-platform)
 - **Documentation**: This directory

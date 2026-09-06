@@ -3,6 +3,7 @@
 ## 🚀 Core Modules
 
 ### Event Bus (`src/core/event-bus.js`)
+
 ```javascript
 const { EventBus } = require('./src/core/event-bus');
 const bus = new EventBus();
@@ -20,6 +21,7 @@ bus.getStats() // { totalSubscribers, storedEvents, dlqSize, pendingRetries }
 **Events**: `ai:suggestion`, `analytics:recorded`, `sync:conflict`, `plugin:installed`, `user:authenticated`, `error:occurred`
 
 ### Data Adapters (`src/adapters/index.js`)
+
 ```javascript
 const { AdapterRegistry } = require('./src/adapters');
 const registry = new AdapterRegistry();
@@ -32,6 +34,7 @@ registry.transform('ai', response, 'from')  // AI format → Backend
 ```
 
 ### API Gateway (`src/gateway/api-gateway.js`)
+
 ```javascript
 const { APIGateway, ResponseFormatter } = require('./src/gateway/api-gateway');
 const gateway = new APIGateway();
@@ -50,6 +53,7 @@ ResponseFormatter.paginated(items, pagination)   // Paginated response
 ```
 
 ### Correlation (`src/core/correlation.js`)
+
 ```javascript
 const { CorrelationIDGenerator, TraceIDPropagation } = require('./src/core/correlation');
 
@@ -65,6 +69,7 @@ const headers = tracing.extractHeaders(correlationId);
 ```
 
 ### State Manager (`src/core/state-manager.js`)
+
 ```javascript
 const { StateManager } = require('./src/core/state-manager');
 const stateManager = new StateManager();
@@ -87,6 +92,7 @@ stateManager.errorState.getStats()
 ```
 
 ### Sync Orchestrator (`src/core/sync-orchestrator.js`)
+
 ```javascript
 const { SyncOrchestrator, ConflictDetector } = require('./src/core/sync-orchestrator');
 const orchestrator = new SyncOrchestrator();
@@ -126,18 +132,21 @@ ConflictDetector.detectConflicts(local, remote);
 ## 🔐 Authentication
 
 ### JWT Token
+
 ```javascript
 const { token, expiresAt, expiresIn } = gateway.auth.issueToken('user-123');
 gateway.auth.validateToken(token)  // Returns tokenData or null
 ```
 
 ### API Key
+
 ```javascript
 gateway.auth.registerAPIKey('key-123', { tier: 'pro' });
 gateway.auth.validateAPIKey('key-123')  // Returns keyData or null
 ```
 
 ### Rate Limits
+
 - **free**: 100 req/min
 - **pro**: 1000 req/min
 - **enterprise**: 10000 req/min
@@ -151,6 +160,7 @@ received → validated → processing → response_prepared → delivered
 ```
 
 Track with:
+
 ```javascript
 tracker.startTracking(correlationId);
 tracker.markStage(correlationId, RequestLifecycleTracker.STAGES.VALIDATED);
@@ -257,6 +267,7 @@ generator.validate(correlationId)
 ## 🔄 Common Workflows
 
 ### User Login Flow
+
 ```javascript
 const token = gateway.auth.issueToken('user-123');
 stateManager.appState.set('auth.token', token);
@@ -264,6 +275,7 @@ bus.publish('user:authenticated', { userId, token, expiresAt }, { correlationId 
 ```
 
 ### AI Processing
+
 ```javascript
 const aiData = registry.transform('ai', backendData, 'to');
 // ... send to AI service ...
@@ -272,6 +284,7 @@ bus.publish('ai:suggestion', backendResult, { correlationId });
 ```
 
 ### Cross-Device Sync
+
 ```javascript
 stateManager.syncState.registerDevice('device-1', { name: 'iPhone' });
 const syncId = orchestrator.startSync(['device-1', 'device-2']);
@@ -280,6 +293,7 @@ orchestrator.completeSync(syncId);
 ```
 
 ### Error Handling
+
 ```javascript
 try {
   // ... operation ...

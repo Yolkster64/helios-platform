@@ -15,6 +15,7 @@
 ## 🎯 Types of Contributions
 
 ### 🐛 Bug Reports
+
 - Found a bug? Create an issue describing:
   - What you were trying to do
   - What happened instead
@@ -22,23 +23,27 @@
   - Steps to reproduce
 
 ### ✨ Feature Requests
+
 - Have an idea? Submit a feature request with:
   - Use case and motivation
   - Proposed solution
   - Alternative approaches considered
 
 ### 📝 Documentation Improvements
+
 - Spotted unclear docs? Send a PR to improve them
 - Add examples or clarify existing content
 - Fix typos or formatting
 
 ### 💻 Code Contributions
+
 - Implement features or bug fixes
 - Performance improvements
 - Code refactoring
 - Test coverage improvements
 
 ### 🧪 Testing
+
 - Report test failures
 - Add new test cases
 - Improve test coverage
@@ -153,6 +158,7 @@ Additional notes
 ```
 
 **Coverage Requirements**:
+
 - Minimum {{MIN_COVERAGE}}%
 - Must test {{CRITICAL_PATHS}}
 
@@ -221,17 +227,20 @@ Fixes #456
 ### Before Submitting
 
 1. **Update branch from upstream**:
+
    ```powershell
    git fetch upstream
    git rebase upstream/main
    ```
 
 2. **Run full test suite**:
+
    ```powershell
    {{FULL_TEST_CMD}}
    ```
 
 3. **Check code quality**:
+
    ```powershell
    {{LINT_CMD}}
    {{FORMAT_CHECK_CMD}}
@@ -240,6 +249,7 @@ Fixes #456
 ### Submitting PR
 
 1. **Push to your fork**:
+
    ```powershell
    git push origin feature/{{FEATURE_NAME}}
    ```
@@ -326,12 +336,14 @@ Fixes #456
 **Title**: Concise summary
 
 **Description**:
+
 - What you were doing
 - What you expected
 - What actually happened
 - {{ENVIRONMENT_INFO}}
 
 **To Reproduce**:
+
 ```powershell
 # Steps to reproduce
 {{REPRO_STEP_1}}
@@ -339,21 +351,25 @@ Fixes #456
 ```
 
 **Expected Behavior**:
+
 ```
 {{EXPECTED_BEHAVIOR}}
 ```
 
 **Actual Behavior**:
+
 ```
 {{ACTUAL_BEHAVIOR}}
 ```
 
 **Environment**:
+
 - OS: {{OS_VERSION}}
 - {{PROJECT_NAME}} Version: {{VERSION}}
 - {{RUNTIME}}: {{RUNTIME_VERSION}}
 
 **Screenshots/Logs**:
+
 ```
 {{ERROR_LOG}}
 ```
@@ -423,6 +439,7 @@ Fixes #456
 ### Contributors
 
 All contributors are recognized in:
+
 - [CONTRIBUTORS.md](./CONTRIBUTORS.md)
 - GitHub repository contributors
 - Release notes

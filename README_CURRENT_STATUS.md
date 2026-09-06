@@ -1,5 +1,13 @@
 # HELIOS Platform v2.0 - Enterprise Desktop Application
 
+> **Historical snapshot — superseded.** The phase-completion and production-readiness
+> claims below describe an earlier status report, not the current repository.
+> HELIOS is under consolidation; the legacy core is excluded from the portable
+> solution and production is disabled. See [current status](README.md#current-status),
+> [the engineering contract](CLAUDE.md), and
+> [repository authority](docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md)
+> for the maintained status and remaining work.
+
 ## 📋 Project Status - Phase 1 Core Systems Complete ✅
 
 **Latest Update**: Added Action Flow, CLI, Logging, Feature Flags, and Server Management systems.
@@ -217,6 +225,7 @@ var resources = await orchestrator.GetSystemResourcesAsync();
 ## 📊 Testing
 
 Current test coverage:
+
 - ✅ Unit tests: 145+ test cases
 - ✅ Integration tests: 35+ scenarios
 - ✅ E2E tests: 12+ workflows
@@ -283,24 +292,28 @@ dotnet test HELIOS.Platform.Tests/bin/Release/HELIOS.Platform.Tests.dll --logger
 ## 🏗️ Architecture Highlights
 
 ### Security-First Design
+
 - Zero-trust architecture
 - Encryption at rest and in transit
 - Secure credential vault
 - Audit logging for all actions
 
 ### Scalable & Modular
+
 - Dependency injection throughout
 - Interface-based design
 - Service-oriented architecture
 - Plugin framework ready
 
 ### Performance Optimized
+
 - Async/await everywhere
 - Connection pooling
 - Smart caching
 - Query optimization
 
 ### Cloud-Ready
+
 - Azure SDK integration
 - REST API framework
 - Distributed logging
@@ -318,6 +331,7 @@ dotnet test HELIOS.Platform.Tests/bin/Release/HELIOS.Platform.Tests.dll --logger
 - ✅ CSRF protection ready
 
 **Important**: Before production deployment:
+
 1. Review security settings in `config/security-config.json`
 2. Configure encryption keys
 3. Set up audit logging
@@ -337,6 +351,7 @@ dotnet test HELIOS.Platform.Tests/bin/Release/HELIOS.Platform.Tests.dll --logger
 ## 📝 Version
 
 **HELIOS Platform v2.0.0**
+
 - Release Date: 2026-04-16
 - Status: Phase 1 Active
 - Maintainer: Development Team
@@ -346,6 +361,7 @@ dotnet test HELIOS.Platform.Tests/bin/Release/HELIOS.Platform.Tests.dll --logger
 ## 📧 Support & Issues
 
 For issues or questions:
+
 1. Check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 2. Review existing GitHub issues
 3. Submit detailed issue reports
@@ -361,6 +377,7 @@ See [LICENSE](LICENSE) file for details.
 ## 🎉 Acknowledgments
 
 Built with:
+
 - .NET 8 + C# 12
 - WinUI 3
 - SQL Server

@@ -1,10 +1,11 @@
 # HELIOS v4.0 - Integration Guide
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Getting Started](#getting-started)
 3. [Component Integration](#component-integration)
-4. [API Contracts](#api-contracts)
+4. [API Contracts](#component-integration)
 5. [Event Formats](#event-formats)
 6. [Error Codes](#error-codes)
 7. [Best Practices](#best-practices)
@@ -73,6 +74,7 @@ await client.connect();
 ### 1. AI Service Integration
 
 **Capabilities:**
+
 - Suggestions
 - Semantic search
 - Entity extraction
@@ -175,6 +177,7 @@ const entities = await client.ai.extractEntities({
 ```
 
 **Error Handling:**
+
 ```javascript
 try {
   const suggestions = await client.ai.generateSuggestions({
@@ -198,6 +201,7 @@ try {
 ### 2. Analytics Service Integration
 
 **Capabilities:**
+
 - Event tracking
 - Dashboard metrics
 - Trend analysis
@@ -287,6 +291,7 @@ const events = await client.analytics.queryEvents({
 ### 3. Sync Engine Integration
 
 **Capabilities:**
+
 - Multi-device sync
 - Conflict resolution
 - Offline queue management
@@ -356,6 +361,7 @@ await client.sync.clearQueue({ force: true });
 ### 4. Plugin System Integration
 
 **Capabilities:**
+
 - Plugin installation
 - Lifecycle management
 - Sandbox communication
@@ -422,6 +428,7 @@ for await (const event of client.plugins.listen('my-plugin')) {
 ### 5. PWA Features Integration
 
 **Capabilities:**
+
 - Offline mode management
 - Push notifications
 - Real-time WebSocket
@@ -495,6 +502,7 @@ client.ws.on('reconnect', () => {
 ### 6. Cloud Storage Integration
 
 **Capabilities:**
+
 - Backup management
 - Restore operations
 - Multi-region replication
@@ -555,6 +563,7 @@ const status = await client.cloud.getRestoreStatus(restore.id);
 ### 7. Security & Authentication
 
 **Capabilities:**
+
 - Token management
 - MFA setup
 - RBAC operations

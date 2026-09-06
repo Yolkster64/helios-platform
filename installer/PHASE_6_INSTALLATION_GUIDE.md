@@ -90,6 +90,7 @@ $reportPath = ".\installation-diagnostics-$(Get-Date -Format 'yyyyMMdd-HHmmss').
 ## Installation Types
 
 ### Minimal (Core Only)
+
 - **Size**: ~500MB
 - **Installation Time**: 1-2 minutes
 - **Use Case**: Resource-constrained environments
@@ -100,6 +101,7 @@ $reportPath = ".\installation-diagnostics-$(Get-Date -Format 'yyyyMMdd-HHmmss').
 ```
 
 ### Standard (Core + Analytics)
+
 - **Size**: ~1.2GB
 - **Installation Time**: 2-3 minutes
 - **Use Case**: Typical deployment
@@ -110,6 +112,7 @@ $reportPath = ".\installation-diagnostics-$(Get-Date -Format 'yyyyMMdd-HHmmss').
 ```
 
 ### Full (All Features)
+
 - **Size**: ~2GB+
 - **Installation Time**: 3-5 minutes
 - **Use Case**: Development/Full deployment
@@ -120,6 +123,7 @@ $reportPath = ".\installation-diagnostics-$(Get-Date -Format 'yyyyMMdd-HHmmss').
 ```
 
 ### Custom (User-Selected)
+
 - **Size**: Variable
 - **Installation Time**: 2-4 minutes
 - **Use Case**: Specific requirements

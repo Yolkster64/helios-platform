@@ -7,6 +7,7 @@ Structure and organization of the HELIOS Platform source code.
 ## 📁 Folder Structure
 
 ### src/
+
 Source code for the HELIOS Platform.
 
 ```
@@ -50,43 +51,57 @@ src/
 ## 🧩 Module Organization
 
 ### Core Module (src/HELIOS.Platform/Core/)
+
 Central orchestration and execution engine.
+
 - Engine initialization and lifecycle
 - Component orchestration
 - Deployment scheduling
 
 ### Components Module (src/HELIOS.Platform/Components/)
+
 Component abstraction and management.
+
 - Component interfaces
 - Component lifecycle
 - Component communication
 
 ### Plugins Module (src/HELIOS.Platform/Plugins/)
+
 Plugin system and management.
+
 - Plugin discovery and loading
 - Plugin lifecycle management
 - Plugin context and APIs
 
 ### Storage Module (src/HELIOS.Platform/Storage/)
+
 Data persistence and retrieval.
+
 - Data models
 - Storage providers
 - Database access
 
 ### API Module (src/HELIOS.Platform/API/)
+
 REST API endpoints and controllers.
+
 - Deployment controllers
 - Monitoring controllers
 - System endpoints
 
 ### BackendServices Module (src/HELIOS.Platform/BackendServices/)
+
 Background services and workers.
+
 - Deployment worker
 - Monitoring service
 - Health check service
 
 ### Presentation Module (src/HELIOS.Platform/Presentation/)
+
 Web UI and user interfaces.
+
 - Dashboard views
 - Configuration UI
 - Monitoring views
@@ -98,21 +113,25 @@ Web UI and user interfaces.
 ### Naming Conventions
 
 **Classes**
+
 ```csharp
 public class PascalCaseClassName { }
 ```
 
 **Interfaces**
+
 ```csharp
 public interface IPascalCaseInterfaceName { }
 ```
 
 **Methods**
+
 ```csharp
 public void PascalCaseMethodName() { }
 ```
 
 **Fields/Properties**
+
 ```csharp
 private string _camelCaseField;
 public string PascalCaseProperty { get; set; }
@@ -130,12 +149,15 @@ public string PascalCaseProperty { get; set; }
 ## 🔄 Cross-Module Communication
 
 ### Dependency Injection
+
 All dependencies injected through constructors.
 
 ### Interfaces
+
 Communication between modules through well-defined interfaces.
 
 ### Services
+
 Services provide functionality across modules.
 
 ---

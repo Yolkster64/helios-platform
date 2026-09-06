@@ -1,9 +1,11 @@
 # HELIOS Platform - Migration and Upgrade Tools
+
 ## Comprehensive Guide
 
 ### Overview
 
 The HELIOS Platform Migration Tools provide a complete framework for:
+
 - Migrating from old to new architecture
 - Version upgrades (v1→v2→v3, etc)
 - Backup creation and rollback
@@ -14,9 +16,11 @@ The HELIOS Platform Migration Tools provide a complete framework for:
 ### Key Components
 
 #### 1. **Migration Core** (`migration-core.ps1`)
+
 Base classes and utilities for all migration operations.
 
 **Classes:**
+
 - `MigrationContext` - Tracks migration state and progress
 - `MigrationProgressTracker` - Logs progress and timing
 - `BackupManager` - Creates and manages backups
@@ -24,35 +28,43 @@ Base classes and utilities for all migration operations.
 - `ValidationEngine` - Pre/post migration validation
 
 #### 2. **Data Transformer** (`data-transformer.ps1`)
+
 Transforms data between different formats and schemas.
 
 **Classes:**
+
 - `DataTransformer` - Field mapping and type conversion
 - `SchemaTransformer` - Schema-based transformation
 - `VersionMigrationCoordinator` - Finds migration paths
 - `BulkTransformer` - Batch processing
 
 #### 3. **Version Upgrade** (`version-upgrade.ps1`)
+
 Manages incremental version upgrades.
 
 **Classes:**
+
 - `VersionUpgradeManager` - Orchestrates version upgrades
 - `IncrementalUpgradeOrchestrator` - Phased upgrades
 - `UpgradeVerifier` - Pre/post upgrade verification
 
 #### 4. **Parallel Migration** (`parallel-migration.ps1`)
+
 Distributes work across multiple workers.
 
 **Classes:**
+
 - `ParallelMigrationWorker` - Individual worker
 - `ParallelMigrationCoordinator` - Manages workers
 - `DistributedMigrationExecutor` - Distributed execution
 - `WorkDistributionEngine` - Task distribution
 
 #### 5. **Migration Orchestrator** (`migration-orchestrator.ps1`)
+
 Complete migration workflow controller.
 
 **Classes:**
+
 - `MigrationOrchestrator` - Main controller
 - `BulkMigrationExecutor` - Bulk operations
 - `MigrationReportGenerator` - Report generation
@@ -379,12 +391,14 @@ finally {
 ## Logging
 
 All operations are logged to:
+
 - **Migration logs**: `C:\HELIOS\logs\migration_<id>.log`
 - **Bulk migration**: `C:\HELIOS\logs\bulk_migration_<timestamp>.log`
 - **Distributed migration**: `C:\HELIOS\logs\distributed_migration.log`
 - **Backups**: `C:\HELIOS\backups\`
 
 View logs:
+
 ```powershell
 Get-Content "C:\HELIOS\logs\migration_*.log" -Tail 50
 ```
@@ -394,16 +408,19 @@ Get-Content "C:\HELIOS\logs\migration_*.log" -Tail 50
 ## Performance Considerations
 
 ### Parallel Processing
+
 - Use 4-8 workers for optimal performance
 - More workers = higher CPU usage but faster processing
 - Adjust based on system resources
 
 ### Batch Size
+
 - Default: 100 records per batch
 - Increase for large simple transformations
 - Decrease for complex transformations
 
 ### Incremental Migration
+
 - Split large migrations into phases
 - Test each phase before proceeding
 - Allows for rollback at phase boundaries
@@ -413,17 +430,20 @@ Get-Content "C:\HELIOS\logs\migration_*.log" -Tail 50
 ## Troubleshooting
 
 ### Migration Fails
+
 1. Check logs: `Get-Content C:\HELIOS\logs\migration_<id>.log`
 2. Run dry-run: `$migration.EnableDryRun($true)`
 3. Verify backup exists: Check `C:\HELIOS\backups\`
 4. Manual rollback if needed
 
 ### Slow Performance
+
 1. Enable parallel execution: `$bulk.EnableParallelExecution(8)`
 2. Increase batch size: `$executor.SetChunkSize(500)`
 3. Check system resources (CPU, Memory)
 
 ### Data Conflicts
+
 1. Review conflict log: `$resolver.GetConflictSummary()`
 2. Change resolution strategy: "keepNew", "merge", etc
 3. Implement custom conflict resolution

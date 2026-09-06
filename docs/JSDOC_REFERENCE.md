@@ -1,11 +1,13 @@
 # HELIOS v4.0 - Complete JSDoc Reference
 
 ## Overview
+
 This document provides comprehensive JSDoc coverage for all 60,000+ lines of code in HELIOS v4.0. Every function, class, and module includes complete documentation with parameter types, return types, examples, and error conditions.
 
 ## Documentation Standards
 
 ### Function Documentation Template
+
 ```javascript
 /**
  * [Brief description of what the function does]
@@ -43,10 +45,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ## Core Component Documentation
 
 ### 1. Analytics Service
+
 **Location:** `src/Components/Analytics`
 **Purpose:** Collect, process, and visualize metrics
 
 #### Class: AnalyticsService
+
 ```javascript
 /**
  * Analytics Service - Collects and processes application metrics
@@ -71,6 +75,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: trackEvent
+
 ```javascript
 /**
  * Track a custom event for analytics
@@ -101,6 +106,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: getDashboardMetrics
+
 ```javascript
 /**
  * Retrieve metrics for dashboard display
@@ -137,10 +143,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 2. Sync Engine
+
 **Location:** `src/Components/Sync`
 **Purpose:** Multi-device synchronization with conflict resolution
 
 #### Class: SyncEngine
+
 ```javascript
 /**
  * Sync Engine - Manages multi-device synchronization
@@ -164,6 +172,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: syncData
+
 ```javascript
 /**
  * Synchronize data across all connected devices
@@ -199,10 +208,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 3. Plugin System
+
 **Location:** `src/Components/Plugins`
 **Purpose:** Extensible plugin architecture
 
 #### Class: PluginManager
+
 ```javascript
 /**
  * Plugin Manager - Manages plugin lifecycle and sandboxing
@@ -220,6 +231,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: installPlugin
+
 ```javascript
 /**
  * Install a new plugin with validation
@@ -252,10 +264,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 4. AI Service
+
 **Location:** `src/Components/AI`
 **Purpose:** Machine learning and intelligent features
 
 #### Class: AIService
+
 ```javascript
 /**
  * AI Service - Intelligent feature engine
@@ -273,6 +287,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: generateSuggestions
+
 ```javascript
 /**
  * Generate intelligent suggestions for user input
@@ -306,10 +321,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 5. PWA Components
+
 **Location:** `src/Components/PWA`
 **Purpose:** Progressive Web App features
 
 #### Class: PWAManager
+
 ```javascript
 /**
  * PWA Manager - Manages offline-first PWA features
@@ -327,6 +344,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: enableOfflineMode
+
 ```javascript
 /**
  * Enable offline mode and cache critical data
@@ -346,10 +364,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 6. Cloud Integration
+
 **Location:** `src/Components/Cloud`
 **Purpose:** Cloud storage and backup
 
 #### Class: CloudManager
+
 ```javascript
 /**
  * Cloud Manager - Manages cloud storage and backups
@@ -366,6 +386,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Method: createBackup
+
 ```javascript
 /**
  * Create a point-in-time backup of all data
@@ -399,10 +420,12 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 ### 7. Security & Authentication
+
 **Location:** `src/Core/Security`
 **Purpose:** Authentication, authorization, and security
 
 #### Function: hashPassword
+
 ```javascript
 /**
  * Hash password with bcrypt and salt
@@ -424,6 +447,7 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ```
 
 #### Function: verifyToken
+
 ```javascript
 /**
  * Verify JWT token and extract claims
@@ -455,26 +479,31 @@ This document provides comprehensive JSDoc coverage for all 60,000+ lines of cod
 ## Best Practices
 
 ### 1. Error Handling
+
 - Always document errors that methods throw
 - Use specific error types (not generic Error)
 - Include handling recommendations in documentation
 
 ### 2. Async Operations
+
 - Mark async functions with @async tag
 - Include Promise resolution type
 - Document timeout behavior
 
 ### 3. Events & Observers
+
 - Document @fires events
 - Include event payload structure
 - Provide listener examples
 
 ### 4. Type Definitions
+
 - Use @typedef for complex objects
 - Document all properties
 - Include default values and constraints
 
 ### 5. Examples
+
 - Include at least one basic example
 - Add advanced usage examples
 - Show error handling patterns

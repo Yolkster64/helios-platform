@@ -11,6 +11,7 @@ Before starting deployment, verify all requirements are met.
 ### System Requirements
 
 #### Minimum Specifications
+
 | Component | Requirement |
 |-----------|-------------|
 | **CPU** | 2-core processor 2.0 GHz or higher |
@@ -21,6 +22,7 @@ Before starting deployment, verify all requirements are met.
 | **OS** | Windows 10/11, Linux, or macOS |
 
 #### Recommended Specifications
+
 | Component | Recommendation |
 |-----------|-----------------|
 | **CPU** | 4-core processor 2.5 GHz or higher |
@@ -47,12 +49,14 @@ Before starting deployment, verify all requirements are met.
 ### Verify Installation Package
 
 **Checksum Verification (Windows):**
+
 ```powershell
 Get-FileHash -Path "helios-v2.5.1.zip" -Algorithm SHA256
 # Expected: a1b2c3d4e5f6...
 ```
 
 **Checksum Verification (macOS/Linux):**
+
 ```bash
 sha256sum helios-v2.5.1.zip
 # Expected: a1b2c3d4e5f6...
@@ -67,16 +71,19 @@ The USB Wizard guides you through creating bootable deployment media.
 ### Step 1: Launch USB Wizard
 
 **Windows:**
+
 ```powershell
 .\helios-usb-wizard.exe
 ```
 
 **macOS/Linux:**
+
 ```bash
 ./helios-usb-wizard
 ```
 
 **Expected Output:**
+
 ```
 ====================================
 Helios Platform v2.5.1 USB Wizard
@@ -93,12 +100,14 @@ Select USB device [1-2]:
 ### Step 2: Select USB Device
 
 **Action:**
+
 1. List shows available USB devices
 2. Enter the number of your USB device
 3. **⚠️ Warning**: This will erase all data on the USB device!
 4. Type `yes` to confirm
 
 **Example:**
+
 ```
 Select USB device [1-2]: 1
 
@@ -123,6 +132,7 @@ Five profiles are available. Select one:
 | **Custom** | User-defined | Varies |
 
 **Example:**
+
 ```
 Available profiles:
   1. Minimal (8 GB) - Lightweight systems
@@ -141,6 +151,7 @@ Select profile [1-5]: 2
 Review deployment configuration before proceeding:
 
 **Example:**
+
 ```
 ====================================
 Deployment Configuration Review
@@ -164,6 +175,7 @@ Continue with deployment? [yes/no]: yes
 ### Step 5: Monitor Creation Progress
 
 **Progress Display:**
+
 ```
 Creating bootable USB media...
 
@@ -184,6 +196,7 @@ Currently downloading:
 ### Step 6: Completion
 
 **On Success:**
+
 ```
 ✓ USB creation completed successfully!
 
@@ -212,12 +225,14 @@ After creating USB media, boot the target system.
 ### Phase 1: BIOS/UEFI Boot (1-2 minutes)
 
 **Steps:**
+
 1. Insert USB into target computer
 2. Power on and enter boot menu (usually F2, F12, DEL, or ESC)
 3. Select USB device as boot drive
 4. Press Enter to boot
 
 **Expected Sequence:**
+
 ```
 BIOS/UEFI Boot Menu
   → Select USB Device
@@ -229,12 +244,14 @@ Helios Bootloader Loading...
 ### Phase 2: Bootloader Phase (1-2 minutes)
 
 **What Happens:**
+
 - Bootloader initializes
 - System memory test runs
 - USB driver loads
 - System preparation
 
 **Screen Display:**
+
 ```
 ╔════════════════════════════════════════╗
 ║  Helios Platform v2.5.1 Bootloader    ║
@@ -251,6 +268,7 @@ Helios Bootloader Loading...
 Automated system configuration runs with selected profile.
 
 **Profile Deployment Tasks:**
+
 ```
 Setting up profile: Standard
 
@@ -265,6 +283,7 @@ Current tasks:
 ```
 
 **Configuration Applied:**
+
 - Selected profile settings loaded
 - Network drivers installed
 - Security policies applied
@@ -273,6 +292,7 @@ Current tasks:
 ### Phase 4: Post-Boot Transition
 
 **Display Message:**
+
 ```
 Auto-setup completed successfully!
 
@@ -293,12 +313,14 @@ After boot, the Helios Management GUI appears with 4 main tabs.
 Create additional bootable USB devices or re-create current USB.
 
 **Features:**
+
 - Detect connected USB devices
 - Select profile for new USB
 - Monitor creation progress
 - Verify USB media integrity
 
 **Example Usage:**
+
 ```
 USB Wizard Tab
 ─────────────────────────────────────
@@ -321,12 +343,14 @@ Creation Progress:
 Switch between 5 available deployment profiles.
 
 **Features:**
+
 - View active profile details
 - Switch to different profile
 - Preview profile settings
 - Export/import custom profiles
 
 **Example Usage:**
+
 ```
 Profiles Tab
 ──────────────────────────────────────
@@ -356,12 +380,14 @@ Profile Details: Standard
 Configure boot options and parameters.
 
 **Features:**
+
 - Boot sequence settings
 - Network discovery options
 - Auto-restart configuration
 - Hardware detection settings
 
 **Example Usage:**
+
 ```
 Boot Configuration Tab
 ───────────────────────────────────
@@ -390,12 +416,14 @@ Network Configuration:
 Configure system settings and deployment options.
 
 **Features:**
+
 - System name configuration
 - Network settings
 - Security policies
 - Update preferences
 
 **Example Usage:**
+
 ```
 System Configuration Tab
 ────────────────────────────────────
@@ -431,30 +459,35 @@ Switch between profiles to change system configuration.
 ### Available Profiles
 
 #### 1. Minimal Profile
+
 - **Size**: 8 GB
 - **Boot Time**: 2 minutes
 - **Use Case**: Lightweight systems, basic functionality
 - **Components**: Core only
 
 #### 2. Standard Profile (Default)
+
 - **Size**: 16 GB
 - **Boot Time**: 3-5 minutes
 - **Use Case**: General-purpose deployments
 - **Components**: Core + Drivers + UI + Basic tools
 
 #### 3. Enterprise Profile
+
 - **Size**: 24 GB
 - **Boot Time**: 5-8 minutes
 - **Use Case**: Large-scale organizational deployments
 - **Components**: Everything + Advanced tools + Security packages
 
 #### 4. Development Profile
+
 - **Size**: 20 GB
 - **Boot Time**: 5 minutes
 - **Use Case**: Development and testing
 - **Components**: Everything + SDKs + Debugging tools
 
 #### 5. Custom Profile
+
 - **Size**: User-defined
 - **Use Case**: Specialized deployments
 - **Components**: User-selected
@@ -462,6 +495,7 @@ Switch between profiles to change system configuration.
 ### How to Switch Profiles
 
 **Using GUI:**
+
 1. Open Helios Management GUI
 2. Click "Profiles" tab
 3. Select desired profile from list
@@ -470,6 +504,7 @@ Switch between profiles to change system configuration.
 6. System will restart with new profile
 
 **Using Command Line:**
+
 ```powershell
 # List available profiles
 helios-cli profile list
@@ -493,35 +528,41 @@ Helios v2.5.1 supports two update methods.
 ### Method 1: Online Update
 
 **Requirements:**
+
 - Internet connection (50+ Mbps recommended)
 - 1 GB free disk space
 
 **Steps:**
 
 1. **Check for Updates**
+
 ```powershell
 helios-cli update check
 ```
 
 2. **Download Update** (with 4-concurrent parallelization)
+
 ```powershell
 helios-cli update download --version 2.5.1
 # Download speed: 3-4x faster with parallel downloads
 ```
 
 3. **Install Update**
+
 ```powershell
 helios-cli update install
 # Estimated time: 5-15 minutes depending on update size
 ```
 
 4. **Verify Installation**
+
 ```powershell
 helios-cli version
 # Output: Helios Platform v2.5.1
 ```
 
 **Example Output:**
+
 ```
 Checking for updates...
 ✓ Update found: v2.5.2 (Released: 2024-02-01)
@@ -543,12 +584,14 @@ Downloading update... [████████████░░] 75%
 ### Method 2: USB Update
 
 **Requirements:**
+
 - USB drive with update media (8+ GB)
 - USB 3.0+ for best performance
 
 **Steps:**
 
 1. **Create USB Update Media**
+
 ```powershell
 .\helios-usb-wizard.exe --update-media
 ```
@@ -557,16 +600,19 @@ Downloading update... [████████████░░] 75%
 Insert the USB drive with update media into the target system.
 
 3. **Install from USB**
+
 ```powershell
 helios-cli update install --source usb --device D:
 ```
 
 4. **Verify**
+
 ```powershell
 helios-cli version
 ```
 
 **Advantages:**
+
 - No internet required
 - Deploy to multiple systems efficiently
 - Faster for large deployments (parallel USB copies)
@@ -580,6 +626,7 @@ helios-cli version
 **If Update Installation Fails:**
 
 1. **Automatic Rollback** (v2.5.1 feature)
+
 ```
 Update installation failed at 65%
 Rolling back to previous version...
@@ -588,12 +635,14 @@ Current version: v2.5.1 (previous)
 ```
 
 2. **Manual Rollback** (if auto-rollback fails)
+
 ```powershell
 helios-cli update rollback
 # Restores to previous known-good version
 ```
 
 3. **Check Status**
+
 ```powershell
 helios-cli status
 # Verify system is running stable version
@@ -610,6 +659,7 @@ helios-cli status
    - Wait for recovery environment
 
 2. **Run Repair**
+
 ```
 Recovery Environment
 ─────────────────────
@@ -623,6 +673,7 @@ Select option [1-4]: 1
 ```
 
 3. **Reboot**
+
 ```powershell
 shutdown /r /t 30 /c "System repair complete. Rebooting..."
 ```
@@ -632,6 +683,7 @@ shutdown /r /t 30 /c "System repair complete. Rebooting..."
 **Troubleshooting:**
 
 1. **Verify Network Settings**
+
 ```powershell
 ipconfig /all
 # Check IP configuration
@@ -641,12 +693,14 @@ ping 8.8.8.8
 ```
 
 2. **Reset Network**
+
 ```powershell
 helios-cli network reset
 # Reinitialize network drivers
 ```
 
 3. **Configure Network Manually**
+
 ```
 Helios GUI → System Configuration → Network Settings
   IP Address: 192.168.1.X
@@ -660,18 +714,21 @@ Helios GUI → System Configuration → Network Settings
 **Cleanup Procedures:**
 
 1. **Check Disk Usage**
+
 ```powershell
 helios-cli disk status
 # Shows usage breakdown
 ```
 
 2. **Clean Temporary Files**
+
 ```powershell
 helios-cli clean --type temp
 # Frees: ~2-5 GB typically
 ```
 
 3. **Clean Update Cache**
+
 ```powershell
 helios-cli clean --type updates
 # Frees: ~1-3 GB typically
@@ -729,6 +786,7 @@ helios-cli clean --type updates
 ### USB Creation Fails
 
 **Solution:**
+
 1. Try different USB drive
 2. Format USB as FAT32/NTFS
 3. Check USB 3.0 compatibility
@@ -738,6 +796,7 @@ helios-cli clean --type updates
 ### Slow Download Speed
 
 **Solution:**
+
 1. Check internet connection: `ping 8.8.8.8`
 2. Verify no bandwidth throttling
 3. Move closer to WiFi router
@@ -747,6 +806,7 @@ helios-cli clean --type updates
 ### System Won't Boot from USB
 
 **Solution:**
+
 1. Verify USB is bootable: `helios-cli usb verify`
 2. Check BIOS boot order
 3. Disable Secure Boot temporarily

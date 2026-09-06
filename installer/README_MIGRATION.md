@@ -1,7 +1,9 @@
 # HELIOS Platform - Migration & Upgrade Tools
+
 ## Complete Implementation Package
 
 ### 📋 Overview
+
 Complete PowerShell-based migration framework providing data migration, version upgrades, backup/rollback, validation, conflict resolution, progress tracking, dry-run testing, parallel execution, and incremental phased migration for the HELIOS Platform.
 
 ---
@@ -28,11 +30,13 @@ C:\HELIOS\
 ## 🚀 Quick Start
 
 ### 1. Load the Framework
+
 ```powershell
 . "C:\HELIOS\migration-orchestrator.ps1"
 ```
 
 ### 2. Create a Migration
+
 ```powershell
 $migration = New-MigrationOrchestrator `
     -Name "MyMigration" `
@@ -41,6 +45,7 @@ $migration = New-MigrationOrchestrator `
 ```
 
 ### 3. Configure Transformation
+
 ```powershell
 # Add field mappings
 $migration.AddFieldMapping("old_id", "id", "int")
@@ -65,6 +70,7 @@ $migration.RegisterUpgrade("v1", "v2", {
 ```
 
 ### 4. Execute Migration
+
 ```powershell
 $data = @{ old_id = 123; old_name = "TestItem" }
 $result = $migration.ExecuteMigration($data)
@@ -85,6 +91,7 @@ $migration.Dispose()
 ## 📚 Documentation Files
 
 ### Main Guides
+
 - **MIGRATION_GUIDE.md** (12.88 KB)
   - Complete quickstart
   - Usage examples for all scenarios
@@ -100,6 +107,7 @@ $migration.Dispose()
   - Installation guide
 
 ### Example Scripts
+
 - **migration-examples.ps1** (12.54 KB)
   - 7 complete, working examples
   - Simple migration
@@ -117,9 +125,11 @@ $migration.Dispose()
 ### Core Modules
 
 #### 1. migration-core.ps1
+
 **Foundation classes for all migration operations**
 
 Classes:
+
 - `MigrationContext` - Tracks state, progress, versions
 - `MigrationProgressTracker` - Logs operations with timing
 - `BackupManager` - Creates/restores backups
@@ -127,35 +137,43 @@ Classes:
 - `ValidationEngine` - Pre/post validation rules
 
 #### 2. data-transformer.ps1
+
 **Data format conversion and transformation**
 
 Classes:
+
 - `DataTransformer` - Field mapping, type conversion
 - `SchemaTransformer` - Schema-based transformation
 - `VersionMigrationCoordinator` - Version path finding
 - `BulkTransformer` - Batch processing
 
 #### 3. version-upgrade.ps1
+
 **Incremental version upgrade management**
 
 Classes:
+
 - `VersionUpgradeManager` - Multi-step upgrades
 - `IncrementalUpgradeOrchestrator` - Phased migrations
 - `UpgradeVerifier` - Verification and checks
 
 #### 4. parallel-migration.ps1
+
 **Distributed work execution**
 
 Classes:
+
 - `ParallelMigrationWorker` - Individual worker
 - `ParallelMigrationCoordinator` - Worker management
 - `DistributedMigrationExecutor` - Distributed processing
 - `WorkDistributionEngine` - Task distribution
 
 #### 5. migration-orchestrator.ps1
+
 **Main workflow controller**
 
 Classes:
+
 - `MigrationOrchestrator` - Complete workflow
 - `BulkMigrationExecutor` - Bulk operations
 - `MigrationReportGenerator` - Report generation
@@ -165,6 +183,7 @@ Classes:
 ## ✨ Features Implemented
 
 ### ✓ 1. Data Migration
+
 - Old to new architecture data transformation
 - Field mapping (1-to-1, 1-to-many, transformations)
 - Automatic type conversion
@@ -172,12 +191,14 @@ Classes:
 - Batch processing support
 
 ### ✓ 2. Version Upgrades
+
 - Multi-step version upgrades (v1→v2→v3, etc)
 - Automatic upgrade path finding (BFS algorithm)
 - Upgrade validation before/after
 - Track executed upgrades
 
 ### ✓ 3. Backup & Restore
+
 - Automatic backup before migration
 - Manifest with data hash verification
 - Configurable retention policy (default 30 days)
@@ -185,12 +206,14 @@ Classes:
 - One-command restore
 
 ### ✓ 4. Rollback on Failure
+
 - Automatic triggering on validation failure
 - Restore to most recent backup
 - Maintains backup history
 - Tracks rollback status
 
 ### ✓ 5. Data Validation
+
 - Pre-migration validation
 - Post-migration validation
 - Rule chaining and composition
@@ -198,6 +221,7 @@ Classes:
 - Custom rule definitions
 
 ### ✓ 6. Conflict Resolution
+
 - Automatic conflict detection
 - 4 resolution strategies:
   - keepOld - Keep original values
@@ -207,6 +231,7 @@ Classes:
 - Per-item conflict tracking
 
 ### ✓ 7. Progress Tracking
+
 - Real-time progress percentages
 - Elapsed time calculation
 - ETA based on current rate
@@ -215,6 +240,7 @@ Classes:
 - Query interface for status
 
 ### ✓ 8. Dry-Run Mode
+
 - Full migration without persisting
 - Complete transformation without backup changes
 - Test migration logic safely
@@ -222,6 +248,7 @@ Classes:
 - No risk to production data
 
 ### ✓ 9. Parallel Migration
+
 - Configurable worker count (2-8+ workers)
 - Round-robin task distribution
 - Load-balanced distribution
@@ -229,6 +256,7 @@ Classes:
 - Queue-based task management
 
 ### ✓ 10. Incremental Migration
+
 - Phase-based execution
 - Define numbered phases with data subsets
 - Per-phase validation
@@ -240,6 +268,7 @@ Classes:
 ## 🔧 Usage Scenarios
 
 ### Scenario 1: Simple Data Migration
+
 ```powershell
 $m = New-MigrationOrchestrator -Name "SimpleMigration" -FromVersion "v1" -ToVersion "v2"
 $m.AddFieldMapping("id", "Id", "int")
@@ -249,6 +278,7 @@ $m.Dispose()
 ```
 
 ### Scenario 2: Test Before Running (Dry-Run)
+
 ```powershell
 $m = New-MigrationOrchestrator -Name "Test" -FromVersion "v1" -ToVersion "v2"
 $m.EnableDryRun($true)  # No actual changes
@@ -258,6 +288,7 @@ $m.Dispose()
 ```
 
 ### Scenario 3: Bulk Parallel Migration
+
 ```powershell
 $m = New-MigrationOrchestrator -Name "Bulk" -FromVersion "v1" -ToVersion "v2"
 $m.AddFieldMapping("id", "Id", "int")
@@ -274,6 +305,7 @@ $bulk.Dispose()
 ```
 
 ### Scenario 4: Multi-Step Upgrade
+
 ```powershell
 $m = New-MigrationOrchestrator -Name "MultiStep" -FromVersion "v1" -ToVersion "v3"
 
@@ -286,6 +318,7 @@ Write-Host "Steps: $($result.ExecutedUpgrades.Count)"
 ```
 
 ### Scenario 5: Incremental Phased Migration
+
 ```powershell
 $upgradeManager = New-VersionUpgradeManager -LogPath "C:\HELIOS\logs\phases.log"
 $upgradeManager.RegisterUpgrade("v1", "v2", { param($d) return $d })
@@ -305,6 +338,7 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 ## 📊 Performance
 
 ### Benchmarks
+
 - Single record: <1ms
 - 100 records (sequential): 5-10ms
 - 1,000 records (4 workers): 50-100ms
@@ -312,6 +346,7 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 - Multi-version upgrade: <10ms per record
 
 ### Optimization Tips
+
 1. Use more parallel workers for CPU-bound transformations
 2. Increase batch size for simple transformations
 3. Use phased migration for very large datasets
@@ -323,6 +358,7 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 ## 🛡️ Error Handling
 
 ### Built-in Safety
+
 - ✓ Automatic backup before migration
 - ✓ Automatic rollback on failure
 - ✓ Detailed error logging
@@ -331,6 +367,7 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 - ✓ Resource cleanup in finally blocks
 
 ### Exception Handling
+
 - All try-catch blocks included
 - Error propagation with context
 - Rollback triggering
@@ -342,11 +379,13 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 ## 📝 Logging
 
 ### Log Locations
+
 - `C:\HELIOS\logs\migration_<id>.log` - Main migration logs
 - `C:\HELIOS\logs\bulk_migration_<timestamp>.log` - Bulk operations
 - `C:\HELIOS\logs\distributed_migration.log` - Parallel execution
 
 ### Log Format
+
 ```
 [2024-01-15 14:30:45.123] [migration-id] Starting upgrade: v1->v2
 [2024-01-15 14:30:45.456] [migration-id] Progress: 50% (500/1000) - Rate: 1234.56 items/sec - ETA: 45s
@@ -358,11 +397,13 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 ## 📦 Installation
 
 ### Prerequisites
+
 - PowerShell 5.1+
 - No external dependencies
 - Disk space for backups
 
 ### Setup
+
 1. Copy all files to `C:\HELIOS\`
 2. Create `C:\HELIOS\logs\` directory
 3. Create `C:\HELIOS\backups\` directory
@@ -373,6 +414,7 @@ Write-Host "Completed: $($result.PhasesCompleted)/$($result.PhasesTotal) phases"
 ## 🧪 Testing
 
 ### Run Examples
+
 ```powershell
 . C:\HELIOS\migration-examples.ps1
 
@@ -434,12 +476,14 @@ Invoke-GenerateReport
 ## 🆘 Support & Troubleshooting
 
 ### Common Issues
+
 1. Migration fails → Check logs in `C:\HELIOS\logs\`
 2. Slow performance → Enable parallel execution
 3. Data conflicts → Review conflict log
 4. Restore from backup → Use BackupManager.RestoreBackup()
 
 ### Resources
+
 - **Guide**: `MIGRATION_GUIDE.md`
 - **Examples**: `migration-examples.ps1`
 - **Architecture**: `MIGRATION_TOOLS_SUMMARY.md`

@@ -14,6 +14,7 @@
 **Cause:** {{CAUSE_1}}
 
 **Solution:**
+
 ```powershell
 {{SOLUTION_1}}
 ```
@@ -25,6 +26,7 @@
 **Symptoms:** {{SYMPTOM_2}}
 
 **Solution:**
+
 ```powershell
 {{SOLUTION_2}}
 ```

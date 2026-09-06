@@ -29,17 +29,20 @@ C:\Users\ADMIN\helios-platform\
 ## Common Commands
 
 ### Initialize
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\utilities\wiki
 .\wiki-orchestrate.ps1 -Action init
 ```
 
 ### Full Regeneration
+
 ```powershell
 .\wiki-orchestrate.ps1 -Action full
 ```
 
 ### Quick Search
+
 ```powershell
 .\wiki-search.ps1 -Query "keyword"
 .\wiki-search.ps1 -SearchType orphaned
@@ -47,11 +50,13 @@ cd C:\Users\ADMIN\helios-platform\scripts\utilities\wiki
 ```
 
 ### Validate
+
 ```powershell
 .\check-cross-references.ps1 -GenerateReport
 ```
 
 ### Map Dependencies
+
 ```powershell
 .\map-dependencies.ps1 -OutputFormat all
 ```
@@ -124,22 +129,26 @@ Level 1: Project Overview (INDEX.md)
 ## Tips & Tricks
 
 ### Search for high-complexity files
+
 ```powershell
 .\wiki-search.ps1 -SearchType complexity -Query "advanced"
 ```
 
 ### Find files with no documentation
+
 ```powershell
 .\wiki-search.ps1 -SearchType sql -Query `
   "SELECT * FROM files WHERE documented=0"
 ```
 
 ### Export to CSV
+
 ```powershell
 .\wiki-search.ps1 -SearchType orphaned -Format csv
 ```
 
 ### View dependency graph in browser
+
 ```powershell
 # Generate DOT file, then use online viewer:
 # http://www.webgraphviz.com/
@@ -147,12 +156,14 @@ Level 1: Project Overview (INDEX.md)
 ```
 
 ### Circular dependency details
+
 ```powershell
 .\check-cross-references.ps1 -CheckCircular -GenerateReport
 # Check: docs/cross-reference-report.md
 ```
 
 ### Update after code changes (incremental)
+
 ```powershell
 .\wiki-orchestrate.ps1 -Action generate -Incremental
 .\check-cross-references.ps1 -ValidateFiles
@@ -161,6 +172,7 @@ Level 1: Project Overview (INDEX.md)
 ## Metadata Example
 
 Create `script.ps1.meta.json`:
+
 ```json
 {
   "category": "Scripts/Build",
@@ -185,15 +197,19 @@ Create `script.ps1.meta.json`:
 ## Integration Points
 
 ### Build System
+
 - Get components: `.\wiki-search.ps1 -SearchType sql -Query "SELECT * FROM files WHERE build_inclusion='standard'"`
 
 ### CI/CD Pipeline
+
 - Regenerate: `.\wiki-orchestrate.ps1 -Action full`
 
 ### Documentation Sites
+
 - Output: `docs/wiki/` (Markdown files)
 
 ### Analysis Tools
+
 - Export: `.\wiki-search.ps1 -Format json` or `-Format csv`
 
 ---

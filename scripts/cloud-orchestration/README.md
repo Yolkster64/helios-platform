@@ -29,6 +29,7 @@ helios-platform/scripts/cloud-orchestration/
 **Coordinates synchronization and failover between environments**
 
 #### Scripts:
+
 - **sync-local-to-cloud.ps1** (16KB)
   - Bi-directional synchronization: Users, Groups, Devices
   - SharePoint content sync
@@ -116,7 +117,9 @@ helios-platform/scripts/cloud-orchestration/
 ## Configuration Files
 
 ### cloud-orchestration-config.json
+
 Master configuration for all orchestration services:
+
 - Azure subscription settings
 - Microsoft 365 tenant details
 - Synchronization parameters
@@ -128,7 +131,9 @@ Master configuration for all orchestration services:
 - Cost management
 
 ### cloud-auth-config.json
+
 Authentication & security configuration:
+
 - Authentication methods (PHS, PTA, Federation)
 - MFA settings
 - Conditional Access policies
@@ -137,7 +142,9 @@ Authentication & security configuration:
 - Session management
 
 ### sync-policies.json
+
 Synchronization rules and policies:
+
 - Sync direction and cycle times
 - Conflict resolution strategies
 - User/group/device sync settings
@@ -145,7 +152,9 @@ Synchronization rules and policies:
 - Failover conditions
 
 ### compliance-policies.json
+
 Compliance framework configuration:
+
 - Data classification schemes
 - DLP policy definitions
 - Retention labels
@@ -156,6 +165,7 @@ Compliance framework configuration:
 ## Quick Start
 
 ### Prerequisites
+
 - Windows Server 2019+ with PowerShell 5.1+
 - Azure subscription with appropriate permissions
 - Microsoft 365 tenant admin access
@@ -165,11 +175,13 @@ Compliance framework configuration:
 ### Setup
 
 1. **Clone/Download HELIOS**
+
    ```powershell
    cd C:\Users\ADMIN\helios-platform\scripts\cloud-orchestration
    ```
 
 2. **Update Configuration**
+
    ```powershell
    # Edit config/cloud-orchestration-config.json
    $config = Get-Content .\config\cloud-orchestration-config.json | ConvertFrom-Json
@@ -178,12 +190,14 @@ Compliance framework configuration:
    ```
 
 3. **Run Setup Orchestration**
+
    ```powershell
    .\hybrid-identity\setup-hybrid-identity.ps1 -EnvironmentType FullSync
    .\hybrid-identity\manage-hybrid-auth.ps1 -AuthMethod All
    ```
 
 4. **Start Synchronization**
+
    ```powershell
    .\orchestrator\sync-local-to-cloud.ps1 -Environment Production -SyncType Full
    ```
@@ -191,31 +205,37 @@ Compliance framework configuration:
 ## Usage Examples
 
 ### Sync On-Premises to Cloud
+
 ```powershell
 PS> .\orchestrator\sync-local-to-cloud.ps1 -Environment Production -SyncType Incremental
 ```
 
 ### Monitor Environment Health
+
 ```powershell
 PS> .\orchestrator\monitor-both-environments.ps1 -CheckHealth All -ContinuousMonitoring
 ```
 
 ### Execute Automatic Failover
+
 ```powershell
 PS> .\orchestrator\auto-failover.ps1 -FailoverStrategy Hybrid -RtoSeconds 300
 ```
 
 ### Balance Workloads
+
 ```powershell
 PS> .\orchestrator\load-balancer.ps1 -BalancingStrategy Auto -MaxCloudCost 100
 ```
 
 ### Generate Compliance Report
+
 ```powershell
 PS> .\compliance\compliance-reports.ps1 -ReportPeriod Weekly
 ```
 
 ### Get AI Recommendations
+
 ```powershell
 PS> .\ai-cloud\ai-recommendations.ps1
 ```
@@ -223,6 +243,7 @@ PS> .\ai-cloud\ai-recommendations.ps1
 ## Features
 
 ### Core Capabilities
+
 ✅ **Bi-directional Synchronization** - Users, groups, devices, data  
 ✅ **Automatic Failover** - RTO/RPO compliant failover orchestration  
 ✅ **Unified Monitoring** - Real-time health across all environments  
@@ -233,6 +254,7 @@ PS> .\ai-cloud\ai-recommendations.ps1
 ✅ **AI Automation** - Copilot orchestration, recommendations, remediation  
 
 ### Enterprise Features
+
 - **High Availability** - Multi-site failover with automatic health detection
 - **Disaster Recovery** - RTO/RPO optimization
 - **Cost Optimization** - Intelligent resource allocation
@@ -244,6 +266,7 @@ PS> .\ai-cloud\ai-recommendations.ps1
 ## Error Handling
 
 All scripts include comprehensive error handling:
+
 - Try-catch blocks for exception handling
 - Detailed error messages and logging
 - Automatic retry mechanisms with exponential backoff
@@ -253,6 +276,7 @@ All scripts include comprehensive error handling:
 ## Logging & Reporting
 
 **Logs Stored**: `./logs/`
+
 - Sync operations
 - Failover events
 - Health assessments
@@ -260,6 +284,7 @@ All scripts include comprehensive error handling:
 - Audit trails
 
 **Reports Generated**: `./reports/`
+
 - Health reports (JSON)
 - Compliance reports
 - Cost analysis
@@ -269,6 +294,7 @@ All scripts include comprehensive error handling:
 ## Performance
 
 **Optimization**:
+
 - Batch processing: 100+ objects per batch
 - Configurable retry logic
 - Incremental sync capability
@@ -276,6 +302,7 @@ All scripts include comprehensive error handling:
 - Parallel processing where applicable
 
 **Scalability**:
+
 - Tested with 1000s of users
 - Millions of files/documents
 - Enterprise-scale deployments
@@ -284,6 +311,7 @@ All scripts include comprehensive error handling:
 ## Security
 
 **Data Protection**:
+
 - Encryption in transit (TLS/SSL)
 - Data at rest encryption support
 - Credential management via Azure Key Vault
@@ -291,6 +319,7 @@ All scripts include comprehensive error handling:
 - MFA enforcement
 
 **Access Control**:
+
 - Role-based access control
 - Conditional access policies
 - Device compliance requirements
@@ -300,6 +329,7 @@ All scripts include comprehensive error handling:
 ## Monitoring & Alerting
 
 **Metrics Tracked**:
+
 - CPU, memory, disk usage
 - Network bandwidth
 - Sync success/failure rates
@@ -308,6 +338,7 @@ All scripts include comprehensive error handling:
 - Error rates
 
 **Alerting**:
+
 - Real-time alerts on failures
 - Health threshold monitoring
 - Cost overrun warnings
@@ -319,6 +350,7 @@ All scripts include comprehensive error handling:
 ### Common Issues
 
 **Sync Failing**
+
 ```powershell
 # Check connectivity
 Test-NetConnection -ComputerName 8.8.8.8
@@ -331,6 +363,7 @@ Get-Content .\logs\sync-*.json | ConvertFrom-Json
 ```
 
 **Failover Not Triggering**
+
 ```powershell
 # Check health thresholds
 .\orchestrator\monitor-both-environments.ps1 -CheckHealth All
@@ -340,6 +373,7 @@ Get-Content .\config\cloud-orchestration-config.json | ConvertFrom-Json | Select
 ```
 
 **Authentication Issues**
+
 ```powershell
 # Verify hybrid identity setup
 .\hybrid-identity\setup-hybrid-identity.ps1 -EnvironmentType FullSync
@@ -372,6 +406,7 @@ Built with comprehensive error handling, security, compliance, and scalability
 ## Change Log
 
 **v1.0.0** (Current)
+
 - Initial release with all 5 modules
 - 25+ production-ready scripts
 - Full compliance framework

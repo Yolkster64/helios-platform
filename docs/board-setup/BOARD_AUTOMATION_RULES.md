@@ -17,7 +17,7 @@
 6. [Rule 4: Auto-Assign Tier Based on Component](#rule-4-auto-assign-tier-based-on-component)
 7. [Automation Configuration Guide](#automation-configuration-guide)
 8. [Troubleshooting Automation](#troubleshooting-automation)
-9. [Performance & Scaling](#performance--scaling)
+9. [Performance & Scaling](#performance-considerations)
 
 ---
 
@@ -104,12 +104,14 @@ Rule 3 (Auto-Complete) ←─ Triggered by PR merge
 ### Automation Error Handling
 
 **Graceful Degradation:**
+
 - If rule fails, issue is flagged with "automation-failed" label
 - Manual override possible by editing field directly
 - System retries failed rules every 5 minutes for 1 hour
 - Failed rules logged for troubleshooting
 
 **Conflict Resolution:**
+
 - Multiple rules trigger: Execute in order (1 → 4 → 2 → 3)
 - Field conflicts: Manual field always takes precedence
 - Circular dependencies: Prevented by rule sequencing
@@ -119,6 +121,7 @@ Rule 3 (Auto-Complete) ←─ Triggered by PR merge
 ## Rule 1: Auto-Assign Phases Based on Labels
 
 ### Purpose
+
 Automatically assign the Status Phase field based on GitHub labels applied to issues.
 
 ### Rule Configuration
@@ -151,6 +154,7 @@ Automatically assign the Status Phase field based on GitHub labels applied to is
 ### Setup Instructions
 
 **Step 1: Create Labels in Repository**
+
 ```bash
 # In GitHub repository settings > Labels
 Create label: phase-0 (Purple)
@@ -173,6 +177,7 @@ Create label: component-infrastructure (Gray)
 ```
 
 **Step 2: Configure GitHub Actions Workflow**
+
 ```yaml
 name: Auto-Assign Phase
 
@@ -250,6 +255,7 @@ Weekly Time Savings:          2-3 hours
 ### Troubleshooting Rule 1
 
 **Issue Not Assigned to Phase:**
+
 ```
 ✓ Verify label exists in repository
 ✓ Verify label name matches exactly (case-sensitive)
@@ -259,6 +265,7 @@ Weekly Time Savings:          2-3 hours
 ```
 
 **Wrong Phase Assigned:**
+
 ```
 ✓ Check label applied matches intended phase
 ✓ Verify automation rule logic correct
@@ -271,12 +278,14 @@ Weekly Time Savings:          2-3 hours
 ## Rule 2: Auto-Update Status on PR Activity
 
 ### Purpose
+
 Automatically update issue status when linked PR changes status (created, reviewed, merged, etc.).
 
 ### Rule Configuration
 
 **Trigger:** PR linked to issue changes status
 **Conditions:**
+
 - PR created → Move to "In Progress"
 - PR marked ready for review → Move to "Review"
 - PR approved → Stay in "Review" (ready to merge)
@@ -298,6 +307,7 @@ Automatically update issue status when linked PR changes status (created, review
 ### Setup Instructions
 
 **Step 1: Enable PR Linking**
+
 ```
 In GitHub Issue:
 1. Mention PR in issue description: "Fixes #123" in PR body
@@ -306,6 +316,7 @@ In GitHub Issue:
 ```
 
 **Step 2: Setup Automation Workflow**
+
 ```yaml
 name: Auto-Update Status on PR Activity
 
@@ -385,12 +396,14 @@ Step 5: PR Merged
 ### Integration Points
 
 **Slack Notifications:**
+
 ```
 When PR status changes, post to #development:
 "PR #789 (Feature: Auth) moved to Review - Issue #456 updated"
 ```
 
 **Email Notifications:**
+
 ```
 Assigned team member receives email:
 "PR #789 merged - Issue #456 ready for completion"
@@ -412,11 +425,13 @@ Weekly Time Savings:            1-1.5 hours
 ## Rule 3: Auto-Move to Done on Completion
 
 ### Purpose
+
 Automatically move issues to Done when all completion criteria are met (PR merged, acceptance criteria checked, etc.).
 
 ### Rule Configuration
 
 **Trigger:** Multiple conditions must all be true:
+
 1. Issue in "Review" column
 2. Linked PR is merged
 3. All acceptance criteria checkboxes checked
@@ -586,6 +601,7 @@ Weekly Time Savings:            15-20 minutes
 ### Troubleshooting Rule 3
 
 **Issue Not Moving to Done:**
+
 ```
 Verify all conditions met:
 1. ✓ Issue in Review column
@@ -606,6 +622,7 @@ If all true but not moving:
 ## Rule 4: Auto-Assign Tier Based on Component
 
 ### Purpose
+
 Automatically classify issues into appropriate tier levels based on component, priority, and effort.
 
 ### Tier Assignment Logic
@@ -734,6 +751,7 @@ Issue 4: "UI button styling"
 ### Metrics & Reports
 
 **Tier Distribution Report:**
+
 ```
 Professional Tier:   60% of issues (120)
 Enterprise Tier:     25% of issues (50)
@@ -749,6 +767,7 @@ Ultimate Tier Progress:      10% complete
 ### Tier View Impact
 
 When tier is assigned, issue automatically appears in:
+
 - Tier-specific board view
 - Tier-based reports
 - Tier roadmaps
@@ -827,6 +846,7 @@ When tier is assigned, issue automatically appears in:
 ### Common Issues & Solutions
 
 **Issue: Automation not triggering**
+
 ```
 Check:
 1. Is the trigger condition met?
@@ -844,6 +864,7 @@ Solution:
 ```
 
 **Issue: Wrong field updated**
+
 ```
 Check:
 1. Is the automation logic correct?
@@ -860,6 +881,7 @@ Solution:
 ```
 
 **Issue: Manual field changes not preserved**
+
 ```
 Check:
 1. Manual changes overwritten by automation?
@@ -877,16 +899,19 @@ Solution:
 ### Performance Considerations
 
 **Automation Latency:**
+
 - Average Rule Execution Time: 1-2 seconds
 - Maximum Acceptable Latency: 5 seconds
 - Current Performance: 98% under 2 seconds
 
 **Load Handling:**
+
 - Peak Operations Per Hour: 500 (typical ~200)
 - System Scales To: 2000+ operations/hour
 - Queue Management: Automatic backoff if backed up
 
 **Optimization Tips:**
+
 - Batch label updates to reduce rule runs
 - Use specific triggers instead of broad conditions
 - Archive old completed issues to reduce processing
@@ -936,6 +961,7 @@ if: false  # Disables the job
 ```
 
 To re-enable:
+
 ```yaml
 if: true  # Enables the job (or remove the if clause)
 ```
@@ -987,6 +1013,7 @@ Overall:
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Status: Production Ready

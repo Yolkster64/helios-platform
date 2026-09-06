@@ -9,6 +9,7 @@
 ## 🎯 What You'll Learn
 
 By the end of this guide, you will:
+
 - ✅ Understand what HELIOS Platform is and its key features
 - ✅ Install HELIOS Platform on your system
 - ✅ Perform your first deployment
@@ -115,6 +116,7 @@ helios start
 ### Access the Dashboard
 
 Open your browser and navigate to:
+
 ```
 http://localhost:8080
 ```
@@ -293,7 +295,7 @@ helios logs SystemMonitor --error-only
 
 ---
 
-**Congratulations!** 🎉 You've successfully set up HELIOS Platform. 
+**Congratulations!** 🎉 You've successfully set up HELIOS Platform.
 
 **Next:** Explore the [User Guides](../user-guides/README.md) or continue learning with the [Architecture Guide](../architecture/README.md).
 

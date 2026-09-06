@@ -1,6 +1,7 @@
 # HELIOS Platform Installation & Integration Guide
 
 ## Table of Contents
+
 1. [Installation Guide](#installation-guide)
 2. [Shell Extension Integration](#shell-extension-integration)
 3. [System Tray Application](#system-tray-application)
@@ -73,6 +74,7 @@ For USB or portable media deployment:
 The shell extension adds "Open with HELIOS Platform" to file context menus.
 
 #### Automatic Registration
+
 The Install-HELIOS.ps1 script handles registration automatically when `-EnableShellExtension` is used.
 
 #### Manual Registration
@@ -161,26 +163,31 @@ Install the HELIOS background service:
 ### Service Management
 
 #### Start Service
+
 ```powershell
 .\Manage-Service.ps1 -Start
 ```
 
 #### Stop Service
+
 ```powershell
 .\Manage-Service.ps1 -Stop
 ```
 
 #### Check Status
+
 ```powershell
 .\Manage-Service.ps1 -Status
 ```
 
 #### Enable Auto-Start
+
 ```powershell
 .\Manage-Service.ps1 -AutoStart
 ```
 
 #### Uninstall Service
+
 ```powershell
 .\Manage-Service.ps1 -Uninstall
 ```
@@ -188,12 +195,14 @@ Install the HELIOS background service:
 ### Service Recovery
 
 The installer automatically configures service recovery:
+
 - **Restart on failure**: After 60 seconds
 - **Max restarts**: 3 attempts within 24 hours
 
 ### Service Logs
 
 Check service logs in Event Viewer:
+
 - **Log**: System
 - **Source**: HeliosPlatformService
 
@@ -208,6 +217,7 @@ Check service logs in Event Viewer:
 ```
 
 Displays:
+
 - Drive letters and labels
 - File systems
 - Total/Used/Free space
@@ -220,6 +230,7 @@ Displays:
 ```
 
 Shows:
+
 - Low disk space warnings
 - System drive optimization suggestions
 - Partition defragmentation status
@@ -239,6 +250,7 @@ Shows:
 ```
 
 Performs:
+
 - NTFS defragmentation
 - SSD TRIM operations
 - Volume optimization
@@ -281,6 +293,7 @@ var printers = SystemDetector.GetPrinters();
 ### System Requirements Check
 
 HELIOS requires:
+
 - ✓ Windows 11 Professional or Enterprise
 - ✓ 5 GB free disk space
 - ✓ 4 GB RAM
@@ -297,6 +310,7 @@ HELIOS requires:
 ```
 
 Interactive uninstaller with options:
+
 - [C]ontinue - Proceed immediately
 - [B]ackup first - Create backup before removing
 - [E]xit - Cancel
@@ -325,6 +339,7 @@ Interactive uninstaller with options:
 ### Backup Preservation
 
 By default, a backup is created:
+
 ```
 C:\Program Files\HELIOS Platform.backup.20240115_143022
 ```
@@ -366,6 +381,7 @@ The HELIOS installer supports installing individual components:
 ### Registry Customization
 
 Key registry locations:
+
 ```
 HKLM:\SOFTWARE\HELIOS Platform
 HKCU:\Software\Classes\*\shell\HELIOS
@@ -379,16 +395,19 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ### Installation Fails
 
 1. **Check Administrator Rights**
+
    ```powershell
    [Security.Principal.WindowsIdentity]::GetCurrent().Groups -contains 'S-1-5-32-544'
    ```
 
 2. **Check Disk Space**
+
    ```powershell
    Get-Volume | Where-Object { $_.DriveLetter -eq 'C' }
    ```
 
 3. **Check Installation Log**
+
    ```powershell
    Get-Content "$env:TEMP\HELIOS_Install_*.log" -Tail 50
    ```
@@ -396,16 +415,19 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ### Service Won't Start
 
 1. **Check Service Status**
+
    ```powershell
    Get-Service HeliosPlatformService
    ```
 
 2. **View Event Logs**
+
    ```powershell
    Get-EventLog System | Where-Object { $_.Source -eq 'HeliosPlatformService' }
    ```
 
 3. **Check Service Executable**
+
    ```powershell
    Test-Path "C:\Program Files\HELIOS Platform\HELIOS.Platform.Service.exe"
    ```
@@ -413,16 +435,19 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ### Context Menu Not Appearing
 
 1. **Verify Registration**
+
    ```powershell
    Test-Path 'HKCU:\Software\Classes\*\shell\HELIOS'
    ```
 
 2. **Re-register Extensions**
+
    ```powershell
    .\Install-HELIOS.ps1 -EnableShellExtension
    ```
 
 3. **Explorer Restart**
+
    ```powershell
    Stop-Process -Name explorer -Force
    Start-Process explorer
@@ -431,11 +456,13 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ### Tray Application Crashes
 
 1. **Check Application Log**
+
    ```powershell
    Get-EventLog Application | Where-Object { $_.Source -match 'HELIOS' }
    ```
 
 2. **Try Standalone**
+
    ```powershell
    & "C:\Program Files\HELIOS Platform\HELIOS.Platform.Tray.exe" -debug
    ```
@@ -445,6 +472,7 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ## Support & Documentation
 
 For additional help:
+
 - Check log files in `%TEMP%\HELIOS_*.log`
 - Review Event Viewer for system events
 - Consult SYSTEM_REQUIREMENTS.md for detailed requirements

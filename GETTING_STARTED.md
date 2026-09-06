@@ -5,6 +5,7 @@
 The HELIOS Platform v2 brings enterprise-grade collaboration and deployment infrastructure:
 
 ### 🎉 New Features
+
 - **GitHub Project Board** - Centralized task management and progress tracking
 - **4 GitHub Actions Workflows** - Automated CI/CD pipeline (multi-repo-sync, component-version-check, build-all-modules, build-variant-test)
 - **GitHub Codespaces** - Full development environment in the cloud (no local setup needed)
@@ -12,6 +13,7 @@ The HELIOS Platform v2 brings enterprise-grade collaboration and deployment infr
 - **Team Collaboration Ready** - Real-time issue tracking and code review
 
 ### 🔗 Quick Links to v2 Resources
+
 - **GitHub Project**: https://github.com/orgs/M0nado/projects/3
 - **GitHub Codespaces**: https://github.com/codespaces
 - **GitHub Actions**: https://github.com/M0nado/helios-platform/actions
@@ -21,11 +23,13 @@ The HELIOS Platform v2 brings enterprise-grade collaboration and deployment infr
 ## 🎯 Your First 15 Minutes
 
 ### Step 1: Read This Document (5 minutes)
+
 You're doing it now! ✓
 
 ### Step 2: Understand the 4 Phases (5 minutes)
 
 **Phase 0: Foundation** (3-4 hours)
+
 - Create bootable USB
 - Install fresh Windows
 - Partition drives
@@ -33,6 +37,7 @@ You're doing it now! ✓
 - **Result:** Clean Windows installation
 
 **Phase 1: Security** (2-3 hours)
+
 - Lock down AppLocker
 - Configure firewall
 - Setup encryption vault
@@ -40,6 +45,7 @@ You're doing it now! ✓
 - **Result:** Protected system
 
 **Phase 2: Optimization** (4-6 hours)
+
 - Disable unnecessary services
 - Speed up startup
 - Optimize resources
@@ -47,6 +53,7 @@ You're doing it now! ✓
 - **Result:** Fast system
 
 **Phase 3: Capability** (6-8 hours)
+
 - Add intelligent dashboard
 - Enable AI learning
 - Setup auto-healing
@@ -56,6 +63,7 @@ You're doing it now! ✓
 ### Step 3: Pick Your Path (5 minutes)
 
 **Option A: Fresh Start (Most People)**
+
 ```powershell
 # Start at Phase 0 (takes 3-4 hours)
 cd C:\Users\ADMIN\helios-platform\phases\0-foundation
@@ -64,6 +72,7 @@ notepad README.md
 ```
 
 **Option B: Security Focus**
+
 ```powershell
 # Start at Phase 1 (need Phase 0 first)
 cd C:\Users\ADMIN\helios-platform\phases\1-security
@@ -72,6 +81,7 @@ notepad README.md
 ```
 
 **Option C: Performance Focus**
+
 ```powershell
 # Start at Phase 2 (need Phase 0 & 1 first)
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization
@@ -80,6 +90,7 @@ notepad README.md
 ```
 
 **Option D: Full Setup**
+
 ```powershell
 # Run all phases in order
 cd C:\Users\ADMIN\helios-platform
@@ -87,6 +98,7 @@ cd C:\Users\ADMIN\helios-platform
 ```
 
 **Option E: Just Add a Component**
+
 ```powershell
 # Install just one component (no phases required)
 cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
@@ -149,6 +161,7 @@ This is what happens when you run Phase 0:
    - Creates system baseline
 
 ### Phase 0 Result
+
 - ✅ Clean Windows 11 Pro
 - ✅ Properly partitioned drives
 - ✅ Organized folder structure
@@ -182,6 +195,7 @@ Day 50+: Consider Phase 3 if you want AI features
 Before you start **each phase**, make sure:
 
 **General (every phase):**
+
 - [ ] I've read the phase README
 - [ ] I understand what will change
 - [ ] I have the time available (look at "Time" column above)
@@ -189,11 +203,13 @@ Before you start **each phase**, make sure:
 - [ ] I'm on administrator account
 
 **Phase 0 specific:**
+
 - [ ] I have 50+ GB free space
 - [ ] I have USB drive for installation media
 - [ ] I understand it's a FRESH install (computer will be wiped)
 
 **Phase 1+ specific:**
+
 - [ ] Previous phase completed successfully
 - [ ] System is functioning normally
 - [ ] I understand what security changes will be made
@@ -203,17 +219,21 @@ Before you start **each phase**, make sure:
 ## 🆘 Need Help?
 
 ### For Each Phase
+
 - **README.md** - Overview & requirements
 - **PLAIN_ENGLISH_GUIDE.md** - What each script does
 - **TESTING_GUIDE.md** - How to verify it worked
 
 ### For File Locations
+
 - **file-architecture/README.md** - Where files go
 
 ### For Troubleshooting
+
 - **tests/TROUBLESHOOTING_TESTS.md** - Diagnostic tests
 
 ### For Rollback
+
 - **phases/[X]/README.md** - Undo instructions
 
 ---
@@ -221,24 +241,29 @@ Before you start **each phase**, make sure:
 ## 🎓 Recommended Reading Order
 
 ### Before You Start (Required - 30 min total)
+
 1. [ ] This file (GETTING_STARTED.md) - 5 min
 2. [ ] README.md - 10 min
 3. [ ] phases/0-foundation/README.md - 5 min
 4. [ ] docs/PLAIN_ENGLISH_GUIDE.md - 10 min
 
 ### Before Phase 0 (Required - 15 min)
+
 5. [ ] file-architecture/PHASE_0_FILE_LOCATIONS.md - 10 min
 6. [ ] phases/0-foundation/PLAIN_ENGLISH_GUIDE.md - 5 min
 
 ### Before Phase 1 (Required - 15 min)
+
 7. [ ] phases/1-security/README.md - 5 min
 8. [ ] phases/1-security/PLAIN_ENGLISH_GUIDE.md - 10 min
 
 ### Before Phase 2 (Required - 15 min)
+
 9. [ ] phases/2-optimization/README.md - 5 min
 10. [ ] phases/2-optimization/PLAIN_ENGLISH_GUIDE.md - 10 min
 
 ### Before Phase 3 (Optional - for advanced users - 15 min)
+
 11. [ ] phases/3-capability/README.md - 5 min
 12. [ ] phases/3-capability/PLAIN_ENGLISH_GUIDE.md - 10 min
 
@@ -272,24 +297,28 @@ A: Rollback using the phase's rollback script. System snapshots available for fu
 ## 🚀 Ready to Start?
 
 ### For Fresh Install
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 notepad README.md
 ```
 
 ### For Just Security
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\1-security
 notepad README.md
 ```
 
 ### For Just Performance
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization
 notepad README.md
 ```
 
 ### For Everything
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform
 ./setup-all-phases.ps1

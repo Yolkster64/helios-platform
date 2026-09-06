@@ -3,6 +3,7 @@
 ## Getting Started
 
 ### Register Services
+
 ```csharp
 var services = new ServiceCollection();
 services.AddEcosystemServices();
@@ -10,6 +11,7 @@ var provider = services.BuildServiceProvider();
 ```
 
 ### Use Services
+
 ```csharp
 var marketplace = provider.GetRequiredService<IMarketplaceIntegration>();
 var apiMarket = provider.GetRequiredService<IAPIMarketplace>();
@@ -20,6 +22,7 @@ var partners = provider.GetRequiredService<IPartnerNetworking>();
 ## Core Operations
 
 ### MarketplaceIntegration
+
 ```csharp
 // Discover plugins
 var plugins = await marketplace.DiscoverPluginsAsync("Security");
@@ -35,6 +38,7 @@ var updateResult = await marketplace.UpdatePluginAsync("plugin-001", "2.0.0");
 ```
 
 ### APIMarketplace
+
 ```csharp
 // Publish API
 var api = new APIDefinition { Id = "api-001", Name = "Test API", ... };
@@ -52,6 +56,7 @@ var metrics = await apiMarket.GetUsageMetricsAsync("sub-001", startDate, endDate
 ```
 
 ### SLAMarketplace
+
 ```csharp
 // Create SLA template
 var template = new SLATemplate { Id = "sla-001", Name = "Premium SLA", ... };
@@ -69,6 +74,7 @@ var perfMetrics = await slaMarket.GetPerformanceMetricsAsync("agr-001", start, e
 ```
 
 ### PartnerNetworking
+
 ```csharp
 // Register partner
 var partnerInfo = new PartnerInfo { OrganizationName = "Partner Corp", ... };
@@ -93,12 +99,14 @@ var revenueResult = await partners.SetupRevenueSharingAsync("pship-001", revenue
 ## Test Coverage
 
 All 31 tests pass:
+
 - MarketplaceIntegration: 10 tests
 - APIMarketplace: 7 tests
 - SLAMarketplace: 6 tests
 - PartnerNetworking: 8 tests
 
 Run tests:
+
 ```bash
 dotnet test tests/HELIOS.Platform.Tests.csproj
 ```
@@ -129,20 +137,24 @@ dotnet pack src/HELIOS.Platform/HELIOS.Platform.csproj
 ## Troubleshooting
 
 **Operations timing out?**
+
 - Increase CancellationToken timeout
 - Check logging for details
 
 **Thread-safety issues?**
+
 - All operations are designed to be thread-safe
 - Use ConfigureAwait(false) in libraries
 
 **Need custom configuration?**
+
 - Use EcosystemServiceOptions to customize
 - Pass to AddEcosystemServices()
 
 ## Support
 
 For issues, check:
+
 1. Log output (enable debug logging)
 2. Test cases for usage examples
 3. XML documentation in Visual Studio IntelliSense

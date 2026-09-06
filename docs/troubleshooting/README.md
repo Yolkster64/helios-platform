@@ -82,6 +82,7 @@ helios component list
 ```
 
 **Common Causes**:
+
 - Component not available
 - Insufficient resources
 - Configuration error
@@ -114,6 +115,7 @@ helios cache clear
 ```
 
 **Prevention**:
+
 - Monitor regularly with `helios metrics`
 - Review [Performance Tuning Guide](../user-guides/PERFORMANCE.md)
 
@@ -358,6 +360,7 @@ helios diagnose --output=report.zip
 ### Contact Support
 
 Include:
+
 1. HELIOS version (`helios --version`)
 2. Error message and code
 3. Steps to reproduce

@@ -5,6 +5,7 @@
 ## Prerequisites
 
 ### Required Modules
+
 ```powershell
 # Install Microsoft Graph modules
 Install-Module Microsoft.Graph.Identity -Force
@@ -18,6 +19,7 @@ Update-Module Microsoft.Graph -Force
 ```
 
 ### Required Permissions
+
 - Global Administrator (for initial setup)
 - Authentication Policy Administrator
 - Security Administrator

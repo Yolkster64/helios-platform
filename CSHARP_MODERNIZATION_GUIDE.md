@@ -1,6 +1,7 @@
 # C# Modernization & Best Practices Guide (25+ Patterns)
 
 ## Overview
+
 This guide covers 25+ C# modernization patterns and best practices for Phase 5-6 code generation. These patterns leverage modern C# features (C# 10+, .NET 6+) to improve code quality, performance, and maintainability.
 
 ---
@@ -8,6 +9,7 @@ This guide covers 25+ C# modernization patterns and best practices for Phase 5-6
 ## Pattern 1: Modern Language Features
 
 ### 1.1 Records Instead of Classes
+
 **Pattern:** Use records for immutable data transfer objects and value types.
 
 ```csharp
@@ -37,6 +39,7 @@ public record UserDto
 **Benefit:** 80% less boilerplate, built-in equality
 
 ### 1.2 Init-Only Properties
+
 **Pattern:** Use init to enforce immutability at construction.
 
 ```csharp
@@ -62,6 +65,7 @@ var order = new Order { Id = 1, Amount = 99.99m };
 **Benefit:** Thread-safe, prevents accidental mutation
 
 ### 1.3 Nullable Reference Types
+
 **Pattern:** Enable nullable annotations for safer code.
 
 ```csharp
@@ -90,6 +94,7 @@ public void SetUserName(User user, string name)
 **Benefit:** Eliminates null reference exceptions
 
 ### 1.4 Pattern Matching
+
 **Pattern:** Use modern pattern matching for type checking and filtering.
 
 ```csharp
@@ -125,6 +130,7 @@ public bool IsValidOrder(Order order) =>
 **Benefit:** More expressive, safer code
 
 ### 1.5 Target-Typed new()
+
 **Pattern:** Use new() without type specification.
 
 ```csharp
@@ -143,6 +149,7 @@ public void ProcessOrders(List<Order> orders = new()) { }
 **Benefit:** Less verbose, clearer intent
 
 ### 1.6 Global Using Statements
+
 **Pattern:** Use global using for common namespaces.
 
 ```csharp
@@ -165,6 +172,7 @@ public class OrderService
 **Benefit:** Cleaner files, shared namespaces
 
 ### 1.7 File-Scoped Namespaces
+
 **Pattern:** Use file-scoped namespaces for simpler structure.
 
 ```csharp
@@ -189,6 +197,7 @@ public class OrderService
 **Benefit:** Cleaner files, less indentation
 
 ### 1.8 Required Members (C# 11+)
+
 **Pattern:** Use required keyword for mandatory properties.
 
 ```csharp
@@ -208,6 +217,7 @@ var order = new Order { Id = 1, Amount = 99 };  // ✅ OK
 **Benefit:** Compile-time safety
 
 ### 1.9 Raw String Literals (C# 11+)
+
 **Pattern:** Use raw string literals for multi-line text.
 
 ```csharp
@@ -233,6 +243,7 @@ string query = """
 **Benefit:** Readable, no escaping
 
 ### 1.10 Top-Level Statements (C# 9+)
+
 **Pattern:** Use top-level statements for simple programs.
 
 ```csharp
@@ -258,6 +269,7 @@ async Task<IResult> GetOrders(IOrderService service)
 ## Pattern 2: Dependency Injection Excellence
 
 ### 2.1 IServiceCollection Registration
+
 **Pattern:** Use DI container for all service registration.
 
 ```csharp
@@ -282,6 +294,7 @@ public class OrderService
 **Benefit:** Loose coupling, testability
 
 ### 2.2 AddSingleton for Stateless Services
+
 **Pattern:** Register stateless services as singletons.
 
 ```csharp
@@ -294,6 +307,7 @@ builder.Services.AddSingleton<ILogger, ConsoleLogger>();
 **Benefit:** Single instance, lower memory
 
 ### 2.3 AddScoped for Request-Scoped Services
+
 **Pattern:** Register request-scoped services for HTTP contexts.
 
 ```csharp
@@ -306,6 +320,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 **Benefit:** Fresh instance per request
 
 ### 2.4 AddTransient for Stateful Services
+
 **Pattern:** Register stateful services as transient.
 
 ```csharp
@@ -317,6 +332,7 @@ builder.Services.AddTransient<IPasswordHasher, BcryptHasher>();
 **Benefit:** New instance every time
 
 ### 2.5 Factory Pattern with DI
+
 **Pattern:** Use factories for complex object creation.
 
 ```csharp
@@ -348,6 +364,7 @@ public class ServiceFactory : IServiceFactory
 **Benefit:** Complex initialization logic
 
 ### 2.6 Keyed Services (C# 11+)
+
 **Pattern:** Register multiple implementations with keys.
 
 ```csharp
@@ -371,6 +388,7 @@ public class NotificationHandler
 **Benefit:** Multiple implementations per interface
 
 ### 2.7 Service Lifetime Management
+
 **Pattern:** Understand service lifetime implications.
 
 ```csharp
@@ -391,6 +409,7 @@ builder.Services.Configure<OrderOptions>(config =>
 **Benefit:** Correct lifetime scoping
 
 ### 2.8 Service Provider Best Practices
+
 **Pattern:** Don't use service locator pattern.
 
 ```csharp
@@ -412,6 +431,7 @@ public class OrderController
 **Benefit:** Explicit dependencies, testability
 
 ### 2.9 Named Options
+
 **Pattern:** Use named options for multiple configurations.
 
 ```csharp
@@ -442,6 +462,7 @@ public class CacheService
 **Benefit:** Multiple configurations per interface
 
 ### 2.10 Validation in DI Configuration
+
 **Pattern:** Validate configuration during startup.
 
 ```csharp
@@ -462,6 +483,7 @@ builder.Services.AddOptions<OrderOptions>()
 ## Pattern 3: Async/Await Best Practices
 
 ### 3.1 Async All the Way
+
 **Pattern:** Use async throughout the call chain.
 
 ```csharp
@@ -489,6 +511,7 @@ public async Task<IActionResult> GetOrders()
 **Benefit:** Prevents thread starvation
 
 ### 3.2 Never Use .Result or .Wait()
+
 **Pattern:** Never block async code.
 
 ```csharp
@@ -509,6 +532,7 @@ public async Task<T> GetAsync() =>
 **Benefit:** Prevents deadlocks
 
 ### 3.3 ConfigureAwait(false) for Libraries
+
 **Pattern:** Use ConfigureAwait(false) to not capture context.
 
 ```csharp
@@ -537,6 +561,7 @@ public class OrderService
 **Benefit:** Better thread pool efficiency
 
 ### 3.4 Proper Exception Propagation
+
 **Pattern:** Let exceptions propagate naturally.
 
 ```csharp
@@ -575,6 +600,7 @@ public async Task<Order> GetOrderAsync(int id)
 **Benefit:** Proper error handling
 
 ### 3.5 CancellationToken Support
+
 **Pattern:** Accept and honor CancellationToken.
 
 ```csharp
@@ -608,6 +634,7 @@ public class OrderService
 **Benefit:** Proper cancellation support
 
 ### 3.6 Task.Run for Blocking Calls
+
 **Pattern:** Use Task.Run to offload blocking operations.
 
 ```csharp
@@ -627,6 +654,7 @@ public async Task<Report> GenerateReportAsync()
 **Benefit:** Doesn't block async context
 
 ### 3.7 ValueTask Optimization
+
 **Pattern:** Use ValueTask to avoid allocations.
 
 ```csharp
@@ -645,6 +673,7 @@ public ValueTask<Order> GetOrderAsync(int id)
 **Benefit:** Reduces allocation pressure
 
 ### 3.8 Async Enumerable Patterns
+
 **Pattern:** Use IAsyncEnumerable for streaming async data.
 
 ```csharp
@@ -670,6 +699,7 @@ await foreach (var order in GetOrdersAsync())
 **Benefit:** Streaming async data
 
 ### 3.9 Timeout Handling
+
 **Pattern:** Apply timeouts to async operations.
 
 ```csharp
@@ -693,6 +723,7 @@ public async Task<Order> GetOrderWithTimeoutAsync(int id)
 **Benefit:** Prevents hanging operations
 
 ### 3.10 Parallel Async Operations
+
 **Pattern:** Execute multiple async operations in parallel.
 
 ```csharp
@@ -717,6 +748,7 @@ public async Task<(Order, Customer, List<OrderItem>)> GetOrderDetailsAsync(int i
 ## Pattern 4: LINQ Excellence
 
 ### 4.1 Query vs Method Syntax Consistency
+
 **Pattern:** Choose query or method syntax consistently.
 
 ```csharp
@@ -737,6 +769,7 @@ var expensiveOrders = (from o in context.Orders
 **Benefit:** Code consistency
 
 ### 4.2 Fluent Chaining
+
 **Pattern:** Chain LINQ operators fluidly.
 
 ```csharp
@@ -753,6 +786,7 @@ var result = context.Orders
 **Benefit:** Readable, chainable operations
 
 ### 4.3 Type Inference
+
 **Pattern:** Let LINQ infer types.
 
 ```csharp
@@ -771,6 +805,7 @@ var summary = context.Orders
 **Benefit:** Less verbose code
 
 ### 4.4 Lazy Evaluation
+
 **Pattern:** Leverage lazy evaluation for performance.
 
 ```csharp
@@ -788,6 +823,7 @@ if (query.Any())
 **Benefit:** Deferred execution
 
 ### 4.5 Stream Processing
+
 **Pattern:** Process streams with yield for memory efficiency.
 
 ```csharp
@@ -808,6 +844,7 @@ public IEnumerable<ProcessedOrder> ProcessOrders()
 **Benefit:** Memory efficient
 
 ### 4.6 Parallel LINQ Where Appropriate
+
 **Pattern:** Use PLINQ for CPU-intensive operations.
 
 ```csharp
@@ -826,6 +863,7 @@ var results = data
 ## Pattern 5: Code Organization & SOLID
 
 ### 5.1 Single Responsibility Principle
+
 **Pattern:** One class, one reason to change.
 
 ```csharp
@@ -869,6 +907,7 @@ public class OrderService
 **Benefit:** Maintainability, testability
 
 ### 5.2 Open/Closed Principle
+
 **Pattern:** Open for extension, closed for modification.
 
 ```csharp
@@ -894,6 +933,7 @@ public class SmsNotification : INotificationService
 **Benefit:** Easy to extend
 
 ### 5.3 Liskov Substitution Principle
+
 **Pattern:** Subtypes must be substitutable for base types.
 
 ```csharp
@@ -924,6 +964,7 @@ public class NotificationHandler
 **Benefit:** Proper polymorphism
 
 ### 5.4 Interface Segregation Principle
+
 **Pattern:** Specific interfaces, not fat ones.
 
 ```csharp
@@ -959,6 +1000,7 @@ public interface IOrderReporting
 **Benefit:** Flexible composition
 
 ### 5.5 Dependency Inversion Principle
+
 **Pattern:** Depend on abstractions, not implementations.
 
 ```csharp
@@ -988,6 +1030,7 @@ public class OrderService
 **Benefit:** Testability, flexibility
 
 ### 5.6 DRY (Don't Repeat Yourself)
+
 **Pattern:** Extract common logic.
 
 ```csharp
@@ -1033,6 +1076,7 @@ public async Task<User> GetByNameAsync(string name) =>
 **Benefit:** Maintainability, consistency
 
 ### 5.7 Composition Over Inheritance
+
 **Pattern:** Favor composition for flexibility.
 
 ```csharp
@@ -1064,6 +1108,7 @@ var order = new Order
 **Benefit:** Flexibility, testability
 
 ### 5.8 Fail Fast
+
 **Pattern:** Validate early and throw meaningful exceptions.
 
 ```csharp
@@ -1090,6 +1135,7 @@ public void ProcessOrder(Order order)
 **Benefit:** Clear error messages
 
 ### 5.9 Abstraction Levels
+
 **Pattern:** Keep abstraction levels consistent.
 
 ```csharp
@@ -1123,6 +1169,7 @@ public class OrderService
 **Benefit:** Readability, maintainability
 
 ### 5.10 Clear Naming Conventions
+
 **Pattern:** Use clear, intention-revealing names.
 
 ```csharp
@@ -1156,6 +1203,7 @@ public class OrderProcessor
 ## Pattern 6: Documentation Best Practices
 
 ### 6.1 XML Documentation Comments
+
 **Pattern:** Document public APIs with XML comments.
 
 ```csharp
@@ -1177,6 +1225,7 @@ public async Task<Order> GetOrderAsync(int id)
 **Benefit:** IntelliSense support, documentation generation
 
 ### 6.2 Method Documentation
+
 **Pattern:** Document parameters, return values, and exceptions.
 
 ```csharp
@@ -1203,6 +1252,7 @@ public decimal CalculateTotalWithTax(Order order, decimal taxRate)
 **Benefit:** Clear API contracts
 
 ### 6.3 Complex Logic Comments
+
 **Pattern:** Comment why, not what.
 
 ```csharp
@@ -1236,6 +1286,7 @@ public decimal CalculateDiscount(Order order)
 ## Pattern 7: Error Handling & Logging
 
 ### 7.1 Structured Logging
+
 **Pattern:** Use structured logging with parameters.
 
 ```csharp
@@ -1255,6 +1306,7 @@ _logger.LogError(ex, "Failed to process order {OrderId}", order.Id);
 **Benefit:** Searchable logs, better analytics
 
 ### 7.2 Exception Specificity
+
 **Pattern:** Throw specific, meaningful exceptions.
 
 ```csharp
@@ -1270,6 +1322,7 @@ throw new ArgumentException($"Email format invalid: {email}", nameof(email));
 **Benefit:** Better error handling
 
 ### 7.3 Custom Exception Classes
+
 **Pattern:** Create domain-specific exceptions.
 
 ```csharp
@@ -1308,6 +1361,7 @@ public class InsufficientInventoryException : Exception
 ## Pattern 8: Testing Best Practices
 
 ### 8.1 Arrange-Act-Assert Pattern
+
 **Pattern:** Structure tests with AAA pattern.
 
 ```csharp
@@ -1330,6 +1384,7 @@ public async Task CreateOrder_WithValidData_ReturnsCreatedOrder()
 **Benefit:** Clear test structure
 
 ### 8.2 Descriptive Test Names
+
 **Pattern:** Name tests clearly about what they test.
 
 ```csharp
@@ -1348,6 +1403,7 @@ public async Task GetOrder_WhenIdIsInvalid_ThrowsArgumentException(int invalidId
 **Benefit:** Self-documenting tests
 
 ### 8.3 Mock Dependencies
+
 **Pattern:** Use mocks to isolate units.
 
 ```csharp

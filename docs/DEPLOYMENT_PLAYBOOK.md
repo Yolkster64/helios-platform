@@ -3,6 +3,7 @@
 ## 📋 Executive Summary
 
 This playbook provides step-by-step procedures for deploying the HELIOS Platform v1.0.0 in various scenarios:
+
 - **NuGet Package Installation** (developers)
 - **Standalone Executable Deployment** (operations)
 - **Windows System Installation** (end users)
@@ -71,16 +72,19 @@ cd MyHeliosApp
 ### Step 2: Add NuGet Package
 
 **Option A: Command Line**
+
 ```powershell
 dotnet add package HELIOS.Platform --version 1.0.0
 ```
 
 **Option B: Package Manager Console**
+
 ```powershell
 Install-Package HELIOS.Platform -Version 1.0.0
 ```
 
 **Option C: Visual Studio UI**
+
 1. Right-click Project → Manage NuGet Packages
 2. Search for "HELIOS.Platform"
 3. Click Install
@@ -162,6 +166,7 @@ dotnet run --configuration Release
 ### Step 1: Acquire Executable
 
 **Option A: Download from Distribution**
+
 ```powershell
 # Copy from dist folder or download from release
 $source = "dist\Release\HELIOS.Platform.exe"
@@ -171,6 +176,7 @@ Copy-Item $source -Destination $dest
 ```
 
 **Option B: Build Standalone**
+
 ```powershell
 # From project directory
 .\build.ps1 -CreateExe -Configuration Release
@@ -265,6 +271,7 @@ while ($true) {
 ### Step 1: Run Installer
 
 **Option A: Batch Installer (Recommended for simplicity)**
+
 ```powershell
 # Navigate to setup directory
 cd setup
@@ -277,6 +284,7 @@ cd setup
 ```
 
 **Option B: PowerShell Installer**
+
 ```powershell
 # Run as Administrator (required)
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
@@ -654,6 +662,7 @@ Get-EventLog -LogName Application | Where-Object {$_.Source -like "*HELIOS*"} | 
 
 **Cause:** Not running as administrator
 **Solution:**
+
 ```powershell
 # Run PowerShell as Administrator
 # Or run batch file with right-click → "Run as administrator"
@@ -663,6 +672,7 @@ Get-EventLog -LogName Application | Where-Object {$_.Source -like "*HELIOS*"} | 
 
 **Cause:** AI Orchestrator initialization timeout
 **Solution:**
+
 ```powershell
 # Rollback to phase 2
 HELIOS.Platform.exe rollback 2
@@ -678,6 +688,7 @@ Get-EventLog -LogName Application -Newest 20 | Format-List
 
 **Cause:** Installation path not in PATH environment variable
 **Solution:**
+
 ```powershell
 # Add to PATH manually
 $installPath = "C:\Program Files\HELIOS.Platform"

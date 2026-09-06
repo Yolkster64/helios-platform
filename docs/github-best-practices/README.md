@@ -5,6 +5,7 @@ Welcome to the comprehensive GitHub best practices documentation for the HELIOS 
 ## 📖 Quick Start
 
 **New to the project?** Start here:
+
 1. Read: [INDEX.md](INDEX.md) - Overview of all documentation
 2. Read: [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md) - Core principles
 3. Read: [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md) - How to develop features
@@ -173,6 +174,7 @@ See [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md#quick-reference-commands) for 
 ## 🔐 Security Reminders
 
 **CRITICAL - Never:**
+
 ```markdown
 ✗ Commit API keys or tokens
 ✗ Commit database passwords
@@ -184,6 +186,7 @@ See [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md#quick-reference-commands) for 
 ```
 
 **Instead:**
+
 ```markdown
 ✓ Use .env files (not committed)
 ✓ Use GitHub Secrets (for CI/CD)
@@ -198,6 +201,7 @@ See [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md#quick-reference-commands) for 
 ## 📈 Documentation Quality
 
 All guides include:
+
 - ✅ Real-world examples
 - ✅ Do/Don't comparisons
 - ✅ Checklists and templates
@@ -209,18 +213,22 @@ All guides include:
 ## 🎓 Learning Path
 
 **Week 1:** Foundations
+
 - [GITHUB_BEST_PRACTICES.md](GITHUB_BEST_PRACTICES.md)
 - [GIT_WORKFLOW_GUIDE.md](GIT_WORKFLOW_GUIDE.md)
 
 **Week 2:** Code Review & PRs
+
 - [PULL_REQUEST_GUIDE.md](PULL_REQUEST_GUIDE.md)
 - [CODE_REVIEW_STANDARDS.md](CODE_REVIEW_STANDARDS.md)
 
 **Week 3:** Collaboration & Security
+
 - [COLLABORATION_GUIDE.md](COLLABORATION_GUIDE.md)
 - [SECURITY_PRACTICES.md](SECURITY_PRACTICES.md)
 
 **Ongoing:** Operations & Tools
+
 - [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md)
 - [RELEASE_PROCESS.md](RELEASE_PROCESS.md)
 - [PROJECT_BOARD_GUIDE.md](PROJECT_BOARD_GUIDE.md)
@@ -265,6 +273,7 @@ These guides are **living documents**. They're updated as practices evolve.
 ## 🎉 Let's Build Great Software Together!
 
 Follow these practices to:
+
 - ✅ Maintain code quality
 - ✅ Ensure security
 - ✅ Enable collaboration

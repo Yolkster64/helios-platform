@@ -22,6 +22,7 @@
 **Dependencies:** {{DEPS_1}}
 
 **Code Statistics:**
+
 - Lines: {{LOC_1}}
 - Complexity: {{COMPLEXITY_1}}
 - Test Coverage: {{COVERAGE_1}}%

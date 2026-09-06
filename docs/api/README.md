@@ -7,17 +7,20 @@ Complete API documentation including REST APIs, WebSocket APIs, and Plugin APIs.
 ## 📚 API Documentation
 
 ### REST API
+
 - **Endpoint**: `http://localhost:8080/api/v1`
 - **Format**: JSON
 - **Authentication**: Bearer Token
 - **Rate Limit**: 1000 requests/hour
 
 ### WebSocket API
+
 - **Endpoint**: `ws://localhost:8080/ws`
 - **Format**: JSON over WebSocket
 - **Purpose**: Real-time updates and monitoring
 
 ### Plugin API
+
 - **Framework**: .NET 6.0+
 - **Interface**: IPlugin
 - **Lifecycle**: Initialize → Execute → Dispose
@@ -59,18 +62,21 @@ curl -H "Authorization: Bearer <token>" \
 ### Deployments
 
 #### List Deployments
+
 ```http
 GET /api/v1/deployments
 Authorization: Bearer <token>
 ```
 
 #### Get Deployment Details
+
 ```http
 GET /api/v1/deployments/{id}
 Authorization: Bearer <token>
 ```
 
 #### Create Deployment
+
 ```http
 POST /api/v1/deployments
 Authorization: Bearer <token>
@@ -85,6 +91,7 @@ Content-Type: application/json
 ```
 
 #### Update Deployment
+
 ```http
 PATCH /api/v1/deployments/{id}
 Authorization: Bearer <token>
@@ -96,6 +103,7 @@ Content-Type: application/json
 ```
 
 #### Delete Deployment
+
 ```http
 DELETE /api/v1/deployments/{id}
 Authorization: Bearer <token>
@@ -104,18 +112,21 @@ Authorization: Bearer <token>
 ### System Monitoring
 
 #### Get System Status
+
 ```http
 GET /api/v1/system/status
 Authorization: Bearer <token>
 ```
 
 #### Get Metrics
+
 ```http
 GET /api/v1/metrics
 Authorization: Bearer <token>
 ```
 
 #### Get Logs
+
 ```http
 GET /api/v1/logs
 Authorization: Bearer <token>
@@ -180,18 +191,21 @@ public class MyPlugin : IPlugin
 ## 🎯 Common API Usage Examples
 
 ### Example 1: List Deployments
+
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/deployments | jq .
 ```
 
 ### Example 2: Get System Status
+
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/system/status | jq .
 ```
 
 ### Example 3: Create a Deployment
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/deployments \
   -H "Authorization: Bearer $TOKEN" \
@@ -208,6 +222,7 @@ curl -X POST http://localhost:8080/api/v1/deployments \
 ## 🔗 API Response Format
 
 ### Success Response
+
 ```json
 {
   "success": true,
@@ -217,6 +232,7 @@ curl -X POST http://localhost:8080/api/v1/deployments \
 ```
 
 ### Error Response
+
 ```json
 {
   "success": false,
@@ -227,6 +243,7 @@ curl -X POST http://localhost:8080/api/v1/deployments \
 ```
 
 ### Pagination
+
 ```json
 {
   "success": true,
@@ -245,15 +262,18 @@ curl -X POST http://localhost:8080/api/v1/deployments \
 ## 📖 Related Documentation
 
 ### Guides
+
 - **[Getting Started](../guides/GETTING_STARTED.md)** - API overview
 - **[Plugin Development](../guides/PLUGIN_DEVELOPMENT.md)** - Build plugins
 - **[Integration Guide](../architecture/INTEGRATION.md)** - Integration patterns
 
 ### User Guides
+
 - **[Deployment Guide](../user-guides/DEPLOYMENT.md)** - Deploy using API
 - **[Configuration Guide](../user-guides/CONFIGURATION.md)** - Configure API
 
 ### Examples
+
 - **[Code Examples](../../examples/README.md)** - Working code samples
 
 ---

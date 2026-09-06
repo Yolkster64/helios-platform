@@ -3,6 +3,7 @@
 ## Developer Workstation Setup
 
 ### config-developer.yaml
+
 ```yaml
 packages:
   # Version Control
@@ -104,6 +105,7 @@ packages:
 ## Creative Professional Setup
 
 ### config-creative.yaml
+
 ```yaml
 packages:
   # Adobe Suite
@@ -167,6 +169,7 @@ packages:
 ## Gaming Setup
 
 ### config-gaming.yaml
+
 ```yaml
 packages:
   # Game Platforms
@@ -223,6 +226,7 @@ packages:
 ## System Administrator Setup
 
 ### config-sysadmin.yaml
+
 ```yaml
 packages:
   # Remote Access
@@ -292,6 +296,7 @@ packages:
 ## Enterprise Development Setup
 
 ### config-enterprise.yaml
+
 ```yaml
 packages:
   # Version Control
@@ -385,6 +390,7 @@ packages:
 ## Minimal / Lean Setup
 
 ### config-minimal.yaml
+
 ```yaml
 packages:
   - name: "Visual Studio Code"
@@ -406,6 +412,7 @@ packages:
 ## Configuration Specifications
 
 ### Installation Methods Priority
+
 1. Winget (Windows Package Manager) - Fastest, officially maintained
 2. Chocolatey - Wide package availability
 3. Official installers - Most reliable, direct from vendor
@@ -413,11 +420,13 @@ packages:
 5. Docker/WSL - For specific use cases
 
 ### Parallel Installation
+
 - Winget packages install in parallel
 - Official installers run sequentially
 - Dependencies resolved automatically
 
 ### Pre-Installation Requirements
+
 ```yaml
 prerequisites:
   - name: "Windows 10 version 1909+"
@@ -427,6 +436,7 @@ prerequisites:
 ```
 
 ### Post-Installation Configuration
+
 ```yaml
 post_install_tasks:
   - name: "Add to PATH"
@@ -439,6 +449,7 @@ post_install_tasks:
 ---
 
 **Usage**: Copy desired config file and modify as needed
+
 ```bash
 helios-cli software bulk-install --config config-developer.yaml
 ```

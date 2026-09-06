@@ -7,23 +7,27 @@ This document provides a comprehensive guide to the dark mode system implemented
 ## Features
 
 ### 1. Complete Dark Mode Coverage
+
 - **Full Color Palette**: 30+ WCAG AAA compliant colors
 - **All UI Components**: Buttons, inputs, dialogs, menus, scrollbars
 - **Semantic Colors**: Success, warning, error, info states
 - **Component-Specific Colors**: Tailored colors for different UI elements
 
 ### 2. Theme Switching
+
 - **Three Theme Modes**: Light, Dark, System (auto-detect)
 - **Smooth Transitions**: 250ms fade animations
 - **No Flickering**: Optimized rendering pipeline
 - **Persistent Storage**: User preference saved to disk
 
 ### 3. System Theme Detection
+
 - **Windows Integration**: Detects Windows 10/11 dark mode preference
 - **Real-time Updates**: Responds to system theme changes
 - **Fallback Handling**: Graceful degradation if system theme unavailable
 
 ### 4. Accessibility (WCAG AAA)
+
 - **7:1 Minimum Contrast**: Primary text on backgrounds
 - **Color Blindness**: Semantic colors designed for accessibility
 - **Focus Indicators**: High-contrast focus rings
@@ -50,6 +54,7 @@ src/tests/Themes/
 The `DarkModeThemeDefinition` class provides:
 
 **Dark Palette** - WCAG AAA compliant colors:
+
 ```csharp
 DarkBackground      = #0F0F14  // Base dark background
 DarkSurface         = #191923  // Surface elements
@@ -62,12 +67,14 @@ Error               = #EF5350  // Error state
 ```
 
 **Typography** - Scalable font system:
+
 - HeadingSize: 28px (main titles)
 - SubheadingSize: 20px (section headers)
 - BodySize: 14px (regular text)
 - CaptionSize: 12px (small text)
 
 **Spacing** - Consistent spacing system:
+
 - Spacing2, 4, 8, 12, 16, 20, 24, 32
 - Corner radius: Small (4), Medium (8), Large (12), XLarge (16)
 
@@ -76,11 +83,13 @@ Error               = #EF5350  // Error state
 The `ThemeManager` singleton manages:
 
 1. **Theme Switching**
+
    ```csharp
    await ThemeManager.Instance.SetThemeModeAsync(ThemeMode.Dark);
    ```
 
 2. **Event Notification**
+
    ```csharp
    manager.ThemeModeChanged += (s, e) => {
        Console.WriteLine($"Theme changed to: {e.NewMode}");
@@ -198,6 +207,7 @@ All colors maintain **minimum 7:1 contrast ratio** (WCAG AAA level).
 ### Light Mode Colors
 
 Similar palette inverted for light theme:
+
 - Light background colors for dark text
 - Maintains same contrast ratios
 - Compatible with existing light mode support
@@ -207,22 +217,26 @@ Similar palette inverted for light theme:
 ### WCAG AAA Standards Met
 
 ✅ **Color Contrast** (Minimum 7:1)
+
 - Text primary on background: 16:1
 - Text secondary on background: 8.2:1
 - Accent colors: 7.1-7.5:1
 - Semantic colors: 7.3-8.5:1
 
 ✅ **Focus Indicators**
+
 - High-contrast focus ring: 9.2:1 contrast
 - Visible at all zoom levels
 - Clear on both light and dark backgrounds
 
 ✅ **Color Blindness Compatibility**
+
 - Not solely reliant on color for meaning
 - Semantic colors tested with color blindness simulators
 - Text labels accompany all icons
 
 ✅ **Disabled State**
+
 - Clear visual indication (reduced opacity)
 - Contrast maintained above 3:1 minimum
 - Not color-only indication
@@ -333,6 +347,7 @@ await manager.ImportThemeAsync("my-theme.json");
 ### Issue: Colors Not Updating
 
 **Solution**: Ensure theme resources are bound in XAML:
+
 ```xaml
 <SolidColorBrush x:Key="BackgroundBrush" 
                  Color="{DynamicResource BackgroundColor}" />
@@ -341,6 +356,7 @@ await manager.ImportThemeAsync("my-theme.json");
 ### Issue: System Theme Not Detected
 
 **Solution**: Check registry access:
+
 ```csharp
 var key = Registry.CurrentUser.OpenSubKey(
     @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
@@ -350,6 +366,7 @@ var key = Registry.CurrentUser.OpenSubKey(
 ### Issue: Persistence Not Working
 
 **Solution**: Check application data folder permissions:
+
 ```csharp
 var path = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -451,6 +468,7 @@ When adding new UI elements:
 ## Support
 
 For issues or questions:
+
 - Check **Troubleshooting** section
 - Review test cases for examples
 - Verify theme resources are properly bound

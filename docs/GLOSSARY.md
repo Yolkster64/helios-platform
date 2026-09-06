@@ -9,6 +9,7 @@
 ## 📖 How to Use This Glossary
 
 This glossary defines technical terms used throughout {{PROJECT_NAME}} documentation. Terms are organized alphabetically, with:
+
 - **Definition**: Clear explanation of the term
 - **Context**: Where and how it's used
 - **Related Terms**: Other concepts to explore
@@ -642,11 +643,11 @@ This glossary defines technical terms used throughout {{PROJECT_NAME}} documenta
 
 ### Throughput
 
-**Definition:** The amount of work completed in a given time, typically measured in requests per second (RPS).
+**Definition:** The amount of work or number of operations completed in a given time, typically measured in requests per second (RPS).
 
-**Context:** {{PROJECT_NAME}} throughput: {{THROUGHPUT_VALUE}}.
+**Context:** {{PROJECT_NAME}} throughput: {{THROUGHPUT_VALUE}} ({{THROUGHPUT_METRIC}}).
 
-**Related Terms:** Performance, Latency, RPS, QPS, Scalability
+**Related Terms:** Performance, Latency, RPS, QPS, Scalability, Capacity
 
 ---
 
@@ -657,16 +658,6 @@ This glossary defines technical terms used throughout {{PROJECT_NAME}} documenta
 **Context:** {{PROJECT_NAME}} supports {{TRACING_METHOD}}.
 
 **Related Terms:** Logging, Monitoring, Observability, Span, Debug
-
----
-
-### Throughput
-
-**Definition:** The number of operations completed in a unit of time (usually per second).
-
-**Context:** {{PROJECT_NAME}} handles {{THROUGHPUT_METRIC}}.
-
-**Related Terms:** Performance, Latency, Scalability, Capacity
 
 ---
 

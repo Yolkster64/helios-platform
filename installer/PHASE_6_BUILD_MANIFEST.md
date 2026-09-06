@@ -1,4 +1,5 @@
 # PHASE 6: PROFESSIONAL WINDOWS INSTALLER & USB BOOTABLE IMAGE
+
 ## Complete Build & Deployment Manifest
 
 ---
@@ -146,6 +147,7 @@ C:\HELIOS/
 ### Installation Package
 
 **HELIOS-Platform-2.0-Setup.exe** (~50MB)
+
 - WiX-compiled MSI wrapped in EXE
 - Digitally signed with Authenticode
 - Supports silent installation: `/S /D=path`
@@ -155,6 +157,7 @@ C:\HELIOS/
 ### USB Boot Image
 
 **HELIOS-Platform-2.0-USBImage.iso** (~500MB)
+
 - Windows PE boot environment
 - Embedded HELIOS installer
 - UEFI + BIOS boot support
@@ -164,6 +167,7 @@ C:\HELIOS/
 ### USB Creator Tool
 
 **USB-Creator-Tool.exe**
+
 - GUI for writing ISO to USB
 - Validates target drive
 - Verifies image integrity
@@ -252,6 +256,7 @@ foreach ($computer in $computers) {
 **File**: `installer/scripts/pre-install-checks.ps1`
 
 **Verifies**:
+
 - ✅ Administrator privileges
 - ✅ OS version (Windows 7, 10, 11)
 - ✅ OS architecture (64-bit required)
@@ -263,6 +268,7 @@ foreach ($computer in $computers) {
 - ✅ Antivirus/Firewall status
 
 **Exit Codes**:
+
 - `0` = All checks passed
 - `1` = Critical failure (installation blocked)
 - `2` = Warnings (installation continues)
@@ -272,6 +278,7 @@ foreach ($computer in $computers) {
 **File**: `installer/scripts/conflict-detection.ps1`
 
 **Detects**:
+
 - ✅ Port conflicts (5000-6010 range)
 - ✅ Service name conflicts
 - ✅ Registry key conflicts
@@ -285,6 +292,7 @@ foreach ($computer in $computers) {
 **File**: `installer/scripts/post-install-verify.ps1`
 
 **Verifies** (8 categories):
+
 1. ✅ Installation file presence
 2. ✅ Registry entries
 3. ✅ Windows Firewall rules
@@ -295,6 +303,7 @@ foreach ($computer in $computers) {
 8. ✅ File permissions
 
 **Exit Codes**:
+
 - `0` = All verifications passed
 - `1` = Critical failures
 - `2` = Warnings
@@ -306,6 +315,7 @@ foreach ($computer in $computers) {
 The following components are architecturally defined and ready for implementation:
 
 ### WiX Source Files
+
 - `features.wxs` - Feature definitions
 - `dialogs.wxs` - Dialog UI definitions
 - `ui-theme.wxs` - Branding and theming
@@ -314,6 +324,7 @@ The following components are architecturally defined and ready for implementatio
 - `custom-actions.wxs` - Custom action definitions
 
 ### PowerShell Scripts
+
 - `firewall-rules.ps1` - Firewall rule creation
 - `rollback-handler.ps1` - Rollback logic
 - `diagnostics-report.ps1` - Report generation
@@ -321,18 +332,21 @@ The following components are architecturally defined and ready for implementatio
 - `restore-engine.ps1` - Restore logic
 
 ### Verification Scripts
+
 - `file-verification.ps1` - CRC32/SHA256 checks
 - `registry-verification.ps1` - Registry validation
 - `service-verification.ps1` - Service checks
 - `firewall-verification.ps1` - Firewall validation
 
 ### Localization Files
+
 - `en-US.wxl` - English
 - `es-ES.wxl` - Spanish
 - `fr-FR.wxl` - French
 - `de-DE.wxl` - German
 
 ### Branding Assets
+
 - `logo.png` - Product logo
 - `eula-banner.bmp` - EULA banner
 - `welcome.png` - Welcome screen
@@ -438,6 +452,7 @@ Complete testing framework defined in `PHASE_6_SAFETY_PROTOCOLS.md`:
 ## 🎯 Next Steps for Implementation
 
 1. **Generate Build Artifacts**
+
    ```powershell
    .\installer\build-installer.ps1 -Configuration Release -SigningCertificate .\cert.pfx
    ```
@@ -485,6 +500,7 @@ Complete testing framework defined in `PHASE_6_SAFETY_PROTOCOLS.md`:
 **END OF BUILD MANIFEST**
 
 This Phase 6 project is now ready for:
+
 - ✅ Development environment setup
 - ✅ Build automation
 - ✅ Quality assurance testing

@@ -17,6 +17,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 ### Submodules
 
 #### PHASE-0-USB-Creator
+
 | Property | Value |
 |---|---|
 | **Purpose** | Create bootable Windows PE USB with HELIOS tools |
@@ -31,6 +32,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Team Size** | 1 developer |
 
 #### PHASE-0-Windows-Installer
+
 | Property | Value |
 |---|---|
 | **Purpose** | Automated Windows installation with custom partitioning |
@@ -45,6 +47,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Team Size** | 1 developer |
 
 #### PHASE-0-Partition-Manager
+
 | Property | Value |
 |---|---|
 | **Purpose** | Create optimized partition layout for security & performance |
@@ -59,6 +62,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Team Size** | 1 developer |
 
 #### PHASE-0-System-Setup
+
 | Property | Value |
 |---|---|
 | **Purpose** | Initial system configuration post-installation |
@@ -91,6 +95,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 ### Submodules
 
 #### PHASE-1-AppLocker
+
 | Property | Value |
 |---|---|
 | **Purpose** | Application whitelisting using Windows AppLocker |
@@ -106,6 +111,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-1-Windows-Firewall
+
 | Property | Value |
 |---|---|
 | **Purpose** | Advanced Windows Firewall configuration and management |
@@ -121,6 +127,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-1-Credential-Vault
+
 | Property | Value |
 |---|---|
 | **Purpose** | Encrypted credential storage and management |
@@ -136,6 +143,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-1-Malware-Quarantine
+
 | Property | Value |
 |---|---|
 | **Purpose** | Detect and quarantine suspicious files and activities |
@@ -169,6 +177,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 ### Submodules
 
 #### PHASE-2-Service-Manager
+
 | Property | Value |
 |---|---|
 | **Purpose** | Optimize Windows services for performance and security |
@@ -184,6 +193,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-2-Startup-Optimizer
+
 | Property | Value |
 |---|---|
 | **Purpose** | Optimize startup time and process |
@@ -199,6 +209,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-2-Resource-Monitor
+
 | Property | Value |
 |---|---|
 | **Purpose** | Monitor CPU, RAM, Disk, Network resources |
@@ -214,6 +225,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-2-System-Tuning
+
 | Property | Value |
 |---|---|
 | **Purpose** | Apply system tuning for maximum performance |
@@ -246,6 +258,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 ### Submodules
 
 #### PHASE-3-Control-Dashboard
+
 | Property | Value |
 |---|---|
 | **Purpose** | Central dashboard for system status and control |
@@ -261,6 +274,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-3-AI-Core
+
 | Property | Value |
 |---|---|
 | **Purpose** | ML models for anomaly detection and prediction |
@@ -276,6 +290,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-3-Self-Healing
+
 | Property | Value |
 |---|---|
 | **Purpose** | Automatically detect and fix common issues |
@@ -291,6 +306,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 | **Version** | v1.0.0 |
 
 #### PHASE-3-User-Profiles
+
 | Property | Value |
 |---|---|
 | **Purpose** | Manage user profiles and personalization |
@@ -321,6 +337,7 @@ Q1 - Weeks 1-13     Q2 - Weeks 14-26     Q3 - Weeks 27-39
 Can begin development after Phase 0, integrate after Phase 2
 
 ### COMPONENT-AI-Dashboard
+
 | Property | Value |
 |---|---|
 | **Purpose** | Advanced analytics dashboard with AI insights |
@@ -332,6 +349,7 @@ Can begin development after Phase 0, integrate after Phase 2
 | **Team Size** | 2-3 developers |
 
 ### COMPONENT-Vault-Dynamics
+
 | Property | Value |
 |---|---|
 | **Purpose** | Advanced credential rotation and lifecycle management |
@@ -343,6 +361,7 @@ Can begin development after Phase 0, integrate after Phase 2
 | **Team Size** | 1-2 developers |
 
 ### COMPONENT-Threat-Intelligence
+
 | Property | Value |
 |---|---|
 | **Purpose** | Real-time threat intelligence and IOC matching |
@@ -354,6 +373,7 @@ Can begin development after Phase 0, integrate after Phase 2
 | **Team Size** | 1-2 developers |
 
 ### COMPONENT-Performance-Tuner
+
 | Property | Value |
 |---|---|
 | **Purpose** | ML-powered performance optimization recommendations |
@@ -371,6 +391,7 @@ Can begin development after Phase 0, integrate after Phase 2
 Integrate throughout Phase 3
 
 ### ECOSYSTEM-Exchange-Integration
+
 | Property | Value |
 |---|---|
 | **Purpose** | Secure Exchange mailbox management and monitoring |
@@ -381,6 +402,7 @@ Integrate throughout Phase 3
 | **Team Size** | 1-2 developers |
 
 ### ECOSYSTEM-Azure-Integration
+
 | Property | Value |
 |---|---|
 | **Purpose** | Azure resource monitoring and optimization |
@@ -391,6 +413,7 @@ Integrate throughout Phase 3
 | **Team Size** | 1-2 developers |
 
 ### ECOSYSTEM-Teams-Integration
+
 | Property | Value |
 |---|---|
 | **Purpose** | Teams health monitoring and optimization |
@@ -401,6 +424,7 @@ Integrate throughout Phase 3
 | **Team Size** | 1 developer |
 
 ### ECOSYSTEM-OneDrive-Sync
+
 | Property | Value |
 |---|---|
 | **Purpose** | Optimize OneDrive sync and profile migration |
@@ -417,6 +441,7 @@ Integrate throughout Phase 3
 Coordinate with AI Core development
 
 ### AI-INTEGRATION-Anomaly-Detector
+
 | Property | Value |
 |---|---|
 | **Purpose** | Advanced anomaly detection for security and performance |
@@ -427,6 +452,7 @@ Coordinate with AI Core development
 | **Team Size** | 2 ML engineers |
 
 ### AI-INTEGRATION-Predictive-Maintenance
+
 | Property | Value |
 |---|---|
 | **Purpose** | Predict system failures before they occur |
@@ -437,6 +463,7 @@ Coordinate with AI Core development
 | **Team Size** | 2 ML engineers |
 
 ### AI-INTEGRATION-Natural-Language-Interface
+
 | Property | Value |
 |---|---|
 | **Purpose** | AI chatbot for system management |

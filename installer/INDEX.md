@@ -36,31 +36,38 @@ C:\Users\ADMIN\helios-platform\installer/
 ### I Want To...
 
 #### **Install HELIOS Platform**
+
 1. Start here: **[README.md](README.md)**
 2. Follow: **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)**
 3. Verify: Run `.\Post-Install-Verify.ps1`
 
 #### **Check System Requirements**
+
 1. Read: **[SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md)**
 2. Validate: Run `.\Pre-Install-Check.ps1`
 
 #### **Troubleshoot Installation Issues**
+
 1. Review: **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)**
 2. Run: `.\Post-Install-Verify.ps1 -Repair`
 
 #### **Deploy Silently/Automated**
+
 1. Reference: **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
 2. Command: `.\HELIOS-Platform-Setup.exe /S /D=path`
 
 #### **Uninstall HELIOS**
+
 1. Guide: Section 9 in **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)**
 2. Command: `.\Uninstall-HELIOS.ps1`
 
 #### **Build Installer from Source**
+
 1. Instructions: Section "Building the Installer" in **[README.md](README.md)**
 2. Command: `.\Build-Installer.ps1`
 
 #### **Review Legal Terms**
+
 1. Read: **[LICENSE.txt](LICENSE.txt)**
 
 ---
@@ -70,7 +77,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ### Installer Scripts
 
 #### `setup.nsi` (8 KB)
+
 **NSIS Installer Script - Source Code**
+
 - Professional GUI with wizard interface
 - Component selection (Core, Shortcuts, PATH, etc.)
 - Registry management
@@ -84,7 +93,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `Build-Installer.ps1` (12 KB)
+
 **Build Automation Script**
+
 - Compiles NSIS script to executable
 - Verifies NSIS installation
 - Performs code signing
@@ -93,6 +104,7 @@ C:\Users\ADMIN\helios-platform\installer/
 - Integrity verification
 
 **Usage:**
+
 ```powershell
 .\Build-Installer.ps1
 .\Build-Installer.ps1 -OutputPath "C:\Releases"
@@ -102,7 +114,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `Pre-Install-Check.ps1` (13 KB)
+
 **System Requirements Validator**
+
 - 8 comprehensive system checks
 - Windows version validation
 - Admin privileges check
@@ -114,6 +128,7 @@ C:\Users\ADMIN\helios-platform\installer/
 - Internet connectivity test
 
 **Usage:**
+
 ```powershell
 .\Pre-Install-Check.ps1
 .\Pre-Install-Check.ps1 -Verbose
@@ -123,7 +138,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `Post-Install-Verify.ps1` (13 KB)
+
 **Installation Verification Tool**
+
 - 6 comprehensive verification checks
 - Installation path validation
 - Required files check
@@ -134,6 +151,7 @@ C:\Users\ADMIN\helios-platform\installer/
 - Automatic repair capability
 
 **Usage:**
+
 ```powershell
 .\Post-Install-Verify.ps1
 .\Post-Install-Verify.ps1 -Verbose
@@ -143,7 +161,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `Uninstall-HELIOS.ps1` (14 KB)
+
 **Standalone Uninstaller**
+
 - Complete file removal
 - Registry cleanup
 - Shortcut removal
@@ -154,6 +174,7 @@ C:\Users\ADMIN\helios-platform\installer/
 - Keep-configuration option
 
 **Usage:**
+
 ```powershell
 .\Uninstall-HELIOS.ps1
 .\Uninstall-HELIOS.ps1 -Force
@@ -165,7 +186,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ### Documentation
 
 #### `README.md` (13 KB)
+
 **Project Overview & Quick Start**
+
 - Package contents overview
 - Quick start guides
 - System requirements summary
@@ -182,7 +205,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `INSTALLATION_GUIDE.md` (13 KB)
+
 **Step-by-Step Installation Guide**
+
 - System requirements (minimum & recommended)
 - Pre-installation procedures
 - 4 installation methods (GUI, Silent, Command Line, Network)
@@ -196,6 +221,7 @@ C:\Users\ADMIN\helios-platform\installer/
 **Best for:** Users installing HELIOS Platform
 
 **Sections:**
+
 1. System Requirements
 2. Pre-Installation
 3. Installation Process (4 methods)
@@ -210,7 +236,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `TROUBLESHOOTING_GUIDE.md` (14 KB)
+
 **Common Issues & Solutions**
+
 - Quick diagnostics procedure
 - Installation issues (5 common problems)
 - Configuration issues (3 common problems)
@@ -224,6 +252,7 @@ C:\Users\ADMIN\helios-platform\installer/
 **Best for:** Resolving installation and runtime issues
 
 **Coverage:**
+
 - Windows version requirements
 - Administrator privileges
 - .NET SDK installation
@@ -238,7 +267,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `SYSTEM_REQUIREMENTS.md` (12 KB)
+
 **Detailed Technical Specifications**
+
 - Minimum requirements
 - Recommended configuration
 - Tier-specific requirements
@@ -256,6 +287,7 @@ C:\Users\ADMIN\helios-platform\installer/
 **Best for:** System administrators and IT professionals
 
 **Covers:**
+
 - Professional Tier requirements
 - Enterprise Tier requirements
 - Ultimate Tier requirements
@@ -266,7 +298,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `LICENSE.txt` (10 KB)
+
 **Software License Agreement**
+
 - Grant of license terms
 - Usage restrictions
 - Installation requirements
@@ -285,7 +319,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `QUICK_REFERENCE.md` (9 KB)
+
 **Quick Command Reference Card**
+
 - Quick start for users/admins/developers
 - System requirements (quick table)
 - Common commands and options
@@ -301,7 +337,9 @@ C:\Users\ADMIN\helios-platform\installer/
 ---
 
 #### `DELIVERABLES.md` (17 KB)
+
 **Complete Deliverables Summary**
+
 - Full file structure
 - Feature checklist
 - Installation methods
@@ -321,29 +359,34 @@ C:\Users\ADMIN\helios-platform\installer/
 ## 🚀 GETTING STARTED
 
 ### Step 1: Review Documentation
+
 ```
 Start with: README.md (5 min read)
 Then read: INSTALLATION_GUIDE.md (10 min read)
 ```
 
 ### Step 2: Check System
+
 ```powershell
 .\Pre-Install-Check.ps1
 ```
 
 ### Step 3: Build Installer (if needed)
+
 ```powershell
 # Install NSIS first from: https://nsis.sourceforge.io/Download
 .\Build-Installer.ps1 -OutputPath ".\build"
 ```
 
 ### Step 4: Install
+
 ```
 Double-click: HELIOS-Platform-Setup.exe
 Or: .\HELIOS-Platform-Setup.exe /S /D="C:\Program Files\HELIOS"
 ```
 
 ### Step 5: Verify
+
 ```powershell
 .\Post-Install-Verify.ps1
 ```
@@ -353,27 +396,32 @@ Or: .\HELIOS-Platform-Setup.exe /S /D="C:\Program Files\HELIOS"
 ## 📚 DOCUMENTATION BY AUDIENCE
 
 ### For End Users
+
 1. **[README.md](README.md)** - Quick overview
 2. **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - Installation steps
 3. **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)** - Problem solving
 
 ### For IT Administrators
+
 1. **[SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md)** - Deployment planning
 2. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Command reference
 3. **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - Silent deployment
 4. **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)** - Issue resolution
 
 ### For Developers
+
 1. **[README.md](README.md)** - Section "Building the Installer"
 2. **[DELIVERABLES.md](DELIVERABLES.md)** - Feature details
 3. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Command reference
 
 ### For Support/Helpdesk
+
 1. **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)** - Issue resolution
 2. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick commands
 3. **[SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md)** - Requirements verification
 
 ### For Managers/Decision Makers
+
 1. **[DELIVERABLES.md](DELIVERABLES.md)** - Feature summary
 2. **[README.md](README.md)** - Quick overview
 3. **[LICENSE.txt](LICENSE.txt)** - License terms
@@ -383,24 +431,28 @@ Or: .\HELIOS-Platform-Setup.exe /S /D="C:\Program Files\HELIOS"
 ## 🔍 SEARCH BY TOPIC
 
 ### Installation
+
 - **How to install?** → [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) Sections 3
 - **System requirements?** → [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md)
 - **Quick start?** → [README.md](README.md) or [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 - **Silent installation?** → [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) Section 3.2
 
 ### Troubleshooting
+
 - **Installation won't start?** → [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md) Section 1
 - **System checks failing?** → [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md) Section 2
 - **Application crashes?** → [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md) Section 3
 - **Network issues?** → [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md) Section 4
 
 ### Administration
+
 - **Deployment tiers?** → [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) Section 8
 - **Performance tuning?** → [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md) Section "Performance Tuning"
 - **Virtualization?** → [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md) Section "Virtualization Support"
 - **Batch deployment?** → [QUICK_REFERENCE.md](QUICK_REFERENCE.md) Section "Pro Tips"
 
 ### Building/Development
+
 - **Build installer?** → [README.md](README.md) Section "Building the Installer"
 - **Code signing?** → [README.md](README.md) Section "Security"
 - **Build process?** → [DELIVERABLES.md](DELIVERABLES.md) Section "Build Automation"
@@ -430,11 +482,13 @@ Before distribution, verify:
 ## 📞 SUPPORT & RESOURCES
 
 ### Inside This Package
+
 - **Quick Help:** [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 - **Detailed Guide:** [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)
 - **Troubleshooting:** [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)
 
 ### External Resources
+
 - **Documentation:** https://docs.helios.solutions
 - **Community Forum:** https://community.helios.solutions
 - **Support Email:** support@helios.solutions
@@ -478,6 +532,7 @@ Before distribution, verify:
 This complete installer package includes:
 
 ✅ **5 Professional Scripts**
+
 - NSIS installer
 - Build automation
 - Pre-check validator
@@ -485,6 +540,7 @@ This complete installer package includes:
 - Uninstaller
 
 ✅ **7 Comprehensive Documents**
+
 - Installation guide
 - Troubleshooting guide
 - System requirements
@@ -494,6 +550,7 @@ This complete installer package includes:
 - Complete index
 
 ✅ **Production-Ready Features**
+
 - GUI and silent modes
 - System validation
 - Error recovery
@@ -503,6 +560,7 @@ This complete installer package includes:
 - Clean uninstallation
 
 ✅ **Enterprise Support**
+
 - 3 deployment tiers
 - Batch deployment
 - Group Policy ready

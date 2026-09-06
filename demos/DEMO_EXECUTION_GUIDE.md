@@ -5,6 +5,7 @@ Complete guide for running and understanding the HELIOS Platform Demo Applicatio
 ## ⚡ Quick Start (5 minutes)
 
 ### 1. Build the Demo Application
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\demos
 
@@ -16,6 +17,7 @@ dotnet build -c Release
 ```
 
 ### 2. Run Interactive Demo Launcher
+
 ```powershell
 # Option A: Using dotnet run
 dotnet run
@@ -28,6 +30,7 @@ dotnet run -- 1
 ```
 
 ### 3. Select Demo
+
 The interactive menu shows all 7 demos with descriptions and estimated durations.
 
 ---
@@ -35,6 +38,7 @@ The interactive menu shows all 7 demos with descriptions and estimated durations
 ## 🎯 Running Individual Demos
 
 ### Method 1: Interactive Menu
+
 1. Run `HeliosDemos.exe` or `dotnet run`
 2. Follow numbered menu (1-7)
 3. Demo executes automatically
@@ -66,7 +70,9 @@ dotnet run -- all                 # All 7 demos sequentially
 ## 📊 Understanding Demo Output
 
 ### Real-time Console Output
+
 Each demo displays:
+
 - ✓ Progress bars with percentage completion
 - ✓ Color-coded status messages
 - ✓ Component deployment status
@@ -74,6 +80,7 @@ Each demo displays:
 - ✓ Real-time counters
 
 ### Color Scheme
+
 - 🟢 **Green** - Success, completed operations
 - 🔴 **Red** - Errors, failures
 - 🟡 **Yellow** - Warnings, attention needed
@@ -82,6 +89,7 @@ Each demo displays:
 - ⚫ **Gray** - Metadata, additional info
 
 ### Console Output Example
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │ HELIOS PLATFORM DEMO: Quick Start Demo               │
@@ -103,6 +111,7 @@ Each demo displays:
 ## 📁 Output Files Location
 
 All output files are saved to:
+
 ```
 C:\Users\<YourUsername>\helios-demos\<YYYY-MM-DD>\
 ```
@@ -110,23 +119,27 @@ C:\Users\<YourUsername>\helios-demos\<YYYY-MM-DD>\
 ### File Types Generated
 
 **1. Execution Log (.log)**
+
 - Raw execution log with timestamps
 - Detailed step-by-step progress
 - Useful for debugging and detailed review
 
 **2. Text Report (.report.txt)**
+
 - Formatted summary report
 - Key metrics and statistics
 - Component deployment list
 - Final status summary
 
 **3. JSON Report (.json)**
+
 - Machine-readable format
 - Structured data for parsing
 - Easy integration with other tools
 - Contains all metrics and status information
 
 ### Example Output Structure
+
 ```
 C:\Users\ADMIN\helios-demos\
 ├── 2024-04-13\
@@ -143,19 +156,23 @@ C:\Users\ADMIN\helios-demos\
 ## 🔍 Demo-Specific Execution Details
 
 ### Demo 1: Quick Start Demo (8 minutes)
+
 **What to expect:**
+
 - Real-time progress of component deployment
 - Before/after system metrics table
 - 7 components deployed sequentially
 - Dashboard configuration display
 
 **Key metrics shown:**
+
 - CPU usage before/after
 - Memory usage before/after
 - Disk usage percentage
 - Process count
 
 **Command:**
+
 ```bash
 dotnet run -- quickstart
 ```
@@ -163,7 +180,9 @@ dotnet run -- quickstart
 ---
 
 ### Demo 2: Gaming Optimization Demo (10 minutes)
+
 **What to expect:**
+
 - Gaming environment validation (GPU, RAM, Monitor)
 - 6 gaming tools installation
 - System optimization steps
@@ -172,6 +191,7 @@ dotnet run -- quickstart
 - FPS improvements comparison (45 → 145 FPS)
 
 **Key metrics shown:**
+
 - Average FPS (baseline vs. optimized)
 - GPU temperature (78°C → 62°C)
 - Frame time (22.2ms → 6.9ms)
@@ -179,6 +199,7 @@ dotnet run -- quickstart
 - Min/Max FPS
 
 **Command:**
+
 ```bash
 dotnet run -- gaming
 ```
@@ -186,7 +207,9 @@ dotnet run -- gaming
 ---
 
 ### Demo 3: Developer Setup Demo (12 minutes)
+
 **What to expect:**
+
 - Environment validation (OS, permissions, disk space)
 - 4 core development tools installation
 - 4 container tools setup
@@ -197,6 +220,7 @@ dotnet run -- gaming
 - Developer dashboard display
 
 **Key metrics shown:**
+
 - Tools installed count
 - IDE status
 - Runtime versions
@@ -204,6 +228,7 @@ dotnet run -- gaming
 - Extensions count (10)
 
 **Command:**
+
 ```bash
 dotnet run -- developer
 ```
@@ -211,7 +236,9 @@ dotnet run -- developer
 ---
 
 ### Demo 4: Security Hardening Demo (10 minutes)
+
 **What to expect:**
+
 - Initial security audit (5 vulnerabilities found)
 - Firewall hardening setup
 - AppLocker policy configuration
@@ -223,6 +250,7 @@ dotnet run -- developer
 - Compliance report generation
 
 **Key metrics shown:**
+
 - Initial security score: 35/100
 - Final security score: 92/100
 - Vulnerabilities found: 5
@@ -230,6 +258,7 @@ dotnet run -- developer
 - Compliance certifications verified
 
 **Command:**
+
 ```bash
 dotnet run -- security
 ```
@@ -237,7 +266,9 @@ dotnet run -- security
 ---
 
 ### Demo 5: Multi-Phase Deployment Demo (15 minutes)
+
 **What to expect:**
+
 - Real-time progress bars for each phase
 - Phase-by-phase component deployment (8 phases)
 - Timing analysis for each phase
@@ -246,6 +277,7 @@ dotnet run -- security
 - Complete timeline summary
 
 **Key metrics shown:**
+
 - Phase execution timeline
 - Total components deployed
 - Average phase duration
@@ -253,6 +285,7 @@ dotnet run -- security
 - Success rate (100%)
 
 **Command:**
+
 ```bash
 dotnet run -- multiphase
 ```
@@ -260,7 +293,9 @@ dotnet run -- multiphase
 ---
 
 ### Demo 6: Enterprise Deployment Demo (14 minutes)
+
 **What to expect:**
+
 - Enterprise infrastructure validation
 - 9 components deployment (7 core + 2 auxiliary)
 - Active Directory integration
@@ -272,6 +307,7 @@ dotnet run -- multiphase
 - 6 output reports (HTML, PDF, JSON, CSV, XLSX)
 
 **Key metrics shown:**
+
 - Deployment tier: Ultimate
 - Components: 9 total
 - Regions: 3
@@ -280,6 +316,7 @@ dotnet run -- multiphase
 - Security score: 98/100
 
 **Command:**
+
 ```bash
 dotnet run -- enterprise
 ```
@@ -287,7 +324,9 @@ dotnet run -- enterprise
 ---
 
 ### Demo 7: Custom Configuration Demo (9 minutes)
+
 **What to expect:**
+
 - Interactive tier selection (Professional/Enterprise/Ultimate)
 - Component selection from 7 available
 - Deployment options configuration (8 options)
@@ -297,6 +336,7 @@ dotnet run -- enterprise
 - Configuration profile export (multiple formats)
 
 **Key metrics shown:**
+
 - Selected tier
 - Component count (3-7)
 - Options enabled
@@ -304,6 +344,7 @@ dotnet run -- enterprise
 - Actual deployment time
 
 **Command:**
+
 ```bash
 dotnet run -- custom
 ```
@@ -313,6 +354,7 @@ dotnet run -- custom
 ## 🏃 Running All Demos
 
 ### Sequential Execution
+
 ```bash
 # Run all 7 demos in sequence
 dotnet run -- all
@@ -323,7 +365,9 @@ dotnet run -- all
 **Total Duration:** ~90 minutes
 
 ### Summary Output After Completion
+
 Displays table with:
+
 - All demo names
 - Success/failure status
 - Individual execution times
@@ -336,6 +380,7 @@ Displays table with:
 ## 🛠️ Build Instructions
 
 ### Prerequisites
+
 - Windows 10/11 Pro or Enterprise
 - .NET 8 SDK (or Runtime for pre-built exe)
 - Administrator terminal
@@ -364,7 +409,9 @@ dotnet publish -c Release -o .\publish
 ```
 
 ### Output Executables
+
 After successful build:
+
 ```
 .\bin\Debug\net8.0\HeliosDemos.exe          # Debug version
 .\bin\Release\net8.0\HeliosDemos.exe        # Release version (optimized)
@@ -375,6 +422,7 @@ After successful build:
 ## 📋 System Requirements Checklist
 
 Before running demos, verify:
+
 - [ ] Windows 10/11 Pro or Enterprise edition
 - [ ] Administrator or elevated privileges
 - [ ] .NET 8 Runtime or SDK installed
@@ -384,6 +432,7 @@ Before running demos, verify:
 - [ ] Display capable of 1920x1080 minimum
 
 ### Verify .NET Installation
+
 ```powershell
 dotnet --version
 # Should output: 8.0.x or higher
@@ -394,34 +443,44 @@ dotnet --version
 ## 🐛 Troubleshooting
 
 ### Issue: "dotnet: command not found"
+
 **Solution:**
+
 1. Install .NET 8 SDK from https://dotnet.microsoft.com/download
 2. Restart PowerShell/Terminal after installation
 3. Verify with `dotnet --version`
 
 ### Issue: "Access denied" or "Permission denied"
+
 **Solution:**
+
 1. Run PowerShell as Administrator
 2. Navigate to demos folder
 3. Execute: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 4. Try again
 
 ### Issue: Demo hangs or freezes
+
 **Solution:**
+
 1. Press Ctrl+C to interrupt
 2. Check available disk space: `Get-PSDrive C`
 3. Ensure no other heavy processes running
 4. Try running demo again
 
 ### Issue: Log files not created
+
 **Solution:**
+
 1. Check path: `C:\Users\<username>\helios-demos`
 2. Ensure folder exists: `mkdir C:\Users\$env:USERNAME\helios-demos`
 3. Verify write permissions on folder
 4. Try running demo again
 
 ### Issue: Wrong output tier or components
+
 **Solution (Custom Demo):**
+
 - This is correct behavior for interactive selection
 - For consistent results, use specific demo (not custom)
 - Custom demo simulates selecting Enterprise tier with 6 components
@@ -456,6 +515,7 @@ Each demo generates a .json file with structured data:
 ```
 
 ### Using JSON Reports
+
 ```powershell
 # Read and parse JSON in PowerShell
 $report = Get-Content "QuickStartDemo_14-30-45.json" | ConvertFrom-Json
@@ -468,6 +528,7 @@ $report.success
 ## 🎓 Learning Outcomes
 
 After running demos, you'll understand:
+
 - ✓ HELIOS Platform architecture
 - ✓ Component deployment process
 - ✓ System optimization capabilities
@@ -484,16 +545,19 @@ After running demos, you'll understand:
 ## 📞 Support & Resources
 
 ### Documentation
+
 - **DEMO_SCENARIOS.md** - Detailed scenario descriptions
 - **DEMO_EXECUTION_GUIDE.md** - This file
 - **README.md** - Quick reference
 
 ### Logs and Reports
+
 - Check `.log` files for detailed execution trace
 - Review `.report.txt` for formatted summary
 - Parse `.json` for programmatic access
 
 ### Common Paths
+
 ```
 Source code:     C:\Users\ADMIN\helios-platform\demos\
 Executables:     C:\Users\ADMIN\helios-platform\demos\bin\Release\net8.0\
@@ -505,6 +569,7 @@ Output files:    C:\Users\<username>\helios-demos\<date>\
 ## ✅ Verification Checklist
 
 After each demo run:
+
 - [ ] Console output shows completion
 - [ ] No errors displayed
 - [ ] Log files created in helios-demos folder
@@ -521,4 +586,3 @@ After each demo run:
 
 For latest updates, visit the HELIOS Platform repository at:
 https://github.com/M0nado/helios-platform
-

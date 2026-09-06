@@ -25,6 +25,7 @@ await orchestrator.SwitchProfileAsync(OrchestrationProfile.Gaming);
 ## 📌 Core APIs
 
 ### Master Orchestration
+
 ```csharp
 await orchestrator.InitializeAsync();                    // Start
 await orchestrator.RegisterToolAsync(tool);              // Register
@@ -35,6 +36,7 @@ await orchestrator.ShutdownAsync();                       // Stop
 ```
 
 ### Tool Optimization
+
 ```csharp
 await profiler.ProfileToolAsync("toolId");               // Profile
 var metrics = await profiler.GetPerformanceMetricsAsync("toolId");
@@ -44,6 +46,7 @@ var allocation = await profiler.OptimizeAllocationAsync("toolId", profile);
 ```
 
 ### Health Monitoring
+
 ```csharp
 var health = await monitor.GetHealthMetricsAsync("toolId");
 var isHealthy = await monitor.IsToolHealthyAsync("toolId");
@@ -57,6 +60,7 @@ var events = await monitor.GetRecentEventsAsync(100);    // Events
 ## 🎯 Common Patterns
 
 ### Monitor System Health
+
 ```csharp
 while (true)
 {
@@ -71,6 +75,7 @@ while (true)
 ```
 
 ### Profile-Aware Optimization
+
 ```csharp
 var profile = OrchestrationProfile.Gaming;
 var allocation = await profiler.OptimizeAllocationAsync("toolId", profile);
@@ -78,6 +83,7 @@ await profiler.UpdateResourceAllocationAsync("toolId", allocation);
 ```
 
 ### Automatic Conflict Resolution
+
 ```csharp
 var conflicts = await monitor.DetectConflictsAsync();
 foreach (var conflict in conflicts)
@@ -315,16 +321,19 @@ stats.AverageMemoryUtilization    // Memory MB
 ## 🆘 Common Troubleshooting
 
 **Tool won't start?**
+
 - Check dependencies registered
 - Verify resource limits
 - Review recent events
 
 **High CPU usage?**
+
 - Switch to Work profile
 - Check optimization recommendations
 - Reduce thread pool size
 
 **Frequent conflicts?**
+
 - Review dependency graph
 - Adjust resource allocation
 - Enable debug logging
@@ -347,6 +356,7 @@ stats.AverageMemoryUtilization    // Memory MB
 ## 🔐 Thread Safety
 
 All operations are thread-safe via `SemaphoreSlim(1)`:
+
 - ✅ Concurrent reads allowed
 - ✅ Exclusive writes enforced
 - ✅ No race conditions

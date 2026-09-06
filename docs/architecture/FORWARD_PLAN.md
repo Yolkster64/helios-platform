@@ -19,6 +19,7 @@ advisory; nothing self-executes.
 ## Tranche sequence
 
 ### T4 — .NET 10 platform (landed on this branch)
+
 Retargeted to net10.0 LTS (net8.0 EOL 2026-11-10) with an allowed-to-fail
 net11-preview CI lane; `src/gui` follows once the pinned Windows App SDK documents
 net10 support. GA flip ~Nov 2026 as a reviewed TFM bump.
@@ -26,6 +27,7 @@ Knowledge: `csharp-orchestrator/references/dotnet-10-and-11.md`. **Owner lane:
 Claude session.**
 
 ### T5 — GUI shell completion (plan of record: `GUI_UPGRADE_PLAN.md`)
+
 P1 canonical tokens + type ramp → P2 `GET /v1/metrics` REST seam → P3 AIHub metrics
 cards + Win2D sparklines → P4 Routing page → P5 Fleet page → P6 effects. Adobe asset
 track (icon + theme board) in parallel. **Owner lane: Claude session dispatching
@@ -33,18 +35,21 @@ ui-designer/theme-designer/ux-reviewer/gui-perf-profiler agents; P2 is
 Copilot-assignable.**
 
 ### T6 — Identity hardening to done (runbook: `IDENTITY_ARCHITECTURE.md`)
+
 Owner executes the ingress app registration (`register-entra-app.ps1 -Apply`) and MI
 grants; session wires EasyAuth/JWT validation in front of `helios-ai-api` and demotes
 `HELIOS_API_ACCESS_KEY` to local dev; absorption epic E5/#18 (Key Vault custody)
 closes on the same pattern. **Owner lane: owner + Claude session.**
 
 ### T7 — M365 Copilot go-live (scaffold: `integrations/m365/`)
+
 Owner: connector app consent, connection + schema registration, agent package upload.
 Session: ingestion automation for docs/absorption verdicts via the OIDC→Entra
 federation pattern (no stored client secret), then a scheduled refresh workflow.
 **Owner lane: owner first, then Claude session.**
 
 ### T8 — Absorption program next batch (ledger epics)
+
 Continue the watchlist → hosted benchmark → verdict loop; Copilot-assign the next
 epic batch the way #95/#96/#97 were run (E-numbered issues on the board). The
 `maxConcurrentLanes` caps and the absorb-pr credential guard are now enforced —
@@ -52,6 +57,7 @@ batch runs stay inside them. **Owner lane: Copilot agent + fleet, Claude session
 reviewing.**
 
 ### T9 — GitHub governance & devtools lane ("full github control")
+
 What actually exists vs what is scriptable, honestly: board custom fields + item
 wiring are real GraphQL (`scripts/board-setup/`, incl. `add-epics-to-board.ps1`);
 views/templates/automation are API-impossible and documented as manual click-paths.
@@ -78,6 +84,7 @@ until the required checks prove stable. **Owner lane: Claude session; ruleset
 enablement is an owner click.**
 
 ### T10 — RL / learning experiments (advisory-first, per the E28 carve-out)
+
 `Yolkster64/rl` (NeMo-RL lineage) is the toolkit reference. Scope: offline experiments
 over the learning store's outcome data (provider win-rates → routing suggestions
 surfaced in `/v1/insights`), never auto-applied — `adaptiveRouting` stays opt-in;
@@ -98,6 +105,7 @@ deploy that turns the Azure backend on. **Owner lane: fleet + Python spoke,
 human approves any routing change.**
 
 ### T11 — Purview/Fabric activation (design: `GOVERNANCE_PURVIEW_FABRIC.md`)
+
 Blocked on owner capacity decisions by design; the trigger is data volume/audience,
 not enthusiasm. **Owner lane: owner.**
 

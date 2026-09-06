@@ -25,11 +25,13 @@ This guide provides solutions for common workflow issues, debugging procedures, 
 ### Issue: Workflow Timeout
 
 **Symptoms**:
+
 - Job runs longer than expected
 - Eventually times out (360 minutes default)
 - Shows: "The operation was canceled"
 
 **Root Causes**:
+
 - Dependency download taking too long
 - Tests running slowly
 - Resource contention
@@ -64,6 +66,7 @@ strategy:
 ```
 
 **Recovery**:
+
 ```bash
 # Rerun failed job
 gh run rerun <RUN_ID> --failed
@@ -77,6 +80,7 @@ gh run rerun <RUN_ID> --failed
 ### Issue: Out of Disk Space
 
 **Symptoms**:
+
 ```
 No space left on device
 Failed to write to file
@@ -84,6 +88,7 @@ Disk full
 ```
 
 **Root Causes**:
+
 - Large artifacts not cleaned up
 - Build outputs not removed
 - Test data accumulation
@@ -123,6 +128,7 @@ Disk full
 ### Issue: Cache Not Being Restored
 
 **Symptoms**:
+
 ```
 Restoring cache failed
 Cache miss - reinstalling dependencies
@@ -130,6 +136,7 @@ No matching cache found
 ```
 
 **Root Causes**:
+
 - `package-lock.json` not committed
 - Cache key mismatch
 - Cache expired (5 day default)
@@ -164,6 +171,7 @@ key: ${{ runner.os }}-npm-${{ github.run_id }}  # Always unique
 ### Issue: Permission Denied Errors
 
 **Symptoms**:
+
 ```
 Permission denied: ./script.sh
 Cannot access file
@@ -171,6 +179,7 @@ chmod: operation not permitted
 ```
 
 **Root Causes**:
+
 - File lacks execute permission
 - Running as wrong user
 - Windows-Linux path issues
@@ -204,6 +213,7 @@ chmod: operation not permitted
 ### Issue: Network Connectivity
 
 **Symptoms**:
+
 ```
 Error: getaddrinfo ENOTFOUND npmjs.com
 Connection timeout
@@ -211,6 +221,7 @@ Failed to download package
 ```
 
 **Root Causes**:
+
 - Network issues
 - Firewall blocking
 - Package registry down
@@ -248,6 +259,7 @@ Failed to download package
 ### Issue: Test Failures
 
 **Symptoms**:
+
 ```
 FAIL tests/app.test.ts
 Expected: true, Got: false
@@ -255,6 +267,7 @@ AssertionError: expected value to be 5
 ```
 
 **Root Causes**:
+
 - Code changes broken tests
 - Environment-specific issues
 - Missing test data
@@ -290,6 +303,7 @@ npm test -- --runInBand
 ### Issue: NuGet Publish Fails
 
 **Symptoms**:
+
 ```
 401 Unauthorized
 409 Conflict (version already exists)
@@ -297,6 +311,7 @@ npm test -- --runInBand
 ```
 
 **Root Causes**:
+
 - Invalid API key
 - Version already published
 - Invalid package format
@@ -342,6 +357,7 @@ npm test -- --runInBand
 ### Issue: Azure Deployment Fails
 
 **Symptoms**:
+
 ```
 401 Unauthorized (Azure)
 ResourceNotFound
@@ -349,6 +365,7 @@ DeploymentFailed
 ```
 
 **Root Causes**:
+
 - Invalid Azure credentials
 - Insufficient permissions
 - Resource already exists
@@ -517,7 +534,8 @@ az resource list --resource-group helios-staging
 
 ### Q: How do I re-run a workflow?
 
-**A**: 
+**A**:
+
 ```bash
 # Using GitHub CLI
 gh run rerun <RUN_ID>
@@ -528,7 +546,8 @@ gh run rerun <RUN_ID>
 
 ### Q: Can I test workflows locally?
 
-**A**: 
+**A**:
+
 ```bash
 # Use act - GitHub Actions local runner
 # https://github.com/nektos/act
@@ -538,14 +557,16 @@ act pull_request
 
 ### Q: How long do workflow runs keep?
 
-**A**: 
+**A**:
+
 - Workflow history: 400 runs (oldest auto-deleted)
 - Artifacts: 7 days default (configurable up to 90)
 - Logs: 90 days (not deletable)
 
 ### Q: Can I skip a workflow for specific files?
 
-**A**: 
+**A**:
+
 ```yaml
 on:
   push:
@@ -556,7 +577,8 @@ on:
 
 ### Q: How do I debug secrets?
 
-**A**: 
+**A**:
+
 ```yaml
 # Secrets are masked in logs
 - name: Debug (No secrets printed)
@@ -576,6 +598,7 @@ on:
 ### Q: Why is my workflow slow?
 
 **A**:
+
 - Check for large downloads
 - Verify caching is working
 - Look for sequential jobs (use parallelization)
@@ -585,6 +608,7 @@ on:
 ### Q: How do I handle flaky tests?
 
 **A**:
+
 ```yaml
 - name: Run Tests with Retry
   run: |

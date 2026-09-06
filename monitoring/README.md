@@ -7,6 +7,7 @@ Complete enterprise-grade monitoring and alerting system for the HELIOS Platform
 ## 📊 System Components
 
 ### Core Monitoring (7 Components)
+
 1. **HELIOS.Platform** - Main API and orchestration (Port 5000)
 2. **AI-Dashboard** - Analytics and visualization (Port 5001)
 3. **Analytics-Core** - Data processing and analysis (Port 5002)
@@ -18,15 +19,18 @@ Complete enterprise-grade monitoring and alerting system for the HELIOS Platform
 ## 🚀 Quick Start
 
 ### 1. Start Monitoring System
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\monitoring\scripts
 .\start-monitoring.ps1 -Mode Continuous -Port 8080
 ```
 
 ### 2. Access Dashboard
+
 Open browser and navigate to: `http://localhost:8080`
 
 ### 3. View Real-time Data
+
 - Health Checks: `data/latest_health_check.json`
 - Performance Metrics: `data/latest_performance_metrics.json`
 - Alerts: `data/alert_status.json`
@@ -66,6 +70,7 @@ monitoring/
 ## ✨ Features
 
 ### 1. Real-Time Dashboards
+
 - Component health status with live indicators
 - Performance metrics (throughput, latency, errors)
 - Alert summary and incident tracking
@@ -74,6 +79,7 @@ monitoring/
 - 24-hour trending
 
 ### 2. Health Checks (01-health-check.ps1)
+
 - HTTP endpoint availability
 - Port responsiveness
 - Service readiness
@@ -81,6 +87,7 @@ monitoring/
 - Runs every 30 seconds
 
 **Sample Output:**
+
 ```
 ✓ HELIOS.Platform - Healthy (Status: 200, Response: 45ms)
 ⚠ Analytics-Core - Warning (Status: 200, Response: 1250ms)
@@ -88,13 +95,16 @@ monitoring/
 ```
 
 ### 3. Performance Metrics (02-performance-metrics.ps1)
+
 Tracks per component:
+
 - **Throughput**: Requests per second
 - **Latency**: P50, P95, P99 percentiles
 - **Errors**: 4xx and 5xx error rates
 - **Resources**: CPU %, Memory %, Disk I/O, Network
 
 **Sample Output:**
+
 ```
 HELIOS.Platform:
   ├─ Throughput: 150 req/s
@@ -105,7 +115,9 @@ HELIOS.Platform:
 ```
 
 ### 4. Alert Evaluator (03-alert-evaluator.ps1)
+
 Predefined alert rules:
+
 - High Error Rate (5xx > 1%)
 - High Latency (P99 > 1000ms)
 - High CPU (> 85%)
@@ -113,13 +125,16 @@ Predefined alert rules:
 - Service Unavailability
 
 **Notification Channels:**
+
 - Email (SMTP)
 - Microsoft Teams
 - Webhooks
 - PagerDuty
 
 ### 5. SLA Tracking (04-sla-calculator.ps1)
+
 Monitors:
+
 - Monthly uptime % vs targets (99.9%, 99.95%, 99.99%)
 - Mean Time To Respond (MTTR)
 - Mean Time Between Failures (MTBF)
@@ -127,6 +142,7 @@ Monitors:
 - Compliance scoring
 
 **Sample Output:**
+
 ```
 HELIOS.Platform:
   ├─ SLA Target: 99.95%
@@ -136,7 +152,9 @@ HELIOS.Platform:
 ```
 
 ### 6. Anomaly Detection (05-anomaly-detector.ps1)
+
 Detects:
+
 - Statistical deviations (Z-score > 2.5σ)
 - Sudden spikes (>150% baseline)
 - Sudden drops (<50% baseline)
@@ -144,13 +162,16 @@ Detects:
 - Confidence scoring
 
 **Anomaly Types:**
+
 - STATISTICAL_DEVIATION
 - SPIKE
 - DROP
 - TREND_CHANGE
 
 ### 7. Incident Management (06-incident-manager.ps1)
+
 Lifecycle management:
+
 - Automatic creation from critical alerts
 - Status tracking (NEW → ASSIGNED → INVESTIGATING → RESOLVED)
 - Root cause documentation
@@ -158,6 +179,7 @@ Lifecycle management:
 - MTTR/MTBF calculations
 
 **Sample Incident:**
+
 ```
 INC-20240413-54821
 ├─ Title: Analytics-Core Memory Spike
@@ -169,14 +191,18 @@ INC-20240413-54821
 ```
 
 ### 8. SLA Compliance Calculations
+
 Monthly tracking:
+
 - Individual component SLA compliance
 - Overall platform compliance
 - Trend analysis (Quarterly/Annual)
 - Breach documentation
 
 ### 9. Capacity Planning
+
 Forecasts (30/90/180 days):
+
 - CPU utilization trends
 - Memory usage growth
 - Disk space consumption
@@ -184,7 +210,9 @@ Forecasts (30/90/180 days):
 - Growth rate analysis
 
 ### 10. Correlative Analysis
+
 Identifies:
+
 - Components that fail together
 - Dependency relationships
 - Root cause propagation
@@ -194,6 +222,7 @@ Identifies:
 ## 🔧 Configuration
 
 ### Alert Rules (config/alert-rules.json)
+
 ```json
 {
   "name": "High Error Rate 5xx",
@@ -206,14 +235,18 @@ Identifies:
 ```
 
 ### Components (config/components.json)
+
 Define all monitored components with:
+
 - Health endpoints
 - Port numbers
 - SLA targets
 - Owner teams
 
 ### Notifications (config/notifications.json)
+
 Configure:
+
 - Email SMTP settings
 - Teams webhook URLs
 - Slack integration
@@ -223,6 +256,7 @@ Configure:
 ## 📈 Data Collection
 
 ### Collection Intervals
+
 - Health Checks: Every 30 seconds
 - Performance Metrics: Every 60 seconds
 - System Metrics: Every 5 minutes
@@ -231,6 +265,7 @@ Configure:
 - Capacity Planning: Every 24 hours
 
 ### Data Retention
+
 - Raw metrics: 30 days
 - Aggregated metrics: 1 year
 - Incidents: 2 years
@@ -239,6 +274,7 @@ Configure:
 ## 🗄️ Database Schema
 
 SQLite database with tables:
+
 - `components` - Component registry
 - `metrics` - Time-series metrics
 - `health_checks` - Health check history
@@ -252,27 +288,32 @@ SQLite database with tables:
 ## 🎛️ Control Commands
 
 ### View Job Status
+
 ```powershell
 Get-Job
 Get-Job -Name "HealthCheck" | Format-List
 ```
 
 ### Stop Individual Component
+
 ```powershell
 Stop-Job -Name "HealthCheck"
 ```
 
 ### View Job Output
+
 ```powershell
 Get-Job -Name "HealthCheck" | Receive-Job
 ```
 
 ### View Recent Errors
+
 ```powershell
 Get-Job -Name "AlertEvaluator" | Select-Object -Last 1 | Receive-Job
 ```
 
 ### Clean Up Jobs
+
 ```powershell
 Get-Job | Stop-Job
 Get-Job | Remove-Job
@@ -311,6 +352,7 @@ Get-Job | Remove-Job
 ## 🐛 Troubleshooting
 
 ### Dashboard Not Loading
+
 ```powershell
 # Check if server is running
 Get-Job -Name "DashboardServer"
@@ -323,6 +365,7 @@ netstat -ano | findstr :8080
 ```
 
 ### Missing Metrics
+
 ```powershell
 # Verify collection scripts are running
 Get-Job -Name "PerformanceMetrics" | Receive-Job
@@ -332,6 +375,7 @@ Get-Content data\latest_performance_metrics.json
 ```
 
 ### Alert Not Triggering
+
 ```powershell
 # Check alert evaluator
 Get-Job -Name "AlertEvaluator" | Receive-Job
@@ -343,6 +387,7 @@ Get-Content config\alert-rules.json
 ## 📞 Support & Help
 
 For issues:
+
 1. Check logs: `logs/monitoring.log`
 2. Review component health: `data/latest_health_check.json`
 3. View alert history: `data/alert_status.json`
@@ -351,18 +396,21 @@ For issues:
 ## 📝 API Reference
 
 ### Health Endpoint
+
 ```
 GET http://localhost:5000/health
 Returns: { status: "healthy", timestamp: "...", components: [...] }
 ```
 
 ### Metrics Endpoint
+
 ```
 GET http://localhost:5000/metrics
 Returns: { throughput_rps, latency_p99, error_rate_5xx, cpu_percent, ... }
 ```
 
 ### Dashboard API
+
 - `GET /api/health` - Overall health
 - `GET /api/components` - Component list
 - `GET /api/metrics/:component` - Component metrics

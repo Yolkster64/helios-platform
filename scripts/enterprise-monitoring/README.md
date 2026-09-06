@@ -5,6 +5,7 @@ A comprehensive, production-ready unified monitoring platform for enterprises ma
 ## 📊 System Overview
 
 The Enterprise Monitoring System provides:
+
 - **Unified Dashboard** - Real-time visualization of all monitored systems
 - **On-Premises Monitoring** - Windows system health, resources, and performance
 - **Azure Integration** - Cloud resource monitoring, cost tracking, and quota management
@@ -68,6 +69,7 @@ enterprise-monitoring/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - PowerShell 5.0 or higher
 - Windows 10/Server 2016+
 - Administrator privileges
@@ -80,6 +82,7 @@ enterprise-monitoring/
 1. Clone/extract to `C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring`
 
 2. Configure settings:
+
 ```powershell
 # Edit configuration files
 notepad config\monitoring-config.json
@@ -87,6 +90,7 @@ notepad config\alert-policies.json
 ```
 
 3. Set Azure credentials (optional):
+
 ```powershell
 $config = Get-Content config\monitoring-config.json | ConvertFrom-Json
 $config.monitoring.azure.subscriptionIds = @("sub-id-1", "sub-id-2")
@@ -97,27 +101,32 @@ $config | ConvertTo-Json | Out-File config\monitoring-config.json
 ### Quick Start
 
 #### Start Dashboard
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring
 .\monitoring-orchestrator.ps1 -StartModule Dashboard
 ```
 
 #### Start On-Premises Monitoring
+
 ```powershell
 .\monitoring-orchestrator.ps1 -StartModule OnPrem
 ```
 
 #### Start Azure Monitoring
+
 ```powershell
 .\monitoring-orchestrator.ps1 -StartModule Azure
 ```
 
 #### Start Microsoft 365 Monitoring
+
 ```powershell
 .\monitoring-orchestrator.ps1 -StartModule M365
 ```
 
 #### Start All Modules
+
 ```powershell
 .\monitoring-orchestrator.ps1 -StartModule All
 ```
@@ -127,6 +136,7 @@ For parallel execution, run each module in a separate PowerShell window.
 ## 📋 Features
 
 ### Dashboard Module (400+ lines)
+
 - **Real-time System View** - Live CPU, memory, disk, and network metrics
 - **Service Status** - Critical Windows services monitoring
 - **Alert Summary** - Aggregated alerts by severity
@@ -134,6 +144,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - **Multiple Themes** - Dark, Light, Ocean, Retro themes with CSS export
 
 ### On-Premises Monitoring (300+ lines)
+
 - **System Health** - OS info, boot time, update status
 - **Resource Tracking** - CPU, memory, disk I/O per-process metrics
 - **Security Monitoring** - Windows Defender, Firewall, UAC status
@@ -141,6 +152,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - **Threshold Alerts** - Configurable CPU, memory, disk thresholds
 
 ### Azure Integration (350+ lines)
+
 - **Subscription Health** - Real-time Azure resource status
 - **VM Performance** - CPU, disk, network metrics per VM
 - **App Service Monitoring** - Response time, error rates, HTTP metrics
@@ -148,6 +160,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - **Quota Tracking** - Resource quota utilization monitoring
 
 ### Microsoft 365 Monitoring (300+ lines)
+
 - **Service Health** - Exchange, Teams, SharePoint status
 - **Mail Flow** - Message processing, queue, and latency metrics
 - **Teams Activity** - Active users, meetings, call duration
@@ -155,18 +168,21 @@ For parallel execution, run each module in a separate PowerShell window.
 - **User Management** - Active/inactive users, licensing alerts
 
 ### Compliance Monitoring (300+ lines)
+
 - **Purview Alerts** - Data governance and protection
 - **DLP Violations** - Policy violation tracking and enforcement
 - **Audit Trail** - Comprehensive activity logging
 - **Risk Scoring** - AI-based risk assessment and trending
 
 ### Analytics Engine (350+ lines)
+
 - **Anomaly Detection** - Z-score based statistical analysis
 - **Predictive Alerts** - Linear regression forecasting
 - **Usage Predictions** - Behavioral pattern analysis
 - **Cost Forecasting** - Budget trend prediction
 
 ### Reporting (300+ lines)
+
 - **Executive Reports** - High-level KPI dashboard (HTML)
 - **Technical Reports** - Detailed performance metrics
 - **Compliance Reports** - Audit and governance documentation
@@ -176,6 +192,7 @@ For parallel execution, run each module in a separate PowerShell window.
 ## ⚙️ Configuration
 
 ### Main Configuration (monitoring-config.json)
+
 ```json
 {
   "monitoring": {
@@ -202,6 +219,7 @@ For parallel execution, run each module in a separate PowerShell window.
 ```
 
 ### Alert Policies (alert-policies.json)
+
 - Configure alert severity levels
 - Define policy rules (threshold, duration, action)
 - Set escalation procedures
@@ -209,6 +227,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - Configure notification channels
 
 ### Report Templates (report-templates.json)
+
 - Customize report sections
 - Define chart types and data
 - Set distribution schedules
@@ -217,6 +236,7 @@ For parallel execution, run each module in a separate PowerShell window.
 ## 📊 Monitoring Metrics
 
 ### System Performance
+
 - CPU utilization and load
 - Memory usage and available
 - Disk I/O and space
@@ -224,6 +244,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - Process-level metrics
 
 ### Service Health
+
 - Service status and uptime
 - Response times
 - Error rates
@@ -231,6 +252,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - Connection counts
 
 ### Cloud Resources
+
 - VM performance (CPU, disk, network)
 - App Service metrics (requests, latency, errors)
 - Storage utilization
@@ -238,6 +260,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - API response times
 
 ### Microsoft 365
+
 - Service operational status
 - Mail flow metrics
 - Teams meeting/call data
@@ -245,6 +268,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - User activity trends
 
 ### Compliance
+
 - Policy violations
 - Audit events
 - Risk scores
@@ -254,6 +278,7 @@ For parallel execution, run each module in a separate PowerShell window.
 ## 🔔 Alert Management
 
 ### Alert Lifecycle
+
 1. **Detection** - Metric exceeds threshold or anomaly detected
 2. **Creation** - Alert generated with unique ID
 3. **Escalation** - Automatic escalation if not acknowledged
@@ -262,6 +287,7 @@ For parallel execution, run each module in a separate PowerShell window.
 6. **Resolution** - Issue resolved and alert closed
 
 ### Severity Levels
+
 - **Critical** - Immediate action required (15-min escalation)
 - **High** - Urgent attention needed (30-min escalation)
 - **Medium** - Non-urgent action (60-min escalation)
@@ -269,6 +295,7 @@ For parallel execution, run each module in a separate PowerShell window.
 - **Info** - Status updates only
 
 ### Notification Channels
+
 - Email (SMTP/Office 365)
 - Microsoft Teams webhooks
 - Slack webhooks
@@ -280,30 +307,35 @@ For parallel execution, run each module in a separate PowerShell window.
 ### Report Types
 
 **Executive Summary**
+
 - KPI overview (uptime, availability)
 - Incident summary
 - Compliance status
 - Cost summary
 
 **Technical Report**
+
 - Infrastructure performance
 - Application metrics
 - Azure resource performance
 - Error and warning analysis
 
 **Compliance Report**
+
 - Framework compliance status
 - DLP violation trends
 - Audit trail summary
 - Risk assessment
 
 **Capacity Planning**
+
 - Current utilization trends
 - 12-month projections
 - Azure quota analysis
 - Recommendations
 
 ### Report Scheduling
+
 - Daily: 02:00 UTC
 - Weekly: Sunday 03:00 UTC
 - Monthly: 1st day 04:00 UTC
@@ -312,18 +344,21 @@ For parallel execution, run each module in a separate PowerShell window.
 ## 🔐 Security
 
 ### Authentication
+
 - Windows Authentication for on-premises
 - Azure AD for cloud services
 - Multi-factor authentication supported
 - Service principal support
 
 ### Data Protection
+
 - TLS encryption for data in transit
 - Encrypted credential storage
 - RBAC-based access control
 - Audit logging of all actions
 
 ### Compliance
+
 - GDPR compliant
 - HIPAA ready
 - SOC 2 Type II controls
@@ -332,18 +367,21 @@ For parallel execution, run each module in a separate PowerShell window.
 ## 📝 Logging
 
 ### Log Files
+
 - Located in: `enterprise-monitoring\logs\`
 - Daily log rotation (YYYY-MM-DD.log)
 - Retention: 30 days (configurable)
 - Format: [TIMESTAMP] [LEVEL] [COMPONENT] Message
 
 ### Log Levels
+
 - **INFO** - General informational messages
 - **WARNING** - Non-critical issues
 - **ERROR** - Error conditions
 - **DEBUG** - Detailed debugging information
 
 ### Viewing Logs
+
 ```powershell
 # View today's logs
 Get-Content "logs\$(Get-Date -Format 'yyyy-MM-dd').log" -Tail 50
@@ -358,6 +396,7 @@ Remove-Item logs\*.log -Older 30days
 ## 🛠️ Customization
 
 ### Creating Custom Alerts
+
 ```powershell
 $alert = New-AlertEvent `
     -AlertId "CUSTOM-001" `
@@ -368,6 +407,7 @@ $alert = New-AlertEvent `
 ```
 
 ### Adding Custom Metrics
+
 ```powershell
 $metric = New-MetricValue `
     -Name "CustomMetric" `
@@ -377,6 +417,7 @@ $metric = New-MetricValue `
 ```
 
 ### Creating Custom Reports
+
 - Edit report templates in `config\report-templates.json`
 - Add new sections and charts
 - Configure data sources
@@ -387,6 +428,7 @@ $metric = New-MetricValue `
 ### Common Issues
 
 **Module fails to load**
+
 ```powershell
 # Check module paths
 Test-Path "C:\Users\ADMIN\helios-platform\scripts\enterprise-monitoring\lib\monitoring-library.ps1"
@@ -396,6 +438,7 @@ $PSVersionTable.PSVersion
 ```
 
 **Azure connection fails**
+
 ```powershell
 # Reconnect to Azure
 Connect-AzAccount -TenantId "your-tenant-id"
@@ -405,6 +448,7 @@ Get-AzSubscription
 ```
 
 **M365 authentication errors**
+
 ```powershell
 # Clear cached credentials
 Remove-Item "$env:APPDATA\Microsoft\*" -Force -Recurse
@@ -414,6 +458,7 @@ Connect-MgGraph -Scopes "Organization.Read.All"
 ```
 
 ### Performance Optimization
+
 - Increase cache duration for high-latency networks
 - Reduce refresh intervals on powerful servers
 - Enable batch processing for large datasets
@@ -422,6 +467,7 @@ Connect-MgGraph -Scopes "Organization.Read.All"
 ## 📞 Support & Contribution
 
 For issues or feature requests:
+
 1. Check logs for error messages
 2. Review configuration files
 3. Consult module-specific documentation

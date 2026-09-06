@@ -42,12 +42,15 @@ Provides automated PowerShell scripts to:
 ### Public Functions
 
 #### New-BootableUSB
+
 ```
 New-BootableUSB -USBDrive <char> -WindowsPEPath <string> -HeliosPath <string> [-Verbose]
 ```
+
 Creates bootable USB with HELIOS tools.
 
 **Parameters**:
+
 - USBDrive: Drive letter (E, F, G, etc)
 - WindowsPEPath: Path to Windows PE ISO or extracted files
 - HeliosPath: Path to HELIOS scripts folder
@@ -55,23 +58,28 @@ Creates bootable USB with HELIOS tools.
 **Returns**: Object with Status, DriveInfo, FilesAdded
 
 **Example**:
+
 ```powershell
 New-BootableUSB -USBDrive "E" -WindowsPEPath "C:\WinPE" -HeliosPath "C:\HELIOS\Phase0"
 ```
 
 #### Test-BootableUSB
+
 ```
 Test-BootableUSB -USBDrive <char> [-TestVM]
 ```
+
 Validates USB is bootable and functional.
 
 **Parameters**:
+
 - USBDrive: Drive letter to test
 - TestVM: If specified, attempts boot in VM
 
 **Returns**: Object with TestResults, Issues, Recommendations
 
 **Example**:
+
 ```powershell
 Test-BootableUSB -USBDrive "E" -TestVM
 ```
@@ -109,12 +117,14 @@ None yet (design phase).
 ### Quick Start
 
 1. **Prepare Windows PE**
+
    ```powershell
    # Download Windows ADK and extract Windows PE
    # Or use pre-built Windows PE ISO
    ```
 
 2. **Get HELIOS Scripts**
+
    ```powershell
    # Clone HELIOS repository
    git clone https://github.com/your-org/helios-platform.git
@@ -122,6 +132,7 @@ None yet (design phase).
    ```
 
 3. **Create USB**
+
    ```powershell
    Import-Module .\submodules\PHASE-0-USB-Creator\src\Module.psm1
    New-BootableUSB -USBDrive "E" `
@@ -130,6 +141,7 @@ None yet (design phase).
    ```
 
 4. **Validate USB**
+
    ```powershell
    Test-BootableUSB -USBDrive "E"
    ```

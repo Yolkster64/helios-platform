@@ -3,6 +3,7 @@
 ## Quick Diagnostics
 
 ### System Health Check
+
 ```bash
 # Run diagnostic
 npx helios-cli diagnose
@@ -23,17 +24,20 @@ npx helios-cli diagnose
 ### Issue 1: High API Latency (>1000ms)
 
 **Symptoms:**
+
 - API responses slow (p95 > 1000ms)
 - Dashboard loading takes >5 seconds
 - Timeout errors appear in logs
 
 **Root Causes:**
+
 1. Database query performance
 2. Network issues
 3. Cache misses
 4. Upstream service latency
 
 **Diagnostics:**
+
 ```bash
 # Check database query performance
 SELECT query, calls, total_time FROM pg_stat_statements
@@ -51,13 +55,16 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.helios.app/health
 ```
 
 **Solutions:**
+
 1. **Add database indexes**
+
    ```sql
    CREATE INDEX idx_documents_user_id ON documents(user_id);
    CREATE INDEX idx_sync_events_timestamp ON sync_events(timestamp DESC);
    ```
 
 2. **Increase cache size**
+
    ```javascript
    // In config/cache.js
    maxMemory: '4gb',
@@ -65,6 +72,7 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.helios.app/health
    ```
 
 3. **Enable query result caching**
+
    ```javascript
    const cacheResult = await cache.getOrSet(
      `query_${hash(query)}`,
@@ -74,6 +82,7 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.helios.app/health
    ```
 
 4. **Optimize slow queries**
+
    ```sql
    -- Replace:
    SELECT * FROM documents WHERE content LIKE '%search%';
@@ -83,6 +92,7 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.helios.app/health
    ```
 
 5. **Scale horizontally**
+
    ```bash
    # Add more API instances
    kubectl scale deployment api-service --replicas=5
@@ -93,11 +103,13 @@ curl -w "@curl-format.txt" -o /dev/null -s https://api.helios.app/health
 ### Issue 2: Database Connection Timeouts
 
 **Symptoms:**
+
 - "FATAL: remaining connection slots reserved" error
 - Connection pool exhausted
 - Database unavailable errors
 
 **Diagnostics:**
+
 ```bash
 # Check active connections
 psql -c "SELECT count(*) FROM pg_stat_activity;"
@@ -110,7 +122,9 @@ psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle';"
 ```
 
 **Solutions:**
+
 1. **Increase connection pool size**
+
    ```javascript
    // config/database.js
    pool: {
@@ -122,6 +136,7 @@ psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle';"
    ```
 
 2. **Enable connection pooling (PgBouncer)**
+
    ```
    # pgbouncer.ini
    max_client_conn = 1000
@@ -132,6 +147,7 @@ psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle';"
    ```
 
 3. **Close idle connections**
+
    ```javascript
    // Add connection cleanup
    setInterval(() => {
@@ -145,6 +161,7 @@ psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle';"
    ```
 
 4. **Monitor connection usage**
+
    ```sql
    -- Create alert
    SELECT count(*) as active_connections
@@ -158,11 +175,13 @@ psql -c "SELECT * FROM pg_stat_activity WHERE state = 'idle';"
 ### Issue 3: Sync Conflicts Not Resolving
 
 **Symptoms:**
+
 - Sync status shows conflicts pending
 - Manual resolution required repeatedly
 - Data inconsistency between devices
 
 **Diagnostics:**
+
 ```javascript
 // Check unresolved conflicts
 const conflicts = await client.sync.getConflicts({
@@ -176,7 +195,9 @@ const logs = await client.sync.getConflictLogs({
 ```
 
 **Solutions:**
+
 1. **Configure auto-resolution strategy**
+
    ```javascript
    // config/sync.js
    conflictResolution: {
@@ -187,6 +208,7 @@ const logs = await client.sync.getConflictLogs({
    ```
 
 2. **Implement custom merge logic**
+
    ```javascript
    syncEngine.onConflict(async (conflict) => {
      const merged = {
@@ -203,6 +225,7 @@ const logs = await client.sync.getConflictLogs({
    ```
 
 3. **Increase conflict timeout**
+
    ```javascript
    conflictResolution: {
      timeout: 300000, // 5 minutes, was 60 seconds
@@ -211,6 +234,7 @@ const logs = await client.sync.getConflictLogs({
    ```
 
 4. **Clear stuck conflicts (careful)**
+
    ```javascript
    // After investigation
    await syncEngine.clearConflict({
@@ -224,11 +248,13 @@ const logs = await client.sync.getConflictLogs({
 ### Issue 4: Out of Memory Errors
 
 **Symptoms:**
+
 - "JavaScript heap out of memory" error
 - Process crashes during heavy operations
 - Memory usage steadily increases
 
 **Diagnostics:**
+
 ```bash
 # Check Node.js process memory
 node --max_old_space_size=4096 server.js
@@ -242,7 +268,9 @@ node --trace-gc server.js 2>&1 | grep "Scavenge"
 ```
 
 **Solutions:**
+
 1. **Increase heap size**
+
    ```bash
    # In docker-compose.yml or deployment
    environment:
@@ -250,6 +278,7 @@ node --trace-gc server.js 2>&1 | grep "Scavenge"
    ```
 
 2. **Fix memory leaks**
+
    ```javascript
    // ❌ LEAK: Unbounded event listeners
    client.on('sync:update', listener);
@@ -261,6 +290,7 @@ node --trace-gc server.js 2>&1 | grep "Scavenge"
    ```
 
 3. **Optimize data structures**
+
    ```javascript
    // ❌ LEAK: Keeping all results in memory
    const allResults = [];
@@ -275,6 +305,7 @@ node --trace-gc server.js 2>&1 | grep "Scavenge"
    ```
 
 4. **Enable heap snapshots**
+
    ```javascript
    const heapdump = require('heapdump');
    
@@ -289,11 +320,13 @@ node --trace-gc server.js 2>&1 | grep "Scavenge"
 ### Issue 5: Cache Hit Rate Below 80%
 
 **Symptoms:**
+
 - Cache hit rate < 80%
 - High database load
 - Repeated queries for same data
 
 **Diagnostics:**
+
 ```bash
 # Check cache hit rate
 redis-cli info stats
@@ -308,7 +341,9 @@ redis-cli info stats | grep evicted_keys
 ```
 
 **Solutions:**
+
 1. **Increase cache size**
+
    ```javascript
    // config/redis.js
    maxMemory: '8gb', // Increase from 4gb
@@ -316,6 +351,7 @@ redis-cli info stats | grep evicted_keys
    ```
 
 2. **Adjust TTL values**
+
    ```javascript
    // Longer TTL for stable data
    CACHE_TTL = {
@@ -327,6 +363,7 @@ redis-cli info stats | grep evicted_keys
    ```
 
 3. **Pre-warm cache**
+
    ```javascript
    async function warmCache() {
      const users = await db.query('SELECT * FROM users LIMIT 10000');
@@ -340,6 +377,7 @@ redis-cli info stats | grep evicted_keys
    ```
 
 4. **Implement cache versioning**
+
    ```javascript
    const version = process.env.CACHE_VERSION || '1';
    const cacheKey = `${key}:v${version}`;
@@ -350,11 +388,13 @@ redis-cli info stats | grep evicted_keys
 ### Issue 6: Plugin Sandbox Crashes
 
 **Symptoms:**
+
 - "Plugin sandbox terminated unexpectedly"
 - Plugin execution timeout
 - Resource limit exceeded errors
 
 **Diagnostics:**
+
 ```javascript
 // Get plugin crash logs
 const logs = await client.plugins.getLogs('plugin_id', {
@@ -368,7 +408,9 @@ const metrics = await client.plugins.getMetrics('plugin_id');
 ```
 
 **Solutions:**
+
 1. **Increase resource limits**
+
    ```javascript
    await client.plugins.updateLimits('plugin_id', {
      cpuLimit: '1000m',      // 1 CPU
@@ -378,6 +420,7 @@ const metrics = await client.plugins.getMetrics('plugin_id');
    ```
 
 2. **Fix plugin memory leak**
+
    ```javascript
    // ❌ MEMORY LEAK in plugin
    const cache = {};
@@ -394,6 +437,7 @@ const metrics = await client.plugins.getMetrics('plugin_id');
    ```
 
 3. **Optimize plugin execution**
+
    ```javascript
    // Reduce processing time
    const optimized = await plugin.process(data, {
@@ -403,6 +447,7 @@ const metrics = await client.plugins.getMetrics('plugin_id');
    ```
 
 4. **Use different sandbox type**
+
    ```javascript
    // Switch from VM to Worker for lower overhead
    await client.plugins.updateConfig('plugin_id', {
@@ -415,11 +460,13 @@ const metrics = await client.plugins.getMetrics('plugin_id');
 ### Issue 7: Authentication Failures
 
 **Symptoms:**
+
 - "Invalid credentials" even with correct password
 - JWT token rejected
 - MFA authentication failing
 
 **Diagnostics:**
+
 ```bash
 # Check auth logs
 cat logs/auth.log | grep -i "failed\|error" | tail -20
@@ -432,7 +479,9 @@ echo $JWT_SECRET | wc -c
 ```
 
 **Solutions:**
+
 1. **Reset password**
+
    ```bash
    curl -X POST https://api.helios.app/v1/auth/forgot-password \
      -H "Content-Type: application/json" \
@@ -442,6 +491,7 @@ echo $JWT_SECRET | wc -c
    ```
 
 2. **Verify JWT configuration**
+
    ```javascript
    // Ensure secrets match
    console.log('JWT_SECRET length:', process.env.JWT_SECRET.length);
@@ -456,6 +506,7 @@ echo $JWT_SECRET | wc -c
    ```
 
 3. **MFA troubleshooting**
+
    ```javascript
    // Verify TOTP synchronization
    const speakeasy = require('speakeasy');
@@ -473,6 +524,7 @@ echo $JWT_SECRET | wc -c
    ```
 
 4. **Refresh expired token**
+
    ```javascript
    const refreshResponse = await fetch('https://api.helios.app/v1/auth/refresh', {
      method: 'POST',
@@ -486,11 +538,13 @@ echo $JWT_SECRET | wc -c
 ### Issue 8: Network Connectivity Issues
 
 **Symptoms:**
+
 - Intermittent connection drops
 - WebSocket reconnection loops
 - Offline queue never syncs
 
 **Diagnostics:**
+
 ```javascript
 // Monitor connectivity
 client.on('offline', () => console.log('Went offline'));
@@ -504,7 +558,9 @@ navigator.connection?.addEventListener('change', () => {
 ```
 
 **Solutions:**
+
 1. **Implement exponential backoff**
+
    ```javascript
    const reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000];
    let reconnectAttempt = 0;
@@ -522,6 +578,7 @@ navigator.connection?.addEventListener('change', () => {
    ```
 
 2. **Increase timeout values**
+
    ```javascript
    // Adjust for poor network
    const config = {
@@ -532,6 +589,7 @@ navigator.connection?.addEventListener('change', () => {
    ```
 
 3. **Enable socket.io fallback**
+
    ```javascript
    const socket = io(url, {
      transports: ['websocket', 'polling'],
@@ -542,6 +600,7 @@ navigator.connection?.addEventListener('change', () => {
    ```
 
 4. **Monitor offline queue**
+
    ```javascript
    setInterval(async () => {
      const queue = await client.sync.getOfflineQueue();
@@ -557,6 +616,7 @@ navigator.connection?.addEventListener('change', () => {
 ## Performance Tuning
 
 ### Database Optimization
+
 ```sql
 -- Enable query statistics
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
@@ -573,6 +633,7 @@ ON sync_events(user_id, timestamp DESC);
 ```
 
 ### Cache Optimization
+
 ```javascript
 // Implement cache compression
 const compress = require('compression');
@@ -586,6 +647,7 @@ const decompressed = JSON.parse(decompress(cached));
 ```
 
 ### API Response Optimization
+
 ```javascript
 // Use pagination
 app.get('/api/documents', (req, res) => {
@@ -606,6 +668,7 @@ app.use(compression({ threshold: 1000 }));
 ## Monitoring & Alerting
 
 ### Key Metrics to Monitor
+
 ```
 - API latency (p50, p95, p99)
 - Error rate (%)
@@ -618,6 +681,7 @@ app.use(compression({ threshold: 1000 }));
 ```
 
 ### Alert Thresholds
+
 ```
 - API p99 latency > 1000ms    → Warning
 - Error rate > 1%              → Critical
@@ -632,12 +696,14 @@ app.use(compression({ threshold: 1000 }));
 ## Debugging Tools
 
 ### 1. Using Node Inspector
+
 ```bash
 node --inspect=9229 server.js
 # Open chrome://inspect in Chrome
 ```
 
 ### 2. Log Analysis
+
 ```bash
 # Find error patterns
 grep ERROR logs/*.log | cut -d: -f3 | sort | uniq -c | sort -rn
@@ -647,11 +713,13 @@ tail -f logs/*.log | grep -E "(ERROR|WARN)"
 ```
 
 ### 3. Database Query Profiling
+
 ```sql
 EXPLAIN ANALYZE SELECT * FROM documents WHERE user_id = $1;
 ```
 
 ### 4. WebSocket Debugging
+
 ```javascript
 // Log all WebSocket events
 socket.on('connect', () => console.log('WS connected'));

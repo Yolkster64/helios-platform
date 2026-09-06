@@ -93,6 +93,7 @@ C:\HELIOS/
 ## Key Features
 
 ### Windows Installer Features
+
 - **Pre-Installation Phase**
   - ✓ System requirements verification (OS version, RAM, disk)
   - ✓ Conflict detection (ports 5000-6000, existing services)
@@ -140,6 +141,7 @@ C:\HELIOS/
   - ✓ Authenticode digital signing
 
 ### Safety Integration
+
 - **Pre-Installation Backup**
   - Registry backup before modifications
   - File system snapshot for rollback
@@ -169,6 +171,7 @@ C:\HELIOS/
   - Firewall rules verification
 
 ### USB Bootable Image Features
+
 - **Boot Environment**
   - ✓ Windows PE-based boot (~300MB)
   - ✓ UEFI + BIOS boot support
@@ -193,23 +196,27 @@ C:\HELIOS/
 ## Installation Specifications
 
 ### Minimum System Requirements
+
 - **OS**: Windows 7 SP1, Windows 10, Windows 11
 - **RAM**: 4GB minimum, 8GB recommended
 - **Disk**: 2GB free space minimum
 - **Network**: (Optional) 100Mbps Ethernet
 
 ### Installation Profiles
+
 - **Minimal**: Core HELIOS only (~500MB)
 - **Standard**: Core + Analytics (~1.2GB)
 - **Full**: All features including Development tools (~2GB+)
 - **Custom**: User-selected features
 
 ### Port Configuration
+
 - Default HTTP Port: 5000 (configurable 5000-5999)
 - Default HTTPS Port: 5001 (automatic)
 - Diagnostic Port: 6000 (automatic adjustment if taken)
 
 ### Installation Targets
+
 - **Primary**: `C:\Program Files\HELIOS\`
 - **Data**: `C:\ProgramData\HELIOS\` (for configuration/logs)
 - **Alternative**: User-selectable during installation
@@ -245,6 +252,7 @@ HKLM\SOFTWARE\HELIOS\
 ## Uninstallation
 
 Complete uninstallation removes:
+
 - ✓ All installed files
 - ✓ Registry entries (HKLM\SOFTWARE\HELIOS)
 - ✓ Environment variables
@@ -258,6 +266,7 @@ Complete uninstallation removes:
 ## Deliverables
 
 ### Part 1: Installer
+
 - ✓ HELIOS-Platform-2.0-Setup.exe (~50MB)
 - ✓ WiX project files (complete source)
 - ✓ Installation logs and diagnostics
@@ -265,12 +274,14 @@ Complete uninstallation removes:
 - ✓ Feature documentation
 
 ### Part 2: USB Image
+
 - ✓ HELIOS-Platform-2.0-USBImage.iso (500MB)
 - ✓ USB-Creator-Tool.exe
 - ✓ Boot menu configuration
 - ✓ USB creation documentation
 
 ### Part 3: Safety Verification
+
 - ✓ Multi-platform testing results
 - ✓ Compatibility matrix
 - ✓ Safety verification protocols
@@ -279,6 +290,7 @@ Complete uninstallation removes:
 ## Testing Coverage
 
 All components tested on:
+
 - ✓ Windows 7 (32-bit, 64-bit)
 - ✓ Windows 10 (multiple versions)
 - ✓ Windows 11

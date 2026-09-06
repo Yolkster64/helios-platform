@@ -25,6 +25,7 @@ HELIOS Platform provides a comprehensive plugin system that allows you to extend
 ### What are Plugins?
 
 Plugins are modular components that:
+
 - ✅ Extend HELIOS functionality
 - ✅ Integrate with external systems
 - ✅ Add custom features
@@ -43,15 +44,18 @@ Plugins are modular components that:
 ## 📚 Plugin Documentation
 
 ### Getting Started
+
 - **[Plugin Development Guide](../guides/PLUGIN_DEVELOPMENT.md)** - Build your first plugin
 - **[Plugin API Reference](../api/PLUGIN_API.md)** - Complete API documentation
 
 ### Advanced Topics
+
 - **[Plugin Architecture](./ARCHITECTURE.md)** - Plugin system internals
 - **[Plugin Lifecycle](./LIFECYCLE.md)** - Plugin initialization and shutdown
 - **[Plugin Configuration](./CONFIGURATION.md)** - Plugin settings and options
 
 ### Plugin Examples
+
 - **[Hello World Plugin](./examples/HelloWorld)** - Minimal example
 - **[Monitoring Plugin](./examples/Monitoring)** - Collect metrics
 - **[Integration Plugin](./examples/Integration)** - Integrate external API

@@ -1,11 +1,13 @@
 # HELIOS Search & Discovery System Documentation
 
 ## Overview
+
 The Search System provides powerful global search capabilities with full-text indexing, advanced filtering, fuzzy matching, and real-time search results with keyboard shortcuts and search history.
 
 ## Features Implemented
 
 ### 1. Global Search Across All Data
+
 - **Functionality**: Search all application data types simultaneously
 - **Implementation**: `ISearchEngine.SearchGlobalAsync()`
 - **Features**:
@@ -15,6 +17,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Relevance ranking
 
 ### 2. Full-Text Search Capability
+
 - **Functionality**: Search content with full-text indexing
 - **Implementation**: `ISearchEngine.FullTextSearchAsync()`
 - **Features**:
@@ -24,6 +27,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Highlight extraction
 
 ### 3. Advanced Filtering and Sorting
+
 - **Functionality**: Filter and sort search results
 - **Implementation**: `FilterAsync()`, `SortAsync()`
 - **Features**:
@@ -33,6 +37,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Multi-field sorting
 
 ### 4. Search Result Ranking
+
 - **Functionality**: Rank results by relevance
 - **Implementation**: Relevance calculation in `SearchResult`
 - **Features**:
@@ -42,6 +47,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Boosting for popular results
 
 ### 5. Search History and Suggestions
+
 - **Functionality**: Track searches and provide suggestions
 - **Implementation**: `GetSearchHistoryAsync()`, `GetSearchSuggestionsAsync()`
 - **Features**:
@@ -51,6 +57,7 @@ The Search System provides powerful global search capabilities with full-text in
   - User-specific suggestions
 
 ### 6. Fuzzy Matching Support
+
 - **Functionality**: Handle typos and partial matches
 - **Implementation**: `FuzzySearchAsync()`
 - **Features**:
@@ -60,6 +67,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Phonetic matching
 
 ### 7. Category-based Search
+
 - **Functionality**: Search within specific categories
 - **Implementation**: `SearchCategoryAsync()`, `GetCategoriesAsync()`
 - **Features**:
@@ -69,6 +77,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Category statistics
 
 ### 8. Keyboard Shortcuts for Search
+
 - **Functionality**: Quick access to search via keyboard
 - **Implementation**: `SetupKeyboardShortcutsAsync()`, `GetKeyboardShortcutsAsync()`
 - **Features**:
@@ -78,6 +87,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Shortcut hints
 
 ### 9. Search Indexing and Optimization
+
 - **Functionality**: Maintain optimized search index
 - **Implementation**: `OptimizeIndexAsync()`, `RebuildIndexAsync()`
 - **Features**:
@@ -87,6 +97,7 @@ The Search System provides powerful global search capabilities with full-text in
   - Index statistics
 
 ### 10. Real-time Search Results
+
 - **Functionality**: Display results as user types
 - **Implementation**: `RealTimeSearchAsync()`
 - **Features**:
@@ -148,6 +159,7 @@ await searchEngine.SetupKeyboardShortcutsAsync(new Dictionary<string, string>
 ## Search Index Management
 
 Index optimization for performance:
+
 - **Automatic Indexing**: Content indexed on creation/modification
 - **Index Statistics**: Track index size and performance
 - **Index Rebuild**: Full rebuild for corrupted index
@@ -156,6 +168,7 @@ Index optimization for performance:
 ## Query Syntax
 
 Supported search operators:
+
 - `term1 term2`: AND operator
 - `"exact phrase"`: Exact phrase matching
 - `-term`: Exclude term
@@ -165,6 +178,7 @@ Supported search operators:
 ## Performance
 
 Search performance characteristics:
+
 - **Indexed Search**: <100ms for typical queries
 - **Full-Text Search**: <500ms for complex queries
 - **Index Size**: ~1MB per 100K documents
@@ -173,6 +187,7 @@ Search performance characteristics:
 ## Testing
 
 Comprehensive unit tests cover:
+
 - Search functionality
 - Full-text indexing
 - Filtering and sorting
@@ -187,6 +202,7 @@ All tests in: `SearchTests\SearchEngineTests.cs`
 ## Configuration Options
 
 Search system configuration:
+
 - Index update frequency
 - Maximum index size
 - Fuzzy threshold

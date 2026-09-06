@@ -16,17 +16,20 @@
 ## 🚀 Getting Started (3 Steps)
 
 ### Step 1: Read Quick Start
+
 ```
 Read: QUICKSTART.md (5-10 minutes)
 ```
 
 ### Step 2: Test the System
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\build-agents
 .\orchestrator\run-all-agents.ps1 -DryRun
 ```
 
 ### Step 3: Execute Build
+
 ```powershell
 # Sequential (slower, safer)
 .\orchestrator\run-all-agents.ps1
@@ -82,6 +85,7 @@ build-agents/
 ### I want to...
 
 #### **Run a full build (safest approach)**
+
 ```powershell
 # 1. Test first
 .\orchestrator\run-all-agents.ps1 -DryRun
@@ -92,9 +96,11 @@ build-agents/
 # 3. Monitor (in another terminal)
 .\orchestrator\check-agent-status.ps1
 ```
+
 📖 **Read:** QUICKSTART.md → "First Run - DRY RUN"
 
 #### **Run a fast build (parallel)**
+
 ```powershell
 # 1. Quick test
 .\orchestrator\run-agents-parallel.ps1 -DryRun
@@ -102,9 +108,11 @@ build-agents/
 # 2. Execute
 .\orchestrator\run-agents-parallel.ps1 -MaxParallelJobs 8
 ```
+
 📖 **Read:** QUICKSTART.md → "Parallel Execution"
 
 #### **Monitor execution in real-time**
+
 ```powershell
 # Overall status
 .\orchestrator\check-agent-status.ps1
@@ -115,9 +123,11 @@ build-agents/
 # Follow specific agent
 .\orchestrator\check-agent-status.ps1 -FollowLogs -AgentId 3
 ```
+
 📖 **Read:** README.md → "Status Monitoring"
 
 #### **Handle a failure**
+
 ```powershell
 # 1. Stop agents
 .\orchestrator\stop-agents.ps1 -All
@@ -131,9 +141,11 @@ build-agents/
 # 4. Optionally rollback
 .\orchestrator\stop-agents.ps1 -All -Rollback
 ```
+
 📖 **Read:** README.md → "Troubleshooting"
 
 #### **View and manage logs**
+
 ```powershell
 # List all logs
 .\orchestrator\view-agent-logs.ps1 -List
@@ -147,16 +159,20 @@ build-agents/
 # Clean old logs
 .\orchestrator\view-agent-logs.ps1 -Clean -CleanDays 30
 ```
+
 📖 **Read:** README.md → "Log Management"
 
 #### **Skip problematic agents**
+
 ```powershell
 # Skip agents 5 and 6
 .\orchestrator\run-all-agents.ps1 -SkipAgents @(5,6)
 ```
+
 📖 **Read:** README.md → "Advanced Usage"
 
 #### **Understand the system**
+
 ```
 1. Read: INSTALLATION_SUMMARY.md (overview)
 2. Read: README.md (comprehensive)
@@ -183,6 +199,7 @@ build-agents/
 ## 🔍 Command Reference
 
 ### Execution
+
 ```powershell
 # Test without changes
 run-all-agents.ps1 -DryRun
@@ -201,6 +218,7 @@ run-agents-parallel.ps1 -MaxParallelJobs 12
 ```
 
 ### Monitoring
+
 ```powershell
 # Status overview
 check-agent-status.ps1
@@ -219,6 +237,7 @@ check-agent-status.ps1 -FollowLogs -AgentId 3
 ```
 
 ### Control
+
 ```powershell
 # Stop all
 stop-agents.ps1 -All
@@ -234,6 +253,7 @@ stop-agents.ps1 -All -Force
 ```
 
 ### Logging
+
 ```powershell
 # List logs
 view-agent-logs.ps1 -List
@@ -254,6 +274,7 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ## 📊 Execution Timeline
 
 ### Sequential Mode
+
 - **Batch 1:** Agent 1 (300s)
 - **Batch 2:** Agent 2 (600s)
 - **Batch 3:** Agent 3 (1200s)
@@ -268,6 +289,7 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 - **Total:** ~60-90 minutes
 
 ### Parallel Mode
+
 - **Batch 1:** Agent 1 (300s)
 - **Batch 2:** Agent 2 (600s)
 - **Batch 3:** Agent 3 (1200s)
@@ -281,6 +303,7 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ## ⚙️ Configuration Files
 
 ### agents-config.json
+
 ```json
 {
   "agents": [
@@ -298,6 +321,7 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ```
 
 ### agent-dependencies.json
+
 ```json
 {
   "dependencies": [
@@ -319,27 +343,32 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ## 🔐 Security & Best Practices
 
 ✅ **Always test with DryRun first**
+
 ```powershell
 .\orchestrator\run-all-agents.ps1 -DryRun
 ```
 
 ✅ **Monitor execution**
+
 ```powershell
 # In another terminal
 .\orchestrator\check-agent-status.ps1
 ```
 
 ✅ **Review logs on failure**
+
 ```powershell
 .\orchestrator\view-agent-logs.ps1 -ShowFailed
 ```
 
 ✅ **Use appropriate parallelization**
+
 - Production/fast: 6-8 jobs
 - Resource-constrained: 2-4 jobs
 - Sequential: Use `run-all-agents.ps1`
 
 ✅ **Understand dependencies**
+
 - Agent 2 is critical (security)
 - Most others can be skipped if needed
 - Dependencies are validated automatically
@@ -347,12 +376,14 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ## 📞 When You Need Help
 
 ### Check the Documentation
+
 1. **Quick questions:** QUICKSTART.md
 2. **How-to guides:** README.md
 3. **Reference:** This INDEX.md
 4. **Agent details:** README.md → "Agents Overview"
 
 ### Check the Logs
+
 ```powershell
 # Recent errors
 .\orchestrator\view-agent-logs.ps1 -Search "ERROR"
@@ -365,6 +396,7 @@ view-agent-logs.ps1 -Clean -CleanDays 30
 ```
 
 ### Check the Status
+
 ```powershell
 # Current execution status
 .\orchestrator\check-agent-status.ps1
@@ -376,6 +408,7 @@ cat temp/orchestrator_status.json
 ## 🎓 Learning Path
 
 ### For New Users:
+
 1. Read: QUICKSTART.md (5-10 min)
 2. Run: `run-all-agents.ps1 -DryRun` (1-2 min)
 3. Read: First few sections of README.md (10 min)
@@ -384,6 +417,7 @@ cat temp/orchestrator_status.json
 6. Review: Logs in logs/ directory (5-10 min)
 
 ### For Advanced Users:
+
 1. Review: agent-dependencies.json (2 min)
 2. Review: agents-config.json (5 min)
 3. Execute: `run-agents-parallel.ps1 -MaxParallelJobs 12` (30-45 min)
@@ -391,6 +425,7 @@ cat temp/orchestrator_status.json
 5. Customize: Modify configs as needed
 
 ### For Administrators:
+
 1. Review: All documentation (20-30 min)
 2. Test: Multiple scenarios with DryRun (10 min)
 3. Deploy: Full parallel execution (30-45 min)

@@ -14,11 +14,13 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Authentication
 
 ### Windows Authentication (Default)
+
 - Integrated Windows authentication for local domain users
 - Service accounts with least-privilege permissions
 - Multi-factor authentication ready (MFA support planned)
 
 ### API Authentication
+
 - Token-based authentication for plugin/API access
 - JWT tokens with configurable expiration
 - Refresh token rotation for long-lived sessions
@@ -26,16 +28,19 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Encryption
 
 ### Data at Rest
+
 - **Algorithm**: AES-256-GCM
 - **Key Management**: Windows DPAPI or Azure Key Vault
 - **Coverage**: Database, cloud cache, configuration
 
 ### Data in Transit
+
 - **Protocol**: HTTPS (TLS 1.3+)
 - **Certificate**: Self-signed or CA-issued
 - **Perfect Forward Secrecy**: Enabled
 
 ### Cloud Provider Credentials
+
 - Encrypted using AES-256
 - Never logged or exposed in debug output
 - Automatic rotation support
@@ -43,12 +48,14 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Authorization
 
 ### Role-Based Access Control (RBAC)
+
 - Administrator: Full system access
 - Operator: Can manage cloud sync and plugins
 - Viewer: Read-only dashboard access
 - Custom roles: Define granular permissions
 
 ### Plugin Permissions
+
 ```
 - system.metrics (read system metrics)
 - cloud.sync (trigger cloud synchronization)
@@ -61,6 +68,7 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Audit Logging
 
 ### Logged Events
+
 - All authentication attempts (success/failure)
 - Configuration changes with before/after values
 - Cloud sync operations (start, stop, conflicts)
@@ -70,6 +78,7 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 - Security events (failed auth, permission denied)
 
 ### Log Retention
+
 - Default: 30 days (configurable)
 - Archived to secure storage for compliance
 - Access logged for audit log viewing
@@ -77,12 +86,14 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Compliance
 
 ### Standards
+
 - **GDPR**: Data protection and user privacy
 - **HIPAA**: Healthcare data handling requirements
 - **SOC 2 Type II**: Security, availability, processing integrity
 - **ISO 27001**: Information security management
 
 ### Policies
+
 - Password policy enforcement
 - Session timeout (default 30 minutes)
 - Secure password storage (PBKDF2)
@@ -92,6 +103,7 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 ## Best Practices
 
 ### Installation
+
 - [ ] Run installer as administrator
 - [ ] Change default administrator password immediately
 - [ ] Enable HTTPS with valid certificate
@@ -99,6 +111,7 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 - [ ] Disable services not needed (e.g., cloud sync if unused)
 
 ### Deployment
+
 - [ ] Keep .NET runtime updated
 - [ ] Enable Windows security features (Firewall, Defender)
 - [ ] Use Active Directory authentication when possible
@@ -106,6 +119,7 @@ HELIOS Platform implements defense-in-depth security with multiple layers:
 - [ ] Regular backup testing
 
 ### Maintenance
+
 - [ ] Monitor security alerts regularly
 - [ ] Review audit logs weekly
 - [ ] Update HELIOS and dependencies promptly

@@ -9,6 +9,7 @@
 This guide provides actionable strategies to reduce GitHub Actions execution time by 55-65% and monthly costs by $84-116 through parallelization, intelligent caching, and resource optimization.
 
 **Key Targets:**
+
 - ✅ Reduce pipeline time: 26 min → 10-12 min (55-60%)
 - ✅ Reduce monthly minutes: 7,800 → 3,000-3,600 (55-60%)
 - ✅ Reduce monthly cost: $156 → $45-50 (71%)
@@ -21,6 +22,7 @@ This guide provides actionable strategies to reduce GitHub Actions execution tim
 ### Current State
 
 #### Baseline Workflow
+
 ```
 Checkout & Setup         2 min    ████
 Restore Dependencies     5 min    ████████████
@@ -34,6 +36,7 @@ Total Sequential Time:   26 min
 ```
 
 #### Current Cost Breakdown
+
 ```
 Build runners:     $0.0075/min × 7,800 min = $58.50
 Storage (50GB):    $0.50/GB = $25.00
@@ -141,6 +144,7 @@ jobs:
 ```
 
 **Time Analysis:**
+
 ```
 Sequential: 8 min × 3 frameworks = 24 min
 Parallel:   8 min (all run simultaneously)
@@ -208,6 +212,7 @@ Savings:    66% (24 → 8 min)
 ```
 
 **Time Analysis:**
+
 ```
 Sequential: 4 unit + 3 integration + 2 E2E = 9 min
 Parallel:   max(4, 3, 2) = 4 min
@@ -250,6 +255,7 @@ Phase 3 (Sequential):
 ```
 
 **Expected Impact:**
+
 ```
 First run:    5 min (restore)
 Cache hit:    30 sec (restore)
@@ -272,6 +278,7 @@ Monthly savings: 85% of restore time × 300 builds = 425 min
 ```
 
 **Cache Key Strategy:**
+
 - Primary key: Hash of project files
 - Restore keys: Fallback to any recent cache
 
@@ -313,6 +320,7 @@ Monthly savings: 85% of restore time × 300 builds = 425 min
 ```
 
 **Cache Size Target:**
+
 ```
 NuGet cache:     500 MB → 300 MB (includes only used packages)
 Build cache:     200 MB → 100 MB (incremental builds)
@@ -352,6 +360,7 @@ Total:           800 MB → 450 MB (43% reduction)
 ```
 
 **Matrix Reduction:**
+
 ```
 Pull Request:      1 framework × 1 test = 1 job
 Feature Branch:    2 frameworks × 2 tests = 4 jobs
@@ -423,6 +432,7 @@ jobs:
 ```
 
 **Schedule Strategy:**
+
 ```
 Peak hours (9-17):   Pull requests only (lightweight)
 Off-peak (18-8):     Full builds, tests, analysis
@@ -508,6 +518,7 @@ jobs:
 ### 7.1 Cost Analysis
 
 **Current Monthly Cost:**
+
 ```
 Metric                      Value
 ─────────────────────────────────────
@@ -559,6 +570,7 @@ Annual savings                  $972
 ```
 
 **Storage Optimization:**
+
 ```
 Current:    50GB × 30 days = 1,500 GB-days
 Optimized:  15GB × 7 days = 105 GB-days
@@ -630,6 +642,7 @@ AFTER (Parallelized):
 ## 9. Implementation Checklist
 
 ### Phase 1: Caching (1-2 hours)
+
 - [ ] Add NuGet cache configuration
 - [ ] Add build output cache
 - [ ] Configure cache cleanup
@@ -637,6 +650,7 @@ AFTER (Parallelized):
 - [ ] Expected improvement: 30%
 
 ### Phase 2: Parallelization (2-3 hours)
+
 - [ ] Create matrix build jobs
 - [ ] Parallelize tests
 - [ ] Configure early exit
@@ -644,6 +658,7 @@ AFTER (Parallelized):
 - [ ] Expected improvement: +40%
 
 ### Phase 3: Conditional Execution (1-2 hours)
+
 - [ ] Skip unnecessary builds
 - [ ] Dynamic matrix generation
 - [ ] Conditional job execution
@@ -651,6 +666,7 @@ AFTER (Parallelized):
 - [ ] Expected improvement: +15%
 
 ### Phase 4: Resource Optimization (1-2 hours)
+
 - [ ] Timeout configuration
 - [ ] Resource monitoring
 - [ ] Artifact management
@@ -675,6 +691,7 @@ public class GitHubActionsMetrics {
 ```
 
 **Track:**
+
 - Build time trends (daily, weekly, monthly)
 - Cost trends
 - Cache effectiveness
@@ -720,6 +737,7 @@ Get-WorkflowStats
 ## Results Summary
 
 **Expected Outcomes:**
+
 - ✅ Pipeline time: 26 min → 12 min (54% reduction)
 - ✅ Monthly cost: $153 → $58 (62% reduction)
 - ✅ Annual savings: $1,140

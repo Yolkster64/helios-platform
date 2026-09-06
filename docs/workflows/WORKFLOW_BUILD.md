@@ -30,6 +30,7 @@ The `build-all-modules.yml` workflow performs comprehensive multi-module builds 
 ## Workflow Purpose
 
 **Goals**:
+
 - ✅ Build all platform modules in parallel
 - ✅ Validate build integrity across modules
 - ✅ Run module-specific tests
@@ -101,6 +102,7 @@ graph TB
 ```
 
 **Build Order** (if sequential):
+
 1. `core` (no dependencies)
 2. `modules` (depends on core)
 3. `registry` (depends on core, modules)
@@ -126,6 +128,7 @@ strategy:
 ```
 
 **Parallelization Benefits**:
+
 - 5 modules build simultaneously
 - Each module: ~2-3 minutes
 - Sequential would take: ~10-15 minutes
@@ -144,6 +147,7 @@ steps:
 ```
 
 **Node.js 18 LTS**:
+
 - Long-term support
 - Stable and reliable
 - Good npm package compatibility
@@ -173,6 +177,7 @@ setup:
 **Purpose**: Centralize build configuration and emit outputs for dependent jobs
 
 **Outputs**:
+
 ```json
 {
   "modules": ["core", "modules", "registry", "cli", "ui"],
@@ -204,6 +209,7 @@ build:
 ```
 
 **Parallel Execution**:
+
 ```
 Module 1 (core)      ┐
 Module 2 (modules)   ├─ All execute simultaneously
@@ -231,6 +237,7 @@ verify-builds:
 ```
 
 **Verification**:
+
 - ✅ All artifacts downloaded successfully
 - ✅ Expected number of artifacts present
 - ✅ No corrupted files
@@ -272,15 +279,18 @@ report-status:
 ```
 
 **Cache Key Structure**:
+
 ```
 linux-core-<hash-of-package-lock.json>
 ```
 
 **Hit Scenarios**:
+
 - ✅ `package-lock.json` unchanged → Cache hit
 - ❌ `package-lock.json` changed → Cache miss (reinstall)
 
 **Cache Contents**:
+
 - `node_modules/` (~100-200 MB per module)
 - `dist/` (build output)
 - `build/` (build intermediate files)
@@ -296,6 +306,7 @@ linux-core-<hash-of-package-lock.json>
 ### Clear Cache
 
 To force a clean build:
+
 1. GitHub UI → Actions → Caches
 2. Find cache by module name
 3. Click "Delete" button
@@ -325,6 +336,7 @@ npm ci --prefer-offline --no-audit
 ```
 
 **Why `npm ci` instead of `npm install`**:
+
 - Installs exact versions from `package-lock.json`
 - Faster and more reliable
 - Prevents dependency drift
@@ -342,6 +354,7 @@ fi
 ```
 
 **Typical lint checks**:
+
 - ESLint (JavaScript/TypeScript)
 - Code style validation
 - Import sorting
@@ -361,10 +374,12 @@ fi
 ```
 
 **Build output locations**:
+
 - `dist/` - Production build
 - `build/` - Intermediate files
 
 **Typical build steps**:
+
 - TypeScript compilation
 - Bundling/webpack
 - Asset optimization
@@ -382,12 +397,14 @@ fi
 ```
 
 **Test framework options**:
+
 - Jest
 - Mocha
 - Vitest
 - Jasmine
 
 **Coverage options**:
+
 - `--coverage` - Generate coverage reports
 - `--passWithNoTests` - Don't fail if no tests
 
@@ -407,6 +424,7 @@ npm test -- \
 ```
 
 **Output**:
+
 ```
  PASS  tests/core.test.ts
   ✓ should initialize platform
@@ -432,6 +450,7 @@ coverage/
 ```
 
 **Coverage Thresholds** (example):
+
 - Lines: 80%
 - Functions: 80%
 - Branches: 75%
@@ -470,6 +489,7 @@ coverage/
 ```
 
 **Artifact structure**:
+
 ```
 build-artifacts-core/
 ├── dist/
@@ -486,12 +506,14 @@ build-artifacts-core/
 ### Artifact Access
 
 **Download via GitHub UI**:
+
 1. Go to workflow run
 2. Scroll to "Artifacts"
 3. Click module artifact
 4. Download .zip file
 
 **Download via CLI**:
+
 ```bash
 gh run download <RUN_ID> -n build-artifacts-core
 ```
@@ -536,6 +558,7 @@ Speedup: 3x
    - Already configured via matrix
 
 3. **Skip unnecessary steps**
+
    ```bash
    if [ -f "package.json" ] && grep -q '"lint"' package.json; then
      npm run lint
@@ -543,6 +566,7 @@ Speedup: 3x
    ```
 
 4. **Shallow clone for speed**
+
    ```yaml
    fetch-depth: 0  # Full history for versioning
    ```
@@ -565,6 +589,7 @@ Speedup: 3x
 **Problem**: Cache not being restored
 
 **Solutions**:
+
 1. Check `package-lock.json` is committed
 2. Clear cache in Actions tab
 3. Verify cache key hasn't changed
@@ -574,6 +599,7 @@ Speedup: 3x
 **Problem**: Job runs longer than expected
 
 **Solutions**:
+
 1. Check for network delays
 2. Reduce test data size
 3. Increase timeout limit
@@ -584,6 +610,7 @@ Speedup: 3x
 **Problem**: Artifact upload times out or fails
 
 **Solutions**:
+
 1. Reduce artifact size
 2. Compress before uploading
 3. Remove unnecessary files
@@ -645,6 +672,7 @@ module.exports = {
 ## Best Practices
 
 ✅ **Do**:
+
 - Use `npm ci` in CI/CD
 - Keep `package-lock.json` committed
 - Configure cache properly
@@ -653,6 +681,7 @@ module.exports = {
 - Use matrix for parallelization
 
 ❌ **Don't**:
+
 - Use `npm install` in CI
 - Commit `node_modules`
 - Disable caching
@@ -667,6 +696,7 @@ module.exports = {
 ### Custom Build Steps
 
 Add additional build steps in `package.json`:
+
 ```json
 {
   "scripts": {
@@ -692,6 +722,7 @@ fi
 ### Custom Reporting
 
 Generate JSON report:
+
 ```javascript
 // scripts/generate-build-report.js
 const fs = require('fs');

@@ -7,6 +7,7 @@
 ## Quick Start (15 minutes)
 
 ### Step 1: Clone & Open (5 min)
+
 ```bash
 git clone https://github.com/your-org/helios-platform.git
 cd helios-platform
@@ -14,6 +15,7 @@ code .
 ```
 
 ### Step 2: Open in Codespaces (10 min)
+
 1. Click "Code" button in GitHub
 2. Select "Codespaces" tab
 3. Click "Create codespace on main"
@@ -21,6 +23,7 @@ code .
 5. Extensions auto-install
 
 ### Step 3: Build & Test (5 min)
+
 ```powershell
 # Build
 dotnet build
@@ -36,6 +39,7 @@ dotnet test
 ### 1. Pick a Feature
 
 **From GitHub Project Board:**
+
 1. Visit: https://github.com/your-org/helios-platform/projects/3
 2. Find issue with "Ready" label
 3. Assign to yourself
@@ -48,6 +52,7 @@ git checkout -b feature/your-feature-name
 ```
 
 **Branch Naming Convention:**
+
 - `feature/description` - New feature
 - `fix/issue-number` - Bug fix
 - `docs/description` - Documentation
@@ -88,6 +93,7 @@ git push origin feature/your-feature-name
 ```
 
 **Commit Message Format:**
+
 - `feat: Add new feature`
 - `fix: Fix issue #123`
 - `docs: Update README`
@@ -105,6 +111,7 @@ git push origin feature/your-feature-name
 ### 7. Code Review
 
 Respond to review comments:
+
 - ✅ Approve and merge
 - 💬 Respond to feedback
 - 🔄 Push additional commits
@@ -162,6 +169,7 @@ docs/
 ### Style Guide
 
 **C# Conventions:**
+
 ```csharp
 // Use PascalCase for classes, methods, properties
 public class HeliosDeployment
@@ -184,6 +192,7 @@ public class HeliosDeployment
 ```
 
 **Comments:**
+
 - Only comment WHY, not WHAT
 - Use XML documentation for public APIs
 - Keep comments updated with code
@@ -191,6 +200,7 @@ public class HeliosDeployment
 ### Testing Standards
 
 **Unit Test Structure:**
+
 ```csharp
 [Fact]
 public void ValidationAsync_WithValidConfig_ReturnsTrue()
@@ -277,6 +287,7 @@ F5
 ## Common Issues & Solutions
 
 ### Build Fails
+
 ```
 Solution:
 1. Clean build: dotnet clean
@@ -286,6 +297,7 @@ Solution:
 ```
 
 ### Tests Fail
+
 ```
 Solution:
 1. Check test output for details
@@ -295,6 +307,7 @@ Solution:
 ```
 
 ### Performance Issues
+
 ```
 Solution:
 1. Profile code with performance tools

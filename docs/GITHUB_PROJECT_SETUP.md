@@ -23,10 +23,12 @@ This guide helps set up a GitHub Project board that integrates with the HELIOS P
 ## 🎯 Project Columns (Kanban View)
 
 ### Column 1: Backlog
+
 **Purpose:** All work items not yet started  
 **Acceptance:** Ready for Phase 0 testing
 
 **Issues to Add:**
+
 ```
 - [ ] Phase 0: Preflight Checks (10 min)
 - [ ] Phase 1: Infrastructure Foundation (12 min)
@@ -38,29 +40,35 @@ This guide helps set up a GitHub Project board that integrates with the HELIOS P
 ```
 
 ### Column 2: Ready to Deploy
+
 **Purpose:** Validated and tested, awaiting approval  
 **Acceptance:** All tests passing
 
 **Criteria:**
+
 - ✅ Component metrics reviewed
 - ✅ Dependency graph validated
 - ✅ Rollback procedures tested
 - ✅ Security checklist passed
 
 ### Column 3: In Deployment
+
 **Purpose:** Currently executing in production  
 **Acceptance:** Active phase running
 
 **Status Indicators:**
+
 - 🟡 Phase running (with % complete)
 - 📊 Real-time metrics visible
 - ⚠️ Any blocking issues
 
 ### Column 4: Testing & Validation
+
 **Purpose:** Post-deployment verification  
 **Acceptance:** All 42 validation tests passing
 
 **Criteria:**
+
 - ✅ Phase tests: 7/7 passing
 - ✅ Storage tests: 6/6 passing
 - ✅ Security tests: 8/8 passing
@@ -70,10 +78,12 @@ This guide helps set up a GitHub Project board that integrates with the HELIOS P
 - ✅ Configuration tests: 2/2 passing
 
 ### Column 5: Complete
+
 **Purpose:** Successfully deployed and verified  
 **Acceptance:** Go-live approved
 
 **Sign-off:**
+
 - ✅ All metrics collected
 - ✅ Performance validated
 - ✅ Security approved
@@ -84,6 +94,7 @@ This guide helps set up a GitHub Project board that integrates with the HELIOS P
 ## 📋 Issues to Create (with Labels & Milestones)
 
 ### Epic: Phase 0 - Preflight Checks
+
 ```
 Title: "🔍 Phase 0: Preflight Checks"
 Labels: phase-0, validation, critical
@@ -113,6 +124,7 @@ Success Criteria:
 ```
 
 ### Epic: Phase 1 - Infrastructure Foundation
+
 ```
 Title: "🏗️ Phase 1: Infrastructure Foundation"
 Labels: phase-1, infrastructure, critical
@@ -149,6 +161,7 @@ Metrics:
 ```
 
 ### Epic: Phase 2 - Agent Fleet Deployment
+
 ```
 Title: "🤖 Phase 2: Agent Fleet Deployment"
 Labels: phase-2, agents, deployment
@@ -193,6 +206,7 @@ Metrics:
 ```
 
 ### Epic: Phase 3 - AI Services Integration
+
 ```
 Title: "🤖 Phase 3: AI Services Integration"
 Labels: phase-3, ai-services, cloud
@@ -238,6 +252,7 @@ Metrics:
 ```
 
 ### Epic: Phase 4 - Security Framework
+
 ```
 Title: "🔒 Phase 4: Security Framework"
 Labels: phase-4, security, hardening
@@ -288,6 +303,7 @@ Metrics:
 ```
 
 ### Epic: Phase 5 - Monitoring & Analytics
+
 ```
 Title: "📊 Phase 5: Monitoring & Analytics"
 Labels: phase-5, monitoring, analytics
@@ -335,6 +351,7 @@ Metrics:
 ```
 
 ### Epic: Phase 6 - Final Verification
+
 ```
 Title: "✅ Phase 6: Final Verification & Optimization"
 Labels: phase-6, verification, production
@@ -425,6 +442,7 @@ Add these columns for enhanced tracking:
 ## 📈 Views to Create
 
 ### View 1: Phase Timeline
+
 ```
 Grouping: Phase (0-6)
 Sorting: Time ascending
@@ -436,6 +454,7 @@ Use Case: Planning deployment timeline
 ```
 
 ### View 2: Critical Path Only
+
 ```
 Filter: Critical = Yes
 Sorting: Phase ascending, Time descending
@@ -446,6 +465,7 @@ Use Case: Identifying must-do items
 ```
 
 ### View 3: Metrics Dashboard
+
 ```
 Grouping: Status
 Sorting: Time descending
@@ -456,6 +476,7 @@ Use Case: Performance tracking
 ```
 
 ### View 4: Component Breakdown
+
 ```
 Grouping: Component
 Sorting: Phase ascending
@@ -466,6 +487,7 @@ Use Case: Component analysis
 ```
 
 ### View 5: Risk Analysis
+
 ```
 Filter: Critical = Yes OR Complexity >= 7
 Sorting: Complexity descending
@@ -476,6 +498,7 @@ Use Case: Risk mitigation
 ```
 
 ### View 6: Resource Planning
+
 ```
 Sorting: Disk descending, Time descending
 Display: Time, Disk, Services, Cumulative values
@@ -511,6 +534,7 @@ Add these as pinned items or links in the project description:
 ### Auto-Updates via GitHub Actions
 
 Create `.github/workflows/project-sync.yml`:
+
 ```yaml
 name: Project Sync
 
@@ -538,18 +562,21 @@ jobs:
 ## 📊 Metrics to Track
 
 ### Performance Metrics
+
 - [ ] Boot time improvement (target: -73%)
 - [ ] Memory usage reduction (target: -55%)
 - [ ] Service count optimization (target: 28 total)
 - [ ] Response time (target: <50ms)
 
 ### Quality Metrics
+
 - [ ] Success rate (target: >97%)
 - [ ] Test pass rate (target: 100%)
 - [ ] Security compliance (target: 8/8 layers)
 - [ ] Rollback success rate (target: 100%)
 
 ### Efficiency Metrics
+
 - [ ] Deployment time (target: 102 min)
 - [ ] Parallel execution (6 agents)
 - [ ] Cost savings (target: 85%)
@@ -575,6 +602,7 @@ jobs:
 ## 🚀 How to Use
 
 ### During Deployment
+
 1. Open Project board
 2. Move Phase epic to "In Deployment"
 3. Check off subtasks as they complete
@@ -582,6 +610,7 @@ jobs:
 5. Move to "Testing & Validation" when phase complete
 
 ### After Deployment
+
 1. All tests in "Testing & Validation"
 2. Review metrics in "Metrics Dashboard" view
 3. Generate compliance report
@@ -589,6 +618,7 @@ jobs:
 5. Archive completed phase
 
 ### For Analysis
+
 1. Use "Component Breakdown" view to analyze components
 2. Use "Metrics Dashboard" view to see aggregates
 3. Use "Risk Analysis" view to identify issues

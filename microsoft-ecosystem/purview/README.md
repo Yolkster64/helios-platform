@@ -27,6 +27,7 @@ HELIOS data assets registered in Purview:
 ### Data Classification
 
 Classification hierarchy:
+
 ```
 Public (Green): Non-sensitive
 Internal (Yellow): Company only
@@ -39,6 +40,7 @@ Highly Confidential (Purple): Maximum security
 ### GDPR Compliance
 
 Requirements tracking:
+
 - Data Subject Rights (export, delete, port)
 - Data Processing Agreements with vendors
 - Privacy Impact Assessments
@@ -48,6 +50,7 @@ Requirements tracking:
 ### HIPAA Compliance
 
 HIPAA controls implemented:
+
 - AES-256 encryption at rest and TLS in transit
 - Multi-factor authentication required
 - Role-based access control
@@ -57,6 +60,7 @@ HIPAA controls implemented:
 ### SOC 2 Type II
 
 SOC 2 requirements:
+
 - Security: User access controls
 - Availability: Uptime metrics and backups
 - Processing Integrity: Data accuracy
@@ -66,6 +70,7 @@ SOC 2 requirements:
 ## Data Lineage
 
 Track data flow through HELIOS:
+
 ```
 Data Sources
 ├── APIs (external integrations)
@@ -89,6 +94,7 @@ Analytics & Reporting
 ## Insider Risk Management
 
 Detect potentially risky user behavior:
+
 - Unusual data access patterns
 - Large downloads outside business hours
 - Access to sensitive data outside role
@@ -112,6 +118,7 @@ Policies can be configured per department/role.
 ### Create Data Classification Rules
 
 Use patterns to auto-classify:
+
 - Credit card numbers (regex matching)
 - Email addresses
 - Social security numbers
@@ -121,6 +128,7 @@ Use patterns to auto-classify:
 ### Configure Compliance Policies
 
 Set rules for:
+
 - Data retention and deletion
 - Access controls
 - Encryption requirements
@@ -130,6 +138,7 @@ Set rules for:
 ## Dashboard
 
 Monitor compliance status:
+
 - Overall compliance score (%)
 - Assets by classification
 - Policy violations

@@ -11,6 +11,7 @@
 ## 📚 Complete Documentation
 
 ### Core Documentation
+
 | File | Purpose | Read Time |
 |------|---------|-----------|
 | [README.md](./README.md) | Overview, capabilities, setup | 15 min |
@@ -20,18 +21,21 @@
 | [COMPLETION_REPORT.md](./COMPLETION_REPORT.md) | Project completion summary | 5 min |
 
 ### ChatGPT Integration
+
 | File | Purpose | Read Time |
 |------|---------|-----------|
 | [chatgpt-integration/README.md](./chatgpt-integration/README.md) | API setup & patterns | 20 min |
 | [chatgpt-integration/SYSTEM_PROMPTS.md](./chatgpt-integration/SYSTEM_PROMPTS.md) | Pre-built system prompts | 10 min |
 
 ### Codex Integration
+
 | File | Purpose | Read Time |
 |------|---------|-----------|
 | [codex-integration/README.md](./codex-integration/README.md) | Codex setup guide | 10 min |
 | [codex-integration/CODE_GENERATION_TEMPLATES.md](./codex-integration/CODE_GENERATION_TEMPLATES.md) | Code generation templates | 15 min |
 
 ### AI Coordination
+
 | File | Purpose | Read Time |
 |------|---------|-----------|
 | [ai-coordination/README.md](./ai-coordination/README.md) | Multi-AI workflows | 15 min |
@@ -49,6 +53,7 @@
 ## 🔧 Quick Commands
 
 ### Load All Functions
+
 ```powershell
 . ./scripts/ask-chatgpt.ps1
 . ./scripts/ask-codex.ps1
@@ -56,18 +61,21 @@
 ```
 
 ### Test ChatGPT
+
 ```powershell
 . ./scripts/ask-chatgpt.ps1
 Invoke-ChatGPT -Prompt "Hello"
 ```
 
 ### Generate Code
+
 ```powershell
 . ./scripts/ask-codex.ps1
 Invoke-Codex -Spec "Generate PowerShell function"
 ```
 
 ### Coordinate AI
+
 ```powershell
 $result = Invoke-AICoordination `
     -ChatGPTResponse $gpt `
@@ -78,24 +86,28 @@ $result = Invoke-AICoordination `
 ## 🎓 Learning Path
 
 ### Beginner (1 hour)
+
 1. Read: QUICK_START.md
 2. Set API key
 3. Test ChatGPT function
 4. Read: README.md
 
 ### Intermediate (2-3 hours)
+
 1. Read: All chatgpt-integration docs
 2. Read: All codex-integration docs
 3. Test all functions
 4. Try: Common workflows
 
 ### Advanced (4-5 hours)
+
 1. Read: ai-coordination docs
 2. Read: VERSION_CONTROL.md
 3. Review: GitHub Actions workflow
 4. Customize: System prompts
 
 ### Expert (Ongoing)
+
 1. Monitor: Costs and usage
 2. Optimize: System prompts
 3. Scale: To new use cases
@@ -152,44 +164,52 @@ cat QUICK_START.md
 ## 💡 Common Tasks
 
 ### Get Strategic Recommendations
+
 → Read: [chatgpt-integration/README.md](./chatgpt-integration/README.md)  
 → Use: HELIOS Optimizer system prompt  
 → Example: "Should we consolidate our AppLocker rules?"
 
 ### Generate AppLocker Script
+
 → Read: [codex-integration/README.md](./codex-integration/README.md)  
 → Use: Invoke-Codex function  
 → Example: "Generate rule consolidation script"
 
 ### Detect Rule Conflicts
+
 → Read: [ai-coordination/CONFLICT_RESOLUTION.md](./ai-coordination/CONFLICT_RESOLUTION.md)  
 → Use: Conflict Detector system prompt  
 → Example: "Will these two rules conflict?"
 
 ### Security Analysis
+
 → Read: [chatgpt-integration/SYSTEM_PROMPTS.md](./chatgpt-integration/SYSTEM_PROMPTS.md)  
 → Use: Security Architect prompt  
 → Example: "Analyze security gaps in my config"
 
 ### Code Review
+
 → Use: Code Reviewer system prompt  
 → Example: "Review this script for best practices"
 
 ## ⚠️ Critical Information
 
 ### API Key Setup
+
 - **Required**: OpenAI API key from https://platform.openai.com
 - **Store**: `$env:OPENAI_API_KEY = "sk-..."`
 - **Never**: Commit to version control
 - **Remember**: Rotate monthly
 
 ### Security Requirements
+
 - ✅ All AI-generated code requires human review
 - ✅ Automatic credential leak detection enabled
 - ✅ Dangerous patterns flagged automatically
 - ✅ Complete audit trail maintained
 
 ### Cost Control
+
 - 🔄 Response caching saves ~70% on repeated questions
 - 📊 Use GPT-3.5-turbo for non-critical questions (~40x cheaper)
 - ⏱️ Monitor token usage in logs
@@ -198,15 +218,19 @@ cat QUICK_START.md
 ## 🆘 Help & Support
 
 ### Troubleshooting
+
 → Read: QUICK_START.md "Troubleshooting" section
 
 ### Common Issues
+
 → Read: chatgpt-integration/README.md "Error Handling" section
 
 ### API Documentation
+
 → Visit: https://platform.openai.com/docs
 
 ### GitHub Copilot
+
 → Visit: https://github.com/features/copilot
 
 ## ✅ Verification

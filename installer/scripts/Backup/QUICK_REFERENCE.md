@@ -3,6 +3,7 @@
 ## 🎯 Essential Commands
 
 ### Initial Setup
+
 ```powershell
 # Create scheduled tasks
 C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action Setup
@@ -12,6 +13,7 @@ C:\HELIOS\Scripts\Backup\Scheduling\1_ConfigureScheduling.ps1 -Action List
 ```
 
 ### Running Backups Manually
+
 ```powershell
 # Full system backup
 C:\HELIOS\Scripts\Backup\1_FullBackup.ps1
@@ -27,6 +29,7 @@ C:\HELIOS\Scripts\Backup\4_CloudBackup.ps1 -BackupId "<guid>"
 ```
 
 ### Verification & Health
+
 ```powershell
 # Check system health
 C:\HELIOS\Scripts\Backup\Utilities\3_HealthCheck.ps1
@@ -39,6 +42,7 @@ C:\HELIOS\Scripts\Backup\Utilities\2_BackupCleanup.ps1
 ```
 
 ### Recovery Operations
+
 ```powershell
 # Point-in-time recovery (dry run)
 C:\HELIOS\Scripts\Backup\Recovery\1_PointInTimeRecovery.ps1 `
@@ -76,19 +80,23 @@ C:\HELIOS\Scripts\Backup\Recovery\2_DisasterRecovery.ps1 `
 ## 🚨 Troubleshooting
 
 ### Backup fails
+
 1. Check D:\HELIOS\Logs\Backup\FullBackup\*.log
 2. Verify D:\HELIOS\Backups has >50% free space
 3. Ensure SQL Server service is running
 
 ### No backups scheduled
+
 1. Run: `1_ConfigureScheduling.ps1 -Action Setup`
 2. Check Task Scheduler: Backup tasks under \HELIOS\Backup\
 3. Verify task runs as NT AUTHORITY\SYSTEM
 
 ### Recovery dry run before actual restore
+
 Always run with `-DryRun $true` first to validate
 
 ### Storage full
+
 1. Run cleanup: `2_BackupCleanup.ps1`
 2. Review retention policy (currently 30-90 days)
 3. Consider archiving to external storage

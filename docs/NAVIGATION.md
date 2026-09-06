@@ -5,6 +5,7 @@ This page helps you find what you need quickly.
 ## 🎯 By What You Want to Do
 
 ### **I want to...use the platform**
+
 1. Start: [START_HERE.md](../START_HERE.md)
 2. Install: [USER_INSTALLATION_GUIDE.md](USER_INSTALLATION_GUIDE.md) ⭐ NEW
 3. Deploy: [USER_DEPLOYMENT_GUIDE.md](USER_DEPLOYMENT_GUIDE.md) ⭐ NEW
@@ -12,6 +13,7 @@ This page helps you find what you need quickly.
 5. Troubleshoot: [USER_TROUBLESHOOTING.md](USER_TROUBLESHOOTING.md) ⭐ NEW
 
 ### **I want to...understand the architecture**
+
 1. Overview: [ARCHITECTURE.md](ARCHITECTURE.md)
 2. Design: [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md)
 3. Components: See components section below
@@ -19,6 +21,7 @@ This page helps you find what you need quickly.
 5. API: [API.md](API.md) or [PHASE-4-API-REFERENCE.md](PHASE-4-API-REFERENCE.md)
 
 ### **I want to...contribute code**
+
 1. Setup: [CONTRIBUTING.md](CONTRIBUTING.md)
 2. Development: [DEVELOPMENT.md](../docs/DEVELOPMENT.md)
 3. Architecture: [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)
@@ -26,12 +29,14 @@ This page helps you find what you need quickly.
 5. API Reference: [API_REFERENCE.md](API_REFERENCE.md)
 
 ### **I want to...fix a problem**
+
 1. Troubleshooting: [USER_TROUBLESHOOTING.md](USER_TROUBLESHOOTING.md) ⭐ NEW
 2. Common Issues: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 3. Emergency Help: [USER_TROUBLESHOOTING.md#emergency](USER_TROUBLESHOOTING.md#emergency-procedures)
 4. GitHub Issues: [Report a Bug](https://github.com/M0nado/helios-platform/issues)
 
 ### **I want to...ask a question**
+
 1. FAQ: [FAQ.md](FAQ.md)
 2. Glossary: [GLOSSARY.md](GLOSSARY.md)
 3. Quick Ref: [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
@@ -41,45 +46,53 @@ This page helps you find what you need quickly.
 ## 📖 By Document Type
 
 ### Quick References (< 10 min read)
+
 - [QUICK_START.md](QUICK_START.md) - TL;DR
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Commands & configs
 - [FAQ.md](FAQ.md) - Common questions
 - [GLOSSARY.md](GLOSSARY.md) - Term definitions
 
 ### Installation & Setup (15-30 min)
+
 - [USER_INSTALLATION_GUIDE.md](USER_INSTALLATION_GUIDE.md) ⭐ NEW - Complete installation from USB
 - [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) - Setup instructions
 - [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) - Pre-deploy checklist
 
 ### Operations & Usage (Daily/Weekly)
+
 - [USER_OPERATIONS_GUIDE.md](USER_OPERATIONS_GUIDE.md) ⭐ NEW - Daily monitoring & maintenance
 - [USER_DEPLOYMENT_GUIDE.md](USER_DEPLOYMENT_GUIDE.md) ⭐ NEW - First deployment & resource management
 - [QUICK_START.md](QUICK_START.md) - Quick reference
 
 ### Architecture & Design (30-60 min)
+
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design
 - [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md) - Detailed design
 - [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) - Component integration
 - [MODULES.md](MODULES.md) - Module organization
 
 ### Deployment & Operations (varies)
+
 - [DEPLOYMENT_PLAYBOOK.md](DEPLOYMENT_PLAYBOOK.md) - Deployment steps
 - [DEPLOYMENT_COMPLETE_GUIDE.md](DEPLOYMENT_COMPLETE_GUIDE.md) - Full guide
 - [PHASE-4-DEPLOYMENT.md](PHASE-4-DEPLOYMENT.md) - Phase 4 specifics
 - [DEPLOYMENT_VERIFICATION_ROLLBACK.md](DEPLOYMENT_VERIFICATION_ROLLBACK.md) - Verify & rollback
 
 ### API & Integration (varies)
+
 - [API.md](API.md) - Public APIs
 - [PHASE-4-API-REFERENCE.md](PHASE-4-API-REFERENCE.md) - Phase 4 APIs
 - [INTEGRATIONS/](INTEGRATIONS/) - Folder with integration guides
 
 ### Troubleshooting & Operations (on-demand)
+
 - [USER_TROUBLESHOOTING.md](USER_TROUBLESHOOTING.md) ⭐ NEW - Comprehensive troubleshooting guide
 - [USER_ADVANCED_GUIDE.md](USER_ADVANCED_GUIDE.md) ⭐ NEW - Advanced features & optimization
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common problems
 - [TESTING_CHECKLIST.md](TESTING_CHECKLIST.md) - Test procedures
 
 ### Contributing & Development (30-60 min)
+
 - [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
 - [DEVELOPMENT.md](../src/HELIOS.Platform/DEVELOPMENT.md) - Dev guide (if exists)
 
@@ -113,6 +126,7 @@ docs/
 ## 🎓 Learning Paths
 
 ### Path 1: User (Just want to run it)
+
 1. [START_HERE.md](../START_HERE.md) - 5 min
 2. [USER_INSTALLATION_GUIDE.md](USER_INSTALLATION_GUIDE.md) - 20 min
 3. [USER_DEPLOYMENT_GUIDE.md](USER_DEPLOYMENT_GUIDE.md) - 15 min
@@ -121,6 +135,7 @@ docs/
 **Total Time**: ~40 minutes
 
 ### Path 2: Developer (Want to understand it)
+
 1. [ARCHITECTURE.md](ARCHITECTURE.md) - 20 min
 2. [ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md) - 30 min
 3. [API.md](API.md) - 15 min
@@ -130,6 +145,7 @@ docs/
 **Total Time**: ~1.5 hours
 
 ### Path 3: Contributor (Want to modify it)
+
 1. [CONTRIBUTING.md](CONTRIBUTING.md) - 10 min
 2. [ARCHITECTURE.md](ARCHITECTURE.md) - 20 min
 3. [GETTING_STARTED/](GETTING_STARTED/) - 30 min
@@ -140,6 +156,7 @@ docs/
 **Total Time**: ~2 hours setup + development time
 
 ### Path 4: Operator (Need to deploy/maintain)
+
 1. [USER_INSTALLATION_GUIDE.md](USER_INSTALLATION_GUIDE.md) - 20 min
 2. [USER_DEPLOYMENT_GUIDE.md](USER_DEPLOYMENT_GUIDE.md) - 20 min
 3. [USER_OPERATIONS_GUIDE.md](USER_OPERATIONS_GUIDE.md) - 20 min

@@ -126,6 +126,7 @@ jobs:
             --template-file infra/main.bicep \
             --parameters infra/main.bicepparam \
             --result-format ResourceIdOnly \
+            --no-pretty-print \
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
@@ -133,9 +134,9 @@ jobs:
           modify_count=0
           delete_count=0
           if [ "$rc" -eq 0 ]; then
-            create_count="$(jq '[.properties.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
-            modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
-            delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
+            create_count="$(jq '[.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
+            modify_count="$(jq '[.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
+            delete_count="$(jq '[.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
           fi
           python3 scripts/validation/emit_deploy_custody_record.py \
             --phase what-if \
@@ -185,12 +186,12 @@ jobs:
 
       - name: Seal custody manifest
         id: seal
-        if: always() && steps.creds.outputs.configured == 'true' && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')
+        if: always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'
         run: |
           set -euo pipefail
           cd custody
-          mode="what-if"
-          if [ "${{ steps.deploy.outcome }}" != "skipped" ]; then mode="deploy"; fi
+          mode="deploy"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.what_if }}" = "true" ]; then mode="what-if"; fi
           jq -n \
             --slurpfile inputs manifest-inputs.json \
             --arg mode "$mode" \

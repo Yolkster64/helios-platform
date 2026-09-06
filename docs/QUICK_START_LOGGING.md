@@ -169,6 +169,7 @@ Console.WriteLine($"Critical Alerts: {summary.CriticalAlertCount}");
 ### View Logs
 
 Logs are stored in `Logs/` directory:
+
 - `application-*.txt` - All logs
 - `application-structured-*.json` - Structured logs
 - `errors-*.txt` - Error only
@@ -245,19 +246,23 @@ C:\Users\ADMIN\helios-platform\src\HELIOS.Platform\Core\
 ## Troubleshooting
 
 ### "Event Log Source Not Found"
+
 - Run as Administrator
 - Manually create: `EventLog.CreateEventSource("HELIOS Platform", "Application")`
 
 ### "Cannot write to log directory"
+
 - Check folder permissions
 - Ensure `Logs/` directory exists and is writable
 
 ### High CPU Usage
+
 - Reduce health check frequency
 - Increase batch sizes for aggregation
 - Disable detailed performance tracking if not needed
 
 ### Disk Growing Fast
+
 - Reduce `MaxRetainedFiles` in rotation config
 - Decrease `DaysToKeepArchived`
 - Reduce log file size limit

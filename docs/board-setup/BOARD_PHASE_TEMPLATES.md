@@ -28,6 +28,7 @@
 ### Template Purpose
 
 Each phase template provides a standardized structure for creating issues within that phase, including:
+
 - **Clear Phase Objectives:** What the phase accomplishes
 - **Acceptance Criteria:** Definition of completion
 - **Success Metrics:** How to measure success
@@ -40,6 +41,7 @@ Each phase template provides a standardized structure for creating issues within
 ### Template Structure
 
 Every template includes:
+
 ```
 1. Phase Title and Overview
 2. Phase Objectives (What we're building/accomplishing)
@@ -56,6 +58,7 @@ Every template includes:
 ### Using Templates
 
 **To Use a Template:**
+
 1. Copy the template for your phase
 2. Create a new issue in GitHub Projects
 3. Paste template into issue description
@@ -120,6 +123,7 @@ Step 7: Execute and Track
 ### Template Customization
 
 **Generic Elements (Use As-Is):**
+
 - ✓ Phase objectives structure
 - ✓ Acceptance criteria framework
 - ✓ Success metrics categories
@@ -127,6 +131,7 @@ Step 7: Execute and Track
 - ✓ Sign-off checklist
 
 **Customizable Elements:**
+
 - ⚙ Specific deliverable names (change to match your context)
 - ⚙ Team member assignments (use your team structure)
 - ⚙ Timeline durations (adjust for your schedule)
@@ -1186,18 +1191,21 @@ requirements or vertical markets.
 ### Customization Tips
 
 **For Different Components:**
+
 - Add component-specific subtasks
 - Include component-specific tests
 - Reference component documentation
 - Include component team lead in roles
 
 **For Different Team Sizes:**
+
 - Adjust team size and roles
 - Combine roles for small teams
 - Create sub-teams for large teams
 - Clarify handoffs between teams
 
 **For Different Timelines:**
+
 - Adjust expected durations
 - Add/remove subtasks for compressed timelines
 - Plan parallel activities where possible
@@ -1206,6 +1214,7 @@ requirements or vertical markets.
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Total Templates: 8

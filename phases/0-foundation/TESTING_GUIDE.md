@@ -34,12 +34,14 @@ If any unchecked: Run DETAILED TESTS below
 **How To Check**:
 
 **Method 1 - Settings**:
+
 1. Click Start button (Windows icon)
 2. Type "winver"
 3. Press Enter
 4. Look for: "Windows 11" and build number (e.g., "Build 22621.xxxx")
 
 **Expected Result**:
+
 ```
 Windows 11
 Version: 23H2 or similar
@@ -47,24 +49,28 @@ Build: 22621.xxxx or higher
 ```
 
 **Method 2 - Command Line**:
+
 ```powershell
 # Run in PowerShell
 wmic os get caption, version, buildnumber
 ```
 
 **Expected Output**:
+
 ```
 Caption            Version  BuildNumber
 Microsoft Windows 11 10.0    22621
 ```
 
 **Method 3 - File Explorer**:
+
 1. Click File Explorer (folder icon)
 2. Right-click "This PC"
 3. Click "Properties"
 4. Look for "Windows 11" mentioned
 
 **If Test Fails**:
+
 - Windows 11 not detected as installed
 - Solution: Rerun windows-installer.ps1 from USB
 
@@ -79,17 +85,20 @@ Microsoft Windows 11 10.0    22621
 **How To Check**:
 
 **Method 1 - File Explorer**:
+
 1. Open File Explorer
 2. Click "This PC" (left sidebar)
 3. Look for "C:" and "D:" drives
 
 **Expected Result**:
+
 ```
 C: [System] - Windows installed (with files)
 D: [Data]   - Empty or with folders (not main OS)
 ```
 
 **Method 2 - PowerShell**:
+
 ```powershell
 # Run as Administrator
 Get-Volume | Select-Object DriveLetter, FileSystemType, SizeRemaining, Size
@@ -101,6 +110,7 @@ exit
 ```
 
 **Expected Output**:
+
 ```
 DriveLetter FileSystemType Size          SizeRemaining
 C           NTFS           150000000000  50000000000
@@ -110,6 +120,7 @@ D           NTFS           350000000000  350000000000
 *Note: Numbers will vary based on your actual disk sizes*
 
 **Method 3 - Properties Check**:
+
 1. Right-click C: drive in File Explorer
 2. Click Properties
 3. Verify: System drive, NTFS format, ~25-30 GB used
@@ -117,6 +128,7 @@ D           NTFS           350000000000  350000000000
 5. Verify: Empty or mostly empty, NTFS format
 
 **If Test Fails**:
+
 - D: drive missing: Run partition-manager.ps1
 - C: drive missing: Windows not installed properly
 - Wrong size: Run partition-manager.ps1 again
@@ -132,6 +144,7 @@ D           NTFS           350000000000  350000000000
 **How To Check**:
 
 **C: Drive Folders**:
+
 ```powershell
 # Run in PowerShell
 # Check if these exist:
@@ -146,6 +159,7 @@ Test-Path "C:\HELIOS\docs"                          # Should be TRUE
 ```
 
 **Expected Output**:
+
 ```
 True
 True
@@ -156,6 +170,7 @@ True
 ```
 
 **D: Drive Folders**:
+
 ```powershell
 # Check if these exist:
 Test-Path "D:\Users\ADMIN\Documents"                # Should be TRUE
@@ -169,6 +184,7 @@ Test-Path "D:\Archive"                              # Should be TRUE
 ```
 
 **Visual Check**:
+
 1. Open File Explorer
 2. Click on C: drive
 3. Should see "HELIOS" folder
@@ -178,6 +194,7 @@ Test-Path "D:\Archive"                              # Should be TRUE
 7. Should see: Users, Backups, Projects, Archive
 
 **Count Check**:
+
 ```powershell
 # Count main folders on C:\HELIOS\
 (Get-ChildItem C:\HELIOS\ -Directory).Count   # Should be 6+
@@ -187,6 +204,7 @@ Test-Path "D:\Archive"                              # Should be TRUE
 ```
 
 **If Test Fails**:
+
 - Folders missing: Run storage-setup.ps1
 - Wrong location: Check folder paths (C: vs D:)
 - Permission error: Run PowerShell as Administrator
@@ -202,6 +220,7 @@ Test-Path "D:\Archive"                              # Should be TRUE
 **How To Check**:
 
 **Method 1 - Disk Management GUI**:
+
 1. Right-click Start button
 2. Click "Disk Management"
 3. Look at disk layout:
@@ -211,6 +230,7 @@ Test-Path "D:\Archive"                              # Should be TRUE
    - All should be NTFS format
 
 **Method 2 - PowerShell**:
+
 ```powershell
 # Show all partitions
 Get-Partition | Select-Object DriveLetter, Type, Size, FileSystem
@@ -222,6 +242,7 @@ Get-Partition | Select-Object DriveLetter, Type, Size, FileSystem
 ```
 
 **Expected Output**:
+
 ```
 DriveLetter Type Size         FileSystem
 C           IFS  160000000000 NTFS
@@ -230,6 +251,7 @@ D           IFS  350000000000 NTFS
 ```
 
 **Method 3 - File Explorer**:
+
 1. Right-click "This PC"
 2. Click "Manage"
 3. Click "Storage" on left
@@ -237,6 +259,7 @@ D           IFS  350000000000 NTFS
 5. Verify partition layout shown
 
 **If Test Fails**:
+
 - Recovery partition missing: Not critical, can be created
 - Partition sizes wrong: Run partition-manager.ps1 again
 - File system wrong: Should be NTFS (not FAT32)
@@ -252,6 +275,7 @@ D           IFS  350000000000 NTFS
 **How To Check**:
 
 **Check Windows Features Enabled**:
+
 ```powershell
 # Run as Administrator
 dism /online /get-features /format=table | findstr /i "hyper-v sandbox wsl virtual-machine"
@@ -260,6 +284,7 @@ dism /online /get-features /format=table | findstr /i "hyper-v sandbox wsl virtu
 ```
 
 **Expected Output** (similar to):
+
 ```
 Hyper-V                          Enabled
 Containers                       Enabled
@@ -268,6 +293,7 @@ WindowsSubsystemForLinux         Enabled
 ```
 
 **Check Services Running**:
+
 ```powershell
 # Check if security services are running
 Get-Service WinDefend, WindowsUpdate, mpssvc | Select-Object Name, Status
@@ -276,6 +302,7 @@ Get-Service WinDefend, WindowsUpdate, mpssvc | Select-Object Name, Status
 ```
 
 **Expected Output**:
+
 ```
 Name             Status
 WinDefend        Running
@@ -284,6 +311,7 @@ mpssvc           Running
 ```
 
 **Check Power Settings**:
+
 ```powershell
 # Check current power plan
 powercfg /getactivescheme
@@ -292,23 +320,27 @@ powercfg /getactivescheme
 ```
 
 **Expected Output**:
+
 ```
 Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (High performance)
 ```
 
 **Check File Explorer Settings**:
+
 1. Open File Explorer
 2. Click View menu (top)
 3. Should see "Hidden items" checked
 4. Should see "File name extensions" checked
 
 **Check Windows Security**:
+
 1. Click Start
 2. Type "Windows Security"
 3. Press Enter
 4. Should show "Virus & threat protection: Protected"
 
 **Check Registry Changes**:
+
 ```powershell
 # Sample check - system baseline should have modified registry
 # This is complex; easier to just verify features/services above
@@ -319,6 +351,7 @@ Get-Content C:\HELIOS\logs\phase0\system-baseline-*.log | tail -20
 ```
 
 **If Test Fails**:
+
 - Features not enabled: Run system-baseline.ps1 again
 - Services not running: Check for errors in logs
 - Power plan wrong: Change manually in Settings > Power
@@ -334,6 +367,7 @@ Get-Content C:\HELIOS\logs\phase0\system-baseline-*.log | tail -20
 **How To Check**:
 
 **Method 1 - Check Admin Status**:
+
 ```powershell
 # Run this in PowerShell
 # If it returns "True", you have admin access
@@ -343,12 +377,14 @@ Get-Content C:\HELIOS\logs\phase0\system-baseline-*.log | tail -20
 ```
 
 **Method 2 - Run as Admin**:
+
 1. Right-click PowerShell icon
 2. Click "Run as Administrator"
 3. If prompt appears, click "Yes"
 4. PowerShell should say "Administrator:" in title bar
 
 **Method 3 - Check PowerShell Version**:
+
 ```powershell
 # Check version
 $PSVersionTable
@@ -357,6 +393,7 @@ $PSVersionTable
 ```
 
 **Expected Output**:
+
 ```
 Name                           Value
 ----                           -----
@@ -367,6 +404,7 @@ WSManStackVersion              3.0
 ```
 
 **If Test Fails**:
+
 - Not running as admin: Right-click PowerShell, Run as Administrator
 - Wrong version: Install PowerShell 7 (not required, but recommended)
 
@@ -396,6 +434,7 @@ Test-Path "C:\HELIOS\phases\0-foundation\scripts\system-baseline.ps1"          #
 ```
 
 **File Explorer Check**:
+
 1. Open File Explorer
 2. Navigate to: C:\HELIOS\phases\0-foundation\
 3. Should see files: README.md, PLAIN_ENGLISH_GUIDE.md, etc.
@@ -404,6 +443,7 @@ Test-Path "C:\HELIOS\phases\0-foundation\scripts\system-baseline.ps1"          #
 6. Should see files: usb-creator.ps1, partition-manager.ps1, etc.
 
 **If Test Fails**:
+
 - Scripts missing: Copy from original source location
 - Wrong location: Move to C:\HELIOS\phases\0-foundation\
 
@@ -418,6 +458,7 @@ Test-Path "C:\HELIOS\phases\0-foundation\scripts\system-baseline.ps1"          #
 **How To Check**:
 
 **Check Logs Exist**:
+
 ```powershell
 # List all Phase 0 logs
 Get-ChildItem C:\HELIOS\logs\phase0\ -Filter "*.log"
@@ -426,6 +467,7 @@ Get-ChildItem C:\HELIOS\logs\phase0\ -Filter "*.log"
 ```
 
 **Expected Output** (similar to):
+
 ```
 Directory: C:\HELIOS\logs\phase0
 
@@ -437,6 +479,7 @@ Mode                 LastWriteTime         Length Name
 ```
 
 **Check for Errors in Logs**:
+
 ```powershell
 # Search logs for ERROR or FAIL
 Get-ChildItem C:\HELIOS\logs\phase0\*.log | ForEach-Object {
@@ -447,6 +490,7 @@ Get-ChildItem C:\HELIOS\logs\phase0\*.log | ForEach-Object {
 ```
 
 **View Specific Log**:
+
 ```powershell
 # Read most recent log
 Get-ChildItem C:\HELIOS\logs\phase0\*.log | 
@@ -456,6 +500,7 @@ Get-ChildItem C:\HELIOS\logs\phase0\*.log |
 ```
 
 **Check Log Size**:
+
 ```powershell
 # Logs should exist and have reasonable size (not empty)
 Get-ChildItem C:\HELIOS\logs\phase0\*.log | 
@@ -465,6 +510,7 @@ Get-ChildItem C:\HELIOS\logs\phase0\*.log |
 ```
 
 **If Test Fails**:
+
 - No logs found: Scripts haven't been run yet
 - Logs show errors: Check error messages and re-run script
 - Logs empty: Script may have failed to start
@@ -480,6 +526,7 @@ Get-ChildItem C:\HELIOS\logs\phase0\*.log |
 **How To Check**:
 
 **Test Internet Connectivity**:
+
 ```powershell
 # Ping a reliable server
 Test-Connection 8.8.8.8 -Count 1 -ErrorAction SilentlyContinue
@@ -490,6 +537,7 @@ Test-Connection google.com
 ```
 
 **Expected Output**:
+
 ```
 Source        Destination     IPV4Address      IPV6Address Status
 ------        -----------     -----------      ----------- ------
@@ -497,6 +545,7 @@ MYCOMPUTER    8.8.8.8         8.8.8.8                      Success
 ```
 
 **Test Windows Update**:
+
 ```powershell
 # Check if Windows Update is enabled and working
 Get-Service WUAuServ | Select-Object Name, Status, StartType
@@ -505,16 +554,19 @@ Get-Service WUAuServ | Select-Object Name, Status, StartType
 ```
 
 **Check Update History**:
+
 1. Click Start
 2. Type "Update"
 3. Click "Check for updates"
 4. Should show recent updates installed
 
 **Visual Check**:
+
 1. Settings > System > About
 2. Should show Windows is up to date (or updates available)
 
 **If Test Fails**:
+
 - No internet: Check WiFi/Ethernet connection
 - Updates failing: Restart computer and try again
 - Service disabled: Run system-baseline.ps1 again
@@ -601,6 +653,7 @@ Get-Service WUAuServ | Select-Object Name, Status, StartType
 **Cause**: Installation incomplete or incorrect OS
 
 **Solution**:
+
 1. Restart computer
 2. Re-run Windows installer from USB
 3. Verify Windows installation completed fully
@@ -610,6 +663,7 @@ Get-Service WUAuServ | Select-Object Name, Status, StartType
 **Cause**: Partitioning not done
 
 **Solution**:
+
 ```powershell
 # Run partition manager
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -622,6 +676,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Cause**: Storage setup not run
 
 **Solution**:
+
 ```powershell
 # Run storage setup
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -634,6 +689,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Cause**: PowerShell not running as administrator
 
 **Solution**:
+
 1. Right-click PowerShell icon
 2. Select "Run as Administrator"
 3. Click "Yes" on prompt
@@ -644,6 +700,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Cause**: Script encountered problem
 
 **Solution**:
+
 1. Read error message in log carefully
 2. Check File_Architecture.md for correct paths
 3. Re-run the failing script
@@ -655,6 +712,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Cause**: Network not configured
 
 **Solution**:
+
 1. Check WiFi/Ethernet connection
 2. Open Settings > Network & Internet
 3. Check network is enabled

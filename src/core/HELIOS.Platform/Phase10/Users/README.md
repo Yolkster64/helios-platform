@@ -65,6 +65,7 @@ await activityMonitor.LogLoginAttemptAsync("john", true, "192.168.1.1");
 ## Account Types
 
 ### Administrator
+
 - Full system access
 - Can modify all system settings
 - Can create/delete users
@@ -72,6 +73,7 @@ await activityMonitor.LogLoginAttemptAsync("john", true, "192.168.1.1");
 - Default groups: Administrators, Remote Desktop Users
 
 ### Primary User (Standard User)
+
 - Limited to user profile
 - Can run applications
 - Cannot modify system
@@ -79,6 +81,7 @@ await activityMonitor.LogLoginAttemptAsync("john", true, "192.168.1.1");
 - Default group: Users
 
 ### Guest
+
 - Very limited permissions
 - Read-only access to shared resources
 - Cannot modify system
@@ -86,6 +89,7 @@ await activityMonitor.LogLoginAttemptAsync("john", true, "192.168.1.1");
 - Default group: Guests
 
 ### Service Account
+
 - System service permissions only
 - No interactive login
 - Dedicated to HELIOS platform
@@ -95,28 +99,33 @@ await activityMonitor.LogLoginAttemptAsync("john", true, "192.168.1.1");
 ## Security Features
 
 ✅ **Password Policies**
+
 - 12+ character minimum (configurable)
 - Complexity enforcement (upper, lower, numbers, special)
 - History tracking (5+ previous passwords)
 - Expiration policies (90 days default)
 
 ✅ **Account Lockout**
+
 - 5 failed attempts threshold
 - 30-minute lockout duration
 - Configurable reset period
 
 ✅ **Audit Logging**
+
 - All account operations logged
 - Daily log rotation
 - 90-day retention
 - Anomaly detection
 
 ✅ **Two-Factor Authentication**
+
 - TOTP framework
 - Recovery codes (10 per account)
 - Backup methods
 
 ✅ **Access Control**
+
 - NTFS permissions
 - Registry permissions
 - UAC level configuration
@@ -339,12 +348,14 @@ public class SecurityConfiguration
 ## Threading & Concurrency
 
 All services are:
+
 - ✅ Thread-safe (lock-based)
 - ✅ Async-first (Task-based)
 - ✅ Non-blocking (I/O operations)
 - ✅ Reentrant-safe
 
 Example of concurrent operations:
+
 ```csharp
 var tasks = new[]
 {
@@ -395,16 +406,19 @@ All services write to `%APPDATA%\HELIOS\Logs\`:
 ## Testing
 
 Run all tests:
+
 ```bash
 dotnet test Phase10.Users.Tests
 ```
 
 Run specific test class:
+
 ```bash
 dotnet test Phase10.Users.Tests --filter "UserAccountProvisionerTests"
 ```
 
 Run with verbose output:
+
 ```bash
 dotnet test Phase10.Users.Tests --verbosity detailed
 ```
@@ -414,6 +428,7 @@ dotnet test Phase10.Users.Tests --verbosity detailed
 ## Best Practices
 
 ✅ **Do**
+
 - Use async/await consistently
 - Validate passwords before assignment
 - Monitor activity regularly
@@ -423,6 +438,7 @@ dotnet test Phase10.Users.Tests --verbosity detailed
 - Review security reports weekly
 
 ❌ **Don't**
+
 - Reuse passwords
 - Log passwords in files
 - Skip security initialization
@@ -433,18 +449,23 @@ dotnet test Phase10.Users.Tests --verbosity detailed
 ## Troubleshooting
 
 ### Issue: "Access Denied" errors
+
 **Solution**: Run with administrator privileges
 
 ### Issue: WMI errors
+
 **Solution**: Ensure WMI service is running (`net start winmgmt`)
 
 ### Issue: Permission changes not applying
+
 **Solution**: Log off and log back on, or restart explorer.exe
 
 ### Issue: User creation timeout
+
 **Solution**: Check disk space, ensure sufficient permissions
 
 ### Issue: Log files growing too large
+
 **Solution**: Call `ArchiveOldLogsAsync()` regularly
 
 ## Contributing
@@ -460,18 +481,21 @@ To extend or modify the system:
 ## Roadmap
 
 **v1.0** (Current)
+
 - Core account management
 - RBAC implementation
 - Security policies
 - Activity monitoring
 
 **v1.1** (Planned)
+
 - Active Directory integration
 - Biometric authentication
 - Advanced ML-based anomaly detection
 - WebAuthn support
 
 **v2.0** (Future)
+
 - Cloud account sync
 - SSO integration
 - Advanced geo-location tracking
@@ -484,6 +508,7 @@ To extend or modify the system:
 ## Support
 
 For issues or questions:
+
 - Check DOCUMENTATION.md for detailed API reference
 - Review test cases for usage examples
 - Check log files for diagnostic information

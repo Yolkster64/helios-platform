@@ -97,11 +97,13 @@ After execution completes:
 ## Agent Execution Order
 
 ### Sequential (Single thread):
+
 ```
 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
 ```
 
 ### Parallel (Multiple threads):
+
 ```
 Batch 1: [1]
 Batch 2: [2]
@@ -116,6 +118,7 @@ Batch 8: [11]
 ## Common Workflows
 
 ### 1. Full System Build (Conservative)
+
 ```powershell
 # Test first
 .\orchestrator\run-all-agents.ps1 -DryRun
@@ -128,6 +131,7 @@ Batch 8: [11]
 ```
 
 ### 2. Fast Deployment (Production)
+
 ```powershell
 # Quick dry run
 .\orchestrator\run-agents-parallel.ps1 -DryRun
@@ -140,12 +144,14 @@ Batch 8: [11]
 ```
 
 ### 3. Skip Problematic Agent
+
 ```powershell
 # Skip agent 5 (drivers) if problematic
 .\orchestrator\run-all-agents.ps1 -SkipAgents @(5)
 ```
 
 ### 4. Investigate Failure
+
 ```powershell
 # Show failed agents
 .\orchestrator\check-agent-status.ps1 -ShowFailed
@@ -161,6 +167,7 @@ Batch 8: [11]
 ```
 
 ### 5. Recovery from Failure
+
 ```powershell
 # Emergency stop
 .\orchestrator\stop-agents.ps1 -All
@@ -189,7 +196,9 @@ Each execution generates outputs in `logs/`:
 ## Configuration
 
 ### agents-config.json
+
 Defines all 11 agents:
+
 - Name and description
 - Tasks and scope
 - Critical flag
@@ -197,7 +206,9 @@ Defines all 11 agents:
 - Dependencies
 
 ### agent-dependencies.json
+
 Defines:
+
 - Agent dependencies
 - Rollback procedures
 - Parallel batches
@@ -206,12 +217,14 @@ Defines:
 ## Customization
 
 ### Skip Specific Agents
+
 ```powershell
 # Skip agents 5 and 6
 .\orchestrator\run-all-agents.ps1 -SkipAgents @(5,6)
 ```
 
 ### Adjust Parallel Jobs
+
 ```powershell
 # Use more parallel jobs for faster execution
 .\orchestrator\run-agents-parallel.ps1 -MaxParallelJobs 12
@@ -221,6 +234,7 @@ Defines:
 ```
 
 ### Disable Rollback
+
 ```powershell
 # Don't rollback on failure (not recommended)
 .\orchestrator\run-all-agents.ps1 -SkipRollback
@@ -229,6 +243,7 @@ Defines:
 ## Troubleshooting
 
 ### Script Not Found Error
+
 ```powershell
 # Make sure you're in the correct directory
 cd C:\Users\ADMIN\helios-platform\scripts\build-agents
@@ -239,19 +254,23 @@ ls agent-templates/*.ps1
 ```
 
 ### Permission Denied
+
 ```powershell
 # May need to allow script execution
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
 ### Agent Timeout (Parallel Only)
+
 ```powershell
 # Increase timeout to 2 hours
 .\orchestrator\run-agents-parallel.ps1 -TimeoutSeconds 7200
 ```
 
 ### Need Admin Privileges
+
 Some agents require admin privileges:
+
 ```powershell
 # Run PowerShell as Administrator first
 Start-Process powershell -Verb RunAs
@@ -260,16 +279,19 @@ Start-Process powershell -Verb RunAs
 ## Performance Tips
 
 1. **Use Parallel for Speed:**
+
    ```powershell
    .\orchestrator\run-agents-parallel.ps1
    ```
 
 2. **Reduce Max Parallel Jobs if Resource Constrained:**
+
    ```powershell
    .\orchestrator\run-agents-parallel.ps1 -MaxParallelJobs 4
    ```
 
 3. **Increase Timeout for Slow Systems:**
+
    ```powershell
    .\orchestrator\run-agents-parallel.ps1 -TimeoutSeconds 7200
    ```

@@ -1,4 +1,5 @@
 # HELIOS Phase 2: Before & After Performance
+
 ## Realistic Performance Improvements
 
 ---
@@ -30,6 +31,7 @@
 | Startup Services Disabled | 15-20 services |
 
 **Example (4-core CPU, 4GB RAM system):**
+
 ```
 Before:  18% CPU (idle) × 4 cores = 0.72 cores busy doing nothing
          Total memory: 2.8 GB used (70% of 4 GB)
@@ -51,6 +53,7 @@ Gain:    0.44 cores freed (61% CPU idle reduction)
 | Estimated Disk I/O | 50-70% reduction during boot |
 
 **Example Timeline (before vs. after):**
+
 ```
 BEFORE STARTUP OPTIMIZATION:
 0 sec:   Windows starts loading
@@ -87,6 +90,7 @@ Net Gain: 45 seconds faster (50% reduction)
 | Page File I/O | 50-70% reduction |
 
 **Example (Launching browser while working):**
+
 ```
 BEFORE RESOURCE TUNING:
 1. Press Chrome icon
@@ -117,6 +121,7 @@ Net Gain: 3-4 seconds faster Chrome startup (60-75% reduction)
 | CPU Spikes (background tasks) | 50-70% reduction |
 
 **Example (Browsing the web):**
+
 ```
 BEFORE:
 - Browsing website
@@ -144,6 +149,7 @@ AFTER:
 | Battery Life Impact | 5-10% longer |
 
 **Visual Comparison:**
+
 ```
 BEFORE:
 - Windows opens with smooth zoom animation (500 ms)
@@ -173,6 +179,7 @@ AFTER:
 | **Ping/Latency** | 45 ms | 42 ms | 6% lower |
 
 **Real-world example (downloading a 1 GB file):**
+
 ```
 Connection: 8 Mbps (typical residential)
 
@@ -205,6 +212,7 @@ Plus: Feels much smoother, fewer stalls
 | Temporary Files Cleaned | 1-3 GB |
 
 **Hard Drive Fragmentation Impact:**
+
 ```
 BEFORE (Highly Fragmented):
 - File pieces scattered across disk platter
@@ -222,6 +230,7 @@ Net Gain: 30 seconds faster (66% improvement) per GB read
 ```
 
 **Example: Program Launch**
+
 ```
 Launching a 500 MB application
 
@@ -555,12 +564,14 @@ Symptoms Gone:
 #### Boot Time Measurement
 
 **Before:**
+
 1. Shut down system
 2. Press power button, start timer
 3. When desktop fully responsive (you can open programs), stop timer
 4. Record time
 
 **After:**
+
 1. Apply Phase 2 optimizations
 2. Reboot, measure same way
 3. Compare times
@@ -570,6 +581,7 @@ Symptoms Gone:
 #### App Launch Measurement
 
 **Before:**
+
 1. Open task manager, clear cache `ipconfig /flushdns`
 2. Close all applications
 3. Press app icon, start timer
@@ -577,6 +589,7 @@ Symptoms Gone:
 5. Repeat 5 times, average
 
 **After:**
+
 1. Apply Phase 2 optimizations
 2. Repeat same measurement
 3. Compare times
@@ -586,6 +599,7 @@ Symptoms Gone:
 #### Memory Measurement
 
 **Before:**
+
 1. Restart system
 2. Wait 2 minutes (let background tasks settle)
 3. Open Task Manager → Performance
@@ -593,6 +607,7 @@ Symptoms Gone:
 5. Note % used
 
 **After:**
+
 1. Apply Phase 2 optimizations
 2. Restart system
 3. Repeat same measurement
@@ -607,17 +622,20 @@ Symptoms Gone:
 ### Absolutely Yes
 
 **You'll immediately notice:**
+
 - Faster boot time (hard to miss 60 seconds improvement)
 - Faster app launches (noticeably snappier)
 - Smoother multitasking (no random freezes)
 - Quieter system (fewer fans)
 
 **You might notice:**
+
 - Slightly less fancy visuals (transparency off)
 - OneDrive doesn't sync continuously (manual option)
 - Windows Update doesn't auto-download
 
 **You'll probably NOT notice:**
+
 - Most disabled services (they run invisibly)
 - TCP/IP optimization (just faster internet, you'll see it in speeds)
 - Disk defragmentation (faster access, you see faster file opens)

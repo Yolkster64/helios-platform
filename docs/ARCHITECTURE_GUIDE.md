@@ -5,6 +5,7 @@
 HELIOS v4.0 is a comprehensive, cloud-native platform designed for enterprise-grade intelligent data management and synchronization. The architecture emphasizes modularity, scalability, security, and intelligent automation through AI-driven features.
 
 **Key Metrics:**
+
 - 7 core components + 3 integration layers
 - 8 critical integration points
 - Support for 1000+ concurrent users
@@ -67,9 +68,11 @@ HELIOS v4.0 is a comprehensive, cloud-native platform designed for enterprise-gr
 ## 1. Core Components
 
 ### 1.1 Analytics Service
+
 **Responsibility:** Metrics collection, aggregation, and visualization
 
 **Key Features:**
+
 - Real-time event tracking
 - Time-series metrics storage
 - Dashboard generation
@@ -77,21 +80,25 @@ HELIOS v4.0 is a comprehensive, cloud-native platform designed for enterprise-gr
 - Retention policies (configurable)
 
 **Technology Stack:**
+
 - Time-series database (InfluxDB/TimescaleDB)
 - Message queue for event processing
 - GraphQL API for dashboard data
 
 **Integration Points:**
+
 - Receives events from all services
 - Provides metrics to monitoring dashboard
 - Triggers alerts on anomalies
 
 **Data Flow:**
+
 ```
 Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ```
 
 **Performance Targets:**
+
 - Event ingestion: 100,000 events/sec
 - Query latency: <500ms p99
 - Dashboard load: <2s
@@ -99,9 +106,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.2 Sync Engine
+
 **Responsibility:** Multi-device synchronization with conflict resolution
 
 **Key Features:**
+
 - Operational transformation (OT) for real-time collaboration
 - Conflict-free replicated data types (CRDTs)
 - Vector clocks for causality tracking
@@ -109,23 +118,27 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - Offline-first architecture
 
 **Technology Stack:**
+
 - PostgreSQL with JSONB
 - WebSocket for real-time updates
 - Distributed transaction processing
 
 **Conflict Resolution Strategies:**
+
 1. **Last-Write-Wins**: Most recent change takes precedence
 2. **Custom Merge**: Application-defined merge logic
 3. **Automatic Merge**: CRDT-based automatic resolution
 4. **Manual Resolution**: User intervention required
 
 **Integration Points:**
+
 - Receives data updates from clients
 - Coordinates with cloud backup
 - Notifies analytics of sync events
 - Interacts with plugin system
 
 **Data Consistency Guarantees:**
+
 - Strong consistency: Within single region, immediate
 - Eventual consistency: Cross-region, within 5 minutes
 - Causal consistency: Ordering preserved by device
@@ -133,9 +146,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.3 Plugin System
+
 **Responsibility:** Extensible plugin architecture with security
 
 **Key Features:**
+
 - Plugin lifecycle management
 - Security sandboxing (V8, WebWorker, or VM)
 - Resource quotas and limits
@@ -143,23 +158,27 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - Automatic updates
 
 **Sandbox Types:**
+
 1. **Worker Sandbox**: Web Worker for client-side plugins
 2. **VM Sandbox**: Node.js VM for backend plugins
 3. **Process Sandbox**: Isolated process for critical plugins
 
 **Plugin API Surface:**
+
 - Data access (read/write with permissions)
 - AI service integration
 - Event emission and listening
 - Storage access (quota-limited)
 
 **Integration Points:**
+
 - Plugin registry and discovery
 - Resource management
 - Security policy enforcement
 - Event propagation
 
 **Security Model:**
+
 - Manifest-based permissions
 - Resource quotas (CPU, memory, storage)
 - Network restrictions
@@ -168,9 +187,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.4 AI Service
+
 **Responsibility:** Machine learning-powered intelligent features
 
 **Key Features:**
+
 - Intelligent suggestions
 - Semantic search
 - Entity extraction
@@ -178,23 +199,27 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - Predictive analytics
 
 **ML Models Deployed:**
+
 - GPT-4 for text generation
 - BERT for embeddings
 - FastText for classification
 - Custom models for domain-specific tasks
 
 **Integration Points:**
+
 - Receives queries from clients
 - Accesses data for context
 - Provides suggestions to UI
 - Tracks accuracy metrics
 
 **Latency Budget:**
+
 - Suggestions: <500ms
 - Search: <1000ms
 - Classification: <200ms
 
 **Caching Strategy:**
+
 - LRU cache for frequent queries
 - 24-hour TTL
 - Hit rate target: >80%
@@ -202,9 +227,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.5 PWA Components
+
 **Responsibility:** Progressive Web App and offline capabilities
 
 **Key Features:**
+
 - Service worker for offline support
 - Push notifications
 - App manifest and installability
@@ -212,18 +239,21 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - WebSocket real-time updates
 
 **Offline Support:**
+
 - Critical data cached locally
 - Operations queued in IndexedDB
 - Sync on reconnection
 - Conflict detection and resolution
 
 **Technology Stack:**
+
 - Service Workers API
 - IndexedDB for local storage
 - Web Workers for background tasks
 - WebSocket for real-time communication
 
 **Integration Points:**
+
 - Synchronizes data with cloud
 - Receives push notifications
 - Listens to real-time events
@@ -232,9 +262,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.6 Cloud Integration
+
 **Responsibility:** Cloud storage, backup, and disaster recovery
 
 **Key Features:**
+
 - Multi-region deployment
 - Automatic backups
 - Point-in-time recovery
@@ -242,17 +274,20 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - Disaster recovery
 
 **Cloud Providers Supported:**
+
 - AWS (primary)
 - Azure (backup)
 - GCP (secondary)
 
 **Backup Strategy:**
+
 - Incremental daily backups
 - Full weekly backups
 - 30-day retention
 - Encryption at rest and in transit
 
 **Integration Points:**
+
 - Receives data from sync engine
 - Provides recovery points
 - Monitors cross-region replication
@@ -261,9 +296,11 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ---
 
 ### 1.7 Security & Authentication
+
 **Responsibility:** Authentication, authorization, and security
 
 **Key Features:**
+
 - Multi-factor authentication
 - OAuth 2.0 / OpenID Connect
 - Role-based access control (RBAC)
@@ -272,18 +309,21 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 - Encryption everywhere
 
 **Authentication Methods:**
+
 - Username/password
 - Social login (Google, Microsoft, GitHub)
 - SAML 2.0 (enterprise)
 - WebAuthn (biometric)
 
 **Authorization Model:**
+
 - Hierarchical roles
 - Fine-grained permissions
 - Resource-based access control
 - Team and group management
 
 **Encryption:**
+
 - TLS 1.3 for transport
 - AES-256 for data at rest
 - End-to-end encryption for sensitive data
@@ -294,41 +334,49 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ## 2. Integration Architecture
 
 ### Integration Point 1: Client → API Gateway
+
 **Protocol:** HTTP/2, WebSocket
 **Authentication:** JWT tokens
 **Rate Limiting:** 1000 req/min per user
 
 ### Integration Point 2: Services → Message Bus
+
 **Protocol:** AMQP
 **Event Types:** Data changes, user actions, system events
 **Delivery:** At-least-once semantics
 
 ### Integration Point 3: Analytics → Data Warehouse
+
 **Protocol:** Direct DB connection
 **Batch Size:** 1000 events
 **Latency:** <5 seconds
 
 ### Integration Point 4: Sync → Cloud Storage
+
 **Protocol:** S3 API compatible
 **Encryption:** AES-256
 **Replication:** Cross-region, 15-minute RPO
 
 ### Integration Point 5: AI Service → ML Pipeline
+
 **Protocol:** gRPC
 **Model Version:** Automatically updated
 **Fallback:** Cached results if service unavailable
 
 ### Integration Point 6: Plugins → Core API
+
 **Protocol:** Message passing
 **Sandboxing:** Strict memory/CPU limits
 **Timeout:** 5 seconds per call
 
 ### Integration Point 7: PWA → WebSocket Gateway
+
 **Protocol:** WebSocket + fallback to polling
 **Reconnection:** Exponential backoff
 **Message Batching:** 100ms window
 
 ### Integration Point 8: Security → Auth Provider
+
 **Protocol:** OIDC/SAML
 **Session:** JWT + refresh tokens
 **Token TTL:** 1 hour (access), 7 days (refresh)
@@ -340,6 +388,7 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ### Core Data Entities
 
 #### User
+
 ```
 {
   id: UUID,
@@ -362,6 +411,7 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ```
 
 #### Document
+
 ```
 {
   id: UUID,
@@ -381,6 +431,7 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ```
 
 #### SyncEvent
+
 ```
 {
   id: UUID,
@@ -395,6 +446,7 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ```
 
 #### AnalyticsEvent
+
 ```
 {
   id: UUID,
@@ -418,6 +470,7 @@ Event → Batch → Message Bus → Analytics Service → DB → Dashboard
 ### RESTful Endpoints
 
 #### Documents
+
 ```
 GET    /api/v1/documents              - List documents
 POST   /api/v1/documents              - Create document
@@ -428,6 +481,7 @@ GET    /api/v1/documents/:id/versions - Document version history
 ```
 
 #### Analytics
+
 ```
 GET    /api/v1/analytics/events       - Query events
 POST   /api/v1/analytics/events       - Log event
@@ -436,6 +490,7 @@ GET    /api/v1/analytics/trends       - Trend analysis
 ```
 
 #### Sync
+
 ```
 POST   /api/v1/sync/pull              - Pull changes
 POST   /api/v1/sync/push              - Push changes
@@ -444,6 +499,7 @@ POST   /api/v1/sync/resolve           - Resolve conflicts
 ```
 
 #### Users
+
 ```
 POST   /api/v1/auth/register          - Register user
 POST   /api/v1/auth/login             - Authenticate user
@@ -460,30 +516,35 @@ PUT    /api/v1/users/me               - Update profile
 ### Defense in Depth
 
 **Layer 1: Network**
+
 - DDoS protection (AWS Shield)
 - WAF rules
 - VPC isolation
 - Security groups
 
 **Layer 2: Application**
+
 - Input validation
 - CSRF tokens
 - Rate limiting
 - Request signing
 
 **Layer 3: Data**
+
 - Encryption at rest (AES-256)
 - Encryption in transit (TLS 1.3)
 - Database encryption
 - Field-level encryption for PII
 
 **Layer 4: Access Control**
+
 - RBAC with fine-grained permissions
 - ABAC for complex policies
 - Audit logging
 - Session management
 
 **Layer 5: Compliance**
+
 - GDPR compliance
 - CCPA compliance
 - SOC 2 certification
@@ -496,16 +557,19 @@ PUT    /api/v1/users/me               - Update profile
 ### Caching Strategy
 
 **L1: Application Cache** (Redis)
+
 - Hot data set
 - 15-minute TTL
 - LRU eviction
 
 **L2: Database Query Cache** (QueryCache)
+
 - Prepared statements
 - Result caching
 - Automatic invalidation
 
 **L3: CDN Cache** (CloudFront)
+
 - Static assets
 - API responses (idempotent operations)
 - 1-hour TTL
@@ -513,16 +577,19 @@ PUT    /api/v1/users/me               - Update profile
 ### Database Optimization
 
 **Indexing:**
+
 - Composite indexes on common queries
 - Full-text search indexes
 - GiST indexes for JSONB fields
 
 **Sharding:**
+
 - User ID-based sharding
 - 100 shards for distributed data
 - Automatic re-balancing
 
 **Replication:**
+
 - Multi-master for read scaling
 - Streaming replication to read replicas
 - Read replicas in each region
@@ -530,16 +597,19 @@ PUT    /api/v1/users/me               - Update profile
 ### API Optimization
 
 **Pagination:**
+
 - Cursor-based pagination
 - Default limit: 50 items
 - Maximum limit: 1000 items
 
 **Filtering:**
+
 - Elasticsearch for complex queries
 - Cached filter results
 - Filter predicate optimization
 
 **Compression:**
+
 - gzip for JSON responses
 - Brotli for better compression ratio
 - Automatic compression selection
@@ -551,18 +621,21 @@ PUT    /api/v1/users/me               - Update profile
 ### Horizontal Scaling
 
 **Services:**
+
 - Stateless service design
 - Load balancing across instances
 - Auto-scaling based on CPU/memory
 - 10-1000 concurrent requests per instance
 
 **Databases:**
+
 - Read replicas for scaling reads
 - Sharding for scaling writes
 - Connection pooling
 - Query optimization
 
 **Message Queue:**
+
 - Partition-based scaling
 - Consumer groups
 - Dead-letter queues
@@ -582,17 +655,20 @@ PUT    /api/v1/users/me               - Update profile
 ## 8. Deployment Architecture
 
 ### Development
+
 ```
 Developer Laptop → GitHub → Local Tests → Git Push
 ```
 
 ### Staging
+
 ```
 Git Commit → GitHub Actions → Build → Docker Image → Registry
 → Staging Cluster → Smoke Tests → Approval Gate
 ```
 
 ### Production
+
 ```
 Approval → Production Cluster → Blue-Green Deploy
 → Canary Testing (5%) → Full Rollout → Monitoring
@@ -604,6 +680,7 @@ Approval → Production Cluster → Blue-Green Deploy
 **RPO (Recovery Point Objective):** 15 minutes
 
 **Recovery Procedures:**
+
 1. Detect failure (monitoring alert)
 2. Activate backup region
 3. Update DNS records
@@ -619,22 +696,26 @@ Approval → Production Cluster → Blue-Green Deploy
 ### Key Metrics
 
 **Availability:**
+
 - Uptime percentage
 - Error rate
 - Success rate
 
 **Performance:**
+
 - P50, P95, P99 latency
 - Throughput (requests/sec)
 - Database query latency
 
 **Capacity:**
+
 - CPU utilization
 - Memory usage
 - Disk I/O
 - Network bandwidth
 
 **Business:**
+
 - Active users
 - Sync conflicts
 - Plugin installations
@@ -643,12 +724,14 @@ Approval → Production Cluster → Blue-Green Deploy
 ### Logging & Tracing
 
 **Logs:**
+
 - Structured JSON logs
 - Centralized log aggregation (ELK Stack)
 - 30-day retention
 - Real-time alerting
 
 **Distributed Tracing:**
+
 - OpenTelemetry instrumentation
 - Request trace correlation
 - Performance analysis
@@ -659,26 +742,31 @@ Approval → Production Cluster → Blue-Green Deploy
 ## 10. Design Decisions & Trade-offs
 
 ### Decision 1: Microservices vs Monolith
+
 **Decision:** Microservices
 **Rationale:** Independent scaling, technology flexibility, team autonomy
 **Trade-off:** Operational complexity, eventual consistency
 
 ### Decision 2: RDBMS vs NoSQL
+
 **Decision:** PostgreSQL (primary) + Redis (cache)
 **Rationale:** ACID transactions, complex queries, good performance
 **Trade-off:** Scaling complexity, schema migrations
 
 ### Decision 3: Synchronous vs Asynchronous
+
 **Decision:** Hybrid approach
 **Rationale:** Real-time for critical operations, async for heavy processing
 **Trade-off:** Complexity in error handling and debugging
 
 ### Decision 4: Single vs Multi-Region
+
 **Decision:** Multi-region active-active
 **Rationale:** High availability, low latency, disaster recovery
 **Trade-off:** Data consistency complexity, operational overhead
 
 ### Decision 5: Centralized vs Decentralized Auth
+
 **Decision:** Centralized OAuth with federation
 **Rationale:** Simplicity, enterprise compatibility, audit trail
 **Trade-off:** Single point of failure (mitigated with backup)
@@ -705,6 +793,7 @@ Approval → Production Cluster → Blue-Green Deploy
 ## Conclusion
 
 HELIOS v4.0 architecture is designed for enterprise-grade requirements with emphasis on:
+
 - **Reliability:** 99.99% uptime SLA
 - **Performance:** Sub-300ms p99 latency
 - **Scalability:** 1000+ concurrent users

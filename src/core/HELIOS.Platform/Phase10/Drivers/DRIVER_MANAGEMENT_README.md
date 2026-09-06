@@ -27,6 +27,7 @@ HELIOS.Platform.Phase10.Drivers/
 Detects hardware using Windows WMI (Windows Management Instrumentation).
 
 **Capabilities:**
+
 - Intel/AMD chipset detection
 - NVIDIA/AMD GPU detection
 - Audio device enumeration
@@ -37,6 +38,7 @@ Detects hardware using Windows WMI (Windows Management Instrumentation).
 - Wireless adapter detection
 
 **Key Methods:**
+
 ```csharp
 // Detect all hardware
 Task<List<DetectedDevice>> DetectAllHardwareAsync()
@@ -56,6 +58,7 @@ Task<List<DetectedDevice>> GetDevicesByTypeAsync(string type)
 ```
 
 **Example:**
+
 ```csharp
 using (var detector = new DriverDetector())
 {
@@ -69,6 +72,7 @@ using (var detector = new DriverDetector())
 Manages local driver library with caching and version control.
 
 **Capabilities:**
+
 - Store/retrieve drivers from repository
 - Cache management
 - Version tracking
@@ -77,6 +81,7 @@ Manages local driver library with caching and version control.
 - Repository statistics
 
 **Key Methods:**
+
 ```csharp
 // CRUD operations
 Task<DriverInfo> GetDriverAsync(string driverId)
@@ -100,6 +105,7 @@ Task<List<DriverInfo>> GetRecentDriversAsync(int count)
 ```
 
 **Example:**
+
 ```csharp
 var repo = new DriverRepository();
 await repo.InitializeAsync();
@@ -113,6 +119,7 @@ var size = await repo.GetRepositorySizeAsync();
 Downloads drivers from manufacturer sources with resume support.
 
 **Capabilities:**
+
 - Manufacturer-specific downloads (Intel, AMD, NVIDIA, Realtek, etc.)
 - Progress tracking
 - Resume interrupted downloads
@@ -120,6 +127,7 @@ Downloads drivers from manufacturer sources with resume support.
 - Automatic cleanup
 
 **Key Methods:**
+
 ```csharp
 // Download operations
 Task<DriverInfo> DownloadDriverAsync(string driverId, string url, 
@@ -144,6 +152,7 @@ string GetManufacturerUrl(string manufacturer)
 ```
 
 **Example:**
+
 ```csharp
 var downloader = new DriverDownloader(repository);
 
@@ -160,6 +169,7 @@ var isValid = await downloader.VerifyChecksumAsync(filePath, checksum);
 Automatically installs drivers with support for multiple formats.
 
 **Capabilities:**
+
 - .exe installer execution
 - .inf driver installation (pnputil)
 - .zip extraction and installation
@@ -169,6 +179,7 @@ Automatically installs drivers with support for multiple formats.
 - Complete installation history
 
 **Key Methods:**
+
 ```csharp
 // Installation
 Task<InstallationResult> InstallDriverAsync(string driverId)
@@ -185,6 +196,7 @@ Task ClearHistoryAsync()
 ```
 
 **Example:**
+
 ```csharp
 var installer = new DriverInstaller(repository);
 
@@ -205,6 +217,7 @@ var history = await installer.GetInstallationHistoryAsync();
 Manages driver updates with automatic scheduling.
 
 **Capabilities:**
+
 - Update checking
 - Critical driver prioritization
 - Automatic update scheduling
@@ -213,6 +226,7 @@ Manages driver updates with automatic scheduling.
 - Update history tracking
 
 **Key Methods:**
+
 ```csharp
 // Update checking
 Task<List<DriverInfo>> CheckForUpdatesAsync()
@@ -234,6 +248,7 @@ Task<bool> RollbackDriverAsync(string driverId)
 ```
 
 **Example:**
+
 ```csharp
 var updater = new DriverUpdater(repository, downloader, installer);
 
@@ -252,6 +267,7 @@ var (hasUpdate, current, latest) = await updater.GetUpdateStatusAsync("gpu_drive
 Manages driver backups and rollback operations.
 
 **Capabilities:**
+
 - Automatic backup before updates
 - Version history tracking
 - Problematic driver detection
@@ -260,6 +276,7 @@ Manages driver backups and rollback operations.
 - Backup size monitoring
 
 **Key Methods:**
+
 ```csharp
 // Backup management
 Task<bool> BackupDriverAsync(string driverId)
@@ -282,6 +299,7 @@ Task ClearOldBackupsAsync(int daysOld)
 ```
 
 **Example:**
+
 ```csharp
 var rollback = new DriverRollback(repository, healthMonitor);
 
@@ -302,6 +320,7 @@ await rollback.ClearOldBackupsAsync(daysOld: 30);
 Monitors driver stability and detects issues.
 
 **Capabilities:**
+
 - Real-time health monitoring
 - Crash detection
 - Error log analysis
@@ -309,6 +328,7 @@ Monitors driver stability and detects issues.
 - Event tracking
 
 **Key Methods:**
+
 ```csharp
 // Health checks
 Task<DriverHealthStatus> CheckDriverHealthAsync(string driverId)
@@ -330,6 +350,7 @@ void Shutdown()
 ```
 
 **Example:**
+
 ```csharp
 var monitor = new DriverHealthMonitor();
 await monitor.InitializeAsync();
@@ -348,6 +369,7 @@ monitor.Shutdown();
 ## Data Models
 
 ### DetectedDevice
+
 ```csharp
 public class DetectedDevice
 {
@@ -364,6 +386,7 @@ public class DetectedDevice
 ```
 
 ### DriverInfo
+
 ```csharp
 public class DriverInfo
 {
@@ -382,6 +405,7 @@ public class DriverInfo
 ```
 
 ### InstallationResult
+
 ```csharp
 public class InstallationResult
 {
@@ -396,6 +420,7 @@ public class InstallationResult
 ```
 
 ### DriverHealthStatus
+
 ```csharp
 public class DriverHealthStatus
 {
@@ -660,17 +685,21 @@ The system includes 45+ unit tests covering:
 ## Support & Troubleshooting
 
 ### Issue: "Driver not found in repository"
+
 - Solution: Download driver first or check repository path
 
 ### Issue: "Installation failed"
+
 - Check: Installation logs in `%ProgramData%\HELIOS\DriverLogs`
 - Solution: Review error log and retry or rollback
 
 ### Issue: "Checksum mismatch"
+
 - Cause: Corrupted download
 - Solution: Re-download driver
 
 ### Issue: "Health check timeout"
+
 - Cause: Event log too large
 - Solution: Clear old event logs or increase timeout
 

@@ -7,6 +7,7 @@
 ## 📋 QUICK START
 
 ### For End Users
+
 ```powershell
 1. Run: .\Pre-Install-Check.ps1
 2. Run: HELIOS-Platform-Setup.exe
@@ -15,6 +16,7 @@
 ```
 
 ### For IT Administrators
+
 ```powershell
 # Silent install
 .\HELIOS-Platform-Setup.exe /S /D=C:\Program Files\HELIOS
@@ -27,6 +29,7 @@
 ```
 
 ### For Developers
+
 ```powershell
 # Build installer
 .\Build-Installer.ps1 -OutputPath ".\build"
@@ -70,6 +73,7 @@
 ## 🔧 COMMON COMMANDS
 
 ### Pre-Installation
+
 ```powershell
 # Check requirements
 .\Pre-Install-Check.ps1
@@ -82,6 +86,7 @@
 ```
 
 ### Installation
+
 ```powershell
 # GUI installation
 HELIOS-Platform-Setup.exe
@@ -100,6 +105,7 @@ HELIOS-Platform-Setup.exe /EXTRACTTO=C:\Extract
 ```
 
 ### Post-Installation
+
 ```powershell
 # Verify installation
 .\Post-Install-Verify.ps1
@@ -115,6 +121,7 @@ HELIOS-Platform-Setup.exe /EXTRACTTO=C:\Extract
 ```
 
 ### Uninstallation
+
 ```powershell
 # Interactive uninstall
 .\Uninstall-HELIOS.ps1
@@ -130,6 +137,7 @@ HELIOS-Platform-Setup.exe /EXTRACTTO=C:\Extract
 ```
 
 ### Building
+
 ```powershell
 # Build in current directory
 .\Build-Installer.ps1
@@ -149,6 +157,7 @@ HELIOS-Platform-Setup.exe /EXTRACTTO=C:\Extract
 ## 🔍 VERIFICATION STEPS
 
 ### After Installation
+
 ```powershell
 # Check installation path
 Test-Path "C:\Program Files\HELIOS Platform"
@@ -168,6 +177,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
 ```
 
 ### After Uninstallation
+
 ```powershell
 # Verify removal
 Test-Path "C:\Program Files\HELIOS Platform"     # Should be False
@@ -228,6 +238,7 @@ Test-Path "$env:SMPROGRAMS\HELIOS Platform"      # Should be False
 ## 💡 PRO TIPS
 
 ### Silent Deployment to Multiple Computers
+
 ```powershell
 $computers = @("PC001", "PC002", "PC003")
 foreach ($pc in $computers) {
@@ -238,6 +249,7 @@ foreach ($pc in $computers) {
 ```
 
 ### Verify Installation Across Fleet
+
 ```powershell
 $computers = @("PC001", "PC002")
 foreach ($pc in $computers) {
@@ -249,6 +261,7 @@ foreach ($pc in $computers) {
 ```
 
 ### Automate with Task Scheduler
+
 ```powershell
 # Create scheduled task for installation
 $action = New-ScheduledTaskAction -Execute "C:\installer\HELIOS-Platform-Setup.exe" -Argument "/S"
@@ -257,6 +270,7 @@ Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "HELIOS Insta
 ```
 
 ### Create Installation Report
+
 ```powershell
 # Generate installation summary
 $report = @{

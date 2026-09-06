@@ -14,7 +14,8 @@
 ## Quick Usage
 
 ### Initialize All Services
-`csharp
+
+```csharp
 var services = new List<IOptimizerService>
 {
     new SystemOptimizer(OptimizationProfiles.GamingProfile),
@@ -27,20 +28,22 @@ var services = new List<IOptimizerService>
 
 foreach (var svc in services)
     await svc.InitializeAsync();
-`
+```
 
 ### Run Full Optimization
-`csharp
+
+```csharp
 foreach (var service in services)
 {
     var result = await service.OptimizeAsync();
     Console.WriteLine(\$"{service.ServiceName}: {(result.Success ? "✓" : "✗")}\");
     result.Changes.ForEach(c => Console.WriteLine(\$"  - {c}\"));
 }
-`
+```
 
 ### Get Metrics
-`csharp
+
+```csharp
 foreach (var service in services)
 {
     var metrics = await service.GetMetricsAsync();
@@ -48,11 +51,11 @@ foreach (var service in services)
     foreach (var m in metrics)
         Console.WriteLine(\$"  {m.Key}: {m.Value}\");
 }
-`
+```
 
 ## Profiles Quick Access
 
-`csharp
+```csharp
 // Gaming
 var gaming = OptimizationProfiles.GamingProfile;
 
@@ -73,34 +76,39 @@ var profile = OptimizationProfiles.GetProfileByName("gaming");
 
 // Get all
 var all = OptimizationProfiles.GetAllProfiles();
-`
+```
 
 ## Performance Metrics
 
 ### CPU Metrics
+
 - CPU Usage: 0-100% (get via PerformanceTuner)
 - Processor Count: Number of logical processors
 - Average CPU: Historical average usage
 - Peak CPU: Highest usage recorded
 
 ### Memory Metrics
+
 - RAM Usage: 0-100% percentage
 - Total Memory: Bytes available
 - Used Memory: Bytes currently used
 - Available Memory: Free bytes
 
 ### Disk Metrics
+
 - Disk Usage: 0-100% percentage
 - Temp Files: Bytes cleaned
 - Defragmentation: Status of drives
 
 ### Network Metrics
+
 - Bandwidth: Mbps
 - Latency: ms
 - Packet Loss: percentage
 - DNS Resolution: ms
 
 ### GPU Metrics
+
 - GPU Vendor: NVIDIA/AMD/Intel
 - VRAM Total: GB
 - VRAM Available: GB
@@ -110,36 +118,40 @@ var all = OptimizationProfiles.GetAllProfiles();
 ## Common Tasks
 
 ### Gaming Optimization
-`csharp
+
+```csharp
 var profile = OptimizationProfiles.GamingProfile;
 var gpu = new GPUOptimizer(profile);
 await gpu.InitializeAsync();
 await gpu.OptimizeAsync();
-`
+```
 
 ### System Cleanup
-`csharp
+
+```csharp
 var optimizer = new SystemOptimizer();
 await optimizer.InitializeAsync();
 var result = await optimizer.OptimizeAsync();
 // Cleans temp files, disables bloatware, optimizes registry
-`
+```
 
 ### Network Tuning
-`csharp
+
+```csharp
 var net = new NetworkOptimizer();
 await net.InitializeAsync();
 var result = await net.OptimizeAsync();
 // Optimizes TCP, configures DNS, enables compression
-`
+```
 
 ### Thermal Monitoring
-`csharp
+
+```csharp
 var dashboard = new MonitoringDashboard();
 await dashboard.InitializeAsync();
 var metrics = await dashboard.GetMetricsAsync();
 var temp = metrics["Temperature"];
-`
+```
 
 ## Expected Performance Gains
 
@@ -152,6 +164,7 @@ var temp = metrics["Temperature"];
 ## Error Handling
 
 All services return OptimizationResult with:
+
 - Success: bool
 - Message: error/success message
 - Changes: list of modifications
@@ -162,14 +175,16 @@ All services return OptimizationResult with:
 ## Testing
 
 Run all tests:
-`powershell
+
+```powershell
 dotnet test
-`
+```
 
 Run specific test:
-`powershell
+
+```powershell
 dotnet test --filter SystemOptimizerTests
-`
+```
 
 ## Tips & Tricks
 
@@ -197,6 +212,7 @@ dotnet test --filter SystemOptimizerTests
 ## API Reference
 
 ### IOptimizerService Interface
+
 - InitializeAsync(): Initialize service
 - OptimizeAsync(CancellationToken): Run optimization
 - GetMetricsAsync(): Get current metrics

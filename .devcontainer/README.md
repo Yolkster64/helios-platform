@@ -5,6 +5,7 @@ Complete, production-ready development environment configuration for Helios Plat
 ## 📦 What's Included
 
 ### Core Development Tools
+
 - **PowerShell 7.4** with modules (posh-git, oh-my-posh, Terminal-Icons)
 - **Node.js 20 & 22 LTS** with npm, yarn, pnpm
 - **Python 3** with pipenv, poetry, pip
@@ -14,6 +15,7 @@ Complete, production-ready development environment configuration for Helios Plat
 - **SQLite3** for local database
 
 ### Development Utilities
+
 - TypeScript, ESLint, Prettier
 - Jupyter Notebook & Labs
 - Azure CLI (az module)
@@ -21,6 +23,7 @@ Complete, production-ready development environment configuration for Helios Plat
 - Code quality tools (black, pylint, flake8)
 
 ### Port Mappings
+
 | Port | Service | Purpose |
 |------|---------|---------|
 | 8080 | Wiki | Application |
@@ -83,6 +86,7 @@ devsetup.sh                     # Local setup script
 ## 🔧 Features
 
 ### devcontainer.json (208 lines)
+
 - Docker Compose orchestration
 - Feature installation (git, GitHub CLI, PowerShell, Docker)
 - Port forwarding with labels
@@ -93,6 +97,7 @@ devsetup.sh                     # Local setup script
 - Security capabilities
 
 ### Dockerfile (150 lines)
+
 - Ubuntu 22.04 base (focal)
 - System dependencies and build tools
 - PowerShell 7.4 installation
@@ -104,6 +109,7 @@ devsetup.sh                     # Local setup script
 - Git configuration
 
 ### docker-compose.yml (180 lines)
+
 - Devcontainer service with full configuration
 - PostgreSQL 16 Alpine (optional database)
 - 8 port mappings with proper protocols
@@ -114,6 +120,7 @@ devsetup.sh                     # Local setup script
 - Dependency management
 
 ### onCreateCommand.sh (280+ lines)
+
 - Git configuration and hooks setup
 - Pre-commit hook for code quality
 - Commit message validation
@@ -127,7 +134,9 @@ devsetup.sh                     # Local setup script
 - Helper scripts creation
 
 ### VS Code Configuration
+
 **settings.json** - Editor, formatting, and extension settings
+
 - Python linting with pylint
 - Black code formatting
 - Prettier for JavaScript/TypeScript
@@ -137,17 +146,20 @@ devsetup.sh                     # Local setup script
 - Line rulers and word wrap
 
 **extensions.json** - 26 recommended extensions
+
 - PowerShell, Python, Pylance, Black
 - Prettier, ESLint, Docker, Remote Containers
 - GitHub Copilot and PR extension
 - GitLens, YAML, Markdown
 
 **launch.json** - Debug configurations
+
 - PowerShell attach and launch
 - Python current file, Django, FastAPI
 - Node.js debugging
 
 **tasks.json** - Build and development tasks
+
 - npm install, build, test, lint
 - Docker Compose commands
 - Python testing with pytest
@@ -155,11 +167,13 @@ devsetup.sh                     # Local setup script
 ## 🔑 Key Configuration Details
 
 ### Git Hooks
+
 - **pre-commit**: Prettier formatting, code quality
 - **commit-msg**: Enforces conventional commit format
 - **post-merge**: Checks for dependency updates
 
 ### Environment Variables
+
 ```
 NODE_ENV=development
 PYTHONUNBUFFERED=1
@@ -169,13 +183,16 @@ POSTGRES_DB=helios_dev
 ```
 
 ### Database Setup
+
 PostgreSQL 16 with automatic initialization:
+
 - Creates extensions (uuid, pg_trgm, btree_gin)
 - Sets up wiki_pages and users tables
 - Configures indexes
 - Grants permissions
 
 ### Security Features
+
 - SYS_PTRACE capability for debugging
 - Non-root user (devuser) execution
 - SSH key mounting (read-only)
@@ -245,6 +262,7 @@ docker-compose ps
 ## 🔄 Persistent Volumes
 
 All volumes are automatically created and managed:
+
 - `devcontainer-node-modules` - Node.js dependencies cache
 - `devcontainer-python-cache` - Python venv
 - `devcontainer-home` - User home directory
@@ -255,14 +273,18 @@ All volumes are automatically created and managed:
 ## 📝 Configuration Files
 
 ### .editorconfig
+
 Ensures consistent coding styles:
+
 - Python: 4 spaces, 100 char limit
 - JavaScript/JSON: 2 spaces
 - YAML: 2 spaces
 - Markdown: no trim
 
 ### .prettierrc
+
 Code formatting rules:
+
 - 100 char line width
 - Single quotes
 - Trailing commas (ES5)
@@ -270,8 +292,10 @@ Code formatting rules:
 - Semicolons enabled
 
 ### .gitignore
+
 Excludes 50+ patterns:
-- node_modules, .venv, __pycache__
+
+- node_modules, .venv, **pycache**
 - Build artifacts (dist, build, out)
 - IDE files (.vscode, .idea)
 - OS files (.DS_Store, Thumbs.db)
@@ -317,6 +341,7 @@ docker-compose exec devcontainer npm run format
 ## 🐛 Troubleshooting
 
 ### Port Already in Use
+
 ```bash
 # Find and kill process on port
 lsof -i :8080
@@ -326,6 +351,7 @@ kill -9 <PID>
 ```
 
 ### Docker Daemon Issues
+
 ```bash
 # Restart Docker
 systemctl restart docker
@@ -334,6 +360,7 @@ open -a Docker
 ```
 
 ### Volume Permission Issues
+
 ```bash
 # Fix volume permissions
 docker-compose down -v
@@ -341,6 +368,7 @@ docker-compose up -d
 ```
 
 ### Clear Cache
+
 ```bash
 docker-compose down -v
 docker system prune -a
@@ -375,6 +403,7 @@ docker-compose build --no-cache
 ## 🤝 Contributing
 
 When adding new tools or features:
+
 1. Update Dockerfile with installation
 2. Add environment variables to docker-compose.yml
 3. Update .devcontainer/onCreateCommand.sh

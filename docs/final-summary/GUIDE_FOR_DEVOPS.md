@@ -25,6 +25,7 @@ GitHub (Source) → GitHub Actions (CI/CD) → Artifacts → Deploy
 ### Deployment Targets
 
 **Supported:**
+
 - Windows 11 Pro/Enterprise
 - Windows Server 2022+
 - Azure VMs
@@ -32,6 +33,7 @@ GitHub (Source) → GitHub Actions (CI/CD) → Artifacts → Deploy
 - Air-gapped systems
 
 **Requirements:**
+
 - .NET 6.0+
 - PowerShell 7.0+
 - 4GB RAM minimum
@@ -43,6 +45,7 @@ GitHub (Source) → GitHub Actions (CI/CD) → Artifacts → Deploy
 ### Build Pipeline
 
 **Trigger Events:**
+
 - Push to main branch
 - Pull request creation
 - Manual dispatch
@@ -76,6 +79,7 @@ Total Time: ~18 minutes
 ### Deployment Pipeline
 
 **Trigger Events:**
+
 - Release tag created
 - Manual trigger
 - Scheduled (optional)
@@ -205,6 +209,7 @@ PAGERDUTY_KEY          # For PagerDuty alerts
 ```
 
 **Set Secrets in GitHub:**
+
 1. Go to Settings → Secrets
 2. Click "New repository secret"
 3. Name: [SECRET_NAME]
@@ -252,6 +257,7 @@ strategy:
 ### Backup Strategy
 
 **Automated Backups:**
+
 - Frequency: Daily (incremental) + Weekly (full)
 - Retention: 30 days daily, 90 days weekly
 - Location: On-site + Cloud (geo-redundant)
@@ -260,6 +266,7 @@ strategy:
 ### Restore Procedures
 
 **Full System Restore:**
+
 ```powershell
 # List available backups
 Get-BackupList | Sort-Object Date -Descending
@@ -272,6 +279,7 @@ Test-SystemIntegrity -Verbose
 ```
 
 **Partial Recovery:**
+
 ```powershell
 # Restore specific application
 Restore-AppBackup -Backup "Full-2026-04-13" -App "HELIOS"
@@ -317,6 +325,7 @@ New-ComplianceReport -Format "PDF" -OutputPath "compliance.pdf"
 ### Access Control
 
 **CI/CD Permissions:**
+
 - [ ] Limited service account access
 - [ ] Multi-factor authentication enabled
 - [ ] Audit logging active

@@ -13,6 +13,7 @@ Optimize HELIOS Platform monitoring and observability for faster issue detection
 ## 1. Metrics Collection
 
 **Key Metrics:**
+
 ```
 Build Duration: time taken per build
 Test Pass Rate: % of tests passing
@@ -40,6 +41,7 @@ services.AddLogging(builder => {
 ## 3. Alert Optimization
 
 **Critical Alerts:**
+
 - Error rate > 5%
 - Response time > 1000ms
 - CPU > 90%
@@ -50,6 +52,7 @@ services.AddLogging(builder => {
 ## 4. Dashboard Design
 
 Real-time displays:
+
 - Build status
 - Deployment progress
 - System metrics
@@ -61,6 +64,7 @@ Real-time displays:
 ## 5. Trace Analysis
 
 Distributed tracing for:
+
 - Request flow
 - Database queries
 - External API calls

@@ -26,12 +26,14 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ### Issue: "Windows 11 Pro/Enterprise Required"
 
 **Error Message:**
+
 ```
 This installer requires Windows 11 Pro or Enterprise.
 Your system does not meet this requirement.
 ```
 
 **Causes:**
+
 - Running on Windows 10 or older
 - Running on Windows 11 Home Edition
 - System version not properly detected
@@ -39,6 +41,7 @@ Your system does not meet this requirement.
 **Solutions:**
 
 1. **Check Windows Version:**
+
    ```powershell
    [System.Environment]::OSVersion.VersionString
    
@@ -67,6 +70,7 @@ Your system does not meet this requirement.
 ### Issue: "Administrator Privileges Required"
 
 **Error Message:**
+
 ```
 This installer requires Administrator privileges.
 Please run this installer as Administrator.
@@ -80,12 +84,14 @@ Please run this installer as Administrator.
    - Click "Yes" in User Account Control
 
 2. **Enable Admin Execution Policy:**
+
    ```powershell
    # Open PowerShell as Administrator
    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
    ```
 
 3. **Disable UAC Temporarily:**
+
    ```powershell
    # Run as Administrator
    reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" ^
@@ -102,12 +108,14 @@ Please run this installer as Administrator.
 ### Issue: ".NET 8 SDK Not Found"
 
 **Error Message:**
+
 ```
 .NET SDK not found. Please install .NET 8 SDK before proceeding.
 Visit: https://dotnet.microsoft.com/download
 ```
 
 **Verification:**
+
 ```powershell
 # Check if dotnet is installed
 dotnet --version
@@ -129,6 +137,7 @@ dotnet --list-sdks
    - Retry HELIOS installation
 
 2. **Update PATH After Installation:**
+
    ```powershell
    # Refresh environment variables
    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -138,6 +147,7 @@ dotnet --list-sdks
    ```
 
 3. **Verify Installation:**
+
    ```powershell
    # Check registry
    Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" | 
@@ -152,6 +162,7 @@ dotnet --list-sdks
 ### Issue: "Insufficient Disk Space"
 
 **Error Message:**
+
 ```
 Insufficient disk space.
 Minimum 2 GB free space required.
@@ -161,11 +172,13 @@ Available: 500 MB
 **Solutions:**
 
 1. **Check Available Space:**
+
    ```powershell
    Get-PSDrive | Where-Object { $_.Name -eq "C" }
    ```
 
 2. **Free Up Disk Space:**
+
    ```powershell
    # Run Disk Cleanup
    cleanmgr.exe
@@ -179,6 +192,7 @@ Available: 500 MB
    ```
 
 3. **Install to Different Drive:**
+
    ```powershell
    # During installation, select different drive
    # Or specify custom path
@@ -186,6 +200,7 @@ Available: 500 MB
    ```
 
 4. **Check Large Files:**
+
    ```powershell
    # Find large files
    Get-ChildItem -Path "C:\" -Recurse -File -ErrorAction SilentlyContinue | 
@@ -199,6 +214,7 @@ Available: 500 MB
 ### Issue: "PowerShell 7+ Not Found"
 
 **Warning Message:**
+
 ```
 PowerShell version 5.1 detected. 
 Recommended: PowerShell 7.0+
@@ -210,13 +226,14 @@ Recommended: PowerShell 7.0+
    - **Option 1:** Microsoft Store
      - Search: "PowerShell"
      - Click "Install"
-   
+
    - **Option 2:** GitHub Releases
      - Visit: https://github.com/PowerShell/PowerShell/releases
      - Download: `PowerShell-7.4.0-win-x64.msi`
      - Run installer
 
 2. **Verify Installation:**
+
    ```powershell
    pwsh --version
    ```
@@ -233,11 +250,13 @@ Recommended: PowerShell 7.0+
 ### Issue: Registry Entries Not Found
 
 **Symptoms:**
+
 - Shortcuts not working
 - Application not found in Add/Remove Programs
 - Settings lost after restart
 
 **Diagnosis:**
+
 ```powershell
 # Check registry entries
 Test-Path "HKCU:\Software\HELIOS Platform"
@@ -248,11 +267,13 @@ Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HELI
 **Solutions:**
 
 1. **Repair Installation:**
+
    ```powershell
    .\Post-Install-Verify.ps1 -Repair
    ```
 
 2. **Manual Registry Restore:**
+
    ```powershell
    $instPath = "C:\Program Files\HELIOS Platform"
    
@@ -263,6 +284,7 @@ Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HELI
    ```
 
 3. **Export/Import Registry:**
+
    ```powershell
    # Export current settings
    Export-RegistryItem -Path "HKCU:\Software\HELIOS Platform" -FilePath "backup.reg"
@@ -276,10 +298,12 @@ Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HELI
 ### Issue: Environment PATH Not Updated
 
 **Symptoms:**
+
 - Command `HELIOS.Platform.exe` not found at command prompt
 - Application not accessible from PATH
 
 **Verification:**
+
 ```powershell
 # Check current PATH
 $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
@@ -291,6 +315,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
 **Solutions:**
 
 1. **Add to PATH Manually:**
+
    ```powershell
    # For current user
    $heliosPath = "C:\Program Files\HELIOS Platform"
@@ -303,6 +328,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
    ```
 
 2. **Add to System PATH:**
+
    ```powershell
    # Run as Administrator
    $heliosPath = "C:\Program Files\HELIOS Platform"
@@ -318,6 +344,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
    ```
 
 3. **Verify:**
+
    ```powershell
    # Restart PowerShell and test
    HELIOS.Platform.exe --version
@@ -330,6 +357,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
 ### Issue: Application Fails to Start
 
 **Symptoms:**
+
 - Double-click does nothing
 - Error window appears briefly
 - Task Manager shows exit code 1
@@ -337,16 +365,19 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
 **Troubleshooting:**
 
 1. **Check File Exists:**
+
    ```powershell
    Test-Path "C:\Program Files\HELIOS Platform\HELIOS.Platform.exe"
    ```
 
 2. **Run with Debug Output:**
+
    ```powershell
    & "C:\Program Files\HELIOS Platform\HELIOS.Platform.exe" --debug --verbose 2>&1
    ```
 
 3. **Check Event Viewer:**
+
    ```powershell
    # View recent errors
    Get-EventLog -LogName Application -Newest 20 | 
@@ -354,6 +385,7 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
    ```
 
 4. **Verify .NET Availability:**
+
    ```powershell
    dotnet --version
    dotnet --list-runtimes
@@ -369,11 +401,13 @@ $env:Path -split ";" | Where-Object { $_ -like "*HELIOS*" }
 ### Issue: Application Crashes on Startup
 
 **Log Location:**
+
 ```
 C:\Program Files\HELIOS Platform\logs\
 ```
 
 **Viewing Logs:**
+
 ```powershell
 # Get recent errors
 Get-Content "C:\Program Files\HELIOS Platform\logs\error.log" -Tail 50
@@ -385,12 +419,14 @@ Select-String -Path "C:\Program Files\HELIOS Platform\logs\*" -Pattern "error|ex
 **Solutions:**
 
 1. **Clear Cache and Logs:**
+
    ```powershell
    Remove-Item "C:\Program Files\HELIOS Platform\logs\*" -Force
    Remove-Item "C:\Program Files\HELIOS Platform\cache\*" -Force -ErrorAction SilentlyContinue
    ```
 
 2. **Reset Configuration:**
+
    ```powershell
    # Backup current config
    Copy-Item "C:\Program Files\HELIOS Platform\config\helios.config" `
@@ -403,6 +439,7 @@ Select-String -Path "C:\Program Files\HELIOS Platform\logs\*" -Pattern "error|ex
    ```
 
 3. **Repair Installation:**
+
    ```powershell
    .\Post-Install-Verify.ps1 -Repair
    ```
@@ -414,6 +451,7 @@ Select-String -Path "C:\Program Files\HELIOS Platform\logs\*" -Pattern "error|ex
 ### Issue: Cannot Reach Update Server
 
 **Error Message:**
+
 ```
 Unable to connect to update server.
 Check your internet connection.
@@ -422,12 +460,14 @@ Check your internet connection.
 **Solutions:**
 
 1. **Check Internet Connection:**
+
    ```powershell
    Test-NetConnection -ComputerName "www.google.com" -Port 443
    Test-NetConnection -ComputerName "api.helios.solutions" -Port 443
    ```
 
 2. **Check Firewall Rules:**
+
    ```powershell
    # View Windows Firewall status
    Get-NetFirewallProfile | Select-Object Name, Enabled
@@ -437,6 +477,7 @@ Check your internet connection.
    ```
 
 3. **Configure Firewall Exception:**
+
    ```powershell
    # Add firewall rule
    New-NetFirewallRule -DisplayName "HELIOS Platform" `
@@ -446,6 +487,7 @@ Check your internet connection.
    ```
 
 4. **Disable Proxy Issues:**
+
    ```powershell
    # Check proxy settings
    netsh winhttp show proxy
@@ -463,12 +505,14 @@ Check your internet connection.
 **Solutions:**
 
 1. **Force Uninstall:**
+
    ```powershell
    # Run uninstaller with force flag
    .\Uninstall-HELIOS.ps1 -Force
    ```
 
 2. **Manual Cleanup:**
+
    ```powershell
    # As Administrator
    
@@ -485,6 +529,7 @@ Check your internet connection.
    ```
 
 3. **Check Task Manager:**
+
    ```powershell
    # End any running HELIOS processes
    Get-Process HELIOS* -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -497,11 +542,13 @@ Check your internet connection.
 ### Issue: High CPU Usage After Installation
 
 **Symptoms:**
+
 - CPU constantly at 50%+
 - Fans spinning loudly
 - System runs slowly
 
 **Diagnosis:**
+
 ```powershell
 # Check HELIOS process usage
 Get-Process HELIOS* -ErrorAction SilentlyContinue | 
@@ -511,6 +558,7 @@ Get-Process HELIOS* -ErrorAction SilentlyContinue |
 **Solutions:**
 
 1. **Disable Auto-Start:**
+
    ```powershell
    # Remove from startup
    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
@@ -518,6 +566,7 @@ Get-Process HELIOS* -ErrorAction SilentlyContinue |
    ```
 
 2. **Reduce Monitoring:**
+
    ```powershell
    # Edit config file
    $configPath = "C:\Program Files\HELIOS Platform\config\helios.config"
@@ -527,6 +576,7 @@ Get-Process HELIOS* -ErrorAction SilentlyContinue |
    ```
 
 3. **Limit Resource Usage:**
+
    ```powershell
    # Open Task Scheduler
    # Find HELIOS tasks

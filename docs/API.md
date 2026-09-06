@@ -9,6 +9,7 @@
 ## 📚 API Overview
 
 This document provides complete reference for all {{PROJECT_NAME}} functions, including:
+
 - Function signatures and parameters
 - Return values and types
 - Usage examples
@@ -39,6 +40,7 @@ This document provides complete reference for all {{PROJECT_NAME}} functions, in
 **Synopsis:** {{FUNCTION_1_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_1_SYNTAX}}
 ```
@@ -79,11 +81,13 @@ try {
 ```
 
 **Performance Notes:**
+
 - Time Complexity: {{TIME_COMPLEXITY}}
 - Space Complexity: {{SPACE_COMPLEXITY}}
 - Typical Duration: {{TYPICAL_DURATION}}
 
 **See Also:**
+
 - {{RELATED_FUNC_1}}
 - {{RELATED_FUNC_2}}
 
@@ -94,6 +98,7 @@ try {
 **Synopsis:** {{FUNCTION_2_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_2_SYNTAX}}
 ```
@@ -124,6 +129,7 @@ Type: {{RETURN_TYPE_2}}
 **Synopsis:** {{FUNCTION_3_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_3_SYNTAX}}
 ```
@@ -155,6 +161,7 @@ Type: {{RETURN_TYPE_3}}
 **Synopsis:** {{FUNCTION_4_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_4_SYNTAX}}
 ```
@@ -199,6 +206,7 @@ Type: {{RETURN_TYPE_4}}
 **Synopsis:** {{FUNCTION_6_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_6_SYNTAX}}
 ```
@@ -218,6 +226,7 @@ Type: {{RETURN_TYPE_4}}
 **Synopsis:** {{FUNCTION_7_SYNOPSIS}}
 
 **Syntax:**
+
 ```powershell
 {{FUNCTION_7_SYNTAX}}
 ```
@@ -237,6 +246,7 @@ Type: {{RETURN_TYPE_4}}
 **Objective:** {{WORKFLOW_1_OBJECTIVE}}
 
 **Steps:**
+
 1. {{WORKFLOW_1_STEP_1}}
 2. {{WORKFLOW_1_STEP_2}}
 3. {{WORKFLOW_1_STEP_3}}
@@ -279,6 +289,7 @@ $result2 = {{FUNCTION_FOR_STEP_2}} -Input $result1
 **Purpose:** {{AUTH_FUNCTION_1_PURPOSE}}
 
 **Syntax:**
+
 ```powershell
 {{AUTH_FUNCTION_1_SYNTAX}}
 ```
@@ -336,6 +347,7 @@ try {
 **Description:** {{DATATYPE_1_DESC}}
 
 **Structure:**
+
 ```json
 {
   "{{FIELD_1}}": "{{TYPE_1}}",
@@ -345,6 +357,7 @@ try {
 ```
 
 **Example:**
+
 ```json
 {{DATATYPE_1_EXAMPLE}}
 ```
@@ -356,6 +369,7 @@ try {
 **Description:** {{DATATYPE_2_DESC}}
 
 **Structure:**
+
 ```json
 {
   "{{FIELD_A}}": "{{TYPE_A}}",

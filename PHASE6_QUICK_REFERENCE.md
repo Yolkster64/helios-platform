@@ -1,4 +1,5 @@
 # PHASE 6 QUICK REFERENCE GUIDE
+
 ## Using Optimization Services in Phase 1-2 Services
 
 ---
@@ -251,6 +252,7 @@ public async Task UpdateConfigurationAsync(string key, object value)
 ## 📊 Performance Tips
 
 ### 1. Cache TTL Configuration
+
 - **Frequently changing data**: 5-15 minutes
 - **User preferences**: 1 hour
 - **Configuration**: 1 hour
@@ -258,18 +260,21 @@ public async Task UpdateConfigurationAsync(string key, object value)
 - **Read-heavy data**: 24 hours
 
 ### 2. Object Pool Sizing
+
 - **Command contexts**: 100 objects
 - **Database connections**: 50 connections
 - **Buffers**: ArrayPool (automatic sizing)
 - **Custom objects**: Scale with concurrency
 
 ### 3. Batch Size Guidelines
+
 - **CPU-bound**: (processor count) * 2
 - **I/O-bound**: 20-50 items
 - **Database operations**: 50-100 items
 - **API calls**: 10-20 items
 
 ### 4. Memory Optimization
+
 - Cache large objects: Strings >10KB, collections >1MB
 - Pool objects: >1KB, frequently allocated
 - Use ArrayPool: For temporary buffers >1KB
@@ -335,6 +340,7 @@ _logger.LogInformation(
 ### Issue: Low Cache Hit Rate (<60%)
 
 **Solutions**:
+
 1. Increase TTL for stable data
 2. Reduce cache invalidation frequency
 3. Add more cache keys (patterns)
@@ -343,6 +349,7 @@ _logger.LogInformation(
 ### Issue: High Memory Usage (>120MB)
 
 **Solutions**:
+
 1. Reduce cache maxMemoryMB limit
 2. Decrease TTL for volatile data
 3. Enable object pooling
@@ -351,6 +358,7 @@ _logger.LogInformation(
 ### Issue: GC Pause Time >15ms
 
 **Solutions**:
+
 1. Reduce allocation frequency
 2. Enable object pooling
 3. Clear collections when done
@@ -359,6 +367,7 @@ _logger.LogInformation(
 ### Issue: Low Throughput
 
 **Solutions**:
+
 1. Increase batch size (if I/O-bound)
 2. Increase parallelism degree
 3. Enable caching for hot paths
@@ -388,6 +397,7 @@ _logger.LogInformation(
 ## 📞 Support
 
 For questions:
+
 1. Check this quick reference
 2. Review PHASE6_OPTIMIZATION_REPORT.md for detailed info
 3. Run test suite for examples

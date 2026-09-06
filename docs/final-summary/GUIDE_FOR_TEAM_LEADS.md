@@ -155,6 +155,7 @@ Backlog → Ready → In Progress → Review → Done
 ### Sprint Velocity
 
 **Calculate:**
+
 ```
 Week 1: 20 points
 Week 2: 15 points
@@ -165,6 +166,7 @@ Trend: Stable or improving?
 ```
 
 **Interpretation:**
+
 - Stable velocity (±10%): Team is healthy
 - Increasing: Team improving
 - Decreasing: Blockers or burnout?
@@ -217,16 +219,19 @@ WEEK OF APRIL 8-12, 2026
 ### Communication Plan
 
 **Daily:**
+
 - Morning standup (15 min)
 - Slack updates on blockers
 - GitHub notifications (auto)
 
 **Weekly:**
+
 - Status report (written)
 - Sprint review (if applicable)
 - 1-on-1 with manager
 
 **Monthly:**
+
 - All-hands meeting
 - Leadership report
 - Roadmap review
@@ -234,16 +239,19 @@ WEEK OF APRIL 8-12, 2026
 ### Escalation Path
 
 **Level 1 - Team Lead (< 4 hours)**
+
 - Can resolve independently
 - Minor blocking issues
 - Process questions
 
 **Level 2 - Skip Manager (4-24 hours)**
+
 - Needs manager input
 - Resource allocation
 - Technical decisions
 
 **Level 3 - Director (24+ hours)**
+
 - Business decision needed
 - Strategic impact
 - Customer-facing
@@ -253,6 +261,7 @@ WEEK OF APRIL 8-12, 2026
 ### Individual Meetings (Weekly, 30 min)
 
 **Agenda:**
+
 ```
 1. Personal Check-in (5 min)
    - How's life? Everything okay?
@@ -298,11 +307,13 @@ about how to manage workload."
 ### Recognition & Development
 
 **Recognition (Immediate):**
+
 - Celebrate wins in public (Slack, standup)
 - Thank for help
 - Escalate great work to leadership
 
 **Development:**
+
 - Identify skill gaps
 - Provide learning opportunities
 - Stretch assignments
@@ -313,21 +324,25 @@ about how to manage workload."
 ### Feature Rollout
 
 **Phase 1: Announcement (1 week)**
+
 - Explain "why" and "what"
 - Answer questions
 - Address concerns
 
 **Phase 2: Training (1 week)**
+
 - Hands-on training sessions
 - Practice with support
 - Collect feedback
 
 **Phase 3: Rollout (1 week)**
+
 - Monitor adoption
 - Support team
 - Adjust as needed
 
 **Phase 4: Optimization (Ongoing)**
+
 - Gather feedback
 - Refine process
 - Document learnings
@@ -337,11 +352,13 @@ about how to manage workload."
 ### Framework for Decisions
 
 **Quick Decisions (< 30 min):**
+
 - Lead decides with input
 - Communicate to team
 - Move forward
 
 **Complex Decisions (> 30 min):**
+
 - Team discussion (30-60 min)
 - Gather data (if needed)
 - Pros/cons list
@@ -349,6 +366,7 @@ about how to manage workload."
 - Communicate rationale
 
 **Strategic Decisions:**
+
 - Escalate to manager
 - Get stakeholder input
 - Document decision & rationale
@@ -359,6 +377,7 @@ about how to manage workload."
 ### Issue Escalation
 
 **Step 1: Direct Conversation (24 hours)**
+
 ```
 People involved: Talk it out
 ├─ What's the issue?
@@ -367,6 +386,7 @@ People involved: Talk it out
 ```
 
 **Step 2: Mediation (48 hours)**
+
 ```
 If Step 1 doesn't work: Involve Lead
 ├─ Hear both sides
@@ -375,6 +395,7 @@ If Step 1 doesn't work: Involve Lead
 ```
 
 **Step 3: Management (72 hours)**
+
 ```
 If Step 2 doesn't work: Escalate up
 ├─ HR involvement if needed
@@ -397,12 +418,14 @@ If Step 2 doesn't work: Escalate up
 ### Team Building Activities
 
 **Monthly:**
+
 - Lunch & learn sessions
 - Coffee chats (15 min 1-on-1s)
 - Team lunch (in-person or virtual)
 - Recognition ceremony
 
 **Quarterly:**
+
 - Offsite or team building
 - Career development workshop
 - Project retrospective
@@ -456,6 +479,7 @@ If Step 2 doesn't work: Escalate up
 ### Career Development
 
 **Have career conversation:**
+
 - Where do they want to go?
 - What skills needed?
 - How can we help?

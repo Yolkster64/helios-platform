@@ -9,6 +9,7 @@ Complete reference for core classes and interfaces in Helios Platform v2.5.1.
 Manages configuration for system paths and file locations throughout the platform.
 
 ### Description
+
 `PathConfiguration` provides centralized path management, ensuring consistent file operations across the platform. It handles environment-specific paths, cache directories, and temporary storage locations.
 
 ### Properties
@@ -27,14 +28,17 @@ Manages configuration for system paths and file locations throughout the platfor
 ### Methods
 
 #### GetFullPath(string relativePath)
+
 Converts relative path to full system path.
 
 **Parameters:**
+
 - `relativePath` (string): Relative path from root
 
 **Returns:** Full system path
 
 **Example:**
+
 ```csharp
 var config = new PathConfiguration();
 string fullPath = config.GetFullPath("config/settings.json");
@@ -42,14 +46,17 @@ string fullPath = config.GetFullPath("config/settings.json");
 ```
 
 #### EnsureDirectoryExists(string path)
+
 Creates directory if it doesn't exist.
 
 **Parameters:**
+
 - `path` (string): Directory path to verify/create
 
 **Returns:** bool - True if successful
 
 **Example:**
+
 ```csharp
 var config = new PathConfiguration();
 bool created = config.EnsureDirectoryExists(config.CachePath);
@@ -59,6 +66,7 @@ if (created) {
 ```
 
 #### ValidatePaths()
+
 Validates all configured paths are accessible.
 
 **Parameters:** None
@@ -66,6 +74,7 @@ Validates all configured paths are accessible.
 **Returns:** PathValidationResult
 
 **Example:**
+
 ```csharp
 var config = new PathConfiguration();
 var result = config.ValidatePaths();
@@ -83,6 +92,7 @@ if (!result.IsValid) {
 Centralized error handling, logging, and recovery system.
 
 ### Description
+
 `ErrorHandler` provides consistent error handling across the platform with automatic recovery suggestions, logging, and error categorization.
 
 ### Properties
@@ -98,15 +108,18 @@ Centralized error handling, logging, and recovery system.
 ### Methods
 
 #### Handle(Exception ex, string context = null)
+
 Processes and logs an exception with context.
 
 **Parameters:**
+
 - `ex` (Exception): Exception to handle
 - `context` (string, optional): Context description
 
 **Returns:** ErrorResult with recovery suggestions
 
 **Example:**
+
 ```csharp
 var handler = new ErrorHandler();
 try {
@@ -119,15 +132,18 @@ try {
 ```
 
 #### Log(string message, LogLevel level = LogLevel.Info)
+
 Logs a message with specified level.
 
 **Parameters:**
+
 - `message` (string): Message to log
 - `level` (LogLevel): Severity level (Info, Warning, Error, Critical)
 
 **Returns:** void
 
 **Example:**
+
 ```csharp
 var handler = new ErrorHandler();
 handler.Log("Update started", LogLevel.Info);
@@ -135,14 +151,17 @@ handler.Log("Retrying connection", LogLevel.Warning);
 ```
 
 #### GetErrorHistory(int count = 10)
+
 Retrieves recent error entries.
 
 **Parameters:**
+
 - `count` (int): Number of errors to retrieve
 
 **Returns:** List<ErrorEntry>
 
 **Example:**
+
 ```csharp
 var handler = new ErrorHandler();
 var recent = handler.GetErrorHistory(5);
@@ -162,12 +181,14 @@ Core service abstractions and contracts.
 Contract for update checking and installation.
 
 **Methods:**
+
 - `CheckForUpdates()`: Async task returning available updates
 - `DownloadUpdate(UpdateInfo info)`: Async task for downloading
 - `InstallUpdate(UpdateInfo info)`: Async task for installation
 - `RollbackUpdate()`: Rollback to previous version
 
 **Example:**
+
 ```csharp
 public class CustomUpdateImplementation : IUpdateService {
     public async Task<UpdateInfo[]> CheckForUpdates() {
@@ -193,6 +214,7 @@ public class CustomUpdateImplementation : IUpdateService {
 Contract for configuration management.
 
 **Methods:**
+
 - `LoadConfiguration(string path)`: Load config from file
 - `SaveConfiguration(string path)`: Persist config to file
 - `GetSetting(string key)`: Retrieve setting value
@@ -203,6 +225,7 @@ Contract for configuration management.
 Contract for logging operations.
 
 **Methods:**
+
 - `Log(string message, LogLevel level)`: Log message
 - `LogException(Exception ex, string context)`: Log exception
 - `GetLogs(DateTime from, DateTime to)`: Retrieve logs in range
@@ -214,6 +237,7 @@ Contract for logging operations.
 Manages software updates with parallel downloading and installation.
 
 ### Description
+
 `UpdateService` handles checking, downloading, and installing updates with built-in parallelization (4 concurrent downloads), error recovery, and rollback capabilities.
 
 ### Properties
@@ -229,6 +253,7 @@ Manages software updates with parallel downloading and installation.
 ### Methods
 
 #### CheckForUpdates()
+
 Checks for available updates from server.
 
 **Parameters:** None
@@ -236,6 +261,7 @@ Checks for available updates from server.
 **Returns:** Async Task<UpdateInfo[]>
 
 **Example:**
+
 ```csharp
 var service = new UpdateService();
 var updates = await service.CheckForUpdates();
@@ -246,15 +272,18 @@ foreach (var update in updates) {
 ```
 
 #### DownloadUpdate(UpdateInfo info, IProgress<ProgressReport> progress)
+
 Downloads update with progress reporting and parallelization.
 
 **Parameters:**
+
 - `info` (UpdateInfo): Update to download
 - `progress` (IProgress<ProgressReport>): Progress callback
 
 **Returns:** Async Task<bool>
 
 **Example:**
+
 ```csharp
 var service = new UpdateService();
 var progress = new Progress<ProgressReport>(report => {
@@ -269,14 +298,17 @@ if (success) {
 ```
 
 #### InstallUpdate(UpdateInfo info)
+
 Installs downloaded update with automatic recovery on failure.
 
 **Parameters:**
+
 - `info` (UpdateInfo): Update to install
 
 **Returns:** Async Task<InstallResult>
 
 **Example:**
+
 ```csharp
 var service = new UpdateService();
 var result = await service.InstallUpdate(update);
@@ -289,6 +321,7 @@ if (result.Success) {
 ```
 
 #### RollbackUpdate()
+
 Rolls back to previous version if update failed.
 
 **Parameters:** None
@@ -296,6 +329,7 @@ Rolls back to previous version if update failed.
 **Returns:** Async Task<RollbackResult>
 
 **Example:**
+
 ```csharp
 var service = new UpdateService();
 var result = await service.RollbackUpdate();
@@ -311,6 +345,7 @@ if (result.Success) {
 User interface for USB creation, profile management, and deployment.
 
 ### Description
+
 `USBManagementGUI` provides comprehensive UI for USB wizard, profile switching, boot phases, and system configuration with 4 main tabs.
 
 ### Properties
@@ -326,6 +361,7 @@ User interface for USB creation, profile management, and deployment.
 ### Methods
 
 #### InitializeGUI()
+
 Initializes UI components and detects USB devices.
 
 **Parameters:** None
@@ -333,6 +369,7 @@ Initializes UI components and detects USB devices.
 **Returns:** void
 
 **Example:**
+
 ```csharp
 var gui = new USBManagementGUI();
 gui.InitializeGUI();
@@ -340,9 +377,11 @@ Console.WriteLine($"Detected {gui.USBDevices.Length} USB devices");
 ```
 
 #### CreateUSBMedia(USBDevice device, Profile profile, IProgress<ProgressReport> progress)
+
 Creates bootable USB with selected profile using optimized StringBuilder rendering.
 
 **Parameters:**
+
 - `device` (USBDevice): USB device to write to
 - `profile` (Profile): Profile to deploy
 - `progress` (IProgress<ProgressReport>): Progress updates
@@ -350,6 +389,7 @@ Creates bootable USB with selected profile using optimized StringBuilder renderi
 **Returns:** Async Task<USBCreationResult>
 
 **Example:**
+
 ```csharp
 var gui = new USBManagementGUI();
 var usb = gui.USBDevices[0];
@@ -366,14 +406,17 @@ if (result.Success) {
 ```
 
 #### SwitchProfile(Profile profile)
+
 Switches active profile for next deployment.
 
 **Parameters:**
+
 - `profile` (Profile): Profile to activate
 
 **Returns:** bool - Success status
 
 **Example:**
+
 ```csharp
 var gui = new USBManagementGUI();
 var profile = gui.AvailableProfiles.FirstOrDefault(p => p.Name == "Enterprise");
@@ -383,14 +426,17 @@ if (gui.SwitchProfile(profile)) {
 ```
 
 #### SetActiveTab(TabType tab)
+
 Switches between 4 main tabs (Wizard, Profiles, Boot, Configuration).
 
 **Parameters:**
+
 - `tab` (TabType): Tab to activate
 
 **Returns:** void
 
 **Example:**
+
 ```csharp
 var gui = new USBManagementGUI();
 gui.SetActiveTab(TabType.Profiles);
@@ -398,14 +444,17 @@ gui.SetActiveTab(TabType.Profiles);
 ```
 
 #### ValidateUSB(USBDevice device)
+
 Validates USB device is suitable for media creation.
 
 **Parameters:**
+
 - `device` (USBDevice): USB device to validate
 
 **Returns:** ValidationResult
 
 **Example:**
+
 ```csharp
 var gui = new USBManagementGUI();
 var device = gui.USBDevices[0];
@@ -422,6 +471,7 @@ if (!validation.IsValid) {
 ## Data Models
 
 ### UpdateInfo
+
 Represents an available update.
 
 ```csharp
@@ -436,6 +486,7 @@ public class UpdateInfo {
 ```
 
 ### Profile
+
 Represents a deployment profile.
 
 ```csharp
@@ -449,6 +500,7 @@ public class Profile {
 ```
 
 ### ProgressReport
+
 Progress information for long-running operations.
 
 ```csharp

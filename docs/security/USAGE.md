@@ -64,6 +64,7 @@ Write-Output "Task completed: $($result.Message)"
 ```
 
 **Common Issues:**
+
 - {{ISSUE_1}}: {{SOLUTION_1}}
 - {{ISSUE_2}}: {{SOLUTION_2}}
 
@@ -94,6 +95,7 @@ Write-Output "Task completed: $($result.Message)"
 **Scenario:** {{WORKFLOW_1_SCENARIO}}
 
 **Prerequisites:**
+
 - {{PREREQUISITE_1}}
 - {{PREREQUISITE_2}}
 
@@ -121,6 +123,7 @@ if ($output.Success) {
 ```
 
 **Expected Outcome:**
+
 ```
 {{EXPECTED_WORKFLOW_OUTCOME}}
 ```
@@ -140,6 +143,7 @@ See [EXAMPLES.md](./EXAMPLES.md) for additional workflows.
 **Situation:** {{USECASE_1_SITUATION}}
 
 **Solution:**
+
 ```powershell
 {{USECASE_1_SOLUTION}}
 ```
@@ -151,6 +155,7 @@ See [EXAMPLES.md](./EXAMPLES.md) for additional workflows.
 ### Use Case 2: {{USECASE_2_TITLE}}
 
 **Solution:**
+
 ```powershell
 {{USECASE_2_SOLUTION}}
 ```
@@ -180,6 +185,7 @@ Reset-{{CATEGORY_NAME}}Config
 Create profiles for different environments:
 
 **Production Profile:**
+
 ```json
 {
   "environment": "production",
@@ -189,6 +195,7 @@ Create profiles for different environments:
 ```
 
 **Development Profile:**
+
 ```json
 {
   "environment": "development",
@@ -199,6 +206,7 @@ Create profiles for different environments:
 ```
 
 **Usage:**
+
 ```powershell
 # Load profile
 Load-Profile "production"
@@ -244,10 +252,12 @@ Export-Logs -OutputPath "./logs_export.csv"
 ### Integration with Other Categories
 
 {{CATEGORY_NAME}} works with:
+
 - **{{CATEGORY_A}}**: Use {{INTEGRATION_A}}
 - **{{CATEGORY_B}}**: Use {{INTEGRATION_B}}
 
 **Example:**
+
 ```powershell
 Import-Module {{CATEGORY_A}}
 Import-Module {{CATEGORY_NAME}}
@@ -263,6 +273,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
 ### Performance Best Practices
 
 1. **Batch Operations**: Group related operations
+
    ```powershell
    # Good: Batch multiple items
    {{BATCH_OPERATION_EXAMPLE}}
@@ -272,6 +283,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
    ```
 
 2. **Caching**: Reuse results when possible
+
    ```powershell
    $cache = @{}
    $result = if ($cache.ContainsKey($key)) {
@@ -284,6 +296,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
    ```
 
 3. **Resource Management**: Clean up properly
+
    ```powershell
    try {
        {{RESOURCE_OPERATION}}
@@ -295,6 +308,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
 ### Security Best Practices
 
 1. **Credential Handling**
+
    ```powershell
    # Use secure credentials
    $cred = Get-Credential
@@ -304,6 +318,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
    ```
 
 2. **Input Validation**
+
    ```powershell
    # Validate before use
    if (-not (Test-ValidInput $input)) {
@@ -320,6 +335,7 @@ $processed = Process-{{CATEGORY_NAME}} -Input $data
 **Symptom:** {{USAGE_SYMPTOM_1}}
 
 **Solution:**
+
 ```powershell
 # Diagnose
 {{DIAGNOSIS_1}}

@@ -3,6 +3,7 @@
 ## 📋 System Overview
 
 This is a production-ready AI services coordination hub that orchestrates:
+
 - **ChatGPT Pro (GPT-4)** - Strategic planning, code review, optimization
 - **Codex** - Code generation and refactoring  
 - **GPT-4.5** - Complex analysis and architectural decisions
@@ -83,6 +84,7 @@ config/ai-services/
 ## 🎯 Common Tasks
 
 ### View Usage Statistics
+
 ```powershell
 .\scripts\ai-services\view-ai-usage.ps1
 
@@ -92,6 +94,7 @@ config/ai-services/
 ```
 
 ### Check Costs & Budget
+
 ```powershell
 .\scripts\ai-services\show-ai-costs.ps1
 
@@ -100,6 +103,7 @@ config/ai-services/
 ```
 
 ### Generate Code with Codex
+
 ```powershell
 . .\scripts\ai-services\codex-client.ps1
 
@@ -111,6 +115,7 @@ $response.Code
 ```
 
 ### Code Review with ChatGPT Pro
+
 ```powershell
 . .\scripts\ai-services\hub.ps1
 
@@ -119,6 +124,7 @@ $review.CombinedResult
 ```
 
 ### Architecture Analysis with GPT-4.5
+
 ```powershell
 . .\scripts\ai-services\gpt-4-5-client.ps1
 
@@ -130,6 +136,7 @@ $analysis.ArchitectureAnalysis
 ```
 
 ### Security Review
+
 ```powershell
 . .\scripts\ai-services\gpt-4-5-client.ps1
 
@@ -140,6 +147,7 @@ $security.Vulnerabilities
 ## 🔧 Configuration
 
 ### Main Config (ai-services-config.json)
+
 ```json
 {
   "services": {
@@ -154,6 +162,7 @@ $security.Vulnerabilities
 ```
 
 ### Cost Limits (cost-limits.json)
+
 ```json
 {
   "budgets": {
@@ -166,7 +175,9 @@ $security.Vulnerabilities
 ```
 
 ### Service Weights (service-weights.json)
+
 Map tasks to optimal services:
+
 ```json
 {
   "taskTypeToServices": {
@@ -180,12 +191,14 @@ Map tasks to optimal services:
 ## 📊 Monitoring & Logging
 
 ### Log Locations
+
 - Hub logs: `logs\ai-services\hub_YYYY-MM-DD.log`
 - Service logs: `logs\ai-services\{service}_YYYY-MM-DD.log`
 - Router logs: `logs\ai-services\router_YYYY-MM-DD.log`
 - Audit logs: `logs\ai-services\audit\audit_YYYY-MM-DD.log`
 
 ### Log Format
+
 ```
 [2024-01-15 10:30:45.123] [INFO] Service request initiated
 [2024-01-15 10:30:46.456] [WARNING] Rate limit approaching
@@ -195,6 +208,7 @@ Map tasks to optimal services:
 ## 🚨 Troubleshooting
 
 ### Test Failed - API Key Issues
+
 ```powershell
 # Validate keys
 .\scripts\ai-services\validate-api-keys.ps1 -Interactive
@@ -204,6 +218,7 @@ Map tasks to optimal services:
 ```
 
 ### "Rate limit exceeded" Error
+
 ```powershell
 # Check current usage
 .\scripts\ai-services\view-ai-usage.ps1
@@ -213,6 +228,7 @@ Map tasks to optimal services:
 ```
 
 ### High Costs
+
 ```powershell
 # Analyze spending
 .\scripts\ai-services\show-ai-costs.ps1 -ShowTrends
@@ -222,6 +238,7 @@ Map tasks to optimal services:
 ```
 
 ### Service Connection Failed
+
 ```powershell
 # Full test suite
 .\scripts\ai-services\test-ai-services.ps1 -Verbose
@@ -253,6 +270,7 @@ $hub.GetHealthStatus()
 ## 📈 Performance Tips
 
 ### Optimize Costs
+
 - Use Codex for code tasks (most efficient)
 - Use ChatGPT Pro for analysis
 - Use GPT-4.5 only for complex decisions
@@ -260,12 +278,14 @@ $hub.GetHealthStatus()
 - Batch similar requests
 
 ### Improve Speed
+
 - Reduce max_tokens if possible
 - Use lower temperature for consistent output
 - Implement local caching
 - Parallel processing for independent requests
 
 ### Monitor Health
+
 ```powershell
 # Regular health checks
 $hub.GetHealthStatus()
@@ -280,6 +300,7 @@ $ServiceRouter.GetServiceEffectiveness()
 ## 📚 Examples
 
 ### Example 1: Code Review Pipeline
+
 ```powershell
 . .\scripts\ai-services\hub.ps1
 
@@ -296,6 +317,7 @@ Write-Host "Cost: $($result.TotalCost)"
 ```
 
 ### Example 2: Generate and Test Code
+
 ```powershell
 . .\scripts\ai-services\codex-client.ps1
 
@@ -311,6 +333,7 @@ Write-Host "Cost: $($generation.Cost)"
 ```
 
 ### Example 3: Architecture Review
+
 ```powershell
 . .\scripts\ai-services\gpt-4-5-client.ps1
 
@@ -335,6 +358,7 @@ Write-Host "`nRecommendations:`n$($analysis.Recommendations | ConvertTo-Json)"
 ## 🆘 Getting Help
 
 ### Check Logs
+
 ```powershell
 # View latest errors
 Get-Content logs\ai-services\hub_*.log -Tail 20
@@ -344,6 +368,7 @@ Select-String "chatgpt-pro" logs\ai-services\*.log
 ```
 
 ### Run Diagnostics
+
 ```powershell
 # Comprehensive test
 .\scripts\ai-services\test-ai-services.ps1 -Verbose
@@ -353,6 +378,7 @@ Select-String "chatgpt-pro" logs\ai-services\*.log
 ```
 
 ### Performance Benchmark
+
 ```powershell
 # Test response times
 .\scripts\ai-services\test-ai-services.ps1 -Benchmark
@@ -370,6 +396,7 @@ Select-String "chatgpt-pro" logs\ai-services\*.log
 ## 🎓 Learning Resources
 
 Inside the hub:
+
 - `hub.ps1` - See AIServiceHub class for core logic
 - `service-router.ps1` - Learn routing algorithms
 - `conflict-resolver.ps1` - Understand conflict handling

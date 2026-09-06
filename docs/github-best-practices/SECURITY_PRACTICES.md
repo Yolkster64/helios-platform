@@ -5,11 +5,12 @@ Security guidelines for protecting the codebase and user data.
 ---
 
 ## Table of Contents
+
 1. [Secret Management](#secret-management)
 2. [Sensitive Data Handling](#sensitive-data-handling)
 3. [Dependency Security](#dependency-security)
 4. [Code Scanning](#code-scanning)
-5. [Security Advisories](#security-advisories)
+5. [Security Advisories](#security-advisories-response)
 6. [Branch Protection](#branch-protection)
 7. [Access Control](#access-control)
 8. [Incident Response](#incident-response)
@@ -23,6 +24,7 @@ Security guidelines for protecting the codebase and user data.
 **NEVER commit secrets to the repository. Period.**
 
 Secrets include:
+
 - API keys and tokens
 - Database passwords
 - Private encryption keys
@@ -67,6 +69,7 @@ jobs:
 **3. Use Secrets Management Tools**
 
 Production environments:
+
 - AWS Secrets Manager
 - HashiCorp Vault
 - Azure Key Vault
@@ -82,12 +85,14 @@ const apiKey = await secretsManager.getSecret('api_key');
 **If a secret is accidentally committed:**
 
 1. **Immediately revoke the secret**
+
    ```bash
    # Don't just remove it in next commit!
    # Revoke the actual secret first
    ```
 
 2. **Rewrite git history** (only if not shared)
+
    ```bash
    # Option 1: BFG Repo Cleaner (recommended)
    bfg --delete-files secrets.json
@@ -97,11 +102,13 @@ const apiKey = await secretsManager.getSecret('api_key');
    ```
 
 3. **Force push (only if appropriate)**
+
    ```bash
    git push origin --force-with-lease
    ```
 
 4. **Notify team**
+
    ```
    Incident: Secret exposed in commit abc123
    - Revoked API key immediately
@@ -149,21 +156,25 @@ credentials.yml
 ### Data Classification
 
 **Public Data**
+
 - Non-sensitive information
 - Can be in source code
 - Examples: product names, documentation
 
 **Internal Data**
+
 - Not for external use but not sensitive
 - Can be in development branches
 - Examples: internal tool names, non-critical IPs
 
 **Confidential Data**
+
 - Requires protection
 - Never in source code
 - Examples: API keys, passwords, user data
 
 **Restricted Data**
+
 - Highly sensitive, subject to regulations
 - PII (Personally Identifiable Information)
 - Financial data, health information
@@ -172,6 +183,7 @@ credentials.yml
 ### Handling Sensitive Data in Code
 
 **❌ Don't:**
+
 ```typescript
 // Don't log sensitive data
 console.log(`User password: ${password}`);
@@ -187,6 +199,7 @@ throw new Error(`Database error: ${connectionString}`);
 ```
 
 **✓ Do:**
+
 ```typescript
 // Log only identifiers
 console.log(`Authenticating user: ${userId}`);
@@ -649,11 +662,13 @@ Monitoring & Alerting:
 ## Security Resources
 
 **Internal:**
+
 - Security team: @security-team on Slack
 - Security wiki: [Internal Link]
 - Incident playbook: [Internal Link]
 
 **External:**
+
 - OWASP Top 10: https://owasp.org/Top10/
 - CWE List: https://cwe.mitre.org/
 - CVE Database: https://cve.mitre.org/

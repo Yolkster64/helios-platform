@@ -5,13 +5,14 @@ Standards and best practices for conducting and receiving code reviews.
 ---
 
 ## Table of Contents
+
 1. [Review Checklist](#review-checklist)
 2. [Comment Types](#comment-types)
 3. [Approval Criteria](#approval-criteria)
 4. [Response Timeframes](#response-timeframes)
 5. [Conflict Resolution](#conflict-resolution)
 6. [Approval Process](#approval-process)
-7. [Anti-Patterns](#anti-patterns)
+7. [Anti-Patterns](#anti-patterns-to-avoid)
 
 ---
 
@@ -175,6 +176,7 @@ Example code:
 ```
 
 **Example:**
+
 ```markdown
 Request change: Add null check for token parameter
 
@@ -192,6 +194,7 @@ function validateToken(token) {
 ```
 
 Current code will fail if token is null or undefined.
+
 ```
 
 **Author must:**
@@ -214,6 +217,7 @@ Current code will fail if token is null or undefined.
 ```
 
 **Example:**
+
 ```markdown
 Suggestion: Consider extracting this to a separate function
 
@@ -229,6 +233,7 @@ export function validateEmail(email: string): boolean {
 ```
 
 Would improve reusability and testability.
+
 ```
 
 **Author can:**
@@ -250,6 +255,7 @@ Would improve reusability and testability.
 ```
 
 **Example:**
+
 ```markdown
 Question: Why use async/await here instead of promises?
 
@@ -259,6 +265,7 @@ Is it just style preference or is there a functional difference?
 ```
 
 **Author should:**
+
 - [ ] Explain the decision
 - [ ] Reference documentation if relevant
 - [ ] Clarify any confusion
@@ -277,6 +284,7 @@ Is it just style preference or is there a functional difference?
 ```
 
 **Example:**
+
 ```markdown
 Great work: Really clean error handling approach
 
@@ -286,6 +294,7 @@ the error handling is very readable.
 ```
 
 **Purpose:**
+
 - Motivate team members
 - Reinforce good practices
 - Create positive code review culture
@@ -360,6 +369,7 @@ Examples requiring changes:
 ### Approval Levels
 
 **Tier 1: Standard Approval**
+
 ```
 Criteria:
 - No critical issues
@@ -371,6 +381,7 @@ Result: Ready to merge
 ```
 
 **Tier 2: Conditional Approval**
+
 ```
 Criteria:
 - Approved with minor notes
@@ -382,6 +393,7 @@ Comment:
 ```
 
 **Tier 3: Request Changes**
+
 ```
 Criteria:
 - Issues that must be fixed
@@ -405,12 +417,14 @@ Result: DO NOT MERGE until addressed
 | Final approval/decision | < 24 hours | All |
 
 **Acknowledgment:**
+
 ```markdown
 Within 2 hours of being assigned to review:
 "Reviewing this now" or "Will review by [time]"
 ```
 
 **Initial Feedback:**
+
 ```markdown
 Within 24 hours:
 Post initial thoughts, even if not complete
@@ -418,6 +432,7 @@ Post initial thoughts, even if not complete
 ```
 
 **Response to Changes:**
+
 ```markdown
 Within 12 hours of author pushing changes:
 Re-review and provide feedback or approve
@@ -435,6 +450,7 @@ Re-review and provide feedback or approve
 | Request re-review | Immediately after changes | All |
 
 **Reading Feedback:**
+
 ```markdown
 ✓ Read review comments promptly
 ✓ Ask for clarification if needed
@@ -442,6 +458,7 @@ Re-review and provide feedback or approve
 ```
 
 **Responding to Feedback:**
+
 ```markdown
 ✓ Comment on each suggestion:
   "Done in commit abc123"
@@ -451,6 +468,7 @@ Re-review and provide feedback or approve
 ```
 
 **Requesting Re-review:**
+
 ```markdown
 ✓ After addressing feedback
 ✓ Click "Request review" button
@@ -464,6 +482,7 @@ Re-review and provide feedback or approve
 ### When Author and Reviewer Disagree
 
 **Scenario 1: Different Approach**
+
 ```markdown
 Reviewer: "Use Map instead of object for performance"
 Author: "Object is simpler and performance is fine here"
@@ -483,6 +502,7 @@ for this use case."
 ```
 
 **Scenario 2: Style Difference**
+
 ```markdown
 Reviewer: "Function too long, break into smaller pieces"
 Author: "Function is clear as-is, breaking it up won't help"
@@ -500,6 +520,7 @@ This is 85 lines. Can we break into 2-3 functions?"
 ```
 
 **Scenario 3: Architecture Decision**
+
 ```markdown
 Reviewer: "This should use service pattern"
 Author: "Simpler to put logic directly in controller"
@@ -797,6 +818,7 @@ DON'T:
 ## Review Best Practices Checklist
 
 ### Before Starting Review
+
 ```markdown
 □ Have 20+ minutes uninterrupted time
 □ Calm and focused (not rushed)
@@ -806,6 +828,7 @@ DON'T:
 ```
 
 ### During Review
+
 ```markdown
 □ Read PR description
 □ Check for breaking changes
@@ -819,6 +842,7 @@ DON'T:
 ```
 
 ### After Review
+
 ```markdown
 □ Submit all feedback at once (not piece by piece)
 □ Be available for questions

@@ -41,22 +41,26 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 ## Development Setup
 
 1. **Fork and clone the repository**
+
    ```bash
    git clone https://github.com/your-username/helios-platform.git
    cd helios-platform
    ```
 
 2. **Create a branch for your changes**
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
 3. **Make your changes and commit**
+
    ```bash
    git commit -am 'Add your feature'
    ```
 
 4. **Push to your fork**
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -66,24 +70,27 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 ## Code Style Guidelines
 
 ### PowerShell
-- Use PascalCase for functions and variables (except script-scoped)
-- Use camelCase for local variables
-- Add comment blocks explaining complex logic
-- Use proper error handling with try-catch
-- Include verbose narration in deployment scripts
 
-### C#
-- Follow Microsoft C# coding conventions
-- Use meaningful variable and function names
-- Add XML documentation comments
-- Use async/await patterns where appropriate
-- Write unit tests for new functionality
+* Use PascalCase for functions and variables (except script-scoped)
+* Use camelCase for local variables
+* Add comment blocks explaining complex logic
+* Use proper error handling with try-catch
+* Include verbose narration in deployment scripts
+
+### C\#
+
+* Follow Microsoft C# coding conventions
+* Use meaningful variable and function names
+* Add XML documentation comments
+* Use async/await patterns where appropriate
+* Write unit tests for new functionality
 
 ### Documentation
-- Use clear, concise language
-- Include code examples where appropriate
-- Keep documentation up-to-date with code changes
-- Use markdown for formatting
+
+* Use clear, concise language
+* Include code examples where appropriate
+* Keep documentation up-to-date with code changes
+* Use markdown for formatting
 
 ## Commit Messages
 
@@ -94,6 +101,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 * Include Co-authored-by for pair programming
 
 Example:
+
 ```
 Add Azure resource group creation in Phase 1
 
@@ -130,7 +138,8 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ## Questions?
 
 Feel free to open a discussion or contact us:
-- GitHub Discussions: https://github.com/M0nado/helios-platform/discussions
-- Email: support@helios-platform.dev
+
+* GitHub Discussions: https://github.com/M0nado/helios-platform/discussions
+* Email: support@helios-platform.dev
 
 Thank you for contributing! 🚀

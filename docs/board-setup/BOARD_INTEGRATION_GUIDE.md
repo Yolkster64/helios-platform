@@ -38,6 +38,7 @@ Project Updates Visible in Issue
 ### What Syncs
 
 **From Issue to Board:**
+
 - Title and description
 - Labels (converted to custom fields)
 - Assigned users
@@ -45,6 +46,7 @@ Project Updates Visible in Issue
 - Issue status (open/closed)
 
 **From Board to Issue:**
+
 - Custom field values via comments
 - Project column (via automation)
 - Automation updates (via comments)
@@ -116,11 +118,13 @@ jobs:
 ### PR/Commit Linking
 
 **Automatic Linking:**
+
 - PR mentions issue: `Fixes #123`
 - Commit mentions issue: `[#456]`
 - System auto-detects and links
 
 **Manual Linking:**
+
 1. Open issue in GitHub Projects
 2. Add PR link in comments
 3. System updates board status
@@ -150,6 +154,7 @@ Commit → Push → Workflow Triggers
 ### Best Practices
 
 **PR Commit Message Format:**
+
 ```
 [component-gui] [phase-2] Implement dark mode toggle
 
@@ -161,6 +166,7 @@ Tests: Added 10 new test cases.
 ```
 
 **Monorepo Considerations:**
+
 - One PR per component when possible
 - Cross-component PRs link multiple issues
 - Use sub-tasks for large features
@@ -189,14 +195,17 @@ Issue moves to "In Progress" (Rule 2)
 ### Sync Direction
 
 **Issue → PR:**
+
 - Issue created → PR references issue
 - Issue moved to Review → PR moved to review state
 
 **PR → Issue:**
+
 - PR created → Issue moved to In Progress
 - PR merged → Issue auto-completed (if criteria met)
 
 **Board ↔ External:**
+
 - Board updates trigger webhooks (if configured)
 - External updates can trigger board updates
 
@@ -230,11 +239,13 @@ Issue moves to "In Progress" (Rule 2)
 ### Notification Setup
 
 **Email Notifications:**
+
 - GitHub Settings → Notifications
 - Project notifications → Email
 - Repository notifications → Email
 
 **Slack Integration (Optional):**
+
 ```
 1. Install GitHub Slack app
 2. Connect repository
@@ -275,6 +286,7 @@ Webhook Events:
 ### External System Integration
 
 **Example: Slack Webhook**
+
 ```yaml
 Event: Issue moved to Review
 Action: Post to Slack
@@ -282,6 +294,7 @@ Message: "@team Issue #456 ready for review"
 ```
 
 **Example: JIRA Sync**
+
 ```
 GitHub Issue ← → JIRA Ticket
 Field Sync: Status, Priority, Assignee
@@ -316,21 +329,25 @@ Daily Checks:
 ### Common Issues
 
 **Issues not appearing on board:**
+
 - Verify issue added to project
 - Check filters aren't hiding it
 - Verify view is showing all items
 
 **PR not linking to issue:**
+
 - Use "Fixes #123" format
 - Verify issue number correct
 - Check for typos
 
 **Status not updating:**
+
 - Verify automation rules active
 - Check PR merge status
 - Review GitHub Actions logs
 
 **Notifications not sending:**
+
 - Check notification settings
 - Verify email not in spam
 - Test with new notification
@@ -363,6 +380,7 @@ During high activity (>100 updates/min):
 ### Conflict Resolution
 
 If board field and issue field conflict:
+
 - **Board takes precedence** in project
 - Manual override allowed
 - Auto-correction logs error
@@ -400,6 +418,7 @@ Current Usage:
 ### Audit Logging
 
 All integration activities logged:
+
 - Who made changes
 - What changed
 - When change occurred
@@ -429,6 +448,7 @@ Webhook Delivery (external):          <5 seconds
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Integration Points: 6

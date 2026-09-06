@@ -24,23 +24,27 @@ dotnet test
 ### Naming Conventions
 
 **Classes/Types**: `PascalCase`
+
 ```csharp
 public class ProfileService { }
 public interface IAPIGateway { }
 ```
 
 **Methods/Properties**: `PascalCase`
+
 ```csharp
 public async Task<bool> CreateProfileAsync() { }
 public string ProfileName { get; set; }
 ```
 
 **Local Variables**: `camelCase`
+
 ```csharp
 var profileId = "profile-123";
 ```
 
 **Constants**: `UPPERCASE`
+
 ```csharp
 private const int MAX_RETRIES = 5;
 ```
@@ -84,6 +88,7 @@ git push origin feature/your-feature-name
 ```
 
 **Branch Names**:
+
 - `feature/*` - New features
 - `bugfix/*` - Bug fixes
 - `docs/*` - Documentation
@@ -95,6 +100,7 @@ Format: `<type>(<scope>): <subject>`
 **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
 **Examples**:
+
 ```
 feat(api-gateway): add request caching
 fix(event-bus): handle concurrent subscriptions
@@ -163,6 +169,7 @@ public async Task<bool> CreateProfileAsync(string name)
 ### Update Docs
 
 When changing features, update:
+
 - `docs/ARCHITECTURE_COMPLETE.md`
 - `docs/API_COMPLETE.md`
 - `docs/CONTRIBUTING.md`

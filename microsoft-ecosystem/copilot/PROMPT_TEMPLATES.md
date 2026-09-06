@@ -7,6 +7,7 @@
 **Purpose**: Review current HELIOS configuration for issues
 
 **Prompt**:
+
 ```
 Please analyze the following HELIOS Platform configuration and provide recommendations:
 
@@ -50,6 +51,7 @@ Please provide:
 **Purpose**: Get security-focused recommendations
 
 **Prompt**:
+
 ```
 Our HELIOS Platform needs security hardening. Current state:
 - No MFA for regular users (only admins have MFA)
@@ -78,6 +80,7 @@ Provide:
 **Purpose**: Create automation scripts
 
 **Prompt**:
+
 ```
 Generate a PowerShell script to deploy HELIOS Platform infrastructure to Azure with:
 
@@ -113,6 +116,7 @@ The script should:
 **Purpose**: Identify and fix performance issues
 
 **Prompt**:
+
 ```
 HELIOS Platform is experiencing performance issues. Current metrics:
 
@@ -150,6 +154,7 @@ Please provide:
 **Purpose**: Get code quality and best practices suggestions
 
 **Prompt**:
+
 ```
 Please review the following PowerShell script for:
 1. Best practices and security
@@ -180,6 +185,7 @@ Provide:
 **Purpose**: Generate DR procedures
 
 **Prompt**:
+
 ```
 Help me create a Disaster Recovery plan for HELIOS Platform with:
 
@@ -223,6 +229,7 @@ Provide:
 **Purpose**: Generate compliance reports and documentation
 
 **Prompt**:
+
 ```
 Generate GDPR compliance documentation for HELIOS Platform:
 
@@ -261,6 +268,7 @@ Provide:
 **Purpose**: Analyze and reduce cloud spending
 
 **Prompt**:
+
 ```
 Analyze HELIOS Platform Azure costs for optimization:
 
@@ -304,6 +312,7 @@ Provide:
 **Purpose**: Help analyze and respond to security incidents
 
 **Prompt**:
+
 ```
 HELIOS Platform detected a potential security incident:
 
@@ -350,6 +359,7 @@ Provide:
 **Purpose**: Prepare for and conduct compliance audits
 
 **Prompt**:
+
 ```
 Help prepare HELIOS Platform for SOC 2 Type II audit:
 
@@ -398,6 +408,7 @@ Required:
 ## Privacy Reminder
 
 ⚠️ **Never include** in Copilot prompts:
+
 - Credentials, passwords, or API keys
 - Full database connection strings
 - Real email addresses (use examples like user@company.com)

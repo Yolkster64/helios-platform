@@ -15,7 +15,7 @@
 dotnet add package HELIOS.Platform
 ```
 
-or 
+or
 
 ```bash
 nuget install HELIOS.Platform
@@ -71,6 +71,7 @@ var deployer = new HeliosDeployer(config);
 ## Features
 
 ### Deployment Phases
+
 - **Phase 0**: Pre-flight validation
 - **Phase 1**: Infrastructure deployment
 - **Phase 2**: Agent fleet launch
@@ -80,6 +81,7 @@ var deployer = new HeliosDeployer(config);
 - **Phase 6**: Verification & go-live
 
 ### Security
+
 - 8-layer protection framework
 - USB token + TPM 2.0 authentication
 - Dual vault secrets management
@@ -88,6 +90,7 @@ var deployer = new HeliosDeployer(config);
 - Consensus-based AI security
 
 ### Monitoring
+
 - 7 real-time dashboards
 - Cost tracking & optimization
 - Performance analytics

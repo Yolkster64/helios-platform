@@ -160,6 +160,7 @@ public class SlowQueryInterceptor : DbCommandInterceptor
 #### Scenario 1: High CPU Usage
 
 **Symptoms**:
+
 ```
 - CPU constantly > 80%
 - Response times slow
@@ -167,6 +168,7 @@ public class SlowQueryInterceptor : DbCommandInterceptor
 ```
 
 **Diagnosis Steps**:
+
 ```csharp
 // 1. Use profiler to identify hot code path
 dotnet-trace record --output trace.nettrace -- application.exe
@@ -182,6 +184,7 @@ dotnet-trace convert --format speedscope trace.nettrace
 ```
 
 **Possible Solutions**:
+
 - Replace LINQ with for loops (hot path)
 - Use object pooling for allocations
 - Cache computation results
@@ -192,6 +195,7 @@ dotnet-trace convert --format speedscope trace.nettrace
 #### Scenario 2: High Memory Usage
 
 **Symptoms**:
+
 ```
 - Memory grows over time
 - GC pauses increasing
@@ -199,6 +203,7 @@ dotnet-trace convert --format speedscope trace.nettrace
 ```
 
 **Diagnosis Steps**:
+
 ```csharp
 // 1. Check for memory leaks
 var gcMemory = GC.GetTotalMemory(true);
@@ -217,6 +222,7 @@ dotnet-trace record --provider GCHeapSnapshot -- application.exe
 ```
 
 **Possible Solutions**:
+
 - Implement object pooling
 - Use object disposal patterns
 - Reduce cache sizes
@@ -227,6 +233,7 @@ dotnet-trace record --provider GCHeapSnapshot -- application.exe
 #### Scenario 3: Slow Database Queries
 
 **Symptoms**:
+
 ```
 - Query times > 100ms
 - CPU at database server high
@@ -234,6 +241,7 @@ dotnet-trace record --provider GCHeapSnapshot -- application.exe
 ```
 
 **Diagnosis Steps**:
+
 ```sql
 -- 1. Find slow queries
 SELECT 
@@ -257,6 +265,7 @@ SELECT * FROM sys.dm_db_missing_index_details;
 ```
 
 **Possible Solutions**:
+
 - Create missing indexes
 - Remove N+1 queries
 - Use query splitting
@@ -268,6 +277,7 @@ SELECT * FROM sys.dm_db_missing_index_details;
 #### Scenario 4: High Cache Churn (Low Hit Rate)
 
 **Symptoms**:
+
 ```
 - L1 Cache hit rate < 70%
 - Database queries not decreasing
@@ -275,6 +285,7 @@ SELECT * FROM sys.dm_db_missing_index_details;
 ```
 
 **Diagnosis Steps**:
+
 ```csharp
 // 1. Analyze cache statistics
 var stats = _cache.GetStatistics();
@@ -293,6 +304,7 @@ foreach (var key in _cache.GetAllKeys())
 ```
 
 **Possible Solutions**:
+
 - Increase TTL for stable data
 - Implement cache warming
 - Use different cache key strategy
@@ -306,6 +318,7 @@ foreach (var key in _cache.GetAllKeys())
 ### Configuration Tuning
 
 **Connection Pool**:
+
 ```csharp
 // Current: MinPool=5, MaxPool=40
 // For high concurrency (1000+ users):
@@ -320,6 +333,7 @@ services.AddDbContext<MyContext>(options =>
 ```
 
 **Thread Pool**:
+
 ```csharp
 // Ensure sufficient threads for async workloads
 ThreadPool.GetMinThreads(out var workerThreads, out var ioThreads);
@@ -327,6 +341,7 @@ ThreadPool.SetMinThreads(Math.Max(workerThreads, Environment.ProcessorCount * 2)
 ```
 
 **Cache Sizes**:
+
 ```csharp
 // L1 Cache (in-memory)
 // Current: 34MB
@@ -339,6 +354,7 @@ ThreadPool.SetMinThreads(Math.Max(workerThreads, Environment.ProcessorCount * 2)
 ```
 
 **TTL Strategy**:
+
 ```csharp
 // Current: 1 hour for user data
 // Adjust based on data freshness requirements:
@@ -355,6 +371,7 @@ ThreadPool.SetMinThreads(Math.Max(workerThreads, Environment.ProcessorCount * 2)
 ### Issue 1: Intermittent Slowness
 
 **Symptoms**:
+
 ```
 - Most requests fast (10ms)
 - Occasional slow requests (500ms+)
@@ -364,6 +381,7 @@ ThreadPool.SetMinThreads(Math.Max(workerThreads, Environment.ProcessorCount * 2)
 **Troubleshooting Steps**:
 
 1. **Check for GC Pauses**:
+
 ```csharp
 var initialGen0 = GC.CollectionCount(0);
 // [do work]
@@ -373,6 +391,7 @@ if (finalGen0 > initialGen0)
 ```
 
 2. **Check for Lock Contention**:
+
 ```csharp
 // Monitor lock wait times
 var diagnostics = System.Diagnostics.LockMetrics.GetLockDetails();
@@ -383,6 +402,7 @@ foreach (var lockWait in diagnostics.Where(d => d.WaitTime > 10))
 ```
 
 3. **Check for Database Connection Issues**:
+
 ```sql
 -- Check for blocking queries
 SELECT * FROM sys.dm_exec_requests WHERE wait_type IS NOT NULL;
@@ -396,6 +416,7 @@ SELECT COUNT(*) FROM sys.dm_exec_sessions;
 ### Issue 2: Out of Memory Exception
 
 **Symptoms**:
+
 ```
 - OutOfMemoryException thrown
 - Service crashes
@@ -405,6 +426,7 @@ SELECT COUNT(*) FROM sys.dm_exec_sessions;
 **Troubleshooting Steps**:
 
 1. **Identify Allocation Site**:
+
 ```csharp
 // Enable memory diagnostics
 using var heapSnapshot = new HeapSnapshot();
@@ -413,6 +435,7 @@ heapSnapshot.Analyze();
 ```
 
 2. **Check for Large Collections**:
+
 ```csharp
 // Look for suspicious large allocations
 var largeObjects = _cache.GetAllKeys()
@@ -427,6 +450,7 @@ foreach (var (key, size) in largeObjects)
 ```
 
 3. **Implement Limits**:
+
 ```csharp
 if (GC.GetTotalMemory(false) > _memoryLimit)
 {
@@ -440,6 +464,7 @@ if (GC.GetTotalMemory(false) > _memoryLimit)
 ### Issue 3: Database Deadlock
 
 **Symptoms**:
+
 ```
 - Sporadic deadlock errors
 - "Deadlock detected" exception
@@ -449,6 +474,7 @@ if (GC.GetTotalMemory(false) > _memoryLimit)
 **Troubleshooting Steps**:
 
 1. **Enable Deadlock Tracing**:
+
 ```sql
 -- Enable trace flag for deadlock detection
 DBCC TRACEON(1222);
@@ -458,6 +484,7 @@ SELECT * FROM sys.dm_exec_requests WHERE wait_type = 'DW_LATCH_EX';
 ```
 
 2. **Identify Lock Order Issue**:
+
 ```csharp
 // Ensure consistent lock order in code
 // BAD:
@@ -470,6 +497,7 @@ SELECT * FROM sys.dm_exec_requests WHERE wait_type = 'DW_LATCH_EX';
 ```
 
 3. **Implement Retry Logic**:
+
 ```csharp
 public async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation)
 {
@@ -493,6 +521,7 @@ public async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation)
 ## 📈 Performance Tuning Roadmap
 
 ### Phase 1: Quick Wins (1-2 hours, 15% improvement)
+
 - [ ] Enable query result caching
 - [ ] Increase connection pool size
 - [ ] Add missing database indexes
@@ -503,6 +532,7 @@ public async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation)
 ---
 
 ### Phase 2: Medium Optimizations (4-6 hours, 20% improvement)
+
 - [ ] Implement query batching
 - [ ] Add cache warming
 - [ ] Optimize hot paths
@@ -513,6 +543,7 @@ public async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation)
 ---
 
 ### Phase 3: Deep Optimization (8-10 hours, 15% improvement)
+
 - [ ] Implement object pooling
 - [ ] Optimize memory allocations
 - [ ] Profile and micro-optimize

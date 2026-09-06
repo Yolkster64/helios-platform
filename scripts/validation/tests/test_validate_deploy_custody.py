@@ -54,6 +54,20 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "resource-group creation",
         )
 
+    def test_fails_when_resource_group_creation_allows_dispatch(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && github.event_name == 'push'",
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')",
+            "resource-group creation",
+        )
+
+    def test_fails_when_what_if_guard_allows_push(self) -> None:
+        self._validate_mutation(
+            "id: whatif\n        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if",
+            "id: whatif\n        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && inputs.what_if",
+            "restricted to workflow_dispatch",
+        )
+
     def test_fails_when_artifact_upload_is_removed(self) -> None:
         self._validate_mutation(
             "        uses: actions/upload-artifact@v4",
@@ -75,8 +89,59 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         self._validate_mutation(
             "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))",
             "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)",
-            "explicitly guard non-what-if deploys to workflow_dispatch",
+            "explicitly guard non-what-if deploys to push or workflow_dispatch",
         )
+
+    def test_fails_when_deploy_guard_is_bypassed_with_true_or(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))",
+            "if: true || (steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if)))",
+            "explicitly guard non-what-if deploys to push or workflow_dispatch",
+        )
+
+    def test_fails_when_seal_step_skips_preflight_failures(self) -> None:
+        self._validate_mutation(
+            "if: always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'",
+            "if: always() && steps.creds.outputs.configured == 'true' && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')",
+            "custody preparation succeeded",
+        )
+
+    def test_fails_when_deploy_guard_is_bypassed(self) -> None:
+        guard = "steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))"
+        for mutated in ("true || " + guard, guard.replace("&& !inputs.what_if", "|| !inputs.what_if")):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "explicitly guard non-what-if deploys to push or workflow_dispatch",
+                )
+
+    def test_fails_when_upload_guard_only_requires_always(self) -> None:
+        guard = "always() && steps.creds.outputs.configured == 'true' && steps.seal.conclusion != 'skipped'"
+        for mutated in (
+            "always()",
+            guard.replace("&& steps.seal.conclusion != 'skipped'", ""),
+        ):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "sealing was not skipped",
+                )
+
+    def test_fails_when_sealing_guard_loses_preflight_evidence(self) -> None:
+        guard = "always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'"
+        for mutated in (
+            guard + " && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')",
+            guard.replace("== 'success'", "!= 'success'"),
+            guard.replace("always()", "success()"),
+        ):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "custody preparation succeeded",
+                )
 
     def test_fails_when_raw_output_is_tee_d_to_record(self) -> None:
         self._validate_mutation(

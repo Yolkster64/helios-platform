@@ -35,6 +35,7 @@ Status\ (DWORD values - Boolean phase status)
 ```
 
 **Registry Type Details**:
+
 - REG_SZ: String values
 - DWORD: 32-bit numbers (1=TRUE, 0=FALSE)
 - FILETIME_VALUE: Windows timestamp

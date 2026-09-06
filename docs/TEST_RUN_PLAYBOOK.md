@@ -10,7 +10,7 @@ Legend for requirements:
 - **Needs credentials** — marked inline; nothing below silently requires a secret.
 - **Windows-only** — marked inline; everything else runs on Linux/macOS/WSL2 too.
 
-Prerequisites for the core lanes: .NET SDK 8, PowerShell 7 (`pwsh`), Python 3.10+, Git.
+Prerequisites for the core lanes: .NET SDK 10 (see `global.json`), PowerShell 7 (`pwsh`), Python 3.10+, Git.
 Optional lanes need Docker, a Bicep compiler (`bicep` or `az`), or Terraform — each lane
 says so. `pwsh scripts/build/verify-readiness.ps1` checks your box in one command.
 
@@ -223,11 +223,11 @@ on (advisory, never an error).
 
 ## 8. Absorption benchmark (keyless; needs Git + network to github.com)
 
-Benchmark one watchlist PR (see `helios-ai absorb-status` for current candidates — #222
+Benchmark one watchlist PR (see `helios-ai absorb-status` for current candidates — #294
 is one as of this writing):
 
 ```bash
-pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
+pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 294
 ```
 
 > **Trust boundary (enforced)**: the gate *executes the merged tree* — the candidate
@@ -241,12 +241,12 @@ pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 222
 > artifact:
 >
 > ```bash
-> gh workflow run absorption-benchmark.yml -f pr_number=222
+> gh workflow run absorption-benchmark.yml -f pr_number=294
 > ```
 
 **Expected**: the script fetches the upstream PR head (`M0nado/helios-platform` —
 public, read-only, no credentials), trial-merges it in a disposable worktree, runs the
-same gate CI runs, and writes a scored report to `.helios/absorption/pr-222.json` with
+same gate CI runs, and writes a scored report to `.helios/absorption/pr-294.json` with
 per-step results and a verdict. **A merge-conflict outcome is a valid result** — the
 report records the conflicting files and the verdict; it is evidence, not a failed run.
 Nothing merges automatically; `-Apply` only keeps the scratch worktree for deliberate

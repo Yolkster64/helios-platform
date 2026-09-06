@@ -13,6 +13,7 @@ Optimize HELIOS Platform security posture through continuous scanning, access co
 ## 1. Security Hardening
 
 ### Baseline Assessment
+
 - Vulnerabilities found: 5-15 per scan
 - Resolution time: <24 hours for critical
 - Security score: 75/100
@@ -72,6 +73,7 @@ public IActionResult PublicStatus() { }
 ## 5. Audit Logging
 
 All access logged with:
+
 - User ID
 - Timestamp
 - Action performed

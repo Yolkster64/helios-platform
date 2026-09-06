@@ -1,6 +1,7 @@
 # HELIOS Platform - Code Examples
 
 ## Table of Contents
+
 1. [Branding & UI](#branding--ui)
 2. [Animations & Effects](#animations--effects)
 3. [Input Validation](#input-validation)
@@ -585,4 +586,3 @@ public class MainWindow : Window
     }
 }
 ```
-

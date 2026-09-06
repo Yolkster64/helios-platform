@@ -1,4 +1,5 @@
 # SCALABILITY & FUTURE INTEGRATION ROADMAP
+
 **HELIOS Platform - Growth, Scaling, & Evolution Strategy**
 
 **Document Version:** 1.0
@@ -229,6 +230,7 @@ Total Integration Time: 4-8 weeks
 ```
 
 **Integration Architecture:**
+
 ```
 New AI Model
     ↓

@@ -9,6 +9,7 @@
 Optimize HELIOS Platform resource utilization across CPU, memory, disk, and network to improve efficiency and scalability.
 
 **Key Targets:**
+
 - ✅ CPU utilization: 45-55% → 70-80%
 - ✅ Memory efficiency: 60-70% → 75-85%
 - ✅ Disk I/O: 40% → 75%

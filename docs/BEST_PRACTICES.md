@@ -3,6 +3,7 @@
 ## Architecture & Design
 
 ### Component Organization
+
 **Best Practice:** Organize components by feature, not by type
 
 ```
@@ -23,6 +24,7 @@ src/Views/
 ```
 
 ### Dependency Injection
+
 **Best Practice:** Always use constructor injection, never service locator pattern
 
 ```csharp
@@ -41,6 +43,7 @@ public class UserService
 ```
 
 ### Async Operations
+
 **Best Practice:** Always use async/await, never block on async code
 
 ```csharp
@@ -60,6 +63,7 @@ public void LoadData()
 ```
 
 ### Error Handling
+
 **Best Practice:** Use specific exception types, never bare catch blocks
 
 ```csharp
@@ -87,6 +91,7 @@ catch { }  // Silent failure!
 ## Code Quality
 
 ### Naming Conventions
+
 **Best Practice:** Use clear, descriptive names that indicate purpose
 
 ```csharp
@@ -102,6 +107,7 @@ public async Task Proc() { }
 ```
 
 ### Method Size
+
 **Best Practice:** Keep methods small and focused (< 30 lines)
 
 ```csharp
@@ -127,6 +133,7 @@ public async Task<Result> DoStuff(dynamic data)
 ```
 
 ### Documentation
+
 **Best Practice:** Document public APIs with XML comments
 
 ```csharp
@@ -150,6 +157,7 @@ public async Task<User> GetUser(int id) { }  // No documentation
 ```
 
 ### Constants
+
 **Best Practice:** Use named constants instead of magic numbers
 
 ```csharp
@@ -167,6 +175,7 @@ if (password.Length < 12 || password.Length > 64) { }
 ## UI/UX Best Practices
 
 ### Animations
+
 **Best Practice:** Use animations purposefully for feedback and transitions
 
 ```csharp
@@ -183,6 +192,7 @@ GUIPolishManager.ApplyPulseAnimation(everyElement);
 ```
 
 ### User Feedback
+
 **Best Practice:** Provide immediate feedback for all user actions
 
 ```csharp
@@ -203,6 +213,7 @@ await _service.SaveAsync(data);
 ```
 
 ### Input Validation
+
 **Best Practice:** Validate input with helpful error messages
 
 ```csharp
@@ -218,6 +229,7 @@ if (!email.Contains("@")) { }  // Vague validation
 ```
 
 ### Loading States
+
 **Best Practice:** Show loading states for long operations
 
 ```csharp
@@ -244,6 +256,7 @@ await LongOperation();
 ## Security Best Practices
 
 ### Secrets Management
+
 **Best Practice:** Never store secrets in code or config files
 
 ```csharp
@@ -257,6 +270,7 @@ private string _dbPassword = "admin123";
 ```
 
 ### Input Validation
+
 **Best Practice:** Validate all external input
 
 ```csharp
@@ -280,6 +294,7 @@ public async Task<User> GetUserAsync(string id)
 ```
 
 ### SQL Injection Prevention
+
 **Best Practice:** Always use parameterized queries
 
 ```csharp
@@ -293,6 +308,7 @@ var query = $"SELECT * FROM Users WHERE Email = '{email}'";  // SQL Injection ri
 ```
 
 ### TLS/SSL
+
 **Best Practice:** Always use HTTPS in production
 
 ```yaml
@@ -312,6 +328,7 @@ security:
 ## Performance Best Practices
 
 ### Caching
+
 **Best Practice:** Cache appropriate data with reasonable TTL
 
 ```csharp
@@ -330,6 +347,7 @@ var user = await _repository.GetAsync(userId);
 ```
 
 ### Connection Pooling
+
 **Best Practice:** Configure appropriate connection pool sizes
 
 ```yaml
@@ -347,6 +365,7 @@ database:
 ```
 
 ### Query Optimization
+
 **Best Practice:** Write efficient queries with proper indexing
 
 ```csharp
@@ -369,6 +388,7 @@ foreach (var user in users)
 ```
 
 ### Logging
+
 **Best Practice:** Log at appropriate levels to avoid performance impact
 
 ```csharp
@@ -387,6 +407,7 @@ _logger.LogDebug($"Processing {ExpensiveCalculation()} items");  // Always compu
 ## Testing Best Practices
 
 ### Unit Testing
+
 **Best Practice:** Write focused unit tests for single responsibility
 
 ```csharp
@@ -420,6 +441,7 @@ public void TestUserService()
 ```
 
 ### Integration Testing
+
 **Best Practice:** Test component integration with real dependencies
 
 ```csharp
@@ -447,6 +469,7 @@ public class UserServiceIntegrationTests
 ## Documentation Best Practices
 
 ### XML Documentation
+
 **Best Practice:** Document public APIs thoroughly
 
 ```csharp
@@ -476,6 +499,7 @@ public async Task<Result> ProcessBatchAsync(User[] users)
 ```
 
 ### README Files
+
 **Best Practice:** Keep README files up-to-date with current information
 
 ---
@@ -483,6 +507,7 @@ public async Task<Result> ProcessBatchAsync(User[] users)
 ## Version Control Best Practices
 
 ### Commit Messages
+
 **Best Practice:** Write clear, descriptive commit messages
 
 ```
@@ -499,6 +524,7 @@ updated code
 ```
 
 ### Branch Strategy
+
 **Best Practice:** Use meaningful branch names
 
 ```
@@ -518,6 +544,7 @@ update
 ## Release Best Practices
 
 ### Version Numbering
+
 **Best Practice:** Follow Semantic Versioning
 
 ```
@@ -530,6 +557,7 @@ MAJOR.MINOR.PATCH
 ```
 
 ### Release Notes
+
 **Best Practice:** Document all changes clearly
 
 ```markdown
@@ -549,4 +577,3 @@ MAJOR.MINOR.PATCH
 ### Migration Guide
 See MIGRATION_GUIDE.md for upgrade instructions
 ```
-

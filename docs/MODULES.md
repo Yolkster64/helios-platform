@@ -36,20 +36,24 @@
 **Version:** {{CORE_MODULE_1_VERSION}}
 
 **Key Features:**
+
 - {{FEATURE_1}}: {{FEATURE_1_DESC}}
 - {{FEATURE_2}}: {{FEATURE_2_DESC}}
 - {{FEATURE_3}}: {{FEATURE_3_DESC}}
 
 **Main Functions:**
+
 - `{{FUNCTION_1}}`: {{FUNCTION_1_DESC}}
 - `{{FUNCTION_2}}`: {{FUNCTION_2_DESC}}
 - `{{FUNCTION_3}}`: {{FUNCTION_3_DESC}}
 
 **Dependencies:**
+
 - {{DEP_1}} ({{DEP_1_VERSION}})
 - {{DEP_2}} ({{DEP_2_VERSION}})
 
 **Usage Example:**
+
 ```powershell
 # {{USAGE_EXAMPLE_1}}
 {{CODE_EXAMPLE_1}}
@@ -59,6 +63,7 @@
 ```
 
 **Documentation:**
+
 - [README](./{{CATEGORY_1}}/{{CORE_MODULE_1}}/README.md)
 - [API Reference](./{{CATEGORY_1}}/{{CORE_MODULE_1}}/API.md)
 - [Examples](./{{CATEGORY_1}}/{{CORE_MODULE_1}}/EXAMPLES.md)
@@ -73,11 +78,13 @@
 **Status:** {{CORE_MODULE_2_STATUS}}
 
 **Key Functions:**
+
 - `{{CORE_M2_FUNCTION_1}}`
 - `{{CORE_M2_FUNCTION_2}}`
 - `{{CORE_M2_FUNCTION_3}}`
 
 **Example:**
+
 ```powershell
 {{CORE_M2_CODE_EXAMPLE}}
 ```
@@ -105,6 +112,7 @@
 **Related To:** {{FEATURE_MODULE_1_RELATED}}
 
 **Main Functions:**
+
 - `{{FM1_FUNC_1}}()`
 - `{{FM1_FUNC_2}}()`
 
@@ -130,6 +138,7 @@
 **Category:** Utility/Helper
 
 **Functions:**
+
 - `{{UM1_FUNC_1}}`
 - `{{UM1_FUNC_2}}`
 
@@ -186,6 +195,7 @@
 ### {{CORE_MODULE_1}} Interface
 
 **Exports:**
+
 ```powershell
 # Functions
 {{EXPORT_FUNC_1}}
@@ -201,6 +211,7 @@ ${{CONSTANT_2}} = {{VALUE_2}}
 ```
 
 **Imports:**
+
 ```powershell
 # Required from {{DEP_1}}
 [{{DEP_1_TYPE}}]${{DEP_1_VAR}}

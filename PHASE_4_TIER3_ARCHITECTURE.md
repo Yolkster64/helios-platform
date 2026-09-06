@@ -149,6 +149,7 @@ CREATE INDEX IX_Category_Active ON Products(Category, IsActive) WHERE IsActive =
 ### L1 Cache (In-Process Memory)
 
 **Architecture**:
+
 ```
 ┌────────────────────────────────────┐
 │        HTTP Request                │
@@ -196,6 +197,7 @@ CREATE INDEX IX_Category_Active ON Products(Category, IsActive) WHERE IsActive =
 ```
 
 **Implementation Details**:
+
 ```csharp
 public class L1CacheService : IL1CacheService
 {
@@ -220,6 +222,7 @@ public class L1CacheService : IL1CacheService
 ```
 
 **Performance Characteristics**:
+
 - Lookup: 0.8ms (L1 CPU cache miss)
 - Hit Rate: 82-85% (typical workload)
 - Size: 34MB (configurable)
@@ -231,6 +234,7 @@ public class L1CacheService : IL1CacheService
 ### L2 Cache (Distributed)
 
 **Architecture**:
+
 ```
 Application Instance 1     Application Instance 2
 ┌─────────────┐           ┌─────────────┐
@@ -257,6 +261,7 @@ Application Instance 1     Application Instance 2
 ```
 
 **Features**:
+
 - Cluster support (high availability)
 - TTL-based expiration (1-24 hours)
 - Replication for fault tolerance
@@ -322,6 +327,7 @@ Data Update occurs
 ```
 
 **Implementation**:
+
 ```csharp
 public async Task UpdateUserAsync(User user)
 {
@@ -348,22 +354,26 @@ public async Task UpdateUserAsync(User user)
 **Index Categories**:
 
 1. **Primary Keys** (Automatic)
+
    ```sql
    PRIMARY KEY CLUSTERED on Id
    ```
 
 2. **Foreign Key Indexes**
+
    ```sql
    CREATE INDEX IX_UserId ON Orders(UserId);
    ```
 
 3. **Filter Indexes** (Most selective queries)
+
    ```sql
    CREATE INDEX IX_Active_Users ON Users(Email) WHERE IsActive = 1;
    -- Smaller index, faster scan
    ```
 
 4. **Composite Indexes** (Multi-column filters)
+
    ```sql
    CREATE INDEX IX_User_Order ON Orders(UserId, OrderDate DESC);
    -- Covers common "user's recent orders" query
@@ -374,6 +384,7 @@ public async Task UpdateUserAsync(User user)
 ### Query Optimization Patterns
 
 **Pattern 1: No-Tracking Reads**
+
 ```csharp
 // Read-only operations don't need change tracking
 var users = _context.Users
@@ -383,6 +394,7 @@ var users = _context.Users
 ```
 
 **Pattern 2: Query Splitting**
+
 ```csharp
 var users = _context.Users
     .Include(u => u.Orders)
@@ -393,6 +405,7 @@ var users = _context.Users
 ```
 
 **Pattern 3: Projection**
+
 ```csharp
 // Only fetch needed columns
 var summary = _context.Users
@@ -650,6 +663,7 @@ Production
 ### Scaling Strategy
 
 **Horizontal Scaling**:
+
 ```
 Load Balancer (Round-Robin)
     │
@@ -670,6 +684,7 @@ Each instance has own L1 cache
 ---
 
 **Vertical Scaling**:
+
 ```
 Single High-Power Machine
 ├─ More CPU cores

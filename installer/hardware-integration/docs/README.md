@@ -60,7 +60,9 @@ HELIOS Phase 2 Architecture
 **Location**: `C:\HELIOS\hardware-integration\cuda\`
 
 #### Overview
+
 Provides complete CUDA runtime management with:
+
 - GPU device detection and management
 - Compute capability verification (SM 5.0+)
 - Memory management with pooling
@@ -71,27 +73,32 @@ Provides complete CUDA runtime management with:
 #### Key Classes
 
 **CudaRuntime**
+
 - Central CUDA runtime manager
 - Device initialization and lifecycle
 - Memory pool management
 - Stream creation and synchronization
 
 **CudaDevice**
+
 - Represents individual GPU device
 - Stores device properties and capabilities
 - Memory information tracking
 
 **CudaMemoryPool**
+
 - Thread-safe memory allocation/deallocation
 - Device-specific memory management
 - Utilization tracking
 
 **CudaStream**
+
 - Async operation management
 - Operation queueing
 - Stream synchronization
 
 #### Files
+
 - `CudaRuntime.ps1` - Core CUDA runtime class
 - `DeviceManager.ps1` - Multi-device management and load balancing
 
@@ -102,7 +109,9 @@ Provides complete CUDA runtime management with:
 **Location**: `C:\HELIOS\hardware-integration\drivers\`
 
 #### Overview
+
 Comprehensive driver lifecycle management:
+
 - Automatic hardware detection (WMI-based)
 - Latest driver version querying
 - Silent driver installation
@@ -111,6 +120,7 @@ Comprehensive driver lifecycle management:
 - Periodic update checks
 
 #### Supported Drivers
+
 - **GPU**: NVIDIA (460+), AMD (Adrenalin), Intel (Arc)
 - **Chipset**: Intel, AMD
 - **Audio**: Realtek, Creative, ASUS
@@ -120,27 +130,32 @@ Comprehensive driver lifecycle management:
 #### Key Classes
 
 **HardwareDevice**
+
 - Detected hardware representation
 - Version tracking (current vs. latest)
 - Update availability status
 
 **DriverPackage**
+
 - Downloaded driver bundle
 - Checksum verification
 - Installation status
 
 **DriverInstallation**
+
 - Installation record
 - Rollback point tracking
 - Success/failure logging
 
 **DriverManager**
+
 - System scanning and detection
 - Update checking
 - Download management
 - Installation orchestration
 
 #### Files
+
 - `DriverManager.ps1` - Driver detection, download, and installation
 
 ---
@@ -150,7 +165,9 @@ Comprehensive driver lifecycle management:
 **Location**: `C:\HELIOS\hardware-integration\wsl2\`
 
 #### Overview
+
 Seamless Windows-Linux integration with distributed agent framework:
+
 - WSL2 distribution management
 - Linux environment provisioning
 - Hermes agent lifecycle management
@@ -158,6 +175,7 @@ Seamless Windows-Linux integration with distributed agent framework:
 - Health monitoring and auto-recovery
 
 #### Supported Distributions
+
 - Ubuntu (18.04, 20.04, 22.04+)
 - Debian
 - Alpine
@@ -165,6 +183,7 @@ Seamless Windows-Linux integration with distributed agent framework:
 - openSUSE
 
 #### Agent Types (Hermes Framework)
+
 1. **Processing Agent** - CPU-intensive tasks
 2. **Analytics Agent** - Data analysis and reporting
 3. **Background Jobs Agent** - Long-running operations
@@ -173,27 +192,32 @@ Seamless Windows-Linux integration with distributed agent framework:
 #### Key Classes
 
 **LinuxDistribution**
+
 - WSL2 distribution representation
 - Installation and running status
 - Environment configuration
 
 **HermesAgent**
+
 - Agent process lifecycle
 - Port assignment and communication
 - Status tracking and health monitoring
 
 **CrossPlatformMessage**
+
 - Windows↔Linux message passing
 - Status tracking (sent/received)
 - Payload encapsulation
 
 **Wsl2Integration**
+
 - Distribution management
 - Agent orchestration
 - Cross-platform communication
 - Task routing and execution
 
 #### Files
+
 - `Wsl2Integration.ps1` - WSL2 and Hermes agent management
 
 ---
@@ -203,7 +227,9 @@ Seamless Windows-Linux integration with distributed agent framework:
 **Location**: `C:\HELIOS\hardware-integration\razer\`
 
 #### Overview
+
 Complete Razer device integration:
+
 - Device detection and enumeration
 - Battery level monitoring
 - DPI profile management
@@ -212,12 +238,14 @@ Complete Razer device integration:
 - Game detection and auto-switching
 
 #### Supported Devices
+
 - **Mice**: DeathAdder, Viper, Pro
 - **Keyboards**: BlackWidow, Huntsman
 - **Headsets**: Kraken, Barracuda
 - **Mousepads**: Goliathus
 
 #### Lighting Modes
+
 - Static color
 - Breathing (pulse animation)
 - Spectrum cycling (rainbow)
@@ -226,6 +254,7 @@ Complete Razer device integration:
 - Custom profiles
 
 #### System Status Indicators
+
 - **Green** - System healthy (CPU < 70%, Memory < 80%, Temp < 60°C)
 - **Orange** - Warning (approaching limits)
 - **Red** - Alert (critical thresholds)
@@ -234,22 +263,26 @@ Complete Razer device integration:
 #### Key Classes
 
 **RazerDevice**
+
 - Individual device representation
 - Battery, DPI, lighting state
 - Device properties and model info
 
 **ChromaProfile**
+
 - Lighting configuration
 - Mode, colors, animation speed
 - User-definable profiles
 
 **RazerIntegration**
+
 - Device scanning and management
 - Lighting orchestration
 - Game detection
 - System status sync
 
 #### Files
+
 - `RazerIntegration.ps1` - Razer device and lighting management
 
 ---
@@ -257,11 +290,13 @@ Complete Razer device integration:
 ## Installation & Setup
 
 ### Prerequisites
+
 - Windows 10/11 (21H1 or later)
 - Administrative privileges
 - PowerShell 5.1+ or PowerShell Core 7+
 
 ### Optional Requirements
+
 - **For CUDA**: NVIDIA CUDA Toolkit 11.0+ and compatible GPU (CC 5.0+)
 - **For WSL2**: WSL2 with at least one distribution
 - **For Razer**: Razer Synapse 3.0+ and compatible devices
@@ -270,11 +305,13 @@ Complete Razer device integration:
 ### Installation Steps
 
 1. **Copy hardware integration module to HELIOS**
+
    ```powershell
    Copy-Item -Path ".\hardware-integration" -Destination "C:\HELIOS\" -Recurse
    ```
 
 2. **Import modules in your scripts**
+
    ```powershell
    . "C:\HELIOS\hardware-integration\cuda\CudaRuntime.ps1"
    . "C:\HELIOS\hardware-integration\cuda\DeviceManager.ps1"
@@ -284,6 +321,7 @@ Complete Razer device integration:
    ```
 
 3. **Create logger instance** (required for all components)
+
    ```powershell
    class SimpleLogger {
        [void] LogInfo([string]$msg) { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -398,42 +436,52 @@ $status = $razer.GetDeviceStatus()
 #### Methods
 
 **Initialize(Logger)**
+
 - Initializes CUDA runtime and devices
 - Returns: bool
 
 **DetectCudaToolkit()**
+
 - Detects installed CUDA Toolkit
 - Returns: bool
 
 **DetectDevices()**
+
 - Scans for CUDA-capable GPUs
 - Returns: int (device count)
 
 **SelectDevice(int deviceId)**
+
 - Selects active GPU device
 - Returns: bool
 
 **AllocateMemory(long size, string label)**
+
 - Allocates device memory
 - Returns: object (allocation info)
 
 **DeallocateMemory(string allocationId)**
+
 - Frees allocated memory
 - Returns: bool
 
 **CreateStream(bool async)**
+
 - Creates execution stream
 - Returns: CudaStream
 
 **SynchronizeStream(int streamId)**
+
 - Blocks until stream completes
 - Returns: bool
 
 **CompileKernel(string sourceCode, string kernelName)**
+
 - Compiles CUDA kernel
 - Returns: bool
 
 **GetMemoryStats()**
+
 - Returns memory utilization statistics
 - Returns: hashtable
 
@@ -442,31 +490,38 @@ $status = $razer.GetDeviceStatus()
 #### Methods
 
 **DiscoverDevices()**
+
 - Discovers all GPU devices
 - Returns: bool
 
 **SetLoadBalancingStrategy(string strategy)**
+
 - Sets workload distribution strategy
 - Strategies: round-robin, least-loaded, memory-aware, performance-aware
 - Returns: void
 
 **SelectDeviceForWorkload(long memory, int priority)**
+
 - Selects best device for workload
 - Returns: int (device ID)
 
 **EnqueueTask(WorkloadTask task)**
+
 - Queues task on appropriate device
 - Returns: bool
 
 **DistributeWorkload(array tasks)**
+
 - Distributes multiple tasks
 - Returns: array (queued tasks)
 
 **StartMonitoring()**
+
 - Starts device health monitoring
 - Returns: bool
 
 **GetDeviceStats()**
+
 - Returns all device statistics
 - Returns: hashtable
 
@@ -477,34 +532,42 @@ $status = $razer.GetDeviceStatus()
 #### Methods
 
 **ScanSystem()**
+
 - Detects all hardware devices
 - Returns: bool
 
 **CheckForUpdates()**
+
 - Checks for available driver updates
 - Returns: bool
 
 **DownloadDriver(string deviceId)**
+
 - Downloads driver for device
 - Returns: DriverPackage
 
 **InstallDriver(DriverPackage package, string deviceId)**
+
 - Installs driver silently
 - Returns: bool
 
 **VerifyInstallation(DriverPackage package, string deviceId)**
+
 - Verifies successful installation
 - Returns: bool
 
 **InstallAllAvailableUpdates()**
+
 - Installs all available driver updates
 - Returns: bool
 
 **GetInstallationHistory()**
+
 - Returns installation records
 - Returns: hashtable
 
 **GetSystemDeviceReport()**
+
 - Returns full device report
 - Returns: array
 
@@ -515,38 +578,47 @@ $status = $razer.GetDeviceStatus()
 #### Methods
 
 **Initialize()**
+
 - Initializes WSL2 integration
 - Returns: bool
 
 **InstallDistribution(string distroName)**
+
 - Installs WSL2 distribution
 - Returns: bool
 
 **ProvisionEnvironment(string distro, hashtable packages)**
+
 - Provisions Linux environment
 - Returns: bool
 
 **CreateAgent(string name, string type, hashtable config)**
+
 - Creates Hermes agent instance
 - Returns: HermesAgent
 
 **StartAgent(HermesAgent agent)**
+
 - Starts Hermes agent
 - Returns: bool
 
 **StartAllAgents()**
+
 - Starts all agents
 - Returns: bool
 
 **ExecuteLinuxTask(string taskType, hashtable parameters)**
+
 - Executes task on Linux agent
 - Returns: hashtable (result)
 
 **MonitorAgentHealth()**
+
 - Monitors agent health
 - Returns: bool
 
 **GetAgentStatus()**
+
 - Returns agent status information
 - Returns: hashtable
 
@@ -557,45 +629,55 @@ $status = $razer.GetDeviceStatus()
 #### Methods
 
 **Initialize()**
+
 - Initializes Razer integration
 - Returns: bool
 
 **ScanDevices()**
+
 - Scans for connected Razer devices
 - Returns: bool
 
 **SetChromaColor(array rgb, string deviceId, int speed)**
+
 - Sets device color
 - RGB: [R, G, B] (0-255)
 - Returns: bool
 
 **SetLightingMode(string mode, int speed, string deviceId)**
+
 - Sets lighting animation mode
 - Modes: static, breathing, spectrum, wave, reactive, sync
 - Returns: bool
 
 **SetDPI(int dpi, string deviceId)**
+
 - Sets mouse DPI
 - Returns: bool
 
 **SyncWithSystemStatus(string status)**
+
 - Synchronizes lighting with system status
 - Status: healthy, warning, alert, processing
 - Returns: bool
 
 **CreateCustomProfile(string name, string mode, array color, int speed)**
+
 - Creates custom lighting profile
 - Returns: bool
 
 **ApplyProfile(string profileName, string deviceId)**
+
 - Applies lighting profile
 - Returns: bool
 
 **DetectGameAndApplyProfile(string gameName)**
+
 - Detects game and applies profile
 - Returns: bool
 
 **GetDeviceStatus()**
+
 - Returns all device status information
 - Returns: hashtable
 
@@ -621,6 +703,7 @@ $status = $razer.GetDeviceStatus()
 ### Test Coverage
 
 **CUDA Tests (8 tests)**
+
 - Runtime initialization
 - Device detection
 - Compute capability verification
@@ -631,6 +714,7 @@ $status = $razer.GetDeviceStatus()
 - Error recovery
 
 **Driver Tests (10 tests)**
+
 - System hardware scan
 - Device categorization
 - Driver version checking
@@ -643,6 +727,7 @@ $status = $razer.GetDeviceStatus()
 - Batch driver installation
 
 **WSL2 Tests (10 tests)**
+
 - WSL2 detection
 - Distribution discovery
 - Environment provisioning
@@ -655,6 +740,7 @@ $status = $razer.GetDeviceStatus()
 - Agent auto-recovery
 
 **Razer Tests (12 tests)**
+
 - Razer Synapse detection
 - Device scanning
 - Device identification
@@ -677,6 +763,7 @@ $status = $razer.GetDeviceStatus()
 ### CUDA Issues
 
 **Problem**: CUDA Toolkit not detected
+
 ```powershell
 # Solution: Verify installation
 $cuda = New-CudaRuntime
@@ -686,6 +773,7 @@ if (-not $cuda.DetectCudaToolkit()) {
 ```
 
 **Problem**: No CUDA devices found
+
 ```powershell
 # Solution: Check device and compute capability
 nvidia-smi -a
@@ -695,6 +783,7 @@ nvidia-smi -a
 ### Driver Issues
 
 **Problem**: Driver installation failed
+
 ```powershell
 # Solution: Check Windows Update settings
 Get-Service wuauserv | Start-Service
@@ -702,6 +791,7 @@ Get-Service wuauserv | Start-Service
 ```
 
 **Problem**: Rollback failed
+
 ```powershell
 # Solution: Create manual restore point
 Checkpoint-Computer -Description "Pre-Driver-Update" -RestorePointType "MODIFY_SETTINGS"
@@ -710,6 +800,7 @@ Checkpoint-Computer -Description "Pre-Driver-Update" -RestorePointType "MODIFY_S
 ### WSL2 Issues
 
 **Problem**: WSL2 not installed
+
 ```powershell
 # Solution: Enable WSL2
 wsl --install
@@ -717,6 +808,7 @@ wsl --install
 ```
 
 **Problem**: Agent communication fails
+
 ```powershell
 # Solution: Check agent port availability
 netstat -ano | findstr :5000
@@ -725,12 +817,14 @@ netstat -ano | findstr :5000
 ### Razer Issues
 
 **Problem**: Razer Synapse not detected
+
 ```powershell
 # Solution: Reinstall Razer Synapse from official source
 # https://www.razerzone.com/synapse-3
 ```
 
 **Problem**: Devices not responding
+
 ```powershell
 # Solution: Restart Razer Synapse
 Stop-Process -Name "RazerSynapse3" -Force
@@ -743,21 +837,25 @@ Start-Sleep -Seconds 2
 ## Performance Considerations
 
 ### CUDA Optimization
+
 - Use stream management for concurrent operations
 - Monitor memory utilization to avoid allocations
 - Profile kernels with device-specific optimizations
 
 ### Driver Management
+
 - Schedule driver updates during maintenance windows
 - Test updates in staging environment first
 - Keep installation history for debugging
 
 ### WSL2 Agents
+
 - Distribute workload based on agent type
 - Monitor agent memory usage
 - Use auto-recovery for reliability
 
 ### Razer Lighting
+
 - Use static colors for minimal system impact
 - Batch updates to reduce USB traffic
 - Disable reactive lighting under high load
@@ -767,6 +865,7 @@ Start-Sleep -Seconds 2
 ## Version Information
 
 **Phase 2 Hardware Integration v1.0**
+
 - Release Date: April 2026
 - CUDA Support: 11.0+
 - Driver Frameworks: Windows 10/11 (21H1+)
@@ -778,6 +877,7 @@ Start-Sleep -Seconds 2
 ## Support & Feedback
 
 For issues, questions, or feature requests:
+
 1. Check troubleshooting section above
 2. Review test results for diagnostics
 3. Check HELIOS logs in `C:\HELIOS\logs\`

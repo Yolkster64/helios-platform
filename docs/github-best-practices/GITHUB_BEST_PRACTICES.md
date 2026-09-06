@@ -3,6 +3,7 @@
 Complete guide to GitHub workflows, collaboration standards, and repository management for the HELIOS Platform project.
 
 **Table of Contents:**
+
 - [Repository Organization](#repository-organization)
 - [Branch Strategy](#branch-strategy)
 - [Commit Message Conventions](#commit-message-conventions)
@@ -78,6 +79,7 @@ helios-platform/
 ### Branch Types
 
 #### Main (Production)
+
 - **Purpose**: Live, production-ready code
 - **Protection**: Requires 2 approvals + all checks passing
 - **Tag**: Automatic semantic version tags
@@ -96,6 +98,7 @@ helios-platform/
 ```
 
 #### Develop (Integration)
+
 - **Purpose**: Integration branch for next release
 - **Protection**: Requires 1 approval + checks passing
 - **Branch from**: Feature branches
@@ -111,6 +114,7 @@ helios-platform/
 ```
 
 #### Feature Branches
+
 - **Naming**: `feature/JIRA-123-brief-description`
 - **Branch from**: `develop`
 - **Merge back to**: `develop` via PR
@@ -118,6 +122,7 @@ helios-platform/
 - **Cleanup**: Delete after merge
 
 **Feature Branch Naming Examples:**
+
 ```
 feature/HELIOS-42-user-authentication
 feature/HELIOS-89-dashboard-charts
@@ -126,12 +131,14 @@ feature/HELIOS-203-security-audit
 ```
 
 #### Bugfix Branches
+
 - **Naming**: `bugfix/JIRA-123-brief-description`
 - **Branch from**: `develop` or `main` (if critical)
 - **Protection**: Same as feature branches
 - **Priority**: High - review within 24 hours
 
 #### Hotfix Branches
+
 - **Naming**: `hotfix/JIRA-123-brief-description`
 - **Branch from**: `main` only
 - **Merge to**: Both `main` and `develop`
@@ -139,6 +146,7 @@ feature/HELIOS-203-security-audit
 - **Deploy**: Immediate to production
 
 **Hotfix Example:**
+
 ```bash
 # Critical production bug found
 git checkout main
@@ -221,6 +229,7 @@ Follow **Conventional Commits** specification:
 ### Scope
 
 Specify what part of the codebase is affected:
+
 - `auth` - Authentication module
 - `dashboard` - Dashboard feature
 - `api` - API services
@@ -242,6 +251,7 @@ Specify what part of the codebase is affected:
 ### Body
 
 Use for detailed explanation:
+
 - What changed and why
 - Reference related issues: `Fixes #123`, `Relates to #456`
 - Mention breaking changes: `BREAKING CHANGE: ...`
@@ -267,6 +277,7 @@ Related to #567
 ### Commit Message Examples
 
 #### ✓ Good Commits
+
 ```
 feat(auth): add two-factor authentication support
 fix(dashboard): resolve widget overlap on mobile view
@@ -279,6 +290,7 @@ chore(deps): upgrade TypeScript to 4.9.0
 ```
 
 #### ✗ Bad Commits
+
 ```
 updates
 fixed stuff
@@ -350,6 +362,7 @@ git push origin feature/HELIOS-42-auth-improvements
 ### PR Purpose
 
 PRs serve to:
+
 1. **Share knowledge**: Distribute code understanding across team
 2. **Catch issues**: Identify bugs before production
 3. **Maintain standards**: Enforce code quality and style
@@ -418,6 +431,7 @@ PRs serve to:
 ### Auto-Merge Policy
 
 **Enabled Only When:**
+
 - All status checks pass
 - Required approvals obtained
 - Branch is up-to-date with main
@@ -425,6 +439,7 @@ PRs serve to:
 - Only for dependency updates and docs
 
 **Disabled For:**
+
 - Feature PRs (require human verification before merge)
 - Security changes
 - Breaking API changes
@@ -461,6 +476,7 @@ Cadence:
 ### Release Checklist
 
 Before releasing:
+
 ```markdown
 □ All tests passing
 □ Security scanning complete
@@ -661,6 +677,7 @@ git push origin --delete feature/old-feature
 ## Escalation Path
 
 **For questions about:**
+
 - Code review standards → #code-review channel
 - Branch strategy → @core-team on Slack
 - Release process → @release-manager

@@ -30,75 +30,92 @@ C:\HELIOS\core-infrastructure\shared-resources/
 ### Core PowerShell Modules
 
 #### **common-functions.psm1** (24 KB)
+
 The foundational module providing 19 shared functions used by all HELIOS components.
 
 **Logging (4 functions)**
+
 - `Log-Message` - Standard logging with configurable levels
 - `Log-Error` - Error logging with exception details
 - `Log-Success` - Success message logging
 - `Initialize-Logging` - Setup logging output
 
 **Configuration (3 functions)**
+
 - `Load-Config` - Load JSON with caching
 - `Save-Config` - Save JSON with backup
 - `Get-ConfigValue` - Access nested values via dot notation
 
 **Validation (2 functions)**
+
 - `Validate-Prerequisites` - Check system requirements
 - `Validate-Admin` - Verify administrator rights
 
 **File Operations (3 functions)**
+
 - `Safe-Copy` - Copy files with logging
 - `Safe-Move` - Move files safely
 - `Safe-Delete` - Delete with automatic backup
 
 **Database Operations (3 functions)**
+
 - `Query-Database` - Execute SELECT statements
 - `Update-Database` - Execute UPDATE statements
 - `Insert-Database` - Execute INSERT statements
 
 **Event Handling (3 functions)**
+
 - `Emit-Event` - Send events to subscribers
 - `Subscribe-Event` - Listen for events
 - `Unsubscribe-Event` - Stop listening
 
 **Error Handling (1 function)**
+
 - `Try-Catch-Retry` - Automatic retry with exponential backoff
 
 #### **api-gateway.ps1** (17 KB)
+
 The API gateway providing unified interface for cross-component communication with 9 exported functions.
 
 **Component Management (2 functions)**
+
 - `Register-Component` - Add component to gateway
 - `Get-ComponentInfo` - Get component details
 
 **Request Execution (3 functions)**
+
 - `Invoke-ComponentAPI` - Call component (sync or async)
 - `Query-Component` - Query component data
 - `Trigger-Component` - Trigger component action
 
 **Request Management (4 functions)**
+
 - `Get-RequestStatus` - Check async request status
 - `Clear-RequestCache` - Clear cached results
 - `Get-RequestLog` - View request history
 - `Get-GatewayStats` - View gateway statistics
 
 #### **event-bus.ps1** (18 KB)
+
 The event bus providing event-driven communication with 11 exported functions.
 
 **Event Management (2 functions)**
+
 - `Register-Event` - Define event type
 - `Unregister-Event` - Remove event type
 
 **Subscriptions (2 functions)**
+
 - `Subscribe-Event` - Listen for events
 - `Unsubscribe-Event` - Stop listening
 
 **Event Processing (2 functions)**
+
 - `Emit-Event` - Send event to subscribers
 - `Process-AsyncEvents` - Process event queue
 
 **Query & Statistics (5 functions)**
+
 - `Get-EventHistory` - Query past events
 - `Get-EventInfo` - Get event details
 - `Get-RegisteredEvents` - List all events
@@ -108,9 +125,11 @@ The event bus providing event-driven communication with 11 exported functions.
 ### Configuration Templates
 
 #### **azure-config.template.json** (1.7 KB)
+
 Azure platform integration configuration.
 
 **Sections:**
+
 - `azure` - Subscription, resource group, location, tenant
 - `copilot` - GitHub Copilot API settings
 - `devops` - Azure DevOps organization and pipelines
@@ -120,9 +139,11 @@ Azure platform integration configuration.
 - `monitoring` - Log Analytics workspace
 
 #### **security-config.template.json** (2.4 KB)
+
 Security policies and controls configuration.
 
 **Sections:**
+
 - `appLocker` - Application whitelisting policies
 - `windowsDefender` - Defender settings
 - `bitdefender` - Advanced threat protection
@@ -133,9 +154,11 @@ Security policies and controls configuration.
 - `mfa` - Multi-factor authentication
 
 #### **agent-profiles.template.json** (5.2 KB)
+
 AI agent definitions for HELIOS platform.
 
 **Agents (12 total):**
+
 1. Copilot Core - Code analysis
 2. Security Agent - Vulnerability scanning
 3. DevOps Agent - Pipeline orchestration
@@ -150,15 +173,18 @@ AI agent definitions for HELIOS platform.
 12. User Support Agent - User support
 
 **Per-Agent Configuration:**
+
 - Capabilities array
 - Supported AI models
 - Max concurrency
 - Operation timeout
 
 #### **model-registry.template.json** (7.2 KB)
+
 AI model registry supporting 35+ models.
 
 **Model Categories:**
+
 - OpenAI (3): GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
 - Anthropic (3): Claude 3 Opus/Sonnet/Haiku
 - Google (2): Gemini Pro, PaLM 2
@@ -168,6 +194,7 @@ AI model registry supporting 35+ models.
 - AI21 (1): Jurassic
 
 **Per-Model Configuration:**
+
 - Provider and version
 - Capabilities
 - Max tokens
@@ -178,6 +205,7 @@ AI model registry supporting 35+ models.
 - Use cases
 
 **Routing Configuration:**
+
 - Algorithm (weighted round-robin)
 - Fallback order
 - Cost optimization
@@ -185,9 +213,11 @@ AI model registry supporting 35+ models.
 - Circuit breaker
 
 #### **optimization-config.template.json** (5.2 KB)
+
 Optimization profiles and resource settings.
 
 **Optimization Profiles (5):**
+
 1. Cost-optimized - Minimize spending
 2. Speed-optimized - Minimize latency
 3. Quality-optimized - Maximize accuracy
@@ -195,36 +225,43 @@ Optimization profiles and resource settings.
 5. Scale-optimized - High-volume processing
 
 **Resource Allocation:**
+
 - CPU cores (reserved, maximum)
 - Memory GB (reserved, maximum)
 - Storage GB (cache, logs, data)
 - Network bandwidth
 
 **Cost Management:**
+
 - Daily/monthly/quarterly budgets
 - Alert thresholds
 - Optimization strategies
 
 **Performance Targets:**
+
 - Latency (p95)
 - Throughput
 - Availability
 - Error rate
 
 **Scalability Settings:**
+
 - Horizontal scaling (min/max instances)
 - Vertical scaling (max CPU/memory)
 - Batch processing (size, queue)
 
 **Caching Configuration:**
+
 - Multi-level (memory, redis, disk)
 - TTL per level
 - Invalidation strategy
 
 #### **component-state.template.json** (5.0 KB)
+
 State tracking for all 7 HELIOS components.
 
 **Tracked Components:**
+
 1. Authentication
 2. Code Analysis
 3. Security
@@ -234,6 +271,7 @@ State tracking for all 7 HELIOS components.
 7. Knowledge Base
 
 **Per-Component Tracking:**
+
 - Current status
 - Health metrics
 - Endpoint status
@@ -241,6 +279,7 @@ State tracking for all 7 HELIOS components.
 - Error counts
 
 **System-Level Tracking:**
+
 - Overall health score
 - Resource usage
 - Performance metrics
@@ -251,7 +290,9 @@ State tracking for all 7 HELIOS components.
 ### Documentation
 
 #### **README.md** (23 KB)
+
 Comprehensive technical documentation covering:
+
 - Architecture overview
 - Component descriptions
 - Function reference with examples
@@ -262,7 +303,9 @@ Comprehensive technical documentation covering:
 - Performance considerations
 
 #### **QUICK-REFERENCE.md** (11 KB)
+
 Quick start guide with:
+
 - Directory structure
 - Function reference tables
 - Common use cases
@@ -270,17 +313,20 @@ Quick start guide with:
 - Quick paths & locations
 
 #### **INDEX.md** (this file)
+
 File structure and descriptions.
 
 ## 📊 Statistics
 
 ### Code Metrics
+
 - **Total Files**: 11
 - **Total Size**: 119 KB
 - **Lines of Code**: 2,500+
 - **Exported Functions**: 39
 
 ### Function Distribution
+
 | Module | Functions | Code Size |
 |--------|-----------|-----------|
 | common-functions.psm1 | 19 | 24 KB |
@@ -289,6 +335,7 @@ File structure and descriptions.
 | Total | 39 | 59 KB |
 
 ### Configuration Templates
+
 | Template | Size | Parameters |
 |----------|------|------------|
 | azure-config.template.json | 1.7 KB | 15+ |
@@ -300,6 +347,7 @@ File structure and descriptions.
 | **Total** | **26.7 KB** | **300+** |
 
 ### Supported Features
+
 - **AI Models**: 35+ across 7 providers
 - **AI Agents**: 12 specialized agents
 - **Components**: 7 HELIOS components tracked
@@ -312,27 +360,32 @@ File structure and descriptions.
 ### Quick Integration Steps
 
 1. **Import Module**
+
    ```powershell
    Import-Module "C:\HELIOS\core-infrastructure\shared-resources\common-functions.psm1"
    ```
 
 2. **Initialize Logging**
+
    ```powershell
    Initialize-Logging -LogPath "C:\HELIOS\logs\my-component.log"
    ```
 
 3. **Load Configuration**
+
    ```powershell
    $config = Load-Config -ConfigPath "C:\HELIOS\config\azure-config.json"
    ```
 
 4. **Register Component**
+
    ```powershell
    . "C:\HELIOS\core-infrastructure\shared-resources\api-gateway.ps1"
    Register-Component -ComponentName "MyComponent" -Handler $handler
    ```
 
 5. **Subscribe to Events**
+
    ```powershell
    . "C:\HELIOS\core-infrastructure\shared-resources\event-bus.ps1"
    Subscribe-Event -EventName "MyEvent" -Component "MyComponent" -Callback $handler
@@ -369,6 +422,7 @@ config-templates/
 ## 📝 Usage Examples
 
 ### Example 1: Logging Setup
+
 ```powershell
 Import-Module "common-functions.psm1"
 Initialize-Logging -LogPath "C:\logs\app.log"
@@ -377,6 +431,7 @@ Log-Success -Message "Configuration loaded"
 ```
 
 ### Example 2: Component Communication
+
 ```powershell
 . "api-gateway.ps1"
 Register-Component -ComponentName "Security" -Handler $scanHandler
@@ -384,6 +439,7 @@ $result = Invoke-ComponentAPI -ComponentName "Security" -Operation "Scan"
 ```
 
 ### Example 3: Event-Driven Processing
+
 ```powershell
 . "event-bus.ps1"
 Subscribe-Event -EventName "Alert" -Component "Monitor" -Callback $alertHandler

@@ -10,11 +10,11 @@
 
 Can't find your issue? Use the search or navigate to:
 
-- **Installation Issues** → [Installation Problems](#installation-problems)
-- **Configuration Issues** → [Configuration Problems](#configuration-problems)
-- **Performance Issues** → [Performance Problems](#performance-problems)
-- **Security Issues** → [Security Problems](#security-problems)
-- **Runtime Errors** → [Runtime Errors](#runtime-errors)
+- **Installation Issues** → [Installation Problems](#-installation-problems)
+- **Configuration Issues** → [Configuration Problems](#%EF%B8%8F-configuration-problems)
+- **Performance Issues** → [Performance Problems](#-performance-issues)
+- **Security Issues** → [Security Problems](#-security-issues)
+- **Runtime Errors** → [Runtime Errors](#-runtime-errors)
 
 ---
 
@@ -23,11 +23,13 @@ Can't find your issue? Use the search or navigate to:
 ### Issue: {{INSTALL_ISSUE_1}}
 
 **Error Message:**
+
 ```
 {{INSTALL_ERROR_1}}
 ```
 
 **Symptoms:**
+
 - {{SYMPTOM_1A}}
 - {{SYMPTOM_1B}}
 - {{SYMPTOM_1C}}
@@ -38,21 +40,25 @@ Can't find your issue? Use the search or navigate to:
 **Solution:**
 
 1. {{SOLUTION_STEP_1A}}
+
    ```powershell
    {{SOLUTION_CMD_1A}}
    ```
 
 2. {{SOLUTION_STEP_1B}}
+
    ```powershell
    {{SOLUTION_CMD_1B}}
    ```
 
 3. {{SOLUTION_STEP_1C}} - Verify:
+
    ```powershell
    {{VERIFY_CMD_1}}
    ```
 
 **If Still Not Working:**
+
 - {{TROUBLESHOOT_1A}}
 - {{TROUBLESHOOT_1B}}
 - {{TROUBLESHOOT_1C}}
@@ -62,6 +68,7 @@ Can't find your issue? Use the search or navigate to:
 ### Issue: {{INSTALL_ISSUE_2}}
 
 **Error Message:**
+
 ```
 {{INSTALL_ERROR_2}}
 ```
@@ -86,6 +93,7 @@ Can't find your issue? Use the search or navigate to:
 **Common Cause:** {{INSTALL_CAUSE_3}}
 
 **Fix:**
+
 ```powershell
 {{SOLUTION_CMD_3}}
 ```
@@ -97,6 +105,7 @@ Can't find your issue? Use the search or navigate to:
 ### Issue: {{CONFIG_ISSUE_1}}
 
 **Symptoms:**
+
 - Application won't start
 - {{CONFIG_SYMPTOM_1A}}
 - {{CONFIG_SYMPTOM_1B}}
@@ -104,6 +113,7 @@ Can't find your issue? Use the search or navigate to:
 **Diagnosis:**
 
 Check configuration file:
+
 ```powershell
 # View configuration
 Get-Content {{CONFIG_PATH}}
@@ -118,11 +128,13 @@ Test-Json {{CONFIG_FILE}}
 **Solution:**
 
 1. **Reset to defaults:**
+
    ```powershell
    {{RESET_CONFIG_CMD}}
    ```
 
 2. **Fix specific setting:**
+
    ```json
    {
      "{{CONFIG_KEY}}": "{{CORRECT_VALUE}}",
@@ -131,6 +143,7 @@ Test-Json {{CONFIG_FILE}}
    ```
 
 3. **Reload configuration:**
+
    ```powershell
    {{RELOAD_CONFIG_CMD}}
    ```
@@ -160,6 +173,7 @@ $env:{{ENV_VAR_2}} = "{{DEFAULT_VALUE_2}}"
 ### Issue: {{STARTUP_ISSUE_1}}
 
 **Error:**
+
 ```
 {{STARTUP_ERROR_1}}
 ```
@@ -180,11 +194,13 @@ $env:{{ENV_VAR_2}} = "{{DEFAULT_VALUE_2}}"
 **Solutions:**
 
 **Option A: Restart Service**
+
 ```powershell
 {{RESTART_CMD}}
 ```
 
 **Option B: Check {{DEPENDENCY_1}}**
+
 ```powershell
 # Verify {{DEPENDENCY_1}} is running
 {{VERIFY_DEPENDENCY_CMD}}
@@ -194,6 +210,7 @@ $env:{{ENV_VAR_2}} = "{{DEFAULT_VALUE_2}}"
 ```
 
 **Option C: Reset State**
+
 ```powershell
 # Clear cache
 {{CLEAR_CACHE_CMD}}
@@ -214,6 +231,7 @@ $env:{{ENV_VAR_2}} = "{{DEFAULT_VALUE_2}}"
 **Root Cause:** {{ROOT_CAUSE_2}}
 
 **Quick Fix:**
+
 ```powershell
 {{QUICK_FIX_2}}
 ```
@@ -225,6 +243,7 @@ $env:{{ENV_VAR_2}} = "{{DEFAULT_VALUE_2}}"
 ### Issue: {{PERF_ISSUE_1}} - High CPU Usage
 
 **Symptoms:**
+
 - CPU utilization above {{CPU_THRESHOLD}}%
 - {{PERF_SYMPTOM_1A}}
 - {{PERF_SYMPTOM_1B}}
@@ -249,11 +268,13 @@ Get-Process -Name "{{PROCESS_NAME}}" | Format-Table CPU, Handles, Memory -AutoSi
    - {{LOAD_REDUCTION_2}}
 
 2. **Increase Resources:**
+
    ```powershell
    {{INCREASE_RESOURCES_CMD}}
    ```
 
 3. **Optimize Configuration:**
+
    ```json
    {
      "performance": {
@@ -268,6 +289,7 @@ Get-Process -Name "{{PROCESS_NAME}}" | Format-Table CPU, Handles, Memory -AutoSi
 ### Issue: {{PERF_ISSUE_2}} - Memory Leaks
 
 **Symptoms:**
+
 - Memory usage increases over time
 - {{MEMORY_SYMPTOM_1}}
 
@@ -301,6 +323,7 @@ Get-Content {{MEMORY_LOG}} | Measure-Object Memory -Average, Maximum, Minimum
 ### Issue: {{PERF_ISSUE_3}} - Slow Response Times
 
 **Symptoms:**
+
 - Requests take > {{RESPONSE_TIME_THRESHOLD}}ms
 - {{RESPONSE_SYMPTOM_1}}
 
@@ -329,6 +352,7 @@ Get-Content {{MEMORY_LOG}} | Measure-Object Memory -Average, Maximum, Minimum
 **Error:** `{{SECURITY_ERROR_1}}`
 
 **Symptoms:**
+
 - Cannot login
 - {{SECURITY_SYMPTOM_1A}}
 
@@ -401,11 +425,13 @@ Get-Content {{MEMORY_LOG}} | Measure-Object Memory -Average, Maximum, Minimum
 **Message:** `{{ERROR_1_MESSAGE}}`
 
 **Stack Trace Location:**
+
 ```
 {{ERROR_1_LOCATION}}
 ```
 
 **Causes:**
+
 - {{ERROR_1_CAUSE_A}}
 - {{ERROR_1_CAUSE_B}}
 - {{ERROR_1_CAUSE_C}}
@@ -417,6 +443,7 @@ Get-Content {{MEMORY_LOG}} | Measure-Object Memory -Average, Maximum, Minimum
 - **If {{CONDITION_C}}:** `{{SOLUTION_C_CMD}}`
 
 **Example:**
+
 ```powershell
 {{ERROR_1_EXAMPLE}}
 ```
@@ -430,6 +457,7 @@ Get-Content {{MEMORY_LOG}} | Measure-Object Memory -Average, Maximum, Minimum
 **Cause:** {{ERROR_2_CAUSE}}
 
 **Fix:**
+
 ```powershell
 {{ERROR_2_FIX}}
 ```
@@ -573,7 +601,7 @@ $env:LOG_LEVEL = "DEBUG"
 
 1. **Check FAQ**: [FAQ.md](./FAQ.md)
 2. **Search Documentation**: [Search Docs](./INDEX.md)
-3. **Check Logs**: [View Logs](#logging--diagnostics)
+3. **Check Logs**: [View Logs](#-logging--diagnostics)
 4. **Run Diagnostics**: `{{DIAGNOSTIC_CMD}}`
 
 ### Collecting Information for Support

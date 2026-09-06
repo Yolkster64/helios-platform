@@ -11,7 +11,7 @@
 Requirements:
 
 - Windows 10 1809 (build 17763) or later / Windows 11.
-- .NET 10 SDK (the repo-root `global.json` pins 10.0.400; the shell itself still
+- .NET 10 SDK (the repo-root `global.json` sets a 10.0.100 minimum with `latestFeature` roll-forward; the shell itself still
   targets `net8.0-windows10.0.19041.0`, which the .NET 10 SDK builds fine).
 - Visual Studio 2022 17.10+ with the **Windows application development** workload
   (or plain `dotnet` CLI — the WinUI XAML compiler ships via the

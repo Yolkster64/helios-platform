@@ -13,6 +13,7 @@ Plan for HELIOS Platform scalability from current 1,000 requests/minute to 5,000
 ## 1. Current Capacity
 
 **Baseline (Month 0):**
+
 ```
 Peak Traffic:           1,000 req/min
 Average Latency:        200 ms

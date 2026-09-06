@@ -9,9 +9,11 @@ The Server Management Core is the foundation of the HELIOS Platform Phase 2, pro
 ### Core Components
 
 #### 1. **ServerServiceManager**
+
 Manages Windows services and custom processes with dependency resolution and clustering support.
 
 **Key Features:**
+
 - Register and manage 100+ services simultaneously
 - Dependency resolution using topological sort
 - Service lifecycle: Start, Stop, Restart, Pause, Resume
@@ -20,6 +22,7 @@ Manages Windows services and custom processes with dependency resolution and clu
 - Auto-restart on failure (configurable)
 
 **Usage:**
+
 ```csharp
 var manager = new ServerServiceManager();
 
@@ -42,9 +45,11 @@ await manager.StopServiceAsync("MyService");
 ```
 
 #### 2. **ProcessManager**
+
 Monitors and controls system processes with advanced resource management.
 
 **Key Features:**
+
 - Monitor 1000+ processes without performance impact
 - CPU affinity control (bind to specific cores)
 - Priority management (Real-time to Idle)
@@ -55,6 +60,7 @@ Monitors and controls system processes with advanced resource management.
 - Thread and handle management
 
 **Usage:**
+
 ```csharp
 var processManager = new ProcessManager();
 
@@ -83,9 +89,11 @@ processManager.ResumeProcess(1234);
 ```
 
 #### 3. **ServiceHealthMonitor**
+
 Performs periodic health monitoring with automatic restart and alerting.
 
 **Key Features:**
+
 - Configurable health check interval (default: 30 seconds)
 - Process responsiveness checking
 - Memory threshold alerts
@@ -95,6 +103,7 @@ Performs periodic health monitoring with automatic restart and alerting.
 - Event-based alerting
 
 **Usage:**
+
 ```csharp
 var monitor = new ServiceHealthMonitor(serviceManager, processManager, healthCheckIntervalSeconds: 30);
 
@@ -121,9 +130,11 @@ monitor.Stop();
 ```
 
 #### 4. **DeploymentService**
+
 Orchestrates application deployments with multiple strategies.
 
 **Key Features:**
+
 - Zero-downtime deployments
 - Four deployment strategies (Standard, BlueGreen, RollingUpdate, Canary)
 - Support for 100+ target servers
@@ -132,6 +143,7 @@ Orchestrates application deployments with multiple strategies.
 - Deployment history and audit trail
 
 **Usage:**
+
 ```csharp
 var deploymentService = new DeploymentService();
 
@@ -155,11 +167,13 @@ await deploymentService.RollbackDeployment(deploymentId);
 ### Deployment Strategies
 
 #### **Standard Deployment**
+
 - Parallel deployment to all servers
 - Fastest approach but higher risk
 - Best for non-critical applications
 
 #### **Blue/Green Deployment**
+
 - Two identical production environments
 - Deploy to inactive environment (Green if Blue is active)
 - Zero downtime traffic switching
@@ -167,6 +181,7 @@ await deploymentService.RollbackDeployment(deploymentId);
 - Best for critical applications
 
 #### **Rolling Update Deployment**
+
 - Staged rollout: 25%, 50%, 75%, 100%
 - Configurable wait time between stages
 - Gradual verification at each stage
@@ -174,6 +189,7 @@ await deploymentService.RollbackDeployment(deploymentId);
 - Best for large deployments
 
 #### **Canary Deployment**
+
 - Deploy to small subset first (canary servers)
 - Monitor canary for errors and performance issues
 - Gradual rollout to production if healthy
@@ -183,6 +199,7 @@ await deploymentService.RollbackDeployment(deploymentId);
 ## Model Classes
 
 ### ServiceInfo
+
 ```csharp
 public class ServiceInfo
 {
@@ -211,6 +228,7 @@ public class ServiceInfo
 ```
 
 ### ProcessInfo
+
 ```csharp
 public class ProcessInfo
 {
@@ -241,12 +259,14 @@ public class ProcessInfo
 ## Enumerations
 
 ### ServiceStatus
+
 - **Stopped** (0): Service is not running
 - **Running** (1): Service is running
 - **Paused** (2): Service is paused
 - **Unknown** (3): Status is unknown
 
 ### ProcessPriority
+
 - **Idle** (64): Lowest priority
 - **BelowNormal** (16384): Below normal
 - **Normal** (32): Normal priority
@@ -255,18 +275,21 @@ public class ProcessInfo
 - **RealTime** (256): Real-time priority (restricted)
 
 ### HealthStatus
+
 - **Healthy** (0): Service is healthy
 - **Unhealthy** (1): Service has issues
 - **Warning** (2): Service has warnings
 - **Unknown** (3): Health status unknown
 
 ### DeploymentType
+
 - **Standard**: Parallel deployment
 - **BlueGreen**: Zero-downtime environment switching
 - **RollingUpdate**: Staged rollout
 - **Canary**: Gradual rollout with monitoring
 
 ### DeploymentStatus
+
 - **Pending**: Waiting to start
 - **InProgress**: Currently deploying
 - **Verifying**: Verifying deployment
@@ -278,18 +301,21 @@ public class ProcessInfo
 ## Performance Characteristics
 
 ### Scalability
+
 - **Services**: Manages 100+ services with O(1) lookup
 - **Processes**: Monitors 1000+ processes efficiently
 - **Servers**: Deploys to 100+ target servers in parallel
 - **Health Checks**: 30-second interval with minimal overhead
 
 ### Resource Usage
+
 - Memory: <50MB for 1000+ processes
 - CPU: <5% during normal monitoring
 - Network: Only minimal status updates
 - Disk I/O: Only for logging/persistence
 
 ### Reliability
+
 - Automatic restart: Configurable per service
 - Dependency resolution: Topological sort ensures correct order
 - Rollback capability: Automatic on failure
@@ -298,9 +324,11 @@ public class ProcessInfo
 ## Testing
 
 ### Unit Tests
+
 Located in: `tests/HELIOS.Platform.Tests/Server/CoreOperationsTests.cs`
 
 **Coverage:**
+
 - Service registration and lifecycle
 - Dependency resolution
 - Process management and resource limits
@@ -308,14 +336,17 @@ Located in: `tests/HELIOS.Platform.Tests/Server/CoreOperationsTests.cs`
 - Event handling
 
 **Run Tests:**
+
 ```bash
 dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter "Category=ServerManagement"
 ```
 
 ### Integration Tests
+
 Located in: `tests/HELIOS.Platform.Tests/Server/DeploymentTests.cs`
 
 **Coverage:**
+
 - Deployment strategies
 - Rolling updates
 - Blue/Green deployment
@@ -324,11 +355,13 @@ Located in: `tests/HELIOS.Platform.Tests/Server/DeploymentTests.cs`
 - Multi-server deployments
 
 **Run Tests:**
+
 ```bash
 dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter "Category=Deployment"
 ```
 
 ### Stress Tests
+
 - 150+ simultaneous services
 - 1000+ process monitoring
 - 100+ parallel deployments
@@ -337,6 +370,7 @@ dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter "C
 ## Configuration
 
 ### Health Check Configuration
+
 ```csharp
 var monitor = new ServiceHealthMonitor(
     serviceManager,
@@ -346,6 +380,7 @@ var monitor = new ServiceHealthMonitor(
 ```
 
 ### Auto-Restart Configuration
+
 ```csharp
 var service = new ServiceInfo
 {
@@ -357,6 +392,7 @@ var service = new ServiceInfo
 ```
 
 ### Rolling Update Configuration
+
 ```csharp
 var config = new RollingUpdateConfig
 {
@@ -368,6 +404,7 @@ var config = new RollingUpdateConfig
 ```
 
 ### Canary Configuration
+
 ```csharp
 var config = new CanaryConfig
 {
@@ -392,6 +429,7 @@ var config = new CanaryConfig
 ## Monitoring and Logging
 
 ### Events
+
 - `ServiceStatusChanged`: Fired when service status changes
 - `ServiceError`: Fired when service operations fail
 - `ProcessStateChanged`: Fired when process state changes
@@ -403,6 +441,7 @@ var config = new CanaryConfig
 - `DeploymentError`: Fired when deployment fails
 
 ### Metrics Tracked
+
 - Service uptime
 - Restart count (hourly and total)
 - Process memory/CPU usage
@@ -413,6 +452,7 @@ var config = new CanaryConfig
 ## Integration Examples
 
 ### Complete Service Management Pipeline
+
 ```csharp
 // Initialize components
 var serviceManager = new ServerServiceManager();
@@ -447,6 +487,7 @@ healthMonitor.Stop();
 ```
 
 ### Complete Deployment Pipeline
+
 ```csharp
 var deploymentService = new DeploymentService();
 
@@ -483,22 +524,26 @@ else if (deployment.Status == DeploymentStatus.RolledBack)
 ### Common Issues
 
 **Issue**: Service fails to start
+
 - Check dependencies are running
 - Verify service has required permissions
 - Check event logs for specific errors
 
 **Issue**: Health check false positives
+
 - Increase health check interval
 - Adjust timeout values
 - Check process load during health checks
 
 **Issue**: Deployment fails
+
 - Verify target servers are accessible
 - Check deployment package integrity
 - Review deployment logs
 - Consider rollback if necessary
 
 **Issue**: High memory usage
+
 - Lower health check interval
 - Reduce maximum concurrent deployments
 - Archive old deployment history
@@ -517,6 +562,7 @@ else if (deployment.Status == DeploymentStatus.RolledBack)
 ## Files
 
 ### Core Implementation
+
 - `src/HELIOS.Platform/Core/Server/Models/ServiceInfo.cs`
 - `src/HELIOS.Platform/Core/Server/Models/ProcessInfo.cs`
 - `src/HELIOS.Platform/Core/Server/ServerServiceManager.cs`
@@ -528,6 +574,7 @@ else if (deployment.Status == DeploymentStatus.RolledBack)
 - `src/HELIOS.Platform/Core/Server/DeploymentVerifierAndRollback.cs`
 
 ### Tests
+
 - `tests/HELIOS.Platform.Tests/Server/CoreOperationsTests.cs`
 - `tests/HELIOS.Platform.Tests/Server/DeploymentTests.cs`
 

@@ -45,6 +45,7 @@
 ## 🔍 DETAILED PERFORMANCE ANALYSIS
 
 ### Startup Time Breakdown (2.4s)
+
 ```
 Total Startup: 2.4s
 
@@ -67,6 +68,7 @@ Optimizations Achieved:
 ```
 
 ### Memory Usage Breakdown (120MB)
+
 ```
 Total Baseline: 120MB
 
@@ -88,6 +90,7 @@ Optimizations Achieved:
 ```
 
 ### Query Performance (12-28ms average)
+
 ```
 Query Performance Breakdown:
 
@@ -114,6 +117,7 @@ Optimizations Achieved:
 ```
 
 ### Cache Performance (87-92% hit rate)
+
 ```
 Cache Strategy:
 
@@ -144,6 +148,7 @@ Optimization Strategy:
 ### Phase 3 Performance Targets
 
 **Startup Time**: <3s (vs Phase 4's 2.4s)
+
 ```
 Phase 3 adds:
 - ML model loading (optional, lazy)
@@ -160,6 +165,7 @@ Target: 2.8-2.9s
 ```
 
 **Memory Usage**: <200MB (vs Phase 4's 120MB)
+
 ```
 Phase 3 additions:
 - ML model cache: +30MB (optional)
@@ -176,6 +182,7 @@ Target: 180-190MB
 ```
 
 **Query Time**: <100ms (vs Phase 4's 12-28ms)
+
 ```
 Phase 3 queries:
 - ML predictions: 50-80ms
@@ -194,6 +201,7 @@ Target: 80-95ms average
 ### Phase 3 Caching Strategy
 
 **L1 Cache Enhancements**:
+
 ```csharp
 // ML prediction cache (5-min TTL)
 - Entity predictions
@@ -210,6 +218,7 @@ Target hit rate: >80%
 ```
 
 **L2 Cache Enhancements**:
+
 ```csharp
 // ML model cache (24-hour TTL)
 - Trained models
@@ -229,6 +238,7 @@ Target hit rate: >85%
 ### Phase 3 Database Optimization
 
 **New Indexes Needed**:
+
 ```sql
 -- Time-series tables
 CREATE INDEX idx_metrics_timestamp ON Metrics(Timestamp DESC);
@@ -244,6 +254,7 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 ```
 
 **Query Optimizations**:
+
 ```csharp
 // Time-series aggregation
 - Use GROUP BY with pre-calculated buckets
@@ -292,9 +303,11 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 ## 🚀 OPTIMIZATION PATHS FOR PHASE 3
 
 ### Path 1: ML Model Optimization
+
 **Goal**: Reduce ML query time from 50-80ms to <40ms
 
 **Actions**:
+
 1. Use ONNX Runtime instead of TensorFlow.NET
 2. Implement model quantization (INT8)
 3. Use batch predictions when possible
@@ -304,9 +317,11 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 **Expected Gain**: 30-40% reduction (to 30-55ms)
 
 ### Path 2: Time-Series Optimization
+
 **Goal**: Reduce aggregation time from 30-50ms to <25ms
 
 **Actions**:
+
 1. Pre-calculate common aggregations
 2. Use time-bucket rollups
 3. Implement columnar storage for metrics
@@ -316,9 +331,11 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 **Expected Gain**: 40-50% reduction (to 15-25ms)
 
 ### Path 3: Correlation Optimization
+
 **Goal**: Reduce correlation queries from 40-80ms to <30ms
 
 **Actions**:
+
 1. Use approximate correlation for large datasets
 2. Cache correlation matrices
 3. Implement lazy evaluation
@@ -328,9 +345,11 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 **Expected Gain**: 50-60% reduction (to 16-32ms)
 
 ### Path 4: Policy Evaluation Optimization
+
 **Goal**: Reduce policy evaluation from 20-40ms to <15ms
 
 **Actions**:
+
 1. Pre-compile policy rules
 2. Use decision trees for evaluation
 3. Cache policy results
@@ -346,21 +365,25 @@ CREATE INDEX idx_alerts_resolved ON Alerts(IsResolved, CreatedTime DESC);
 ### Weekly Performance Tracking
 
 **Week 1-2 (Tier 1 ML)**:
+
 - Baseline ML service performance
 - Identify slow paths
 - Implement caching
 
 **Week 3-4 (Tier 2 Observability)**:
+
 - Metric aggregation performance
 - Time-series query optimization
 - Alert processing latency
 
 **Week 5-6 (Tier 3 API/Web)**:
+
 - API gateway latency
 - GraphQL query performance
 - WebSocket throughput
 
 **Week 7-8 (Tier 4 Production)**:
+
 - Cache performance
 - Load balancer efficiency
 - Disaster recovery timing
@@ -401,6 +424,7 @@ public class Phase3PerformanceTests
 ## 🎯 PHASE 3 SUCCESS CHECKLIST
 
 ### Performance
+
 - [ ] Startup time: <3s
 - [ ] Memory usage: <200MB
 - [ ] ML queries: <40ms
@@ -413,6 +437,7 @@ public class Phase3PerformanceTests
 - [ ] All queries: <100ms p95
 
 ### Quality
+
 - [ ] 80+ new tests passing
 - [ ] 90%+ code coverage
 - [ ] 0 security vulnerabilities
@@ -421,6 +446,7 @@ public class Phase3PerformanceTests
 - [ ] Performance optimizations committed
 
 ### Code
+
 - [ ] 26 services implemented
 - [ ] All interfaces documented
 - [ ] Error handling complete
@@ -429,6 +455,7 @@ public class Phase3PerformanceTests
 - [ ] DI container integrated
 
 ### Documentation
+
 - [ ] Performance guide updated
 - [ ] Benchmark results documented
 - [ ] Optimization guide created
@@ -440,6 +467,7 @@ public class Phase3PerformanceTests
 ## 🎯 IMMEDIATE ACTIONS
 
 ### Before Phase 3 Implementation
+
 1. ✅ Create Phase 3 service interfaces (DONE)
 2. ✅ Plan caching strategy (DONE)
 3. ✅ Design database indexes (DONE)
@@ -447,6 +475,7 @@ public class Phase3PerformanceTests
 5. 🟡 **Implement Tier 1 ML services - START NOW**
 
 ### During Phase 3 Implementation
+
 1. Run weekly performance benchmarks
 2. Track memory usage continuously
 3. Identify bottlenecks early
@@ -454,6 +483,7 @@ public class Phase3PerformanceTests
 5. Document all performance tuning
 
 ### After Each Tier Completion
+
 1. Run full benchmark suite
 2. Compare against targets
 3. Identify optimization opportunities
@@ -465,6 +495,7 @@ public class Phase3PerformanceTests
 ## 📊 PERFORMANCE DASHBOARD
 
 **Current State (Phase 4 Complete)**:
+
 ```
 ╔════════════════════════════════════════════╗
 ║        HELIOS Performance Dashboard        ║
@@ -485,6 +516,7 @@ public class Phase3PerformanceTests
 ```
 
 **Phase 3 Targets (In Progress)**:
+
 ```
 ├─ Startup Time:        <3s          🟡 PLANNING
 ├─ Memory Usage:        <200MB       🟡 PLANNING

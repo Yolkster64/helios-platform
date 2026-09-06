@@ -5,6 +5,7 @@ Complete setup and usage guide for integrating GitHub Codex with HELIOS Platform
 ## Overview
 
 GitHub Codex integration enables intelligent code generation for:
+
 - PowerShell script generation from specifications
 - AppLocker rule scripts and configurations
 - Test case generation with Pester
@@ -21,17 +22,17 @@ GitHub Codex integration enables intelligent code generation for:
 
 ### Step 2: API Configuration
 
-`powershell
+```powershell
 # Set GitHub Copilot API key
 $env:GITHUB_COPILOT_API_KEY = "ghp-your-token-here"
-`
+```
 
 ### Step 3: Verify Installation
 
-`powershell
+```powershell
 . .\scripts\ask-codex.ps1
 $result = Invoke-Codex -Spec "Generate hello world in PowerShell"
-`
+```
 
 ## Code Generation Capabilities
 

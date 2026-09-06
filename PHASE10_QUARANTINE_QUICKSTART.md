@@ -178,18 +178,21 @@ while (true)
 ## Troubleshooting
 
 ### Issue: "VeraCrypt not found"
+
 ```bash
 # Add to PATH
 $env:Path += ";C:\Program Files\VeraCrypt"
 ```
 
 ### Issue: Permission Denied
+
 ```bash
 # Run as Administrator
 Start-Process powershell -ArgumentList "-Command `"$YOUR_COMMAND`"" -Verb RunAs
 ```
 
 ### Issue: Partition Already Exists
+
 ```bash
 # Check drive I: is mounted
 Get-Volume -DriveLetter I
@@ -217,16 +220,19 @@ Encrypted I: Partition (VeraCrypt)
 ## Performance Tips
 
 1. **Batch Processing**: Process multiple files together
+
    ```csharp
    var results = await service.CaptureThreatsBatchAsync(fileList);
    ```
 
 2. **Archive Regularly**: Keep active threats minimal
+
    ```csharp
    await QuarantineManager.ArchiveOldThreatsAsync(90);
    ```
 
 3. **Update Intelligence**: Keep threat database current
+
    ```csharp
    await service.UpdateThreatIntelligenceAsync();
    ```

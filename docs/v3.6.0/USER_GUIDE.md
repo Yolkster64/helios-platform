@@ -5,6 +5,7 @@
 ## Getting Started with v3.6.0
 
 ### System Requirements
+
 - Windows 11 Pro or Server 2022+
 - 4GB RAM minimum (8GB recommended)
 - 10GB disk space
@@ -12,6 +13,7 @@
 - Stable internet connection
 
 ### Installation
+
 1. Download HELIOS-Platform-v3.6.0-Setup.exe
 2. Run as administrator
 3. Follow setup wizard
@@ -36,6 +38,7 @@
 5. Plugin loads automatically
 
 **Manage Installed Plugins:**
+
 - View list in Extensions > Installed Plugins
 - Enable/disable with checkbox
 - Update when available
@@ -68,24 +71,28 @@
 ## Troubleshooting Guide
 
 **Cloud sync not working:**
+
 - Check internet connectivity
 - Verify cloud credentials in Settings
 - Check file permissions
 - Review sync logs in Dashboard
 
 **Plugin issues:**
+
 - Check compatibility with v3.6.0
 - Review plugin logs
 - Try reinstalling from marketplace
 - Check plugin configuration
 
 **Dashboard access problems:**
+
 - Verify HELIOS service running
 - Check port 8080 not blocked by firewall
 - Clear browser cache
 - Try different browser
 
 **Dark mode not applying:**
+
 - Clear browser cache
 - Hard refresh (Ctrl+Shift+R)
 - Restart dashboard service

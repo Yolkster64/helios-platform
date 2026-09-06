@@ -5,16 +5,19 @@ Production-ready deployment platform for HELIOS ecosystem.
 ## Installation
 
 ### Option 1: .NET CLI (Recommended)
+
 \\\ash
 dotnet add package HELIOS.Platform
 \\\
 
 ### Option 2: Package Manager Console
+
 \\\powershell
 Install-Package HELIOS.Platform
 \\\
 
 ### Option 3: Package Manager UI
+
 1. Open NuGet Package Manager
 2. Search for "HELIOS.Platform"
 3. Click Install
@@ -22,6 +25,7 @@ Install-Package HELIOS.Platform
 ## Features
 
 ✅ **7-Phase Deployment**
+
 - Phase 0: Preflight validation (10 min)
 - Phase 1: Infrastructure setup (12 min)
 - Phase 2: Agent fleet deployment (25 min)
@@ -31,6 +35,7 @@ Install-Package HELIOS.Platform
 - Phase 6: Verification & go-live (10 min)
 
 ✅ **6 Specialist Agents**
+
 - Storage Agent
 - Security Agent
 - Software Agent
@@ -39,6 +44,7 @@ Install-Package HELIOS.Platform
 - Verification Agent
 
 ✅ **12+ AI Services**
+
 - ChatGPT / Azure OpenAI
 - Claude (Anthropic)
 - Google Gemini
@@ -49,6 +55,7 @@ Install-Package HELIOS.Platform
 - And more...
 
 ✅ **8-Layer Security**
+
 - Physical (USB + TPM)
 - Authentication (MFA)
 - Secrets (Dual Vault)
@@ -59,6 +66,7 @@ Install-Package HELIOS.Platform
 - AI Security (Consensus)
 
 ✅ **42 Validation Tests**
+
 - Infrastructure checks
 - Security compliance
 - Performance baseline

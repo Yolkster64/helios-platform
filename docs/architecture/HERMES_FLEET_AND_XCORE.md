@@ -73,9 +73,11 @@ A pass reads the latest running run's manifest and boards (the same
 `.helios/fleet/<runId>/` contract fleet-status/stop-fleet use) and computes, for every
 pool with an autoscaling block (the pool's block merged over `defaults.autoscaling`):
 
-    queueDepth   = open tasks in the pool's lanes
-                   + claimed tasks whose 300s claim lease expired (crashed lanes)
-    desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```text
+queueDepth   = open tasks in the pool's lanes
+               + claimed tasks whose 300s claim lease expired (crashed lanes)
+desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```
 
 Scale-up spawns extra workers through start-fleet's spawn contract (same env vars, same
 launch mechanics) and records them in the run manifest, so fleet-status and stop-fleet

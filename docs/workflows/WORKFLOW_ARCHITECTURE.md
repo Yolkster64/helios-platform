@@ -127,6 +127,7 @@ graph TB
 ## Trigger Conditions
 
 ### 1. Push Trigger
+
 ```yaml
 on:
   push:
@@ -142,11 +143,13 @@ on:
 ```
 
 **Behavior**:
+
 - Triggers on commits to main, develop, and feature branches
 - Ignores documentation-only changes
 - Triggers release workflow on version tags
 
 ### 2. Pull Request Trigger
+
 ```yaml
 on:
   pull_request:
@@ -159,11 +162,13 @@ on:
 ```
 
 **Behavior**:
+
 - Runs quality checks on PR submissions
 - Prevents merge until checks pass
 - Reports results as PR comments
 
 ### 3. Workflow Dispatch
+
 ```yaml
 on:
   workflow_dispatch:
@@ -175,11 +180,13 @@ on:
 ```
 
 **Behavior**:
+
 - Manual trigger from GitHub UI
 - Allows optional parameters
 - Useful for on-demand builds
 
 ### 4. Schedule Trigger
+
 ```yaml
 on:
   schedule:
@@ -189,6 +196,7 @@ on:
 ```
 
 **Behavior**:
+
 - Automated scheduled tasks
 - Can trigger maintenance workflows
 - Useful for periodic verification
@@ -270,6 +278,7 @@ status-dashboard
 ### Critical Path
 
 The critical path (longest chain) is:
+
 1. Code Checks: ~5 min
 2. Build Setup: ~2 min
 3. Build Modules (parallel): ~10 min
@@ -377,6 +386,7 @@ if: !contains(github.ref_name, 'alpha') &&
 ### Status Check Rules
 
 Enable branch protection with required status checks:
+
 - ✅ Code Checks - HELIOS Platform v2
 - ✅ Build All Modules
 - ✅ Test Suite
@@ -385,11 +395,13 @@ Enable branch protection with required status checks:
 ### Slack/Email Notifications
 
 **Configure in GitHub Settings**:
+
 1. Settings → Notifications
 2. Enable "Notify me" for workflow runs
 3. Configure email delivery
 
 **Custom Notifications**:
+
 ```yaml
 - name: Notify on Failure
   if: failure()
@@ -471,6 +483,7 @@ Test Results:
 ### Secrets Management
 
 **Required Secrets**:
+
 ```yaml
 NUGET_API_KEY        # NuGet.org publishing key
 GITHUB_TOKEN         # Auto-provided by GitHub
@@ -479,6 +492,7 @@ SLACK_WEBHOOK        # Slack notifications (optional)
 ```
 
 **Best Practices**:
+
 - ✅ Never commit secrets to repository
 - ✅ Use GitHub Secrets for sensitive data
 - ✅ Rotate secrets regularly
@@ -499,6 +513,7 @@ permissions:
 ### Security Scanning
 
 **Enabled**:
+
 - ✅ Syntax validation
 - ✅ Hardcoded secrets detection
 - ✅ Registry modification validation
@@ -547,10 +562,12 @@ permissions:
 ### Cost Estimation
 
 **GitHub Actions Pricing** (as of 2024):
+
 - Free tier: 2,000 minutes/month
 - $0.008 per minute for private repos (overages)
 
 **Estimated Monthly Usage**:
+
 - 50 PRs × 20 min = 1,000 min
 - 4 releases × 30 min = 120 min
 - 30 scheduled tasks × 10 min = 300 min
@@ -581,6 +598,7 @@ permissions:
 ### Debug Logging
 
 Enable debug logging:
+
 ```yaml
 - name: Enable Debug Logging
   run: |
@@ -590,6 +608,7 @@ Enable debug logging:
 ### Workflow Validation
 
 Validate workflow syntax:
+
 ```bash
 # Using act (local testing)
 act push --container-architecture linux/amd64
@@ -604,6 +623,7 @@ gh workflow view build-all-modules.yml
 ## Best Practices Summary
 
 ✅ **Always**:
+
 - Use consistent naming conventions
 - Document workflow purpose and requirements
 - Set appropriate timeouts
@@ -613,6 +633,7 @@ gh workflow view build-all-modules.yml
 - Review and update runner versions regularly
 
 ❌ **Never**:
+
 - Hardcode secrets in workflows
 - Use `latest` for action versions
 - Disable security checks

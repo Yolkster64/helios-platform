@@ -5,6 +5,7 @@ Complete guide to versioning, releasing, and announcing new versions.
 ---
 
 ## Table of Contents
+
 1. [Version Numbering](#version-numbering)
 2. [Release Checklist](#release-checklist)
 3. [Changelog Management](#changelog-management)
@@ -41,6 +42,7 @@ Format: `MAJOR.MINOR.PATCH`
 ### When to Increment
 
 **PATCH Release (x.x.+1):**
+
 - Bug fixes
 - Security patches
 - Documentation fixes
@@ -48,12 +50,14 @@ Format: `MAJOR.MINOR.PATCH`
 - Backward compatible
 
 **MINOR Release (x.+1.0):**
+
 - New features
 - Non-breaking enhancements
 - API additions (backward compatible)
 - Backward compatible
 
 **MAJOR Release (+1.0.0):**
+
 - Breaking API changes
 - Major feature overhauls
 - Incompatible changes

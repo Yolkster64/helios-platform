@@ -25,6 +25,7 @@
 ### Morning Standup Metrics
 
 **Open Issues:** 145 total
+
 - Backlog: 45
 - Todo: 30
 - In Progress: 25
@@ -32,15 +33,18 @@
 - Done: 30
 
 **Work in Progress:** 25 active tasks
+
 - Capacity: 87% utilized (target: 80-90%)
 - Status: Healthy
 
 **Completed Yesterday:** 8 issues
+
 - Velocity contribution: +12 points
 - On-time delivery: 100%
 - Quality: 0 defects
 
 **Blockers:** 3 items
+
 - Action: Review blocker board
 - Escalation: 1 requires lead review
 
@@ -121,6 +125,7 @@ Points
 ```
 
 **Analysis:**
+
 - Started ahead of schedule
 - Mid-week slip recovered
 - On-track for completion
@@ -424,6 +429,7 @@ Recommendations for improvement...
 ### Report Templates
 
 **Weekly Performance Report:**
+
 ```markdown
 # Weekly Board Report - Week of [DATE]
 
@@ -447,6 +453,7 @@ Recommendations for improvement...
 ```
 
 **Sprint Summary Report:**
+
 ```markdown
 # Sprint Report - Sprint [N]
 
@@ -502,6 +509,7 @@ jobs:
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Metrics Tracked: 15+

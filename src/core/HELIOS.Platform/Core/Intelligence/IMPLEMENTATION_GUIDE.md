@@ -7,6 +7,7 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 ## Implemented Services
 
 ### 1. DataCollector (`DataCollector.cs`)
+
 - **Purpose**: Aggregates metrics from all services in real-time
 - **Key Features**:
   - Register metric sources dynamically
@@ -18,12 +19,14 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IDataCollector`
 
 **Key Methods**:
+
 - `CollectMetricsAsync()` - Collects all registered metrics
 - `RegisterMetricSourceAsync()` - Registers a new metric source
 - `UnregisterMetricSourceAsync()` - Removes a metric source
 - `GetCollectionStatsAsync()` - Returns collection statistics
 
 ### 2. DataNormalizer (`DataNormalizer.cs`)
+
 - **Purpose**: Standardizes metrics for ML processing using Z-score normalization
 - **Key Features**:
   - Z-score normalization for standardization
@@ -35,12 +38,14 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IDataNormalizer`
 
 **Key Methods**:
+
 - `NormalizeAsync()` - Applies Z-score normalization
 - `RegisterMetricBoundsAsync()` - Sets min/max bounds for metrics
 - `GetNormalizationStatsAsync()` - Returns normalization statistics
 - `ClearHistoryAsync()` - Resets all historical data
 
 ### 3. FeatureExtractor (`FeatureExtractor.cs`)
+
 - **Purpose**: Extracts statistical features from time-series data
 - **Key Features**:
   - 13+ statistical features (Mean, StdDev, Skewness, Kurtosis, etc.)
@@ -53,12 +58,14 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IFeatureExtractor`
 
 **Key Methods**:
+
 - `ExtractFeaturesAsync()` - Extracts comprehensive feature set
 - `ExtractMovingAverageAsync()` - Calculates moving averages
 - `CalculateTrendSlopeAsync()` - Linear regression slope
 - `ExtractSeasonalComponentsAsync()` - Seasonal indices and strength
 
 ### 4. InMemoryTimeSeriesDB (`InMemoryTimeSeriesDB.cs`)
+
 - **Purpose**: Fast in-memory time-series database for metric storage and retrieval
 - **Key Features**:
   - Thread-safe concurrent storage
@@ -71,6 +78,7 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `ITimeSeriesDB`
 
 **Key Methods**:
+
 - `StoreAsync()` - Stores a data point with timestamp
 - `QueryAsync()` - Retrieves points within a time range
 - `GetRecentAsync()` - Gets latest N data points
@@ -78,6 +86,7 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 - `PurgeOldDataAsync()` - Removes expired data points
 
 ### 5. AnomalyDetector (`AnomalyDetector.cs`)
+
 - **Purpose**: Detects anomalies in data using statistical methods
 - **Key Features**:
   - Z-score based anomaly detection with configurable sensitivity
@@ -90,12 +99,14 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IAnomalyDetector`
 
 **Key Methods**:
+
 - `DetectAnomalyAsync()` - Single-value anomaly detection with score
 - `DetectBatchAnomaliesAsync()` - Batch processing of multiple values
 - `TrainModelAsync()` - Trains detector on historical data
 - `GetDetectionStatsAsync()` - Returns detection metrics
 
 ### 6. PredictiveAnalytics (`PredictiveAnalytics.cs`)
+
 - **Purpose**: Forecasts trends and predicts future values
 - **Key Features**:
   - Linear regression-based trend prediction
@@ -108,12 +119,14 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IPredictiveAnalytics`
 
 **Key Methods**:
+
 - `PredictTrendAsync()` - Forecasts future values
 - `GetPredictionConfidenceIntervalsAsync()` - Calculates confidence bands
 - `ForecastPeakAsync()` - Predicts peak value and time
 - `PredictThresholdBreachAsync()` - Calculates breach probability
 
 ### 7. MLModelManager (`MLModelManager.cs`)
+
 - **Purpose**: Manages ML model lifecycle including training, evaluation, and auto-retraining
 - **Key Features**:
   - Model creation and registration
@@ -126,6 +139,7 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 **Interface**: `IMLModelManager`
 
 **Key Methods**:
+
 - `CreateModelAsync()` - Creates and registers a new model
 - `TrainModelAsync()` - Trains/retrains a model
 - `EvaluateModelAsync()` - Evaluates model on test data
@@ -136,7 +150,9 @@ This document describes the implementation of Phase 3 Tier 1 - ML Intelligence S
 ## Architecture & Design Patterns
 
 ### Thread Safety
+
 All services use `SemaphoreSlim(1,1)` for thread-safe operations:
+
 ```csharp
 private readonly SemaphoreSlim _semaphore = new(1, 1);
 
@@ -155,7 +171,9 @@ public async Task SomeMethodAsync()
 ```
 
 ### Async/Await Throughout
+
 All I/O and potentially long-running operations use async/await:
+
 ```csharp
 public async Task<Dictionary<string, double>> CollectMetricsAsync()
 {
@@ -170,7 +188,9 @@ public async Task<Dictionary<string, double>> CollectMetricsAsync()
 ```
 
 ### Resource Management
+
 All services implement `IDisposable` with proper cleanup:
+
 ```csharp
 public class Service : IDisposable
 {
@@ -193,7 +213,9 @@ public class Service : IDisposable
 ```
 
 ### Logging Integration
+
 All services use `ILogger<T>` for comprehensive logging:
+
 ```csharp
 private readonly ILogger<DataCollector> _logger;
 
@@ -273,6 +295,7 @@ public class MyService
 ## Performance Characteristics
 
 ### Target Performance
+
 - Data Collection: <100ms for 50+ metrics
 - Time-Series Query: <100ms for 1000+ points
 - Feature Extraction: <100ms for 1000+ data points
@@ -280,6 +303,7 @@ public class MyService
 - Prediction: <100ms for trend calculation
 
 ### Resource Usage
+
 - Memory: ~1MB per 10,000 time-series data points
 - CPU: Minimal overhead with async patterns
 - Lock Contention: Minimal with SemaphoreSlim
@@ -287,15 +311,18 @@ public class MyService
 ## Testing
 
 ### Test Coverage
+
 - 25+ comprehensive unit tests
 - Integration tests for end-to-end workflows
 - Performance benchmarks
 - All services tested with mock loggers
 
 ### Test Location
+
 `Tests/HELIOS.Platform.Tests/Intelligence/MLIntelligenceServicesTests.cs`
 
 ### Running Tests
+
 ```bash
 dotnet test Tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter "MLIntelligence"
 ```
@@ -303,11 +330,13 @@ dotnet test Tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter "M
 ## Caching Integration (Phase 4)
 
 Services are designed to support Phase 4 caching:
+
 - L1 Cache: 5-minute TTL for normalized data
 - L2 Cache: 1-hour TTL for predictions and models
 - Easy integration with ICacheService interface
 
 ### Planned Cache Integration
+
 ```csharp
 public class CachedDataCollector : IDataCollector
 {
@@ -330,6 +359,7 @@ public class CachedDataCollector : IDataCollector
 ## Error Handling & Graceful Degradation
 
 All services include:
+
 - Exception handling for individual metric collection failures
 - Null argument validation
 - Disposed object detection
@@ -393,16 +423,19 @@ public void ConfigureServices(IServiceCollection services)
 ## Troubleshooting
 
 ### High Memory Usage
+
 - Reduce `MaxTimeSeriesPoints` option
 - Implement more aggressive `PurgeOldDataAsync` schedules
 - Monitor with performance counters
 
 ### Detection Accuracy Issues
+
 - Train models with more representative historical data
 - Adjust `DefaultAnomalySensitivity` (1-10)
 - Verify data normalization is appropriate
 
 ### Performance Degradation
+
 - Monitor lock contention with diagnostic logging
 - Scale with additional service instances
 - Consider caching predictions

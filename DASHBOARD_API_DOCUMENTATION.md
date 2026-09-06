@@ -13,6 +13,7 @@ The Developer Dashboard follows the MVVM (Model-View-ViewModel) pattern for clea
 Main dashboard controller managing tab navigation and overall metrics.
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<DashboardTab> Tabs { get; set; }
 DashboardTab SelectedTab { get; set; }
@@ -27,6 +28,7 @@ DateTime LastUpdate { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand SelectTabCommand        // Switch between dashboard tabs
 ICommand RefreshCommand          // Update all metrics
@@ -38,12 +40,14 @@ ICommand SettingsCommand         // Open settings dialog
 Provides performance analytics, process management, and system health.
 
 **Key Classes:**
+
 - PerformanceMetric
 - ProcessInfo
 - SystemHealthStatus
 - LogEntry
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<MetricDataPoint> MetricsHistory { get; set; }
 ObservableCollection<ProcessInfo> ProcessList { get; set; }
@@ -56,6 +60,7 @@ double PeakMemory { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand RefreshCommand              // Load latest process list
 ICommand TerminateProcessCommand     // Kill a process
@@ -68,12 +73,14 @@ ICommand FilterLogsCommand           // Filter by level
 API testing, theme building, and plugin generation tools.
 
 **Key Classes:**
+
 - ApiRequest
 - ThemeColor
 - PluginTemplate
 - PerformanceProfile
 
 **Key Commands:**
+
 ```csharp
 ICommand ExecuteApiCommand          // Execute API request
 ICommand ClearApiCommand            // Clear request history
@@ -88,6 +95,7 @@ ICommand StopProfilingCommand       // Stop profiling
 Crash analysis, bottleneck detection, and memory profiling.
 
 **Key Classes:**
+
 - CrashDump
 - BottleneckDetection
 - DependencyNode
@@ -95,6 +103,7 @@ Crash analysis, bottleneck detection, and memory profiling.
 - TraceEvent
 
 **Key Commands:**
+
 ```csharp
 ICommand AnalyzeCrashCommand           // Scan for crash dumps
 ICommand DetectBottlenecksCommand      // Find performance issues
