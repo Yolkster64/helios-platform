@@ -138,8 +138,10 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     _ensure_action(upload, "actions/upload-artifact", "custody record must be uploaded via actions/upload-artifact")
     upload_if = str(upload.get("if", ""))
     upload_with = upload.get("with") or {}
-    _require("always()" in upload_if,
-             "custody upload must run with always() to retain failure evidence")
+    _require(
+        _normalize_if(upload_if) == _normalize_if("always() && steps.creds.outputs.configured == 'true' && steps.seal.conclusion != 'skipped'"),
+        "custody upload must run with always() and retain evidence whenever sealing was not skipped",
+    )
     _require("run_attempt" in str(upload_with.get("name", "")),
              "custody artifact name must include run_attempt for uniqueness")
     _require(str(upload_with.get("retention-days", "")).strip() != "",

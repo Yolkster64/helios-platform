@@ -114,6 +114,19 @@ class DeployCustodyValidatorTests(unittest.TestCase):
                     "explicitly guard non-what-if deploys to push or workflow_dispatch",
                 )
 
+    def test_fails_when_upload_guard_only_requires_always(self) -> None:
+        guard = "always() && steps.creds.outputs.configured == 'true' && steps.seal.conclusion != 'skipped'"
+        for mutated in (
+            "always()",
+            guard.replace("&& steps.seal.conclusion != 'skipped'", ""),
+        ):
+            with self.subTest(guard=mutated):
+                self._validate_mutation(
+                    "if: " + guard,
+                    "if: " + mutated,
+                    "sealing was not skipped",
+                )
+
     def test_fails_when_sealing_guard_loses_preflight_evidence(self) -> None:
         guard = "always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'"
         for mutated in (
