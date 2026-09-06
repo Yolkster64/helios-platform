@@ -129,6 +129,14 @@ jobs:
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
+          create_count=0
+          modify_count=0
+          delete_count=0
+          if [ "$rc" -eq 0 ]; then
+            create_count="$(jq '[.properties.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
+            modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
+            delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
+          fi
           python3 scripts/validation/emit_deploy_custody_record.py \
             --phase what-if \
             --deployment-name "$deployment_name" \
