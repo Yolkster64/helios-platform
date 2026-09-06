@@ -213,21 +213,9 @@ identifiers, not secrets; set them as **Actions variables** (the script prints t
 exact `gh variable set` one-liners). The workflow targets `rg-helios-ai` (override
 with the `AZURE_RESOURCE_GROUP` / `AZURE_LOCATION` repo variables) and only attempts
 `az group create` when the RG is missing, since the RG-scoped principal cannot
-create it.
-
-**Audience hardening + immutable plan/deploy custody.** `helios-deploy.yml` pins the
-`azure/login` token audience to `api://AzureADTokenExchange` explicitly (matching the
-federated credential above) rather than trusting the action default, so a token is
-only ever minted for the intended exchange. Every what-if plan and every apply is
-named per run (`helios-<run_id>-<run_attempt>`, a distinct record in the RG's
-deployment history), captured verbatim, SHA-256-checksummed, and retained for 90 days
-as an **immutable** GitHub artifact alongside a run-identity manifest (commit, actor,
-event, audience, mode) — a tamper-evident audit trail of exactly what was planned or
-deployed and by which run. The invariants (audience pin, OIDC guard, no stored client
-secret, custody artifact) are enforced by
-`scripts/validation/validate_deploy_custody.py` through the `deploy-hardening-contract`
-workflow. `main.bicepparam` passes no `@secure()` values from CI, so these records
-carry no secrets.
+create it. `azure/login` pins `audience: api://AzureADTokenExchange`, and deploy
+custody records are allowlisted JSON summaries + digests (not raw payload archives).
+What-if mode is read-only and fails if the resource group does not already exist.
 
 Boundaries and operations:
 

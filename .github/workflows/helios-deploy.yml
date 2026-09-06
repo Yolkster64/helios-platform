@@ -11,9 +11,6 @@ on:
         type: boolean
         default: true
 
-# OIDC: id-token lets the runner mint a short-lived token that Entra exchanges against
-# the federated credential created by scripts/bootstrap/azure-oidc-setup.sh — no cloud
-# secret is stored anywhere. Without id-token: write the token is never issued.
 permissions:
   id-token: write
   contents: read
@@ -23,8 +20,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Must match the scope the OIDC principal holds Contributor on (see
-  # scripts/bootstrap/azure-oidc-setup.sh and infra/README.md "OIDC identity").
   AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-helios-ai' }}
   AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
 
@@ -35,15 +30,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Repos without the OIDC federated credential configured skip gracefully
-      # instead of failing every push to main. AZURE_CLIENT_ID is an identifier,
-      # not a secret — set it as an Actions variable (azure-oidc-setup.sh prints
-      # the gh one-liners); the legacy secrets locations (AZURE_* and the older
-      # AZURE_OIDC_* alias, strictly last) still work as fallbacks.
-      # All THREE identifiers are checked, resolved through the same fallback chains
-      # the login step uses: a repo carrying only a partial legacy set (say, just
-      # AZURE_OIDC_CLIENT_ID) must stay a graceful skip, not hand azure/login an
-      # empty tenant or subscription and fail the run.
       - name: Check Azure OIDC configuration
         id: creds
         env:
@@ -62,16 +48,6 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # No creds JSON, no client secret: azure/login exchanges the run's OIDC token
-      # against the federated credential whose subject is
-      # repo:Yolkster64/helios-platform:ref:refs/heads/main — so dispatch this
-      # workflow from main, not from a topic branch.
-      #
-      # Audience hardening: pin the token audience to api://AzureADTokenExchange
-      # explicitly instead of relying on the action default. It must match the
-      # audience on the federated credential (scripts/bootstrap/azure-oidc-setup.sh
-      # sets exactly this value); a mismatch fails token exchange with AADSTS700213
-      # rather than minting a token for an unintended audience.
       - name: Azure Login (OIDC)
         if: steps.creds.outputs.configured == 'true'
         uses: azure/login@v2
@@ -81,61 +57,14 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || secrets.AZURE_OIDC_SUBSCRIPTION_ID }}
           audience: api://AzureADTokenExchange
 
-      # Contributor is scoped to the resource group, so the identity cannot create
-      # the RG itself (and an unconditional `az group create` would also fail on a
-      # location mismatch with the existing RG). Only attempt creation when the RG
-      # is missing — that path works for identities with subscription-wide rights.
-      - name: Ensure resource group
+      - name: Prepare custody metadata
+        id: custody
         if: steps.creds.outputs.configured == 'true'
         run: |
-          if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
-            az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
-          fi
-
-      # Immutable plan custody: the what-if change preview is a read-only rehearsal,
-      # but we still capture it verbatim into a per-run record so the plan an
-      # operator approved is auditable after the fact. main.bicepparam passes no
-      # @secure() values from CI, so the preview carries no secrets.
-      - name: What-if
-        id: whatif
-        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
-        run: |
+          set -euo pipefail
           mkdir -p custody
-          record="custody/record-what-if-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
-          az deployment group what-if \
-            -g "$AZURE_RESOURCE_GROUP" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam | tee "$record"
-
-      # Immutable deploy custody: name the deployment per run so each apply is a
-      # distinct, traceable record in the resource group's deployment history, and
-      # capture its JSON result (declared outputs only — main.bicep never outputs a
-      # secret) into a per-run record for the custody manifest below.
-      - name: Deploy Helios Infra
-        id: deploy
-        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
-        run: |
-          mkdir -p custody
-          record="custody/record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
-          az deployment group create \
-            -g "$AZURE_RESOURCE_GROUP" \
-            --name "helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam \
-            --output json | tee "$record"
-
-      # Seal the plan/deploy custody: SHA-256 every captured record and write a
-      # signed-by-content manifest (run identity, commit, actor, audience, mode).
-      # The checksums make the archived plan/deploy tamper-evident; the manifest
-      # ties the record to the exact run that produced it.
-      - name: Seal plan/deploy custody
-        id: custody
-        if: steps.creds.outputs.configured == 'true' && (steps.whatif.outcome == 'success' || steps.deploy.outcome == 'success')
-        run: |
-          cd custody
-          sha256sum record-* > checksums.sha256
-          mode="what-if"
-          if [ "${{ steps.deploy.outcome }}" = "success" ]; then mode="deploy"; fi
+          template_digest="$(sha256sum infra/main.bicep | awk '{print $1}')"
+          parameters_digest="$(sha256sum infra/main.bicepparam | awk '{print $1}')"
           jq -n \
             --arg runId "$GITHUB_RUN_ID" \
             --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
@@ -145,24 +74,153 @@ jobs:
             --arg event "$GITHUB_EVENT_NAME" \
             --arg resourceGroup "$AZURE_RESOURCE_GROUP" \
             --arg oidcAudience "api://AzureADTokenExchange" \
+            --arg templateDigest "$template_digest" \
+            --arg parametersDigest "$parameters_digest" \
+            '{runId:$runId, runAttempt:$runAttempt, commit:$commit, ref:$ref, actor:$actor, event:$event, resourceGroup:$resourceGroup, oidcAudience:$oidcAudience, templateDigestSha256:$templateDigest, parametersDigestSha256:$parametersDigest}' \
+            > custody/manifest-inputs.json
+
+      - name: Ensure resource group for deploy
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'push'
+        run: |
+          if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
+            az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"
+          fi
+
+      - name: Verify what-if resource group exists
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
+        run: |
+          set -euo pipefail
+          deployment_name="helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          record="custody/record-what-if-precheck-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+          if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
+            printf '%s\n' "ERROR: What-if is read-only and will not create missing resource group '$AZURE_RESOURCE_GROUP'. Create it first or run deploy mode." > "$stderr_file"
+            python3 scripts/validation/emit_deploy_custody_record.py \
+              --phase what-if-precheck \
+              --deployment-name "$deployment_name" \
+              --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --exit-code 1 \
+              --stdout-file "$stdout_file" \
+              --stderr-file "$stderr_file" \
+              --record-file "$record"
+            cat "$stderr_file" >&2
+            exit 1
+          fi
+
+      - name: What-if (sanitized custody record)
+        id: whatif
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
+        run: |
+          set -euo pipefail
+          deployment_name="helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          record="custody/record-what-if-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+          set +e
+          az deployment group what-if \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment_name" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --result-format ResourceIdOnly \
+            --output json > "$stdout_file" 2>"$stderr_file"
+          rc=$?
+          set -e
+          create_count=0
+          modify_count=0
+          delete_count=0
+          if [ "$rc" -eq 0 ]; then
+            create_count="$(jq '[.properties.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
+            modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
+            delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
+          fi
+          python3 scripts/validation/emit_deploy_custody_record.py \
+            --phase what-if \
+            --deployment-name "$deployment_name" \
+            --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --exit-code "$rc" \
+            --stdout-file "$stdout_file" \
+            --stderr-file "$stderr_file" \
+            --record-file "$record"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Azure what-if failed (exit $rc). See sanitized custody artifact for diagnostics."
+            exit "$rc"
+          fi
+
+      - name: Deploy Helios Infra (sanitized custody record)
+        id: deploy
+        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.what_if))
+        run: |
+          set -euo pipefail
+          deployment_name="helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          record="custody/record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+          set +e
+          az deployment group create \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --name "$deployment_name" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --query '{name:name, id:id, resourceGroup:resourceGroup, provisioningState:properties.provisioningState, timestamp:properties.timestamp}' \
+            --output json > "$stdout_file" 2>"$stderr_file"
+          rc=$?
+          set -e
+          python3 scripts/validation/emit_deploy_custody_record.py \
+            --phase deploy \
+            --deployment-name "$deployment_name" \
+            --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --exit-code "$rc" \
+            --stdout-file "$stdout_file" \
+            --stderr-file "$stderr_file" \
+            --record-file "$record"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics."
+            exit "$rc"
+          fi
+
+      - name: Seal custody manifest
+        id: seal
+        if: always() && steps.creds.outputs.configured == 'true' && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')
+        run: |
+          set -euo pipefail
+          cd custody
+          mode="what-if"
+          if [ "${{ steps.deploy.outcome }}" != "skipped" ]; then mode="deploy"; fi
+          jq -n \
+            --slurpfile inputs manifest-inputs.json \
             --arg mode "$mode" \
+            --arg whatIfOutcome "${{ steps.whatif.outcome }}" \
+            --arg deployOutcome "${{ steps.deploy.outcome }}" \
             --arg sealedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{runId:$runId, runAttempt:$runAttempt, commit:$commit, ref:$ref, actor:$actor, event:$event, resourceGroup:$resourceGroup, oidcAudience:$oidcAudience, mode:$mode, sealedAt:$sealedAt}' \
-            > manifest.json
+            '{inputs:$inputs[0], mode:$mode, outcomes:{whatIf:$whatIfOutcome, deploy:$deployOutcome}, sealedAt:$sealedAt}' > manifest.json
+          shopt -s nullglob
+          records=(record-*.json)
+          if [ "${#records[@]}" -eq 0 ]; then
+            echo "::warning::No record-*.json files were produced; sealing manifest-only diagnostics."
+            sha256sum manifest-inputs.json manifest.json > checksums.sha256
+          else
+            sha256sum manifest-inputs.json manifest.json "${records[@]}" > checksums.sha256
+          fi
+          sha256sum checksums.sha256 > checksums.sha256.sha256
           {
             echo "## Deploy custody ($mode)"
+            echo "This checksum set is tamper-evident integrity data for retained artifacts; it is not a substitute for GitHub/Azure authenticated provenance."
             echo '```'
             cat manifest.json
             echo
             cat checksums.sha256
+            echo
+            cat checksums.sha256.sha256
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Retain the sealed plan/deploy record. GitHub artifacts are immutable once
-      # uploaded (deletable after retention, never editable), so this is the durable
-      # custody copy the run summary's checksums vouch for.
       - name: Upload plan/deploy custody
-        if: steps.custody.outcome == 'success'
+        if: always() && steps.creds.outputs.configured == 'true' && steps.seal.conclusion != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: helios-deploy-custody-${{ github.run_id }}-${{ github.run_attempt }}
