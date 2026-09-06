@@ -7,8 +7,8 @@ namespace HELIOS.Mcp;
 
 /// <summary>
 /// Read-only visibility into the canonical HELIOS Fabric setup contract. The tool
-/// intentionally reports environment-variable names and presence only; it never reads
-/// back or serializes a credential value, invokes a provider, or mutates an external
+/// intentionally reports environment-variable names and presence only; it never returns
+/// or serializes a credential value, invokes a provider, or mutates an external
 /// system.
 /// </summary>
 [McpServerToolType]
@@ -44,6 +44,7 @@ public static class HeliosFabricTools
     /// </summary>
     public static string BuildFabricPlanJson(string? startDirectory, string? requestedPath = null)
     {
+        var secretValuesRead = false;
         try
         {
             var repoRoot = ResolveRepositoryRoot(startDirectory);
@@ -69,7 +70,13 @@ public static class HeliosFabricTools
                     .Where(name => name.Length > 0)
                     .ToArray();
                 var presentEnvNames = requiredEnvNames
-                    .Where(name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)))
+                    .Where(name =>
+                    {
+                        var value = Environment.GetEnvironmentVariable(name);
+                        var present = !string.IsNullOrEmpty(value);
+                        secretValuesRead |= present;
+                        return present;
+                    })
                     .ToArray();
                 var missingEnvNames = requiredEnvNames.Except(presentEnvNames, StringComparer.Ordinal).ToArray();
                 var readiness = desiredState switch
@@ -144,7 +151,7 @@ public static class HeliosFabricTools
                 {
                     productionEnabled = false,
                     applyDefault = false,
-                    secretValuesRead = false,
+                    secretValuesRead,
                     externalMutationPerformed = false,
                     activeUiFramework = "WinUI 3",
                 },
@@ -160,7 +167,7 @@ public static class HeliosFabricTools
                 error = "HELIOS Fabric contract could not be read or validated.",
                 detail = exception.Message,
                 externalMutationPerformed = false,
-                secretValuesRead = false,
+                secretValuesRead,
             }, JsonOptions);
         }
     }

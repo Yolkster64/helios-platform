@@ -281,6 +281,7 @@ public sealed class McpFabricToolTests : IDisposable
         var present = openai.GetProperty("presentEnvNames")
             .EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Equal(new[] { "TEST_OPENAI_API_KEY" }, present);
+        Assert.True(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
     }
 
     // ---- fail-closed enforcement ----------------------------------------------------
