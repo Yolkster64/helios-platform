@@ -209,10 +209,11 @@ public static class HeliosFabricTools
         if (!string.IsNullOrWhiteSpace(configured))
         {
             var explicitRoot = Path.GetFullPath(configured);
-            if (Directory.Exists(explicitRoot))
+            if (!Directory.Exists(explicitRoot))
             {
-                return explicitRoot;
+                throw new InvalidDataException("Configured HELIOS_REPO_ROOT does not exist.");
             }
+            return explicitRoot;
         }
 
         foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
