@@ -108,8 +108,10 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     seal = _find_step(steps, "Seal custody manifest")
     seal_if = str(seal.get("if", ""))
     seal_run = str(seal.get("run", ""))
-    _require("always()" in seal_if,
-             "manifest sealing must still run on failures to retain diagnostics")
+    _require(
+        "always()" in seal_if and "steps.custody.conclusion" in seal_if,
+        "manifest sealing must run after custody setup, including preflight failures",
+    )
     _require("sha256sum" in seal_run and "manifest.json" in seal_run,
              "manifest sealing must checksum records and include manifest")
     _require("templateDigestSha256" in text and "parametersDigestSha256" in text,
