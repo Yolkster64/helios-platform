@@ -353,6 +353,9 @@ function Update-DeviceFlow {
 
 function Stop-DeviceFlow {
     param([Parameter(Mandatory)]$Flow)
+    # Register-ObjectEvent -Action returns a PSEventJob (not the PSEventSubscriber): its
+    # Name IS the subscriber's SourceIdentifier and its Id is the job id, so these two
+    # calls remove both halves of the registration.
     foreach ($s in $Flow.Subscriptions) { Unregister-Event -SourceIdentifier $s.Name -ErrorAction SilentlyContinue; Remove-Job -Id $s.Id -Force -ErrorAction SilentlyContinue }
     # The whole tree: the CLI may have forked (az wraps python), and an orphaned poller
     # would keep asking GitHub or Entra about a code nobody will enter.

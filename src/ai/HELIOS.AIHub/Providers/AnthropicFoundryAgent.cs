@@ -218,7 +218,7 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
     /// <c>endpointEnv</c> is pointed at the shell or <c>.helios/azure.env</c> instead of at
     /// a script that would never set its variable.
     /// </summary>
-    public static string MissingEndpointHint(string sourceName) =>
+    internal static string MissingEndpointHint(string sourceName) =>
         $"Set {sourceName} (Foundry resource name or https base URL) — " +
         (string.Equals(sourceName, DefaultEndpointEnv, StringComparison.Ordinal)
             ? "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login, and azure-up writes it into .helios/azure.env."

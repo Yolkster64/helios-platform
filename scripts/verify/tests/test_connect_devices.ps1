@@ -128,6 +128,24 @@ try {
     Assert-True ((Get-FlowVerdict -ExitCode 3 -Lines @('segfault')) -eq 'failed') 'Unknown failure must classify as failed.'
     Assert-True ((Get-FlowVerdict -ExitCode 0 -Lines @() -TimedOut) -eq 'expired') 'A timed-out flow must classify as expired.'
 
+    # --- Flow lifecycle -------------------------------------------------------------------------
+    # Register-ObjectEvent -Action hands back a PSEventJob (not a PSEventSubscriber): its Name
+    # is the subscriber's SourceIdentifier and its Id the job id. Stop-DeviceFlow relies on
+    # exactly that, so prove it against the shim and prove the teardown leaves nothing behind.
+    Reset-Shims -Gh 'ok' -Az 'ready'
+    $subscribersBefore = @(Get-EventSubscriber).Count
+    $jobsBefore = @(Get-Job).Count
+    $flow = Start-DeviceFlow -Spec $ghSpec
+    Assert-True (@($flow.Subscriptions | Where-Object { $_ -is [System.Management.Automation.PSEventJob] }).Count -eq 2) 'Start-DeviceFlow must hold two PSEventJob subscriptions.'
+    $liveIds = @(Get-EventSubscriber | ForEach-Object { $_.SourceIdentifier })
+    Assert-True (@($flow.Subscriptions | Where-Object { $liveIds -contains $_.Name }).Count -eq 2) 'Each subscription Name must be a live subscriber SourceIdentifier.'
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do { Start-Sleep -Milliseconds 50; Update-DeviceFlow -Flow $flow } until ($flow.Code -or [DateTime]::UtcNow -gt $deadline)
+    Assert-True ($flow.Code -eq 'ABCD-1234') 'The device code must arrive through the event queue.'
+    Stop-DeviceFlow -Flow $flow
+    Assert-True (@(Get-EventSubscriber).Count -eq $subscribersBefore) 'Stop-DeviceFlow left event subscribers behind.'
+    Assert-True (@(Get-Job).Count -eq $jobsBefore) 'Stop-DeviceFlow left event jobs behind.'
+
     # --- Verify-only: probes only, never a login ---------------------------------------------------
     Reset-Shims -Gh 'ok' -Az 'ok'
     $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Tenant = $tenant; Repository = 'owner/repo' }
@@ -169,6 +187,7 @@ try {
     Assert-True ((Get-Lane $run.Object 'azure-login').detail -eq 'device code accepted; az session verified') 'az lane not verified after the flow.'
     Assert-True ((Get-Lane $run.Object 'chain').state -eq 'skipped' -and (Get-Lane $run.Object 'chain').detail -eq '-SkipChain') 'Chain must be skipped by -SkipChain.'
     Assert-True (@($run.Object.lanes).Count -eq 3) 'Apply with -SkipChain must report exactly three lanes.'
+    Assert-True (@(Get-EventSubscriber).Count -eq 0 -and @(Get-Job).Count -eq 0) 'A completed apply run left event subscribers or jobs behind.'
 
     # --- Apply: a ready lane is never asked for a code -----------------------------------------------
     Reset-Shims -Gh 'ready' -Az 'ok'
