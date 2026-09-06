@@ -15,6 +15,7 @@ public sealed class PythonInsightsSpoke
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim ProcessSlots = new(initialCount: 4, maxCount: 4);
+    private const string SpokeEntryPoint = "__main__.py";
 
     private readonly string? _spokeDirectory;
     private readonly string _interpreter;
@@ -112,7 +113,7 @@ public sealed class PythonInsightsSpoke
 
     private async Task<JsonElement?> InvokeAsync(object request, CancellationToken cancellationToken)
     {
-        if (_spokeDirectory is null)
+        if (!HasRunnableSpokeDirectory(_spokeDirectory))
         {
             return null;
         }
@@ -215,4 +216,8 @@ public sealed class PythonInsightsSpoke
             }
         }
     }
+
+    private static bool HasRunnableSpokeDirectory(string? spokeDirectory) =>
+        spokeDirectory is not null
+        && File.Exists(Path.Combine(spokeDirectory, "helios_agents", SpokeEntryPoint));
 }
