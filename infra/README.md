@@ -180,7 +180,7 @@ bootstrap (`scripts/bootstrap/azure-oidc-setup.sh`, PowerShell twin
 
 - App registration **`helios-github-deploy`** + service principal — with **no client
   secret**, so there is nothing to leak, expire, or rotate.
-- Three **federated credentials** (issuer `https://token.actions.githubusercontent.com`,
+- Two **federated credentials** (issuer `https://token.actions.githubusercontent.com`,
   audience `api://AzureADTokenExchange`) trusting exactly these subjects:
 
   | Subject | Used by |
