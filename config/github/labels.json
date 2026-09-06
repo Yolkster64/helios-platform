@@ -21,6 +21,7 @@
     { "name": "copilot", "color": "8250df", "description": "Assign the Copilot coding agent to this issue (copilot-dispatch.yml)" },
     { "name": "dependencies", "color": "0366d6", "description": "Dependency update PRs opened by Dependabot (.github/dependabot.yml)" },
     { "name": "hygiene", "color": "fbca04", "description": "Branch and issue cleanup: prune-branches, duplicate closure, stale refs" },
-    { "name": "absorption-candidate", "color": "c5def5", "description": "Promising upstream item flagged by the absorption cadence for a benchmark" }
+    { "name": "absorption-candidate", "color": "c5def5", "description": "Promising upstream item flagged by the absorption cadence for a benchmark" },
+    { "name": "triage", "color": "d4c5f9", "description": "Filed through an issue form (bug_report, feature_request, component-task); awaiting a first classification pass" }
   ]
 }

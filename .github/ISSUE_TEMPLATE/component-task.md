@@ -2,7 +2,7 @@
 name: Component Task
 about: Task for developing or maintaining a platform component
 title: "[COMPONENT] "
-labels: component-module
+labels: triage
 assignees: ""
 ---
 
