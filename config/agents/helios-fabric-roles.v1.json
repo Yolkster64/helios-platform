@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "registryId": "helios-fabric-roles",
+  "defaultPolicy": "deny",
+  "roles": [
+    {
+      "id": "deployment-supervisor",
+      "purpose": "Coordinate reviewed plans, approvals, evidence, and rollback state.",
+      "allowed": ["read-state", "validate-contracts", "assemble-plan", "request-approval", "publish-redacted-evidence"],
+      "denied": ["self-approve", "deploy-production", "grant-rbac", "read-secrets", "mutate-workstation"]
+    },
+    {
+      "id": "repository-curator",
+      "purpose": "Inventory repositories, compare commits, classify forks, and prepare reviewed migration changes.",
+      "allowed": ["read-repositories", "compare-commits", "prepare-branch", "prepare-pull-request", "seed-idempotent-issues"],
+      "denied": ["rename-repository", "delete-repository", "archive-without-proof", "force-push-main", "bypass-branch-protection"]
+    },
+    {
+      "id": "winui3-engineer",
+      "purpose": "Build the native C# WinUI 3 Control Center and shared visual system.",
+      "allowed": ["edit-gui-source", "build-windows", "test-ui-contract", "package-msix", "profile-performance"],
+      "denied": ["introduce-wpf", "introduce-uwp", "sign-with-unapproved-certificate", "replace-windows-shell", "mutate-firmware"]
+    },
+    {
+      "id": "integration-broker-engineer",
+      "purpose": "Maintain typed events, MCP tools, connector adapters, idempotency, approvals, and receipts.",
+      "allowed": ["edit-contracts", "validate-schemas", "simulate-connectors", "verify-signatures", "test-idempotency"],
+      "denied": ["unrestricted-http", "generic-shell", "secret-readback", "automatic-consequential-write", "cross-tenant-action"]
+    },
+    {
+      "id": "azure-plan-reviewer",
+      "purpose": "Compile Bicep and review exact-source development what-if plans.",
+      "allowed": ["build-bicep", "validate-bicep", "run-dev-what-if", "summarize-plan", "publish-plan-hash"],
+      "denied": ["azure-apply", "subscription-wide-rbac", "create-client-secret", "tenant-consent", "production-federation"]
+    },
+    {
+      "id": "azure-devops-validator",
+      "purpose": "Mirror validation and evidence through Entra-issued workload identity federation.",
+      "allowed": ["validate-pipeline", "run-dev-what-if", "publish-artifact", "report-status"],
+      "denied": ["become-deployment-authority", "bypass-github-approval", "read-key-vault-secrets", "create-service-principal-secret", "deploy-production"]
+    },
+    {
+      "id": "sharepoint-evidence-publisher",
+      "purpose": "Publish deterministic, redacted governance and deployment evidence.",
+      "allowed": ["resolve-approved-folder", "upload-approved-artifact", "verify-upload", "record-receipt"],
+      "denied": ["tenant-wide-search", "overwrite-without-version", "publish-secret", "grant-site-permission", "delete-governance-history"]
+    },
+    {
+      "id": "collaboration-synchronizer",
+      "purpose": "Synchronize GitHub state to Slack and Linear using correlated idempotent events.",
+      "allowed": ["post-approved-status", "update-linked-work-item", "attach-receipt", "deduplicate-event"],
+      "denied": ["approve-deployment", "create-workspace-app", "post-to-fallback-destination", "expose-token", "mass-notify"]
+    },
+    {
+      "id": "openai-provider",
+      "purpose": "Invoke approved OpenAI models through project-scoped references and typed AIHub contracts.",
+      "allowed": ["health-check", "bounded-response", "trace-request", "report-cost", "fallback-by-policy"],
+      "denied": ["read-api-key", "write-repository", "deploy-resource", "grant-permission", "execute-generic-shell"]
+    },
+    {
+      "id": "claude-code-engineer",
+      "purpose": "Use repository instructions, skills, subagents, and governed MCP for coding and review.",
+      "allowed": ["read-repository", "edit-branch", "build", "test", "prepare-pull-request", "review-dev-what-if"],
+      "denied": ["merge", "rename-repository", "azure-apply", "rbac-or-consent", "secret-readback", "workstation-admin"]
+    },
+    {
+      "id": "hermes-xcore-runtime",
+      "purpose": "Route tasks, execute bounded workers, score outcomes, reflect, and update redacted learning state.",
+      "allowed": ["route-task", "execute-approved-worker", "score-result", "reflect", "write-redacted-memory", "recommend-scale"],
+      "denied": ["self-enable-tool", "self-approve", "deploy", "merge", "read-secret", "publish-private-memory"]
+    },
+    {
+      "id": "security-and-rollback-controller",
+      "purpose": "Validate safety boundaries, backups, recovery plans, evidence, and rollback readiness.",
+      "allowed": ["audit", "scan", "validate-backup", "simulate-rollback", "block-unsafe-action"],
+      "denied": ["destructive-remediation", "disable-security", "reset-tpm", "erase-disk", "automatic-reboot", "override-owner"]
+    }
+  ],
+  "globalRequirements": {
+    "correlationId": true,
+    "idempotencyKeyForWrites": true,
+    "approvalReceiptForConsequentialWrites": true,
+    "redactedEvidence": true,
+    "secretReferencesOnly": true,
+    "productionEnabled": false
+  }
+}
