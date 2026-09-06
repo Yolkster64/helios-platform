@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "fabricId": "helios-control-fabric",
+  "currentAuthority": {
+    "repository": "Yolkster64/helios-platform",
+    "defaultBranch": "main",
+    "renameTarget": "Yolkster64/helios-control",
+    "strategy": "in-place-rename-after-reviewed-cutover"
+  },
+  "targetTopology": {
+    "coreRepository": "Yolkster64/helios-control",
+    "guiRepository": "Yolkster64/helios-gui",
+    "profileRepository": "Yolkster64/Yolkster64",
+    "governanceRepository": "Yolkster64/.github-enterprise-control"
+  },
+  "authorities": {
+    "sourceAndDeployment": "GitHub protected environments",
+    "workGraph": "Linear",
+    "operations": "Slack",
+    "governanceEvidence": "SharePoint",
+    "validationMirror": "Azure DevOps",
+    "modelAndAgentPlane": "HELIOS AIHub and governed MCP"
+  },
+  "collaboration": {
+    "slack": {
+      "workspaceId": "T0BAFGSNY5P",
+      "conversationId": "D0BB80HRZFA",
+      "requiredConnection": true,
+      "fallbackAllowed": false
+    },
+    "linear": {
+      "project": "Helios Integration Fabric",
+      "coordinationIssue": "JOH-208"
+    },
+    "sharePoint": {
+      "hostname": "heli0s-my.sharepoint.com",
+      "sitePath": "/personal/jmore_heli0s_onmicrosoft_com",
+      "governancePath": "Helios/Governance"
+    },
+    "azureDevOps": {
+      "organization": "Heli0sDev",
+      "role": "validation-and-evidence-mirror"
+    }
+  },
+  "desktop": {
+    "repository": "Yolkster64/helios-gui",
+    "language": "C#",
+    "targetFramework": "net10.0-windows",
+    "framework": "WinUI 3",
+    "xamlNamespace": "Microsoft.UI.Xaml",
+    "compositionNamespace": "Microsoft.UI.Composition",
+    "packaging": "single-project-msix",
+    "wpfFallback": false,
+    "uwpFallback": false
+  },
+  "identity": {
+    "githubOidcSubjects": {
+      "dev": "repo:Yolkster64/helios-control:environment:azure-dev",
+      "test": "repo:Yolkster64/helios-control:environment:azure-test",
+      "prod": "repo:Yolkster64/helios-control:environment:azure-prod"
+    },
+    "azureDevOpsServiceConnections": {
+      "dev": "helios-control-azure-wif-dev",
+      "test": "helios-control-azure-wif-test",
+      "prod": "helios-control-azure-wif-prod"
+    },
+    "clientSecretsAllowed": false,
+    "credentialReadbackAllowed": false
+  },
+  "providerReferences": {
+    "openai": [
+      "OPENAI_API_KEY",
+      "OPENAI_PROJECT_ID",
+      "OPENAI_ORG_ID",
+      "OPENAI_BASE_URL"
+    ],
+    "anthropic": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "azure": [
+      "AZURE_CLIENT_ID",
+      "AZURE_TENANT_ID",
+      "AZURE_SUBSCRIPTION_ID",
+      "AZURE_RESOURCE_GROUP"
+    ]
+  },
+  "activationOrder": [
+    "repository-cutover-contract",
+    "current-main-ci",
+    "in-place-core-rename",
+    "winui3-gui-extraction",
+    "github-environments-and-oidc",
+    "azure-devops-wif",
+    "sharepoint-evidence-binding",
+    "slack-linear-routing",
+    "provider-secret-references",
+    "development-what-if",
+    "separate-development-apply-approval",
+    "independent-test-and-production-gates"
+  ],
+  "safety": {
+    "productionEnabled": false,
+    "applyDefault": false,
+    "automaticRepositoryMerge": false,
+    "automaticAzureDeployment": false,
+    "automaticTenantConsent": false,
+    "automaticRbacMutation": false,
+    "automaticSecretWrite": false,
+    "automaticDiskOrFirmwareMutation": false,
+    "sourceArchivalRequiresProof": true
+  }
+}
