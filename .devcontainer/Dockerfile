@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev \
     postgresql-client \
     procps \
+    python3-venv \
     shellcheck \
     sqlite3 \
     unzip \
