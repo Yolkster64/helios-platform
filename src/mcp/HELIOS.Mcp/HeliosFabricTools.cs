@@ -15,6 +15,16 @@ namespace HELIOS.Mcp;
 public static class HeliosFabricTools
 {
     private const string DefaultRelativePath = "config/fabric/helios-fabric.v1.json";
+    private static readonly string[] SecretPrefixes =
+    [
+        "sk-",
+        "sk-proj-",
+        "ghp_",
+        "github_pat_",
+        "xoxb-",
+        "xoxp-",
+        "lin_api_",
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -54,7 +64,7 @@ public static class HeliosFabricTools
 
             var canonical = root.GetProperty("canonical");
             var security = root.GetProperty("security");
-            EnsureFailClosed(canonical, security);
+            EnsureFailClosed(root, canonical, security);
 
             var integrations = new List<object>();
             var integrationStates = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -178,7 +188,7 @@ public static class HeliosFabricTools
         .Where(value => value.Length > 0)
         .ToArray();
 
-    private static void EnsureFailClosed(JsonElement canonical, JsonElement security)
+    private static void EnsureFailClosed(JsonElement root, JsonElement canonical, JsonElement security)
     {
         if (canonical.GetProperty("productionEnabled").GetBoolean()
             || security.GetProperty("productionEnabled").GetBoolean()
@@ -195,6 +205,147 @@ public static class HeliosFabricTools
                 StringComparison.Ordinal))
         {
             throw new InvalidDataException("WinUI 3 must remain the active desktop framework.");
+        }
+
+        if (!security.GetProperty("externalWritesRequireApproval").GetBoolean())
+        {
+            throw new InvalidDataException("externalWritesRequireApproval must remain true.");
+        }
+
+        var forbiddenUiFrameworks = new HashSet<string>(
+            Strings(security.GetProperty("forbiddenUiFrameworks")),
+            StringComparer.Ordinal);
+        if (!forbiddenUiFrameworks.Contains("WPF") || !forbiddenUiFrameworks.Contains("UWP"))
+        {
+            throw new InvalidDataException("forbiddenUiFrameworks must include WPF and UWP.");
+        }
+
+        EnsureNoSecretLikeValues(root);
+        ValidatePhaseTopology(root.GetProperty("integrations"), root.GetProperty("phases"));
+    }
+
+    private static void EnsureNoSecretLikeValues(JsonElement value)
+    {
+        foreach (var text in EnumerateStrings(value))
+        {
+            var lowered = text.ToLowerInvariant();
+            if (SecretPrefixes.Any(prefix => lowered.StartsWith(prefix, StringComparison.Ordinal))
+                || lowered.Contains("-----begin private key-----", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Fabric contract appears to contain a credential value.");
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateStrings(JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in value.EnumerateObject())
+                {
+                    foreach (var child in EnumerateStrings(property.Value))
+                    {
+                        yield return child;
+                    }
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in value.EnumerateArray())
+                {
+                    foreach (var child in EnumerateStrings(item))
+                    {
+                        yield return child;
+                    }
+                }
+                break;
+            case JsonValueKind.String:
+                var text = value.GetString();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    yield return text;
+                }
+                break;
+        }
+    }
+
+    private static void ValidatePhaseTopology(JsonElement integrations, JsonElement phases)
+    {
+        var integrationIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var integration in integrations.EnumerateArray())
+        {
+            integrationIds.Add(integration.GetProperty("id").GetString()
+                ?? throw new InvalidDataException("integration id is null"));
+        }
+
+        var phaseDependencies = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var phase in phases.EnumerateArray())
+        {
+            var phaseId = phase.GetProperty("id").GetString()
+                ?? throw new InvalidDataException("phase id is null");
+            if (!phaseDependencies.TryAdd(phaseId, Strings(phase.GetProperty("dependsOn"))))
+            {
+                throw new InvalidDataException($"duplicate phase id {phaseId}");
+            }
+
+            var requiredIntegrations = Strings(phase.GetProperty("requiredIntegrations"));
+            var missingIntegrations = requiredIntegrations
+                .Where(integrationId => !integrationIds.Contains(integrationId))
+                .ToArray();
+            if (missingIntegrations.Length > 0)
+            {
+                throw new InvalidDataException(
+                    $"phase {phaseId} references missing integrations [{string.Join(", ", missingIntegrations)}]");
+            }
+
+            var mutatesExternalState = phase.GetProperty("mutatesExternalState").GetBoolean();
+            var requiredApproval = phase.GetProperty("requiredApproval").GetString() ?? "none";
+            if (mutatesExternalState && string.Equals(requiredApproval, "none", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"phase {phaseId} mutates external state but has no approval.");
+            }
+        }
+
+        var missingDependencies = phaseDependencies
+            .SelectMany(pair => pair.Value.Select(dependency => (Phase: pair.Key, Dependency: dependency)))
+            .Where(item => !phaseDependencies.ContainsKey(item.Dependency))
+            .ToArray();
+        if (missingDependencies.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"phase {missingDependencies[0].Phase} references missing phase {missingDependencies[0].Dependency}");
+        }
+
+        var incoming = phaseDependencies.ToDictionary(pair => pair.Key, _ => 0, StringComparer.Ordinal);
+        var outgoing = phaseDependencies.Keys.ToDictionary(key => key, _ => new List<string>(), StringComparer.Ordinal);
+        foreach (var (phaseId, dependencies) in phaseDependencies)
+        {
+            foreach (var dependency in dependencies)
+            {
+                incoming[phaseId]++;
+                outgoing[dependency].Add(phaseId);
+            }
+        }
+
+        var ready = new Queue<string>(incoming.Where(pair => pair.Value == 0).Select(pair => pair.Key));
+        var visited = 0;
+        while (ready.Count > 0)
+        {
+            var phaseId = ready.Dequeue();
+            visited++;
+            foreach (var child in outgoing[phaseId])
+            {
+                incoming[child]--;
+                if (incoming[child] == 0)
+                {
+                    ready.Enqueue(child);
+                }
+            }
+        }
+
+        if (visited != phaseDependencies.Count)
+        {
+            throw new InvalidDataException("phase dependency graph contains a cycle.");
         }
     }
 
