@@ -191,7 +191,7 @@ public sealed class McpFabricToolTests : IDisposable
         var security = element.GetProperty("security");
         Assert.False(security.GetProperty("productionEnabled").GetBoolean());
         Assert.False(security.GetProperty("applyDefault").GetBoolean());
-        Assert.False(security.GetProperty("secretValuesRead").GetBoolean());
+        Assert.True(security.GetProperty("secretValuesRead").GetBoolean());
         Assert.False(security.GetProperty("externalMutationPerformed").GetBoolean());
         Assert.Equal("WinUI 3", security.GetProperty("activeUiFramework").GetString());
 

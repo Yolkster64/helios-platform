@@ -7,8 +7,8 @@ namespace HELIOS.Mcp;
 
 /// <summary>
 /// Read-only visibility into the canonical HELIOS Fabric setup contract. The tool
-/// intentionally reports environment-variable names and presence only; it never reads
-/// back or serializes a credential value, invokes a provider, or mutates an external
+/// intentionally reports environment-variable names and presence only; it never returns
+/// or serializes a credential value, invokes a provider, or mutates an external
 /// system.
 /// </summary>
 [McpServerToolType]
@@ -55,6 +55,7 @@ public static class HeliosFabricTools
             var security = root.GetProperty("security");
             EnsureFailClosed(canonical, security);
 
+            var secretValuesRead = false;
             var integrations = new List<object>();
             var integrationStates = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var integration in root.GetProperty("integrations").EnumerateArray())
@@ -69,7 +70,11 @@ public static class HeliosFabricTools
                     .Where(name => name.Length > 0)
                     .ToArray();
                 var presentEnvNames = requiredEnvNames
-                    .Where(name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)))
+                    .Where(name =>
+                    {
+                        secretValuesRead = true;
+                        return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name));
+                    })
                     .ToArray();
                 var missingEnvNames = requiredEnvNames.Except(presentEnvNames, StringComparer.Ordinal).ToArray();
                 var readiness = desiredState switch
@@ -144,7 +149,7 @@ public static class HeliosFabricTools
                 {
                     productionEnabled = false,
                     applyDefault = false,
-                    secretValuesRead = false,
+                    secretValuesRead,
                     externalMutationPerformed = false,
                     activeUiFramework = "WinUI 3",
                 },
