@@ -27,11 +27,8 @@ public sealed partial class MainWindow : Window
             ReadinessVisuals.Attach(root);
         }
 
-        // Land on the dashboard: navigate the frame FIRST, then select the nav item.
-        // SelectionChanged does not fire for a programmatic pre-layout selection on
-        // all WinUI versions — but on versions where it DOES fire synchronously, the
-        // handler's own CurrentSourcePageType guard now sees AIHubPage already
-        // current and skips the double navigation (review finding).
+        // Land on the provider dashboard. Fabric Control is available as the next
+        // operator surface without replacing the existing AI Hub default.
         ContentFrame.Navigate(typeof(AIHubPage));
         Nav.SelectedItem = AIHubNavItem;
     }
@@ -43,10 +40,16 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Only the AI Hub page exists in this bootstrap; Routing/Fleet items are disabled.
-        if (tag == "aihub" && ContentFrame.CurrentSourcePageType != typeof(AIHubPage))
+        var pageType = tag switch
         {
-            ContentFrame.Navigate(typeof(AIHubPage));
+            "aihub" => typeof(AIHubPage),
+            "fabric" => typeof(FabricControlPage),
+            _ => null,
+        };
+
+        if (pageType is not null && ContentFrame.CurrentSourcePageType != pageType)
+        {
+            ContentFrame.Navigate(pageType);
         }
     }
 }
