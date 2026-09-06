@@ -77,12 +77,9 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
 
     ensure_rg = _find_step(steps, "Ensure resource group for deploy")
     ensure_rg_if = str(ensure_rg.get("if", ""))
-    _require("steps.creds.outputs.configured == 'true'" in ensure_rg_if,
-             "resource-group creation must be gated by OIDC configuration")
-    _require("github.event_name == 'push'" in ensure_rg_if,
-             "resource-group creation must be limited to push deploys")
-    _require("!inputs.what_if" not in ensure_rg_if,
-             "resource-group creation must not include workflow_dispatch deploy mode")
+    expected_ensure_rg_if = "steps.creds.outputs.configured == 'true' && github.event_name == 'push'"
+    _require(" ".join(ensure_rg_if.split()) == expected_ensure_rg_if,
+             "resource-group creation must be limited to configured push deploys")
 
     what_if = _find_step(steps, "What-if (sanitized custody record)")
     what_if_if = str(what_if.get("if", ""))
