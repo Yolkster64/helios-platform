@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "organization": "Heli0sDev",
+  "repositoryCurrent": "Yolkster64/helios-platform",
+  "repositoryTarget": "Yolkster64/helios-control",
+  "role": "validation-and-evidence-mirror",
+  "serviceConnections": {
+    "dev": "helios-control-azure-wif-dev",
+    "test": "helios-control-azure-wif-test",
+    "prod": "helios-control-azure-wif-prod"
+  },
+  "environments": {
+    "devPlan": "helios-dev-plan",
+    "testPlan": "helios-test-plan",
+    "prodPlan": "helios-prod-plan"
+  },
+  "permissions": {
+    "authentication": "microsoft-entra-workload-identity-federation",
+    "clientSecretAllowed": false,
+    "subscriptionWideRoleAllowed": false,
+    "keyVaultSecretReadAllowed": false,
+    "deploymentAuthority": false,
+    "resourceGroupScopeRequired": true
+  },
+  "pipeline": {
+    "entryPoint": ".azuredevops/pipelines/helios-fabric-validation.yml",
+    "stages": [
+      "validate",
+      "development-what-if",
+      "publish-evidence"
+    ],
+    "applyParameterExists": false,
+    "productionDeploymentExists": false
+  },
+  "requiredVariables": [
+    "HELIOS_AZURE_RESOURCE_GROUP_DEV",
+    "HELIOS_AZURE_LOCATION"
+  ],
+  "evidence": {
+    "publishCompiledTemplate": true,
+    "publishWhatIfJson": true,
+    "publishSourceCommit": true,
+    "publishSha256": true,
+    "retentionDays": 30
+  }
+}
