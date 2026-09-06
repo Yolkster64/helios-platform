@@ -17,9 +17,11 @@ which lane answers best. Around it sit a Python analytics spoke, an F# routing d
 C++ learning kernel, review-only Azure and Foundry infrastructure, an agent fleet (Xcore-9
 pools with Hermes lanes), and a WinUI 3 desktop shell that builds on Windows only. It is not
 a finished product: the [README](../README.md#current-status) says what is real and what is
-historical, and the coverage matrix on the onboarding epic
+historical, the coverage matrix
 ([#242](https://github.com/Yolkster64/helios-platform/issues/242)) says, per item, where it
-lives and what is still a gap.
+lives and what is still a gap, and the onboarding epic
+([#223](https://github.com/Yolkster64/helios-platform/issues/223)) tracks the lanes that
+make the first hour easier.
 
 ## Pick your path
 
