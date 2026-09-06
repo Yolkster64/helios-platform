@@ -194,6 +194,16 @@ function Invoke-ChainStep {
     catch { Write-Verbose "$Step emitted invalid JSON: $($_.Exception.Message)" }
     # JSON scalars and arrays are not child report objects.
     if ($report -is [Array] -or $report -isnot [pscustomobject]) { $report = $null }
+    if ($Step -eq 'identity' -and $null -ne $report) {
+        $lanesProperty = $report.PSObject.Properties['lanes']
+        $lanes = if ($lanesProperty) { @($lanesProperty.Value) } else { @() }
+        $invalidLanes = @($lanes | Where-Object {
+                $null -eq $_ -or -not $_.PSObject.Properties['lane'] -or
+                -not $_.PSObject.Properties['state'] -or
+                $_.state -notin @('ready', 'repaired', 'mismatch', 'needs-owner', 'unavailable')
+            })
+        if ($lanes.Count -eq 0 -or $invalidLanes.Count -gt 0) { $report = $null }
+    }
     $state = if ($null -eq $report) { 'failed' } elseif ($exit -eq 0) { 'ok' } else { 'degraded' }
     [pscustomobject]@{
         step = $Step; script = $Script; state = $state; exitCode = $exit
