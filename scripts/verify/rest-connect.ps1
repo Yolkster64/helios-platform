@@ -605,7 +605,7 @@ $script:aihubMemberSchemas = @{
     # An ENABLED entry's name is required (the hub keys its provider map on it) and,
     # when learning is enabled, mode / tableEndpointEnv are dereferenced by
     # CreateLearningStore (review findings) — the same rule as auto-login / auth-doctor.
-    cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'int' }
+    cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'seconds' }
     learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
     learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
 }
@@ -653,10 +653,14 @@ function Get-AIHubMemberProblem {
             'string!' { $v -is [string] }
             'bool' { $v -is [bool] }
             'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+            # Enabled cliAgents timeouts are range-checked (review finding): CancelAfter
+            # throws on a negative TimeSpan after the child was started, zero cancels
+            # every request before it answers.
+            'seconds' { (($v -is [int]) -or ($v -is [long])) -and $v -ge 1 -and $v -le 2147483 }
         }
         if (-not $ok) {
             $shape = if ($null -eq $v) { 'null' } elseif ($v -is [System.Array]) { 'an array' } elseif ($v -is [System.Management.Automation.PSCustomObject]) { 'an object' } elseif ($v -is [string]) { 'a JSON string' } elseif ($v -is [bool]) { 'a JSON boolean' } else { 'a JSON number' }
-            $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+            $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } 'seconds' { 'an integer from 1 to 2147483 (seconds — CliProcessAgent hands it to CancellationTokenSource.CancelAfter, which throws on a negative value and cancels a zero before the first byte; the child process is already running by then)' } }
             return "$Path.$($member.Name) is $shape, not $expected"
         }
     }

@@ -260,7 +260,7 @@ function Get-AIHubConfigState {
         $memberSchemas = @{
             provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
             cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-            cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'int' }
+            cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'seconds' }
             learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
             learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
         }
@@ -277,9 +277,11 @@ function Get-AIHubConfigState {
                     'string!' { $v -is [string] }
                     'bool' { $v -is [bool] }
                     'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+                    # Enabled cliAgents timeouts are range-checked (review finding).
+                    'seconds' { (($v -is [int]) -or ($v -is [long])) -and $v -ge 1 -and $v -le 2147483 }
                 }
                 if (-not $ok) {
-                    $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+                    $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } 'seconds' { 'an integer from 1 to 2147483 (seconds — CliProcessAgent hands it to CancellationTokenSource.CancelAfter, which throws on a negative value and cancels a zero before the first byte; the child process is already running by then)' } }
                     return "$path.$($m.Name) as $(& $shapeOf $v), not $expected"
                 }
             }
@@ -1040,6 +1042,57 @@ function Test-GhLane {
         -OwnerAction 'gh auth login --web   # device-code flow; scripts/bootstrap/connect-github.sh adds the models:read scope'
 }
 
+# The deployed credential DefaultAzureCredential selects ahead of the az cache, by
+# name presence only ('' when none): the environment service principal (secret or
+# certificate), a workload identity (all three variables), or a declared
+# managed-identity endpoint. Raw IMDS is not inferred here — a VM without a declared
+# endpoint reports through rest-connect's own probe when the owner runs it.
+function Get-DeployedCredentialKind {
+    if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'service-principal' }
+    if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and (Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE')) { return 'workload-identity' }
+    if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed-identity' }
+    return ''
+}
+# scripts/verify/rest-connect.ps1 -Json, parsed; $null when it cannot run. It posts
+# the selected credential once (secret / assertion in memory, never echoed) and stops
+# where the SDK stops, so its azure lane is the proof this doctor cannot produce
+# without mutating the shared az profile.
+function Invoke-RestConnectProbe {
+    $restConnectPath = Join-Path $repoRoot 'scripts/verify/rest-connect.ps1'
+    if (-not (Test-Path -LiteralPath $restConnectPath -PathType Leaf)) { return $null }
+    $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
+    if (-not $pwshExe) { return $null }
+    $lines = @(& $pwshExe -NoProfile -File $restConnectPath -Json 2>$null | ForEach-Object { "$_" })
+    $text = $lines -join "`n"
+    $start = $text.IndexOf('{')
+    if ($start -lt 0) { return $null }
+    try { return ($text.Substring($start) | ConvertFrom-Json) } catch { return $null }
+}
+$script:selectedCredentialLaneCache = @{}
+function Get-SelectedCredentialLane {
+    param([Parameter(Mandatory)][string]$Kind)
+    if ($script:selectedCredentialLaneCache.ContainsKey($Kind)) { return $script:selectedCredentialLaneCache[$Kind] }
+    $sourcePrefix = switch ($Kind) { 'service-principal' { 'env-service-principal' } 'workload-identity' { 'workload-identity' } 'managed-identity' { 'managed-identity' } default { '' } }
+    $lane = [pscustomobject]@{ State = 'unavailable'; Source = ''; Detail = 'scripts/verify/rest-connect.ps1 could not be run or produced no report, so the selected credential was never exercised'; OwnerAction = '' }
+    $report = Invoke-RestConnectProbe
+    $azure = $null
+    if ($null -ne $report -and $report.PSObject.Properties['lanes'] -and $null -ne $report.lanes) {
+        $azure = @($report.lanes | Where-Object { $null -ne $_ -and $_.PSObject.Properties['lane'] -and [string]$_.lane -eq 'azure' }) | Select-Object -First 1
+    }
+    if ($null -ne $azure) {
+        $read = { param($Prop) if ($azure.PSObject.Properties[$Prop] -and $null -ne $azure.$Prop) { [string]$azure.$Prop } else { '' } }
+        $state = & $read 'state'
+        $source = & $read 'source'
+        # A token from a LATER source (the az cache, another identity) never proves
+        # the selected credential: ready counts only from that credential's source.
+        if ($state -eq 'ready' -and -not ($sourcePrefix -and $source.StartsWith($sourcePrefix, [System.StringComparison]::Ordinal))) { $state = 'needs-owner' }
+        $lane = [pscustomobject]@{ State = $state; Source = $source; Detail = (& $read 'detail'); OwnerAction = (& $read 'ownerAction') }
+    }
+    $script:selectedCredentialLaneCache[$Kind] = $lane
+    return $lane
+}
+
 # --- az lane -------------------------------------------------------------------------
 function Test-AzLane {
     $azCmd = Get-CliCommand -Name 'az'
@@ -1065,6 +1118,24 @@ function Test-AzLane {
 
     if ($show.ExitCode -eq 0 -and $refreshOk) {
         $suffix = if ($inCloudShell) { ' (Cloud Shell implicit login)' } else { '' }
+        # A configured DEPLOYED credential is exercised before the cache is credited
+        # (review finding): the hub's DefaultAzureCredential selects an environment
+        # service principal, a workload identity or a managed identity AHEAD of the az
+        # cache and stops when it fails, so a healthy cache proves nothing about the
+        # credential the hub will present. rest-connect.ps1 performs that exchange in
+        # memory (never a login, never an echo) and its azure lane is the verdict.
+        $deployedKind = Get-DeployedCredentialKind
+        if ($deployedKind) {
+            $selected = Get-SelectedCredentialLane -Kind $deployedKind
+            if ($selected.State -eq 'ready') {
+                return New-LaneResult -Lane 'az' -State 'ready' -Method $deployedKind `
+                    -Detail ("the selected $deployedKind was exercised end to end by scripts/verify/rest-connect.ps1 (token acquired, ARM answered; token never echoed) — that is the credential the hub's DefaultAzureCredential uses; az account show and a live token refresh also succeed$suffix for the CLI's own cached login")
+            }
+            $selectedState = if ($selected.State -eq 'unavailable') { 'unavailable' } else { 'needs-owner' }
+            return New-LaneResult -Lane 'az' -State $selectedState -Method $deployedKind `
+                -Detail ("az account show and a live token refresh succeed$suffix, but the hub's DefaultAzureCredential selects the configured $deployedKind ahead of that cache and stops when it fails — scripts/verify/rest-connect.ps1 reports it $($selected.State): $($selected.Detail)") `
+                -OwnerAction $(if ($selected.OwnerAction) { $selected.OwnerAction } else { "repair the configured $deployedKind (run pwsh scripts/verify/rest-connect.ps1 -Json for the exact step), or unset its AZURE_* / IDENTITY_ENDPOINT variables so DefaultAzureCredential falls through to this az login" })
+        }
         return New-LaneResult -Lane 'az' -State 'ready' -Method 'cached-login' `
             -Detail ("az account show and a live token refresh both succeed$suffix — this Entra token backs az, the SDK credential chain, and Azure AI Foundry")
     }
@@ -1527,19 +1598,36 @@ function Test-CopilotLane {
 # permission: a 404 counts as absent only when the listing endpoint answered 200 (GitHub
 # hides secrets from a token without that permission behind the same 404), anything
 # else is unknown with the reason. Screened GitHub tokens are cleared around the calls
-# exactly as for the gh lane; the repo comes from gh's own {owner}/{repo} resolution
-# (the current git remote, or GH_REPO).
+# exactly as for the gh lane; the repository is THIS checkout's origin remote, passed
+# explicitly (review finding): gh's {owner}/{repo} placeholders resolve through GH_REPO
+# when it is set, which would report another repository's secrets as this one's.
+$script:checkoutRepositorySlug = $null
+function Get-CheckoutRepositorySlug {
+    if ($null -ne $script:checkoutRepositorySlug) { return $script:checkoutRepositorySlug }
+    $slug = ''
+    $gitCmd = Get-CliCommand -Name 'git'
+    if ($gitCmd) {
+        $remote = Invoke-Probe -Executable $gitCmd.Source -Arguments @('-C', $repoRoot, 'remote', 'get-url', 'origin')
+        $url = if ($remote.ExitCode -eq 0) { (@($remote.Output) -join '').Trim() } else { '' }
+        # https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r(.git)
+        if ($url -match '(?i)github\.com[:/](?<owner>[A-Za-z0-9_.-]+)/(?<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$') { $slug = "$($Matches['owner'])/$($Matches['repo'])" }
+    }
+    $script:checkoutRepositorySlug = $slug
+    return $slug
+}
 function Get-RepositorySecretState {
     param([Parameter(Mandatory)][string]$Name)
     if ($Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return [pscustomobject]@{ State = 'unknown'; Reason = "'$Name' is not a valid secret name" } }
     $ghCmd = Get-CliCommand -Name 'gh'
     if (-not $ghCmd) { return [pscustomobject]@{ State = 'unknown'; Reason = 'gh is not on PATH, so repository-secret metadata could not be read' } }
+    $slug = Get-CheckoutRepositorySlug
+    if (-not $slug) { return [pscustomobject]@{ State = 'unknown'; Reason = "this checkout's origin remote is not a github.com repository (or git is absent), so the repository whose secrets to read cannot be pinned; GH_REPO is deliberately not consulted" } }
     $cleared = @(Get-NonGitHubOwnedTokenNames)
     $saved = @{}
     foreach ($clearedName in $cleared) { $saved[$clearedName] = [Environment]::GetEnvironmentVariable($clearedName); [Environment]::SetEnvironmentVariable($clearedName, $null) }
     try {
-        $listProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', 'repos/{owner}/{repo}/actions/secrets?per_page=1')
-        $itemProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', "repos/{owner}/{repo}/actions/secrets/$Name")
+        $listProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', "repos/$slug/actions/secrets?per_page=1")
+        $itemProbe = Invoke-Probe -Executable $ghCmd.Source -Arguments @('api', '-i', "repos/$slug/actions/secrets/$Name")
     }
     finally {
         foreach ($clearedName in $cleared) { [Environment]::SetEnvironmentVariable($clearedName, $saved[$clearedName]) }
@@ -1554,7 +1642,7 @@ function Get-RepositorySecretState {
     $itemStatus = & $statusOf $itemProbe
     if ($itemStatus -eq 200) { return [pscustomobject]@{ State = 'configured'; Reason = 'repository-secret metadata lists it (name and dates only, never a value)' } }
     if ($itemStatus -eq 404 -and $listStatus -eq 200) { return [pscustomobject]@{ State = 'absent'; Reason = 'the repository-secret listing is readable and does not contain it' } }
-    $why = if ($itemStatus -eq 0) { "gh api could not be resolved or reached (not in a git checkout with a GitHub remote, or the call failed; output never echoed)" }
+    $why = if ($itemStatus -eq 0) { "gh api could not reach repos/$slug (the call failed; output never echoed)" }
     elseif ($itemStatus -in 401, 403, 404) { "HTTP $itemStatus — the wire token cannot read repository-secret metadata (GitHub answers $itemStatus without the actions-secrets read permission); a fine-grained PAT with Secrets: read, or the owner's gh login, can" }
     else { "HTTP $itemStatus from the repository-secret metadata endpoint" }
     return [pscustomobject]@{ State = 'unknown'; Reason = $why }

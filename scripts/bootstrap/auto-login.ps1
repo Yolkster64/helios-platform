@@ -288,7 +288,7 @@ function Invoke-HeliosAutoLogin {
     $memberSchemas = @{
         provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
         cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-        cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'int' }
+        cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'seconds' }
         learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
         learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
     }
@@ -312,9 +312,14 @@ function Invoke-HeliosAutoLogin {
                 'string!' { $v -is [string] }
                 'bool' { $v -is [bool] }
                 'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+                # An ENABLED entry's timeout is RANGE-checked (review finding): the hub
+                # binds any int, then CliProcessAgent.CancelAfter throws on a negative
+                # TimeSpan after the child process was already started, and a zero
+                # cancels every request before it answers.
+                'seconds' { (($v -is [int]) -or ($v -is [long])) -and $v -ge 1 -and $v -le 2147483 }
             }
             if (-not $ok) {
-                $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } }
+                $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } 'seconds' { 'an integer from 1 to 2147483 (seconds — CliProcessAgent hands it to CancellationTokenSource.CancelAfter, which throws on a negative value and cancels a zero before the first byte; the child process is already running by then)' } }
                 return "$Path.$($member.Name) is $(Get-JsonShapeName $v), but AIHubOptions binds it as $expected"
             }
         }
@@ -719,6 +724,28 @@ function Invoke-HeliosAutoLogin {
         $action = if ($proof.OwnerAction) { $proof.OwnerAction }
         else { "prove the hub's $Kind${selector}: run pwsh scripts/verify/rest-connect.ps1 -Json (its azure lane must report ready for that credential source) and repair what it names, or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established" }
         return [pscustomobject]@{ Gap = $gap; Action = $action }
+    }
+    # The cached az identity's client id and tenant, as identifiers (never a secret);
+    # blanks when az is absent or the profile cannot be read.
+    function Get-CachedAzIdentity {
+        if (-not $azCmd) { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $acctLines = @(& $azCmd.Source account show --query '{name:user.name,tenantId:tenantId}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+        if ([int]$LASTEXITCODE -ne 0) { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $acct = $null
+        try { $acct = ($acctLines -join '') | ConvertFrom-Json } catch { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $read = { param($Prop) if ($null -ne $acct -and $acct.PSObject.Properties[$Prop] -and $null -ne $acct.$Prop) { ([string]$acct.$Prop).Trim() } else { '' } }
+        return [pscustomobject]@{ Name = (& $read 'name'); Tenant = (& $read 'tenantId') }
+    }
+    # '' when the cached identity IS the configured one (client id and, when
+    # AZURE_TENANT_ID is set, tenant); otherwise a description of what is cached.
+    function Test-AzIdentityMismatch {
+        param([AllowEmptyString()][string]$Name = '', [AllowEmptyString()][string]$Tenant = '')
+        if (-not $Name) { return '' }
+        $wantedClient = ([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim()
+        $wantedTenant = ([string][Environment]::GetEnvironmentVariable('AZURE_TENANT_ID')).Trim()
+        if (-not $Name.Equals($wantedClient, [System.StringComparison]::OrdinalIgnoreCase)) { return "'$Name'" }
+        if ($wantedTenant -and -not $Tenant.Equals($wantedTenant, [System.StringComparison]::OrdinalIgnoreCase)) { return "'$Name' in tenant '$(if ($Tenant) { $Tenant } else { 'unknown' })'" }
+        return ''
     }
     # The Entra-fallback verdict for an azure-openai entry whose key is not set: the
     # az lane feeds DefaultAzureCredential only for kind az-cli; any other kind must be
@@ -1210,6 +1237,21 @@ function Invoke-HeliosAutoLogin {
     # (and adding a human action for it) would leave the "only steps that need
     # a human" list non-empty for an already-satisfied configuration.
     $unresolvedPairs = @($vaultPairs | Where-Object { -not (Test-EnvValue $_.Env) })
+    # Pairs whose variable is ALREADY set are judged here (review finding): a preset
+    # key lights an azure-openai entry only with a usable endpoint and a github-models
+    # entry only with a baseUrl the factory accepts — CreateAzureOpenAi / CreateGitHubModels
+    # check those before the key — so "already holds a value" is never the whole
+    # verdict, and it is reached whatever the vault stage does next (nothing to pull,
+    # az down, no vault URI, every pair populated).
+    foreach ($presetPair in @($vaultPairs | Where-Object { Test-EnvValue $_.Env })) {
+        $presetProblems = @(Get-AzureOpenAiEndpointProblems -Pair $presetPair) + @(Get-GitHubModelsOriginProblems -Pair $presetPair)
+        if ($presetProblems.Count -gt 0) {
+            Add-Step -Step $presetPair.Env -State 'needs-owner' -Detail "already holds a value in this session (never clobbered), but the entries it lights stay unconfigured until this is fixed: $($presetProblems -join '; ')"
+        }
+        else {
+            Add-Step -Step $presetPair.Env -State 'skipped' -Detail 'already holds a value in this session — never clobbered'
+        }
+    }
     if (@($unresolvedPairs).Count -eq 0) {
         $nothingToPullWhy = if (@($vaultPairs).Count -eq 0) { 'the active config declares no enabled vault-backed providers' }
         else { 'every configured provider env already holds a value in this session (never clobbered)' }
@@ -1269,19 +1311,22 @@ function Invoke-HeliosAutoLogin {
             $cachedAzIdentity = ''
             $azIdentityMismatch = $false
             if (Test-EnvValue 'AZURE_CLIENT_ID') {
-                $acctLines = @(& $azCmd.Source account show --query user.name --output tsv --only-show-errors 2>$null)
-                if ([int]$LASTEXITCODE -eq 0) { $cachedAzIdentity = (@($acctLines) -join '').Trim() }
-                if ($cachedAzIdentity -and $cachedAzIdentity -ne ([string]$env:AZURE_CLIENT_ID).Trim()) {
+                # Client AND tenant (review finding): a multi-tenant app has one service
+                # principal per tenant under the same client id, so an az cache for
+                # tenant B matches AZURE_CLIENT_ID configured for tenant A by name alone
+                # and the identity-switch repair would be suppressed. Identifiers only.
+                $cachedAz = Get-CachedAzIdentity
+                $cachedAzIdentity = $cachedAz.Name
+                $mismatch = Test-AzIdentityMismatch -Name $cachedAz.Name -Tenant $cachedAz.Tenant
+                if ($mismatch) {
                     $azIdentityMismatch = $true
-                    Add-Step -Step 'az-identity' -State 'ok' -Detail ("cached az login is '$cachedAzIdentity', not the configured AZURE_CLIENT_ID workload identity — vault pulls proceed under the cached identity, whose Key Vault RBAC may differ")
+                    Add-Step -Step 'az-identity' -State 'ok' -Detail ("cached az login is $mismatch, not the configured AZURE_CLIENT_ID / AZURE_TENANT_ID workload identity — vault pulls proceed under the cached identity, whose Key Vault RBAC may differ")
                 }
             }
             $anyPullFailed = $false
             foreach ($pair in $vaultPairs) {
-                if (Test-EnvValue $pair.Env) {
-                    Add-Step -Step $pair.Env -State 'skipped' -Detail 'already holds a value in this session — never clobbered'
-                    continue
-                }
+                # Reported (and endpoint-validated) once, before the stage.
+                if (Test-EnvValue $pair.Env) { continue }
                 # Value: az stdout → local → $env:NAME. It is never interpolated anywhere.
                 $secretValue = ''
                 $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.SecretName --query value --output tsv --only-show-errors 2>$null)
