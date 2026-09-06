@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "repositoryTarget": "Yolkster64/helios-control",
+  "runnerGroups": [
+    {
+      "id": "github-hosted-portable",
+      "labels": ["ubuntu-latest", "windows-latest"],
+      "purpose": "Portable validation, unit tests, Bicep compilation, WinUI contract scans",
+      "secretsAllowed": false,
+      "productionAllowed": false
+    },
+    {
+      "id": "helios-windows-build",
+      "labels": ["self-hosted", "Windows", "X64", "helios-winui"],
+      "purpose": "Native WinUI 3 build, MSIX packaging, PowerShell AST and Windows integration tests",
+      "ephemeralPreferred": true,
+      "secretsAllowed": false,
+      "productionAllowed": false
+    },
+    {
+      "id": "helios-azure-plan",
+      "labels": ["self-hosted", "Linux", "X64", "helios-azure-plan"],
+      "purpose": "Optional private network development what-if and evidence generation",
+      "ephemeralPreferred": true,
+      "secretsAllowed": false,
+      "oidcOnly": true,
+      "productionAllowed": false
+    },
+    {
+      "id": "helios-azure-deploy",
+      "labels": ["self-hosted", "Linux", "X64", "helios-azure"],
+      "purpose": "Protected environment approved deployments",
+      "ephemeralPreferred": true,
+      "secretsAllowed": false,
+      "oidcOnly": true,
+      "productionAllowed": false
+    }
+  ],
+  "hardening": {
+    "runAsAdministratorByDefault": false,
+    "ephemeralWorkspace": true,
+    "cleanCheckout": true,
+    "outboundAllowList": true,
+    "inboundNetworkExposure": false,
+    "persistCredentials": false,
+    "automaticUpdates": true,
+    "imageOrBootstrapHashRequired": true,
+    "runnerVersionEvidenceRequired": true,
+    "logsRedacted": true,
+    "localSecretStorage": false
+  },
+  "registration": {
+    "tokenMayBeLogged": false,
+    "tokenMayBeCommitted": false,
+    "tokenLifetime": "single-registration",
+    "runnerDeletionAfterDecommission": true
+  }
+}
