@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "evt_command_01JHELIOSEXAMPLE001",
+  "eventType": "command.requested",
+  "source": "codex",
+  "repository": "Yolkster64/helios-platform",
+  "sourceSha": "c21ec24f41e61941c7f335b9835aba965c8f298b",
+  "entityId": "pull-request:example",
+  "correlationId": "corr_integration_contract_example",
+  "causationId": null,
+  "idempotencyKey": "command:integration-contract:example:1",
+  "environment": "test",
+  "occurredAt": "2026-09-06T00:00:00Z",
+  "dataClassification": "internal",
+  "actor": {
+    "type": "agent",
+    "id": "codex",
+    "displayName": "Codex"
+  },
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "tracestate": null
+  },
+  "links": [
+    {
+      "rel": "source",
+      "href": "https://github.com/Yolkster64/helios-platform/commit/c21ec24f41e61941c7f335b9835aba965c8f298b",
+      "title": "Executing source"
+    },
+    {
+      "rel": "receipt",
+      "href": "https://example.invalid/helios/receipts/evt_command_01JHELIOSEXAMPLE001",
+      "title": "Example durable receipt"
+    }
+  ],
+  "payload": {
+    "command": "validate-integration-contracts",
+    "dryRun": true
+  }
+}

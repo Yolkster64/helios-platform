@@ -1,0 +1,373 @@
+{
+  "schemaVersion": "1.0",
+  "authority": {
+    "currentProductRepository": "Yolkster64/helios-platform",
+    "plannedProductRepository": "Yolkster64/helios-control",
+    "integrationGovernanceRepository": "Heli0s-Dynamics/adaptive-multibrain-bootstrap",
+    "historicalProductRepository": "M0nado/helios-platform",
+    "transitionUrl": "https://github.com/Yolkster64/helios-platform/pull/154"
+  },
+  "externalAuthorities": {
+    "sourceControl": "github",
+    "deployment": "github-protected-environments",
+    "identity": "azure-workload-identity-federation",
+    "secrets": "azure-key-vault"
+  },
+  "repositories": [
+    {
+      "name": "Yolkster64/helios-platform",
+      "lifecycle": "active",
+      "role": "Current product, execution, MCP, connector, and fleet authority",
+      "integrationMode": "canonical",
+      "importPolicy": "native"
+    },
+    {
+      "name": "Heli0s-Dynamics/adaptive-multibrain-bootstrap",
+      "lifecycle": "active",
+      "role": "Cross-repository governance and integration-policy authority",
+      "integrationMode": "contract-governance",
+      "importPolicy": "contract-mirror"
+    },
+    {
+      "name": "Yolkster64/helios-control",
+      "lifecycle": "planned",
+      "role": "Planned in-place name for the current product repository",
+      "integrationMode": "planned-in-place-rename",
+      "importPolicy": "never-wholesale"
+    },
+    {
+      "name": "Yolkster64/helios-gui",
+      "lifecycle": "planned",
+      "role": "Planned WinUI 3 extraction target",
+      "integrationMode": "planned-extraction",
+      "importPolicy": "selective-extraction"
+    },
+    {
+      "name": "M0nado/helios-platform",
+      "lifecycle": "historical",
+      "role": "Historical upstream and provenance source",
+      "integrationMode": "historical-upstream",
+      "importPolicy": "read-only-reference"
+    },
+    {
+      "name": "M0nado/helios-ai-hub",
+      "lifecycle": "recovery",
+      "role": "Provider-contract recovery reference",
+      "integrationMode": "recovery-only",
+      "importPolicy": "selective-extraction"
+    },
+    {
+      "name": "Yolkster64/hermes-agent-github",
+      "lifecycle": "satellite",
+      "role": "Hermes agent runtime source",
+      "integrationMode": "adapter",
+      "importPolicy": "thin-adapter"
+    },
+    {
+      "name": "Yolkster64/hermes-fleet-platforms",
+      "lifecycle": "satellite",
+      "role": "Hermes and XCore fleet experiment source",
+      "integrationMode": "reference-only",
+      "importPolicy": "selective-extraction"
+    },
+    {
+      "name": "Yolkster64/monado-blade",
+      "lifecycle": "satellite",
+      "role": "Legacy architecture and interaction-pattern source",
+      "integrationMode": "reference-only",
+      "importPolicy": "selective-extraction"
+    },
+    {
+      "name": "Yolkster64/WindowsDeveloperConfig",
+      "lifecycle": "satellite",
+      "role": "Windows development workload source",
+      "integrationMode": "workload-manifest",
+      "importPolicy": "versioned-artifact"
+    },
+    {
+      "name": "Yolkster64/ai-hub-knowledge",
+      "lifecycle": "recovery",
+      "role": "Event Hub and Application Insights design reference",
+      "integrationMode": "recovery-only",
+      "importPolicy": "read-only-reference"
+    },
+    {
+      "name": "Yolkster64/helios",
+      "lifecycle": "recovery",
+      "role": "Unverified Azure inventory and receipt snapshot",
+      "integrationMode": "recovery-only",
+      "importPolicy": "read-only-reference"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cross-repository-policy",
+      "authorityRepository": "Heli0s-Dynamics/adaptive-multibrain-bootstrap",
+      "status": "active",
+      "description": "Defines cross-repository policy and integration governance.",
+      "consumers": [
+        "Yolkster64/helios-platform"
+      ]
+    },
+    {
+      "id": "integration-event-distribution",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Distributes the executable v1 envelope used by the current product line.",
+      "consumers": [
+        "github",
+        "linear",
+        "slack",
+        "sharepoint",
+        "azure-devops",
+        "chatgpt",
+        "codex",
+        "claude",
+        "hermes",
+        "xcore"
+      ]
+    },
+    {
+      "id": "product-execution",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns the current product and execution platform.",
+      "consumers": [
+        "github",
+        "azure"
+      ]
+    },
+    {
+      "id": "multi-llm-routing",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns provider-neutral routing and readiness contracts.",
+      "consumers": [
+        "chatgpt",
+        "openai-api",
+        "codex",
+        "claude",
+        "github-copilot",
+        "microsoft-copilot",
+        "hermes",
+        "xcore"
+      ]
+    },
+    {
+      "id": "mcp-tool-host",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns the HELIOS MCP tools and their local transport today.",
+      "consumers": [
+        "chatgpt",
+        "openai-api",
+        "codex",
+        "claude",
+        "github-copilot",
+        "microsoft-copilot"
+      ]
+    },
+    {
+      "id": "connector-orchestration",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns connector configuration and delivery workflows.",
+      "consumers": [
+        "linear",
+        "slack",
+        "sharepoint",
+        "azure-devops"
+      ]
+    },
+    {
+      "id": "fleet-orchestration",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns governed Hermes and XCore fleet planning and execution contracts.",
+      "consumers": [
+        "hermes",
+        "xcore",
+        "azure"
+      ]
+    },
+    {
+      "id": "desktop-control-current",
+      "authorityRepository": "Yolkster64/helios-platform",
+      "status": "active",
+      "description": "Owns the current WinUI 3 desktop source until reviewed extraction.",
+      "consumers": [
+        "windows"
+      ]
+    },
+    {
+      "id": "product-execution-future-alias",
+      "authorityRepository": "Yolkster64/helios-control",
+      "status": "planned",
+      "description": "Represents the reviewed in-place rename target; it is not active authority yet.",
+      "consumers": []
+    },
+    {
+      "id": "desktop-control-future",
+      "authorityRepository": "Yolkster64/helios-gui",
+      "status": "planned",
+      "description": "Represents the reviewed WinUI 3 extraction target; it is not active authority yet.",
+      "consumers": []
+    },
+    {
+      "id": "hermes-agent-source",
+      "authorityRepository": "Yolkster64/hermes-agent-github",
+      "status": "reference-only",
+      "description": "Supplies version-pinned Hermes capabilities through a thin adapter.",
+      "consumers": [
+        "Yolkster64/helios-platform"
+      ]
+    },
+    {
+      "id": "fleet-experiment-source",
+      "authorityRepository": "Yolkster64/hermes-fleet-platforms",
+      "status": "reference-only",
+      "description": "Supplies individually reviewed fleet concepts, never a wholesale tree import.",
+      "consumers": [
+        "Yolkster64/helios-platform"
+      ]
+    },
+    {
+      "id": "architecture-pattern-source",
+      "authorityRepository": "Yolkster64/monado-blade",
+      "status": "reference-only",
+      "description": "Supplies selected interface and interaction patterns.",
+      "consumers": [
+        "Yolkster64/helios-platform"
+      ]
+    },
+    {
+      "id": "windows-workload-source",
+      "authorityRepository": "Yolkster64/WindowsDeveloperConfig",
+      "status": "reference-only",
+      "description": "Supplies versioned Windows developer workload manifests.",
+      "consumers": [
+        "Yolkster64/helios-platform"
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "name": "github",
+      "role": "Engineering source and protected deployment authority",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": true
+    },
+    {
+      "name": "linear",
+      "role": "Planning and coordination evidence",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "slack",
+      "role": "Operator notification and coordination evidence",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "sharepoint",
+      "role": "Governance knowledge and durable evidence",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "azure-devops",
+      "role": "Validation and evidence mirror",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "chatgpt",
+      "role": "Remote MCP client and operator surface",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "openai-api",
+      "role": "Remote MCP and agent client",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "codex",
+      "role": "Repository implementation agent",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "claude",
+      "role": "Architecture and review agent",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "github-copilot",
+      "role": "Repository coding assistant",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "microsoft-copilot",
+      "role": "Enterprise assistant client",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "hermes",
+      "role": "Governed planning and fleet worker",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "xcore",
+      "role": "Governed planning and fleet worker",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    },
+    {
+      "name": "azure",
+      "role": "Runtime and independently authorized deployment target",
+      "eventSource": true,
+      "receiptRequired": true,
+      "deploymentAuthority": false
+    }
+  ],
+  "provenance": [
+    {
+      "repository": "M0nado/helios-platform",
+      "path": "config/integrations/event-contract.schema.json",
+      "blobSha": "cb370966c248a319eb7b6d6edacecaad5853275a",
+      "relationship": "adapted-from"
+    },
+    {
+      "repository": "M0nado/helios-platform",
+      "path": "config/integrations/repositories.json",
+      "blobSha": "5c3df96ec2d491ba7990454a8eb31ccff1f8ac1d",
+      "relationship": "adapted-from"
+    },
+    {
+      "repository": "Yolkster64/helios-platform",
+      "path": "config/migration/yolkster-control/topology.v1.json",
+      "blobSha": "f29f1a70b0acce323d24de272af202006780a123",
+      "relationship": "mirrors"
+    }
+  ]
+}

@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helios.dev/contracts/repository-capabilities.v1.schema.json",
+  "title": "HELIOS Repository and Capability Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "authority",
+    "externalAuthorities",
+    "repositories",
+    "capabilities",
+    "surfaces",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentProductRepository",
+        "plannedProductRepository",
+        "integrationGovernanceRepository",
+        "historicalProductRepository",
+        "transitionUrl"
+      ],
+      "properties": {
+        "currentProductRepository": {
+          "$ref": "#/$defs/repositoryName"
+        },
+        "plannedProductRepository": {
+          "$ref": "#/$defs/repositoryName"
+        },
+        "integrationGovernanceRepository": {
+          "$ref": "#/$defs/repositoryName"
+        },
+        "historicalProductRepository": {
+          "$ref": "#/$defs/repositoryName"
+        },
+        "transitionUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://(?:\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+        }
+      }
+    },
+    "externalAuthorities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceControl",
+        "deployment",
+        "identity",
+        "secrets"
+      ],
+      "properties": {
+        "sourceControl": {
+          "const": "github"
+        },
+        "deployment": {
+          "const": "github-protected-environments"
+        },
+        "identity": {
+          "const": "azure-workload-identity-federation"
+        },
+        "secrets": {
+          "const": "azure-key-vault"
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "lifecycle",
+          "role",
+          "integrationMode",
+          "importPolicy"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/repositoryName"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "planned",
+              "satellite",
+              "historical",
+              "recovery"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "integrationMode": {
+            "type": "string",
+            "enum": [
+              "canonical",
+              "contract-governance",
+              "planned-in-place-rename",
+              "planned-extraction",
+              "adapter",
+              "versioned-package",
+              "workload-manifest",
+              "reference-only",
+              "recovery-only",
+              "historical-upstream"
+            ]
+          },
+          "importPolicy": {
+            "type": "string",
+            "enum": [
+              "native",
+              "contract-mirror",
+              "thin-adapter",
+              "versioned-artifact",
+              "selective-extraction",
+              "read-only-reference",
+              "never-wholesale"
+            ]
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "authorityRepository",
+          "status",
+          "description",
+          "consumers"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*$"
+          },
+          "authorityRepository": {
+            "$ref": "#/$defs/repositoryName"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "planned",
+              "reference-only"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "consumers": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "role",
+          "eventSource",
+          "receiptRequired",
+          "deploymentAuthority"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*$"
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "eventSource": {
+            "type": "boolean"
+          },
+          "receiptRequired": {
+            "type": "boolean"
+          },
+          "deploymentAuthority": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "path",
+          "blobSha",
+          "relationship"
+        ],
+        "properties": {
+          "repository": {
+            "$ref": "#/$defs/repositoryName"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blobSha": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "adapted-from",
+              "supersedes",
+              "mirrors"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repositoryName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    }
+  }
+}

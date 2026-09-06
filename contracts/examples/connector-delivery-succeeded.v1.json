@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "eventId": "evt_connector_01JHELIOSEXAMPLE02",
+  "eventType": "connector.delivery.succeeded",
+  "source": "helios-platform",
+  "repository": "Yolkster64/helios-platform",
+  "sourceSha": "c21ec24f41e61941c7f335b9835aba965c8f298b",
+  "entityId": "outbox:example-2",
+  "correlationId": "corr_integration_contract_example",
+  "causationId": "evt_command_01JHELIOSEXAMPLE001",
+  "idempotencyKey": "connector:slack:example-delivery:1",
+  "environment": "test",
+  "occurredAt": "2026-09-06T00:00:01Z",
+  "dataClassification": "internal",
+  "actor": {
+    "type": "workflow",
+    "id": "connector-worker",
+    "displayName": "HELIOS connector worker"
+  },
+  "links": [
+    {
+      "rel": "parent",
+      "href": "https://example.invalid/helios/receipts/evt_command_01JHELIOSEXAMPLE001"
+    },
+    {
+      "rel": "receipt",
+      "href": "https://example.invalid/helios/receipts/evt_connector_01JHELIOSEXAMPLE02",
+      "title": "Example connector receipt"
+    }
+  ],
+  "payload": {
+    "connector": "slack",
+    "attempt": 1,
+    "destinationReference": "configured-channel",
+    "remoteReceiptId": "example-only"
+  }
+}

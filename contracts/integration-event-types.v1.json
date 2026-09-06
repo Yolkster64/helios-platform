@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "1.0",
+  "eventTypes": [
+    {
+      "id": "command.requested",
+      "family": "command",
+      "terminal": false,
+      "description": "A caller proposed a bounded command for evaluation."
+    },
+    {
+      "id": "command.accepted",
+      "family": "command",
+      "terminal": false,
+      "description": "The command was admitted to an authorized processing path."
+    },
+    {
+      "id": "command.rejected",
+      "family": "command",
+      "terminal": true,
+      "description": "The command was rejected before execution."
+    },
+    {
+      "id": "result.succeeded",
+      "family": "result",
+      "terminal": true,
+      "description": "A bounded operation completed successfully."
+    },
+    {
+      "id": "result.failed",
+      "family": "result",
+      "terminal": true,
+      "description": "A bounded operation completed with a failure."
+    },
+    {
+      "id": "approval.requested",
+      "family": "approval",
+      "terminal": false,
+      "description": "A separate authority was asked to approve a consequential action."
+    },
+    {
+      "id": "approval.granted",
+      "family": "approval",
+      "terminal": true,
+      "description": "The named authority approved the exact bound action."
+    },
+    {
+      "id": "approval.rejected",
+      "family": "approval",
+      "terminal": true,
+      "description": "The named authority rejected the exact bound action."
+    },
+    {
+      "id": "approval.expired",
+      "family": "approval",
+      "terminal": true,
+      "description": "An approval request expired before use."
+    },
+    {
+      "id": "deployment.planned",
+      "family": "deployment",
+      "terminal": false,
+      "description": "A deployment plan was produced without applying it."
+    },
+    {
+      "id": "deployment.preview.succeeded",
+      "family": "deployment",
+      "terminal": false,
+      "description": "A what-if or equivalent deployment preview completed."
+    },
+    {
+      "id": "deployment.preview.failed",
+      "family": "deployment",
+      "terminal": true,
+      "description": "A deployment preview failed and no apply is authorized."
+    },
+    {
+      "id": "deployment.started",
+      "family": "deployment",
+      "terminal": false,
+      "description": "An independently authorized deployment began."
+    },
+    {
+      "id": "deployment.succeeded",
+      "family": "deployment",
+      "terminal": true,
+      "description": "An independently authorized deployment completed."
+    },
+    {
+      "id": "deployment.failed",
+      "family": "deployment",
+      "terminal": true,
+      "description": "An independently authorized deployment failed."
+    },
+    {
+      "id": "connector.delivery.requested",
+      "family": "connector",
+      "terminal": false,
+      "description": "An outbox item was created for a connector destination."
+    },
+    {
+      "id": "connector.delivery.reconciling",
+      "family": "connector",
+      "terminal": false,
+      "description": "A connector delivery is being reconciled after an uncertain result."
+    },
+    {
+      "id": "connector.delivery.succeeded",
+      "family": "connector",
+      "terminal": true,
+      "description": "The destination returned a durable delivery receipt."
+    },
+    {
+      "id": "connector.delivery.failed",
+      "family": "connector",
+      "terminal": true,
+      "description": "Connector delivery failed with no success receipt."
+    },
+    {
+      "id": "fleet.job.queued",
+      "family": "fleet",
+      "terminal": false,
+      "description": "A fleet job entered the durable queue."
+    },
+    {
+      "id": "fleet.job.leased",
+      "family": "fleet",
+      "terminal": false,
+      "description": "A worker acquired a bounded lease for a fleet job."
+    },
+    {
+      "id": "fleet.job.started",
+      "family": "fleet",
+      "terminal": false,
+      "description": "The lease owner began the fleet job."
+    },
+    {
+      "id": "fleet.job.lease-expired",
+      "family": "fleet",
+      "terminal": false,
+      "description": "A fleet lease expired and the job is eligible for reconciliation."
+    },
+    {
+      "id": "fleet.job.succeeded",
+      "family": "fleet",
+      "terminal": true,
+      "description": "A fleet job completed with a durable result receipt."
+    },
+    {
+      "id": "fleet.job.failed",
+      "family": "fleet",
+      "terminal": true,
+      "description": "A fleet job failed before successful completion."
+    },
+    {
+      "id": "fleet.job.dead-lettered",
+      "family": "fleet",
+      "terminal": true,
+      "description": "A fleet job exhausted its retry policy and entered the dead-letter path."
+    }
+  ]
+}
