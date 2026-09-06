@@ -43,6 +43,10 @@ def _ensure_action(step: dict[str, Any], expected_prefix: str, message: str) -> 
 def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     if not path.is_file():
         fail(f"deploy workflow missing: {path.relative_to(ROOT)}")
+    try:
+        workflow_path = str(path.relative_to(ROOT))
+    except ValueError:
+        workflow_path = str(path)
 
     text = path.read_text(encoding="utf-8")
     data = yaml.safe_load(text) or {}
@@ -75,8 +79,10 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     ensure_rg_if = str(ensure_rg.get("if", ""))
     _require("steps.creds.outputs.configured == 'true'" in ensure_rg_if,
              "resource-group creation must be gated by OIDC configuration")
-    _require("!inputs.what_if" in ensure_rg_if,
-             "resource-group creation must not run for what-if mode")
+    _require("github.event_name == 'push'" in ensure_rg_if,
+             "resource-group creation must be limited to push deploys")
+    _require("!inputs.what_if" not in ensure_rg_if,
+             "resource-group creation must not include workflow_dispatch deploy mode")
 
     what_if = _find_step(steps, "What-if (sanitized custody record)")
     what_if_if = str(what_if.get("if", ""))
@@ -132,7 +138,7 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
 
     return {
         "status": "passed",
-        "workflow": str(path.relative_to(ROOT)),
+        "workflow": workflow_path,
         "checks": [
             "oidc-guard",
             "audience-hardening",

@@ -80,7 +80,7 @@ jobs:
             > custody/manifest-inputs.json
 
       - name: Ensure resource group for deploy
-        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)
+        if: steps.creds.outputs.configured == 'true' && github.event_name == 'push'
         run: |
           if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
             az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION"

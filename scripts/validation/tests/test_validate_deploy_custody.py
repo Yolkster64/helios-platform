@@ -45,6 +45,13 @@ class DeployCustodyValidatorTests(unittest.TestCase):
     def test_fails_when_contents_permission_is_elevated(self) -> None:
         self._validate_mutation("  contents: read", "  contents: write", "keep contents: read")
 
+    def test_fails_when_resource_group_creation_runs_outside_push(self) -> None:
+        self._validate_mutation(
+            "if: steps.creds.outputs.configured == 'true' && github.event_name == 'push'",
+            "if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || !inputs.what_if)",
+            "resource-group creation",
+        )
+
     def test_fails_when_artifact_upload_is_removed(self) -> None:
         self._validate_mutation(
             "        uses: actions/upload-artifact@v4",
