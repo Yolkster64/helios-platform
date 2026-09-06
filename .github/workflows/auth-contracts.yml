@@ -6,6 +6,10 @@ on:
       - 'scripts/verify/rest-connect.ps1'
       - 'scripts/bootstrap/auth-doctor.ps1'
       - 'scripts/bootstrap/auto-login.ps1'
+      - 'scripts/bootstrap/provision-github-secrets.ps1'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/verify/tests/test_bootstrap_review.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
@@ -17,6 +21,10 @@ on:
       - 'scripts/verify/rest-connect.ps1'
       - 'scripts/bootstrap/auth-doctor.ps1'
       - 'scripts/bootstrap/auto-login.ps1'
+      - 'scripts/bootstrap/provision-github-secrets.ps1'
+      - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/setup/setup-all.ps1'
+      - 'scripts/verify/tests/test_bootstrap_review.ps1'
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
@@ -41,3 +49,6 @@ jobs:
           ./scripts/verify/tests/test_auth_readiness.ps1
           ./scripts/verify/tests/test_auth_boundaries.ps1
           ./scripts/verify/tests/test_auth_config.ps1
+      - name: Verify bootstrap provisioning and informational readiness contracts
+        shell: pwsh
+        run: ./scripts/verify/tests/test_bootstrap_review.ps1

@@ -108,10 +108,9 @@ function New-Component {
 
 # Informational rows read ready | unhealthy | skipped and are excluded from the readiness
 # verdict by construction: the exit-code filter below keys on the literal
-# 'needs-attention', which these statuses never equal. A passing probe says 'ready' rather
-# than a private word such as 'healthy' because setup-everything.ps1 extracts every
-# component whose status is not 'ready' as needing attention, and a passing probe must not
-# surface there. Fix is always empty for the same reason: the roll-ups harvest nextCommand
+# 'needs-attention', which these statuses never equal. setup-everything.ps1 also excludes
+# components marked Informational from its needs-attention summary regardless of status.
+# Fix is always empty because the roll-ups harvest nextCommand
 # into the owner checklist, and an informational probe must never mint an owner action;
 # the remedy travels inside Detail instead, where a human still sees it.
 function New-InformationalComponent {
