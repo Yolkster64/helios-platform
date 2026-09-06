@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "topologyId": "yolkster-helios-two-repository-product",
+  "repositories": [
+    {
+      "name": "Yolkster64/helios-control",
+      "currentName": "Yolkster64/helios-platform",
+      "role": "canonical-core-control-plane",
+      "creationStrategy": "rename-current-repository-in-place",
+      "visibility": "private-preferred",
+      "defaultBranch": "main",
+      "deploymentAuthority": true,
+      "archive": false
+    },
+    {
+      "name": "Yolkster64/helios-gui",
+      "role": "canonical-native-winui3-desktop",
+      "creationStrategy": "new-repository-plus-history-preserving-extraction",
+      "visibility": "private-preferred",
+      "defaultBranch": "main",
+      "deploymentAuthority": false,
+      "archive": false
+    },
+    {
+      "name": "Yolkster64/Yolkster64",
+      "role": "public-profile-readme",
+      "creationStrategy": "public-profile-repository",
+      "visibility": "public",
+      "defaultBranch": "main",
+      "deploymentAuthority": false,
+      "archive": false
+    },
+    {
+      "name": "Yolkster64/.github-enterprise-control",
+      "role": "repository-governance-and-runner-policy",
+      "creationStrategy": "special-governance-repository",
+      "visibility": "private",
+      "defaultBranch": "main",
+      "deploymentAuthority": false,
+      "archive": false
+    }
+  ],
+  "sourceDisposition": [
+    {
+      "repository": "M0nado/helios-platform",
+      "role": "historical-upstream-and-migration-source",
+      "importPolicy": "file-level-unique-reviewed-deltas-only",
+      "archiveAfterProof": false
+    },
+    {
+      "repository": "M0nado/Helios-Control-Center",
+      "role": "historical-ui-source",
+      "importPolicy": "original-winui3-assets-and-logic-only",
+      "archiveAfterProof": true
+    },
+    {
+      "repository": "Yolkster64/monado-blade",
+      "role": "immutable-integration-lab-history",
+      "importPolicy": "checksum-locked-artifacts-and-provenance",
+      "archiveAfterProof": true
+    },
+    {
+      "repository": "Yolkster64/hermes-fleet-platforms",
+      "role": "hermes-xcore-specialist-lab",
+      "importPolicy": "owned-contracts-adapters-skills-tests-only",
+      "archiveAfterProof": true
+    },
+    {
+      "repository": "Yolkster64/WindowsDeveloperConfig",
+      "role": "windows-declarative-config-fork",
+      "importPolicy": "owned-configuration-deltas-only",
+      "archiveAfterProof": true
+    },
+    {
+      "repository": "Yolkster64/azure-sdk-for-net",
+      "role": "upstream-sdk-fork",
+      "importPolicy": "released-packages-and-thin-adapters-not-source",
+      "archiveAfterProof": true
+    }
+  ],
+  "globalRules": {
+    "singleCoreAuthority": true,
+    "singleGuiAuthority": true,
+    "newerDestinationWins": true,
+    "sourceShaRequired": true,
+    "licenseReviewRequired": true,
+    "targetCiRequiredBeforeArchive": true,
+    "deleteRepositoryAllowed": false,
+    "rewriteHistoryAllowed": false,
+    "productionEnabled": false
+  }
+}
