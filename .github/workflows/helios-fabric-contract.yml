@@ -1,0 +1,147 @@
+name: HELIOS Fabric Contract
+
+on:
+  pull_request:
+    paths:
+      - 'config/fabric/**'
+      - 'config/schemas/helios-fabric.schema.json'
+      - 'docs/fabric/**'
+      - 'scripts/fabric/**'
+      - 'tests/fabric/**'
+      - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
+      - '.azuredevops/pipelines/helios-fabric-validate.yml'
+      - '.claude/agents/fabric-setup.md'
+      - '.claude/commands/plan-fabric-setup.md'
+      - '.github/workflows/helios-fabric-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/fabric/**'
+      - 'config/schemas/helios-fabric.schema.json'
+      - 'scripts/fabric/**'
+      - 'tests/fabric/**'
+      - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
+      - '.azuredevops/pipelines/helios-fabric-validate.yml'
+      - '.github/workflows/helios-fabric-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-fabric-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Validate Fabric topology and planner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate Fabric contract
+        run: python scripts/fabric/plan_helios_fabric.py --mode validate
+
+      - name: Build sanitized Fabric plan
+        run: >-
+          python scripts/fabric/plan_helios_fabric.py
+          --mode plan
+          --output fabric-plan.json
+
+      - name: Run Fabric planner regression tests
+        run: python -m unittest discover -s tests/fabric -p 'test_*.py' -v
+
+      - name: Verify fail-closed plan artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path('fabric-plan.json').read_text(encoding='utf-8'))
+          assert plan['status'] == 'passed'
+          result = plan['result']
+          assert result['contract']['integrations'] == 14
+          assert result['contract']['phases'] == 17
+          assert result['security']['productionEnabled'] is False
+          assert result['security']['applyDefault'] is False
+          assert result['security']['secretValuesRead'] is False
+          assert result['security']['externalMutationPerformed'] is False
+          assert result['security']['activeUiFramework'] == 'WinUI 3'
+          production = next(item for item in result['phases'] if item['id'] == 'F16')
+          assert production['readiness'] == 'production-disabled'
+          PY
+
+      - name: Validate existing Yolkster cutover and WinUI contract
+        run: python scripts/validation/validate_yolkster_cutover.py
+
+      - name: Compile Python planner
+        run: python -m compileall -q scripts/fabric tests/fabric
+
+      - name: Upload Fabric plan evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-fabric-plan
+          path: |
+            fabric-plan.json
+            config/fabric/helios-fabric.v1.json
+          if-no-files-found: error
+          retention-days: 30
+
+  mcp:
+    name: Build HELIOS MCP Fabric tool
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build MCP server
+        run: >-
+          dotnet build src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj
+          --configuration Release
+          --nologo
+
+  policy:
+    name: Enforce non-deployment Fabric boundary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify workflow permissions and source policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          contract = json.loads(Path('config/fabric/helios-fabric.v1.json').read_text(encoding='utf-8'))
+          assert contract['canonical']['productionEnabled'] is False
+          assert contract['security']['productionEnabled'] is False
+          assert contract['security']['applyDefault'] is False
+          assert contract['security']['secretValuesInRepository'] is False
+          assert contract['security']['externalWritesRequireApproval'] is True
+          assert contract['security']['allowedUiFramework'] == 'WinUI 3'
+          assert {'WPF', 'UWP'}.issubset(set(contract['security']['forbiddenUiFrameworks']))
+
+          workflow = Path('.github/workflows/helios-fabric-contract.yml').read_text(encoding='utf-8')
+          permissions_block = workflow.split('permissions:', 1)[1].split('concurrency:', 1)[0]
+          assert 'contents: read' in permissions_block
+          assert 'write' not in permissions_block
+          assert 'azure/login' not in workflow
+          assert 'az deployment' not in workflow
+          assert 'pull_request_target' not in workflow
+          PY
