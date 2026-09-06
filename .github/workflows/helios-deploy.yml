@@ -177,12 +177,12 @@ jobs:
 
       - name: Seal custody manifest
         id: seal
-        if: always() && steps.creds.outputs.configured == 'true' && (steps.whatif.outcome != 'skipped' || steps.deploy.outcome != 'skipped')
+        if: always() && steps.creds.outputs.configured == 'true' && steps.custody.conclusion == 'success'
         run: |
           set -euo pipefail
           cd custody
-          mode="what-if"
-          if [ "${{ steps.deploy.outcome }}" != "skipped" ]; then mode="deploy"; fi
+          mode="deploy"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.what_if }}" = "true" ]; then mode="what-if"; fi
           jq -n \
             --slurpfile inputs manifest-inputs.json \
             --arg mode "$mode" \
