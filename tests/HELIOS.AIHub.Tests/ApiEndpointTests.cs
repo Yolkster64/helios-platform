@@ -9,10 +9,12 @@ namespace HELIOS.AIHub.Tests;
 
 /// <summary>
 /// HTTP-level tests for the REST orchestration surface. The factory boots the real app
-/// against the shipped config/aihub.json (found by walking up from the test directory),
-/// where every provider is Unconfigured — so these run keyless and offline, like CI.
+/// against a private copy of the shipped config/aihub.json (<see cref="IsolatedApiFactory"/>),
+/// where every provider is Unconfigured and the learning store is empty — so these run
+/// keyless and offline, like CI, and independently of the checkout's own
+/// <c>.helios/learning</c> store.
 /// </summary>
-public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ApiEndpointTests : IClassFixture<IsolatedApiFactory>
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly bool RequirePythonSpoke =
@@ -20,7 +22,7 @@ public sealed class ApiEndpointTests : IClassFixture<WebApplicationFactory<Progr
 
     private readonly HttpClient _client;
 
-    public ApiEndpointTests(WebApplicationFactory<Program> factory)
+    public ApiEndpointTests(IsolatedApiFactory factory)
     {
         _client = factory.CreateClient();
         if (Environment.GetEnvironmentVariable("HELIOS_API_ACCESS_KEY") is { Length: > 0 } key)

@@ -11,6 +11,7 @@ C# dead code, `scripts/ai-services/` OpenAI-only PowerShell, and the orphaned GU
 |---|---|---|---|---|
 | `openai` | SDK (REST under the hood) | `OpenAI 2.12.0` → `IChatClient` | `OPENAI_API_KEY` | ChatGPT/Codex-class models |
 | `anthropic` | SDK, native Messages API | `Anthropic.SDK 5.10.0` | `ANTHROPIC_API_KEY` | Community SDK isolated behind `ProviderFactory`; raw-REST fallback documented below |
+| `anthropic-foundry` | SDK, native Messages API against Microsoft Foundry | `Anthropic.SDK 5.10.0` with `ApiUrlFormat` → `https://<resource>.services.ai.azure.com/anthropic/{0}/{1}` | `ANTHROPIC_FOUNDRY_RESOURCE` (resource name **or** https base URL) + `ANTHROPIC_FOUNDRY_API_KEY` (`x-api-key`) **or** Entra ID (`DefaultAzureCredential`, scope `https://ai.azure.com/.default`, `Authorization: Bearer`) | Model = Foundry *deployment name* (default `claude-sonnet-4-6`, same deployments as `Connect-ClaudeFoundry.ps1`); Entra token cached and refreshed ≥5 min before expiry in a `DelegatingHandler` |
 | `azure-openai` | SDK | `Azure.AI.OpenAI 2.1.0` | endpoint + key **or** Entra ID (`DefaultAzureCredential`) | Model = *deployment name* from `infra/main.bicepparam` |
 | `azure-foundry` | SDK | `Azure.AI.Agents.Persistent 1.1.0` | Entra ID against `projectEndpoint` | Foundry Agent Service: agent + thread + run + poll |
 | `github-models` | REST (OpenAI-compatible) | `OpenAI` client @ `https://models.github.ai/inference` | `GITHUB_MODELS_TOKEN` / `GITHUB_TOKEN` | API-shaped access to the GitHub catalog |
@@ -31,6 +32,8 @@ config/aihub.json ──► AIHubOptions ──► ProviderFactory ──► ICh
 AgentRequest → ChatRequest mapping        ┌── ChatClientAgent (M.E.AI IChatClient: openai,
 IAgent seam (source-linked from core) ────┤    azure-openai, github-models, ollama)
                                           ├── AnthropicAgent (native SDK)
+                                          ├── AnthropicFoundryAgent (same SDK, Foundry base URL,
+                                          │    key or Entra bearer via DelegatingHandler)
                                           ├── FoundryAgentProvider (persistent agents)
                                           └── CliProcessAgent (argv template, no shell)
 AIHubService ──► TaskTypeRoutingStrategy (IRouter/IRoutingStrategy seam)

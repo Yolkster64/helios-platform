@@ -744,7 +744,7 @@ function Get-ConfiguredGitHubModelsEnvs {
         $providers = Get-OptionalProperty $parsed 'providers'
         if ($null -eq $providers) { return @() }
         # Pass 1 — every enabled KEYED entry (github-models, openai, anthropic,
-        # azure-openai) that reads a variable, with whether it is a PUBLIC github-models
+        # azure-openai, anthropic-foundry) that reads a variable, with whether it is a PUBLIC github-models
         # provider. apiKeyEnv follows ProviderFactory exactly (review finding): the
         # per-type default applies only when the property is absent/null; a
         # declared-blank name means the hub reads NO variable (SecretResolver skips a
@@ -773,6 +773,9 @@ function Get-ConfiguredGitHubModelsEnvs {
                 'openai' { 'OPENAI_API_KEY' }
                 'anthropic' { 'ANTHROPIC_API_KEY' }
                 'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                # Claude in Microsoft Foundry reads its own (optional) key variable —
+                # a Models entry sharing that name is a non-GitHub reader, screened here.
+                'anthropic-foundry' { 'ANTHROPIC_FOUNDRY_API_KEY' }
                 default { '' }
             }
             if (-not $typeDefault) { continue }   # keyless types read no variable
@@ -810,16 +813,16 @@ function Get-ConfiguredGitHubModelsEnvs {
         # Pass 2 — a variable is a candidate only when EVERY enabled entry reading it
         # is a PUBLIC github-models provider (review findings, mixed and cross-type
         # ownership): one also read by a custom-baseUrl Models entry or by an
-        # openai/anthropic/azure-openai entry may hold THAT service's credential,
-        # which must never be sent to api.github.com — the same rule auto-login.ps1
+        # openai/anthropic/azure-openai/anthropic-foundry entry may hold THAT service's
+        # credential, which must never be sent to api.github.com — the same rule auto-login.ps1
         # applies before exporting into such a variable. Names compare under the OS
         # rule (case-sensitive on Unix — review finding).
         $names = [System.Collections.Generic.List[string]]::new()
         $seenNames = [System.Collections.Generic.HashSet[string]]::new($script:EnvNameComparer)
         # Every variable a NON-GitHub consumer reads is remembered (review finding):
         # the two fixed candidates GH_TOKEN / GITHUB_TOKEN bypass this function's
-        # result, yet an openai/anthropic/azure-openai entry or a CLI agent may be
-        # configured to read exactly those names — their value then belongs to that
+        # result, yet an openai/anthropic/azure-openai/anthropic-foundry entry or a CLI
+        # agent may be configured to read exactly those names — their value then belongs to that
         # service and must not be sent to api.github.com either.
         foreach ($entry in $entries) {
             if (-not $entry.PublicModels) { [void]$script:nonGitHubReaderEnvs.Add($entry.Env) }
@@ -860,7 +863,7 @@ function Get-GitHubTokenCandidates {
         # even have populated it from that provider's Key Vault secret — so it is that
         # service's credential, never a GitHub candidate.
         if ($script:nonGitHubReaderEnvs.Contains($envName)) {
-            $script:candidateNotes.Add("env:$envName is read by an enabled non-GitHub consumer in the active config (openai / anthropic / azure-openai / custom-endpoint provider or CLI agent) — its value belongs to that service and was not offered to api.github.com")
+            $script:candidateNotes.Add("env:$envName is read by an enabled non-GitHub consumer in the active config (openai / anthropic / azure-openai / anthropic-foundry / custom-endpoint provider or CLI agent) — its value belongs to that service and was not offered to api.github.com")
             continue
         }
         # Literal name through the .NET API (review finding): the env: drive would

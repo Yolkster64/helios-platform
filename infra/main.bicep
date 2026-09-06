@@ -85,6 +85,41 @@ param additionalModelDeployments modelDeployment[] = [
   }
 ]
 
+// --- Claude in Foundry: Azure Marketplace attestation ------------------------------
+// Anthropic-format entries of additionalModelDeployments (claude-sonnet-4-6, ...) are
+// Marketplace offers: the Cognitive Services RP accepts the Anthropic terms on the
+// deployer's behalf from a modelProviderData block sent with each deployment, and a
+// Claude deployment without it fails (AnthropicOrganizationCreationException). The block
+// exists only on accounts/deployments@2025-10-01-preview, so the account module deploys
+// Anthropic-format entries through that API version and everything else through the GA
+// 2025-06-01 pin. An empty organization name (the default) SKIPS the Anthropic-format
+// entries, so the live rg-helios-ai stack redeploys unchanged until the owner attests
+// at deploy time (see infra/README.md, "Claude in Foundry"). Sources:
+//   https://learn.microsoft.com/azure/developer/ai/how-to/deploy-claude-foundry
+//   https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-claude
+
+@description('Legal entity name sent to Anthropic as modelProviderData.organizationName with every Anthropic-format deployment (Azure Marketplace attestation — review the Anthropic Commercial Terms first). Empty string (the default) skips the Anthropic-format entries of additionalModelDeployments: no Claude deployment is created or changed.')
+param claudeOrganizationName string = ''
+
+@minLength(2)
+@maxLength(2)
+@description('Two-letter ISO country code of the organization using Claude, sent as modelProviderData.countryCode.')
+param claudeCountryCode string = 'US'
+
+@allowed([
+  'technology'
+  'finance'
+  'healthcare'
+  'education'
+  'retail'
+  'manufacturing'
+  'government'
+  'media'
+  'other'
+])
+@description('Industry of the organization using Claude, sent as modelProviderData.industry. Lowercase — the values the Foundry portal dropdown offers.')
+param claudeIndustry string = 'technology'
+
 @description('Full ARM resource ID of an existing Foundry/AI Services account. Empty string means create a new account (and project) here; when set, no account, deployments, or project are created — see infra/README.md.')
 param aiServiceAccountResourceId string = ''
 
@@ -234,6 +269,9 @@ module foundryAccount 'modules/ai-foundry-account.bicep' = if (!aiServiceExists)
     tags: tags
     modelDeployments: allModelDeployments
     principalId: principalId
+    claudeOrganizationName: claudeOrganizationName
+    claudeCountryCode: claudeCountryCode
+    claudeIndustry: claudeIndustry
   }
 }
 
@@ -325,6 +363,12 @@ output aiServicesEndpoint string = aiServiceExists ? '' : foundryAccount!.output
 
 @description('Azure OpenAI-compatible endpoint on the Foundry account (empty when an existing account was supplied).')
 output openAiEndpoint string = aiServiceExists ? '' : foundryAccount!.outputs.openAiEndpoint
+
+@description('Name of the Foundry (AIServices) account — the bare resource name scripts/ai-integration/Connect-ClaudeFoundry.ps1 and the hub\'s anthropic-foundry provider read from ANTHROPIC_FOUNDRY_RESOURCE (empty when an existing account was supplied).')
+output aiServicesAccountName string = aiServiceExists ? '' : foundryAccount!.outputs.accountName
+
+@description('Claude Messages API base URL on the Foundry account, https://<account>.services.ai.azure.com/anthropic — Entra scope https://ai.azure.com/.default, model = deployment name; carries no secret (empty when an existing account was supplied).')
+output anthropicFoundryBaseUrl string = aiServiceExists ? '' : foundryAccount!.outputs.anthropicBaseUrl
 
 @description('Foundry project endpoint — the modern replacement for the legacy "project connection string".')
 output projectEndpoint string = aiServiceExists ? '' : foundryProject!.outputs.projectEndpoint

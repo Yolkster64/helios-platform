@@ -196,6 +196,7 @@ public sealed class AIHubService
                     return result;
                 },
                 isSuccess: static result => result.Success,
+                describeFailure: static result => result.Error,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (FallbackChainExhaustedException ex)

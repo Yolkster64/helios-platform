@@ -23,7 +23,7 @@ public class CloudConfigBindingTests
     {
         var options = LoadCloudConfig();
 
-        foreach (var expected in new[] { "azure-openai", "azure-foundry", "openai", "anthropic", "github-models" })
+        foreach (var expected in new[] { "azure-openai", "azure-foundry", "openai", "anthropic", "anthropic-foundry", "github-models" })
         {
             Assert.True(options.Providers.ContainsKey(expected), $"provider '{expected}' missing");
         }

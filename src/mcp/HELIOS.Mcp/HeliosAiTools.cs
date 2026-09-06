@@ -19,7 +19,7 @@ public static class HeliosAiTools
     public static async Task<string> Ask(
         AIHubService hub,
         [Description("The prompt to send.")] string prompt,
-        [Description("Provider key from config/aihub.json (e.g. openai, anthropic, azure-openai, github-models, ollama, azure-foundry). Omit to route.")] string? provider = null,
+        [Description("Provider key from config/aihub.json (e.g. openai, anthropic, anthropic-foundry, azure-openai, github-models, ollama, azure-foundry). Omit to route.")] string? provider = null,
         [Description("Model or Azure deployment override for this request.")] string? model = null,
         [Description("Optional system prompt.")] string? system = null,
         CancellationToken cancellationToken = default)

@@ -24,6 +24,14 @@
       "apiKeyEnv": "ANTHROPIC_API_KEY",
       "apiKeySecretName": "anthropic-api-key"
     },
+    "anthropic-foundry": {
+      "$comment": "Claude deployed in Microsoft Foundry (https://<resource>.services.ai.azure.com/anthropic). 'model' is the Foundry DEPLOYMENT name; endpointEnv is a bare resource name or an https base URL; a missing key falls back to Entra ID (DefaultAzureCredential) like azure-openai.",
+      "type": "anthropic-foundry",
+      "model": "claude-sonnet-4-6",
+      "endpointEnv": "ANTHROPIC_FOUNDRY_RESOURCE",
+      "apiKeyEnv": "ANTHROPIC_FOUNDRY_API_KEY",
+      "apiKeySecretName": "anthropic-foundry-api-key"
+    },
     "github-models": {
       "type": "github-models",
       "model": "openai/gpt-4o-mini",
@@ -32,19 +40,19 @@
     }
   },
   "routing": {
-    "defaultChain": ["azure-openai", "openai", "anthropic", "github-models"],
+    "defaultChain": ["azure-openai", "openai", "anthropic", "anthropic-foundry", "github-models"],
     "taskRouting": {
       "code_generation": ["azure-openai", "openai", "anthropic"],
       "code_refactoring": ["anthropic", "openai", "azure-openai"],
       "test_creation": ["openai", "azure-openai", "anthropic"],
-      "code_review": ["anthropic", "openai"],
-      "long_context_analysis": ["anthropic"],
-      "documentation_generation": ["anthropic", "openai", "github-models"],
-      "code_analysis": ["anthropic", "openai"],
+      "code_review": ["anthropic", "anthropic-foundry", "openai"],
+      "long_context_analysis": ["anthropic", "anthropic-foundry"],
+      "documentation_generation": ["anthropic", "anthropic-foundry", "openai", "github-models"],
+      "code_analysis": ["anthropic", "anthropic-foundry", "openai"],
       "debugging": ["openai", "anthropic", "azure-openai"],
-      "security_analysis": ["anthropic", "openai"],
-      "architecture_design": ["anthropic", "openai"],
-      "enterprise_data": ["azure-foundry", "azure-openai"],
+      "security_analysis": ["anthropic", "anthropic-foundry", "openai"],
+      "architecture_design": ["anthropic", "anthropic-foundry", "openai"],
+      "enterprise_data": ["azure-foundry", "anthropic-foundry", "azure-openai"],
       "inline_completion": ["github-models", "azure-openai"],
       "general_query": ["azure-openai", "openai", "github-models"]
     }

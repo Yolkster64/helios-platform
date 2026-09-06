@@ -89,14 +89,14 @@ public sealed class AIHubOptions
 /// <summary>One API-backed provider entry.</summary>
 public sealed class ProviderOptions
 {
-    /// <summary>Provider kind: openai | azure-openai | anthropic | github-models | ollama | azure-foundry-agent.</summary>
+    /// <summary>Provider kind: openai | azure-openai | anthropic | anthropic-foundry | github-models | ollama | azure-foundry-agent.</summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = "";
 
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Default model (or Azure OpenAI deployment name) for this provider.</summary>
+    /// <summary>Default model (or Azure OpenAI / Foundry deployment name) for this provider.</summary>
     [JsonPropertyName("model")]
     public string? Model { get; set; }
 
@@ -108,11 +108,14 @@ public sealed class ProviderOptions
     [JsonPropertyName("apiKeySecretName")]
     public string? ApiKeySecretName { get; set; }
 
-    /// <summary>Environment variable holding the endpoint (azure-openai, azure-foundry-agent, ollama).</summary>
+    /// <summary>
+    /// Environment variable holding the endpoint (azure-openai, azure-foundry-agent, ollama;
+    /// for anthropic-foundry either a bare Foundry resource name or an https base URL).
+    /// </summary>
     [JsonPropertyName("endpointEnv")]
     public string? EndpointEnv { get; set; }
 
-    /// <summary>Fixed base URL (github-models default endpoint, ollama default).</summary>
+    /// <summary>Fixed base URL (github-models default endpoint, ollama default, anthropic-foundry override).</summary>
     [JsonPropertyName("baseUrl")]
     public string? BaseUrl { get; set; }
 }

@@ -15,7 +15,14 @@ deprecated; its parameter mapping lives in `infra/README.md`.
 - Raw resources over AVM registry modules in this repo — keeps `bicep build` offline and
   deterministic in CI (`infra-validate.yml` needs no subscription).
 - Pin api-versions; current pins: accounts/projects/deployments `2025-06-01`,
-  Key Vault `2024-11-01`, role assignments `2022-04-01`.
+  Key Vault `2024-11-01`, role assignments `2022-04-01`. One deliberate exception:
+  Anthropic-format (Claude) deployments live in a second `@batchSize(1)` loop on
+  `accounts/deployments@2025-10-01-preview`, the only version that carries the
+  `modelProviderData` attestation block Foundry requires for Claude — the
+  `#disable-next-line BCP037` beside it is that exception, not a lint to clean up
+  (`infra/README.md` "Claude in Foundry"; the Terraform mirror sets
+  `schema_validation_enabled = false` on the same resource for the same reason).
+  Fold the loop back into the GA version when `modelProviderData` ships there.
 - Stable naming: `uniqueString(resourceGroup().id)` — never `utcNow()` in resource names
   (mints new resources every deploy; the legacy quickstart had this bug).
 - Model deployments are data, not resources you hand-edit: the typed

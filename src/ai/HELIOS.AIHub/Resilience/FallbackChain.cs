@@ -40,13 +40,23 @@ public sealed class FallbackChain
     /// <summary>Times each provider was skipped or failed over, for status reporting.</summary>
     public IReadOnlyDictionary<string, long> FailoverCounts => _failovers;
 
+    /// <summary>Longest per-provider reason kept in the exhausted-chain summary.</summary>
+    public const int MaxFailureReasonLength = 240;
+
+    private const string DefaultSoftFailureReason = "provider reported failure";
+
     /// <param name="providerChain">Ordered provider names: first is primary, the rest are fallbacks.</param>
     /// <param name="operationForProvider">The operation, parameterized by the provider to run against.</param>
     /// <param name="isSuccess">Optional predicate marking a returned value as a soft failure that should fall through.</param>
+    /// <param name="describeFailure">
+    /// Optional reason extractor for soft failures, so an exhausted chain reports the real
+    /// causes (a CLI timeout, a "Set X" hint) instead of a generic placeholder.
+    /// </param>
     public async Task<T> ExecuteAsync<T>(
         IReadOnlyList<string> providerChain,
         Func<string, Task<T>> operationForProvider,
         Func<T, bool>? isSuccess = null,
+        Func<T, string?>? describeFailure = null,
         CancellationToken cancellationToken = default)
     {
         if (providerChain.Count == 0)
@@ -77,7 +87,7 @@ public sealed class FallbackChain
                 }
 
                 breaker.RecordFailure();
-                failures[provider] = "provider reported failure";
+                failures[provider] = SummarizeReason(describeFailure?.Invoke(result));
             }
             catch (OperationCanceledException)
             {
@@ -86,12 +96,27 @@ public sealed class FallbackChain
             catch (Exception ex)
             {
                 breaker.RecordFailure();
-                failures[provider] = ex.Message;
+                failures[provider] = SummarizeReason(ex.Message);
             }
 
             _failovers.AddOrUpdate(provider, 1, static (_, n) => n + 1);
         }
 
         throw new FallbackChainExhaustedException(failures);
+    }
+
+    /// <summary>One line, bounded length, never blank — the summary joins many of these.</summary>
+    internal static string SummarizeReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return DefaultSoftFailureReason;
+        }
+
+        var singleLine = string.Join(' ',
+            reason.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return singleLine.Length <= MaxFailureReasonLength
+            ? singleLine
+            : singleLine[..(MaxFailureReasonLength - 1)] + "…";
     }
 }

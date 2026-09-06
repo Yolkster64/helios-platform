@@ -34,6 +34,11 @@ public sealed class CliProcessAgent : ProviderAgentBase
         var startInfo = new ProcessStartInfo
         {
             FileName = _options.Command,
+            // Own stdin too: an inherited stdin lets CLIs that drain it to EOF (codex
+            // exec under any non-interactive host — CI, helios-ai-api, the MCP server)
+            // block for the whole timeout. Closing it right after start hands every
+            // agent an immediate EOF; the prompt always travels in argv, never stdin.
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -46,6 +51,7 @@ public sealed class CliProcessAgent : ProviderAgentBase
         var stopwatch = Stopwatch.StartNew();
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start '{_options.Command}'.");
+        process.StandardInput.Close();
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);

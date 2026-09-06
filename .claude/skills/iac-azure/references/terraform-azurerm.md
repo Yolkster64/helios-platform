@@ -41,7 +41,12 @@ with `terraform init -upgrade` and review the resulting diff; never delete the l
 
 - Foundry account / model deployments / project are typed `azapi_resource` blocks pinned
   to `Microsoft.CognitiveServices/...@2025-06-01` — the **same api-version the Bicep
-  pins**, which is the point of the mirror. Keep the two in lockstep.
+  pins**, which is the point of the mirror. Keep the two in lockstep. The one shared
+  exception is `azapi_resource.claude_deployment`: Anthropic-format (Claude)
+  deployments need the `modelProviderData` block that exists only on
+  `accounts/deployments@2025-10-01-preview`, so that resource pins the preview
+  version with `schema_validation_enabled = false` (azapi's schema lags the preview)
+  — the Terraform twin of the Bicep loop's `#disable-next-line BCP037`.
 - The fleet VMSS uses azapi because `azurerm_orchestrated_virtual_machine_scale_set`'s
   identity block is UserAssigned-only and cannot express SystemAssigned (comment above
   `azapi_resource.fleet_vmss`).

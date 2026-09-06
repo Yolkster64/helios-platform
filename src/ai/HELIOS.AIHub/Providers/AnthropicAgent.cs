@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Anthropic.SDK;
-using Anthropic.SDK.Messaging;
 using HELIOS.AIHub.Abstractions;
 
 namespace HELIOS.AIHub.Providers;
@@ -10,6 +9,8 @@ namespace HELIOS.AIHub.Providers;
 /// IChatClient adapter — this pins us to compile-time-checked types instead of an
 /// abstractions-version handshake between two packages. Swapping to a raw-REST client is
 /// documented in docs/architecture/MULTI_LLM_INTEGRATION.md if the SDK ever blocks us.
+/// The request/response shape lives in <see cref="AnthropicMessageMapping"/> and is shared
+/// with <see cref="AnthropicFoundryAgent"/> (Claude in Microsoft Foundry).
 /// </summary>
 public sealed class AnthropicAgent : ProviderAgentBase
 {
@@ -35,36 +36,13 @@ public sealed class AnthropicAgent : ProviderAgentBase
     protected override async Task<ChatResult> ChatCoreAsync(ChatRequest request, CancellationToken cancellationToken)
     {
         var model = request.Model ?? DefaultModel ?? "claude-sonnet-4-5";
-        var parameters = new MessageParameters
-        {
-            Model = model,
-            MaxTokens = request.MaxTokens ?? 4096,
-            Messages = new List<Message> { new(RoleType.User, request.Prompt) },
-        };
-        if (!string.IsNullOrWhiteSpace(request.System))
-        {
-            parameters.System = new List<SystemMessage> { new(request.System) };
-        }
-        if (request.Temperature is { } temperature)
-        {
-            parameters.Temperature = (decimal)temperature;
-        }
+        var parameters = AnthropicMessageMapping.ToParameters(request, model);
 
         var stopwatch = Stopwatch.StartNew();
         var response = await _client!.Value.Messages
             .GetClaudeMessageAsync(parameters, cancellationToken)
             .ConfigureAwait(false);
 
-        var text = string.Concat(
-            response.Content.OfType<TextContent>().Select(content => content.Text));
-
-        return new ChatResult(
-            Success: true,
-            Text: text,
-            Provider: Provider,
-            Model: response.Model ?? model,
-            Latency: stopwatch.Elapsed,
-            InputTokens: response.Usage?.InputTokens,
-            OutputTokens: response.Usage?.OutputTokens);
+        return AnthropicMessageMapping.ToResult(response, Provider, model, stopwatch.Elapsed);
     }
 }

@@ -83,12 +83,17 @@ Chain (reuse-first — this script orchestrates, it does not reimplement):
                  entry without any secret path is reported as an owner config fix.
                  Any other declared name is used LITERALLY — surrounding whitespace
                  included — because the factory hands the string untouched to
-                 Environment.GetEnvironmentVariable. Only the four keyed types
-                 (openai, anthropic, github-models, azure-openai) read a key at all;
-                 apiKeyEnv / apiKeySecretName on an ollama or azure-foundry-agent
-                 entry is ignored (nothing pulled, nothing exported). azure-openai's
-                 key is OPTIONAL: a vault secret that cannot be read leaves it on
-                 Entra ID (DefaultAzureCredential) and is not an owner action.
+                 Environment.GetEnvironmentVariable. Only the five keyed types
+                 (openai, anthropic, github-models, azure-openai, anthropic-foundry)
+                 read a key at all; apiKeyEnv / apiKeySecretName on an ollama or
+                 azure-foundry-agent entry is ignored (nothing pulled, nothing
+                 exported). The azure-openai and anthropic-foundry keys are OPTIONAL:
+                 a vault secret that cannot be read leaves them on Entra ID
+                 (DefaultAzureCredential) and is not an owner action — as long as
+                 the endpoint the factory reads first is usable (AZURE_OPENAI_ENDPOINT
+                 as an absolute http(s) URL; ANTHROPIC_FOUNDRY_RESOURCE as a bare
+                 Foundry resource name or an https base URL, or the entry's baseUrl,
+                 which overrides the variable — exactly ProviderFactory's rules).
                  A variable that enabled entries map to DIFFERENT Key Vault secrets
                  is a conflict: nothing is pulled into it (declaration order must
                  never choose a credential every sharer then reads) and the owner
@@ -832,6 +837,130 @@ function Invoke-HeliosAutoLogin {
         }
         return $problems
     }
+    # Claude in Microsoft Foundry (anthropic-foundry) — the SAME readiness contract as
+    # azure-openai, mirrored from ProviderFactory.CreateAnthropicFoundry: the entry's
+    # baseUrl (when non-blank) overrides the endpoint variable (endpointEnv, default
+    # ANTHROPIC_FOUNDRY_RESOURCE); the value is accepted by TryResolveBaseUri as a bare
+    # Foundry resource name (letters, digits and hyphens, 1-64 characters, leading
+    # letter or digit → https://<name>.services.ai.azure.com/anthropic) or as an
+    # absolute https URL (normalized to its /anthropic base); anything else — internal
+    # whitespace, http://, another shape — is Unconfigured. Only then is the key read
+    # (ANTHROPIC_FOUNDRY_API_KEY / apiKeySecretName), and a missing key selects Entra
+    # ID (DefaultAzureCredential, scope https://ai.azure.com/.default). The value is
+    # judged by shape only and never echoed (it is an identifier, but the rule is one).
+    function Test-AnthropicFoundryResource {
+        param([AllowEmptyString()][string]$Value = '')
+        $trimmed = $Value.Trim()
+        if (-not $trimmed) { return [pscustomobject]@{ Ok = $false; Kind = 'unset'; Note = 'unset' } }
+        foreach ($ch in $trimmed.ToCharArray()) {
+            if ([char]::IsWhiteSpace($ch)) { return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'neither a Foundry resource name nor an absolute https URL (it contains whitespace)' } }
+        }
+        if ($trimmed -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$') { return [pscustomobject]@{ Ok = $true; Kind = 'resource-name'; Note = 'a bare Foundry resource name (resolved to https://<name>.services.ai.azure.com/anthropic)' } }
+        $parsed = $null
+        if ([uri]::TryCreate($trimmed, [System.UriKind]::Absolute, [ref]$parsed) -and $parsed.Scheme -eq 'https' -and $parsed.Host) {
+            # Userinfo is rejected by TryResolveBaseUri too: a credential embedded in the
+            # resource value is never accepted, only the key or the Entra token.
+            if ($parsed.UserInfo) { return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'an https URL carrying userinfo (user:password@host) — a credential never belongs in the resource value; CreateAnthropicFoundry rejects it' } }
+            return [pscustomobject]@{ Ok = $true; Kind = 'https-url'; Note = 'an absolute https base URL (normalized to its /anthropic base)' }
+        }
+        return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'neither a Foundry resource name (letters, digits and hyphens, 1-64 characters, leading letter or digit) nor an absolute https URL without userinfo' }
+    }
+    # The only provider types whose factory path calls SecretResolver at all, and the
+    # two among them whose key is OPTIONAL because the factory falls back to Entra ID —
+    # each of those reads an ENDPOINT before any credential (see the two rules above).
+    $keyedProviderTypes = @('openai', 'anthropic', 'github-models', 'azure-openai', 'anthropic-foundry')
+    $entraProviderTypes = @('azure-openai', 'anthropic-foundry')
+    function Get-EntraFactoryName {
+        param([AllowEmptyString()][string]$Type = '')
+        switch ($Type) { 'azure-openai' { return 'CreateAzureOpenAi' } 'anthropic-foundry' { return 'CreateAnthropicFoundry' } default { return 'ProviderFactory' } }
+    }
+    # The endpoint variable an Entra-capable entry reads, exactly as the factory reads
+    # it: the declared endpointEnv when the property is present (a declared-blank name
+    # is returned blank — the factory then reads no variable), the per-type default
+    # when it is absent/null, '' for types that read no endpoint.
+    function Get-EntraEndpointEnv {
+        param([Parameter(Mandatory)]$Provider, [AllowEmptyString()][string]$Type = '')
+        $default = switch ($Type) { 'azure-openai' { 'AZURE_OPENAI_ENDPOINT' } 'anthropic-foundry' { 'ANTHROPIC_FOUNDRY_RESOURCE' } default { '' } }
+        if (-not $default) { return '' }
+        $prop = $Provider.PSObject.Properties['endpointEnv']
+        if ($null -eq $prop -or $null -eq $prop.Value) { return $default }
+        return [string]$prop.Value
+    }
+    function Get-EntraMembers {
+        param([Parameter(Mandatory)]$Pair, [AllowEmptyString()][string]$Type = '')
+        if (-not $Pair.PSObject.Properties['Members'] -or $null -eq $Pair.Members) { return @() }
+        return @($Pair.Members | Where-Object { $_.Type -in $entraProviderTypes -and (-not $Type -or $_.Type -eq $Type) })
+    }
+    function Get-MemberBaseUrl {
+        param([Parameter(Mandatory)]$Member)
+        if ($Member.PSObject.Properties['BaseUrl'] -and $null -ne $Member.BaseUrl) { return [string]$Member.BaseUrl }
+        return ''
+    }
+    # The Foundry twin of Get-AzureOpenAiEndpointProblems: every anthropic-foundry member
+    # of the pair is judged the way CreateAnthropicFoundry judges it (config baseUrl
+    # first, then the endpoint variable), the problems are returned and the owner
+    # action each one needs is recorded. Values are never echoed.
+    function Get-AnthropicFoundryResourceProblems {
+        param([Parameter(Mandatory)]$Pair)
+        $problems = @()
+        foreach ($member in @(Get-EntraMembers -Pair $Pair -Type 'anthropic-foundry')) {
+            $memberBase = Get-MemberBaseUrl -Member $member
+            if (-not [string]::IsNullOrWhiteSpace($memberBase)) {
+                $baseVerdict = Test-AnthropicFoundryResource -Value $memberBase
+                if (-not $baseVerdict.Ok) {
+                    $problems += "providers.$($member.Name).baseUrl is $($baseVerdict.Note), so CreateAnthropicFoundry reports the provider unconfigured (value never echoed)"
+                    Add-OwnerAction -Text "fix providers.$($member.Name).baseUrl in ${aihubConfigLabel}: it is $($baseVerdict.Note) — use the Foundry resource name or https://<resource>.services.ai.azure.com/anthropic, or remove baseUrl to read $(if ($member.EndpointEnv) { $member.EndpointEnv } else { 'the endpoint variable' })"
+                }
+                continue
+            }
+            $endpointName = [string]$member.EndpointEnv
+            if (-not $endpointName) {
+                $problems += "providers.$($member.Name) declares a blank endpointEnv and no baseUrl, so CreateAnthropicFoundry reads no Foundry resource at all"
+                Add-OwnerAction -Text "fix the anthropic-foundry entry '$($member.Name)' in ${aihubConfigLabel}: endpointEnv is declared blank — set it to a variable name (or remove the property to use ANTHROPIC_FOUNDRY_RESOURCE), or set baseUrl"
+                continue
+            }
+            $envVerdict = Test-AnthropicFoundryResource -Value ([string][Environment]::GetEnvironmentVariable($endpointName))
+            if ($envVerdict.Kind -eq 'unset') {
+                $problems += "$endpointName is unset"
+                Add-OwnerAction -Text "set $endpointName to the Foundry resource name (infra output 'aiServicesAccountName'; azure-up writes it into .helios/azure.env — PowerShell: . .helios/azure.env.ps1, bash: source .helios/azure.env) or to https://<resource>.services.ai.azure.com/anthropic for $($Pair.Lights); scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from the az login; the API key is optional (Entra ID fallback)"
+                continue
+            }
+            if (-not $envVerdict.Ok) {
+                $problems += "$endpointName is set but is $($envVerdict.Note) (value never echoed)"
+                Add-OwnerAction -Text "fix ${endpointName}: it is set but is $($envVerdict.Note), so CreateAnthropicFoundry reports $($Pair.Lights) unconfigured — use the Foundry resource name or https://<resource>.services.ai.azure.com/anthropic"
+            }
+        }
+        return $problems
+    }
+    # Every endpoint problem of an Entra-capable pair, both types (the pair's azure-openai
+    # members through their EndpointEnvs, its anthropic-foundry members through the
+    # Foundry rule). The one call every judgement site makes.
+    function Get-EntraEndpointProblems {
+        param([Parameter(Mandatory)]$Pair)
+        return @(Get-AzureOpenAiEndpointProblems -Pair $Pair) + @(Get-AnthropicFoundryResourceProblems -Pair $Pair)
+    }
+    # Report wording for an Entra-capable pair: which factory falls back, what "usable
+    # endpoint" means for it, and the data-plane role its principal needs.
+    function Get-EntraFallbackText {
+        param([Parameter(Mandatory)]$Pair)
+        $members = @(Get-EntraMembers -Pair $Pair)
+        $types = @($members | ForEach-Object { $_.Type } | Select-Object -Unique)
+        if ($types.Count -eq 0 -and $Pair.PSObject.Properties['EndpointEnvs'] -and @($Pair.EndpointEnvs).Count -gt 0) { $types = @('azure-openai') }
+        $factories = @(); $endpoints = @(); $roles = @()
+        foreach ($type in $types) {
+            $factories += Get-EntraFactoryName -Type $type
+            if ($type -eq 'azure-openai') {
+                $endpoints += "its endpoint variable $(@(@($Pair.EndpointEnvs) | Where-Object { $_ } | Select-Object -Unique) -join ' / ') holds an absolute http(s) URL"
+                $roles += "'Cognitive Services OpenAI User' on the Azure OpenAI resource"
+            }
+            else {
+                $foundrySources = @($members | Where-Object { $_.Type -eq 'anthropic-foundry' } | ForEach-Object { if (-not [string]::IsNullOrWhiteSpace((Get-MemberBaseUrl -Member $_))) { "providers.$($_.Name).baseUrl" } else { $_.EndpointEnv } } | Where-Object { $_ } | Select-Object -Unique)
+                $endpoints += "its Foundry resource ($($foundrySources -join ' / ')) resolves to https://<resource>.services.ai.azure.com/anthropic"
+                $roles += "'Cognitive Services User' on the Foundry account (Claude in Foundry)"
+            }
+        }
+        return [pscustomobject]@{ Factory = ($factories -join ' / '); Endpoint = ($endpoints -join ' and '); Role = ($roles -join ' / ') }
+    }
     # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
     # so they are reported (and, without a secret path, handed to the owner as the
     # config defect they are) instead of being silently defaulted.
@@ -839,14 +968,15 @@ function Invoke-HeliosAutoLogin {
     # Providers that read a key but declare NO apiKeySecretName (review finding): no
     # vault path exists for them, so when their variable is still unset after every
     # rung the only repair is to set it directly — and the summary must say so.
-    # azure-openai is deliberately not in this list: ProviderFactory falls back to
-    # Entra ID (DefaultAzureCredential) when its key is absent, so an unset key is a
-    # supported state there, not a defect — but a supported state still has to be
-    # VALIDATED (review finding): CreateAzureOpenAi reads the endpoint variable before
-    # any credential, and the fallback needs a credential that works, so every
-    # secretless azure-openai entry is collected here and judged in step 2.
+    # azure-openai and anthropic-foundry are deliberately not in this list:
+    # ProviderFactory falls back to Entra ID (DefaultAzureCredential) when their key is
+    # absent, so an unset key is a supported state there, not a defect — but a
+    # supported state still has to be VALIDATED (review finding): CreateAzureOpenAi /
+    # CreateAnthropicFoundry read the endpoint before any credential, and the fallback
+    # needs a credential that works, so every secretless entry of those types is
+    # collected here and judged in step 2.
     $directKeyProviders = [System.Collections.Generic.List[object]]::new()
-    $secretlessAzureOpenAi = [System.Collections.Generic.List[object]]::new()
+    $secretlessEntraProviders = [System.Collections.Generic.List[object]]::new()
     # Every enabled keyed entry that reads a variable, by variable (review finding):
     # the GitHub-credential rule in step 3 must see readers of OTHER types too — an
     # openai entry sharing a github-models entry's variable would receive the gh
@@ -872,15 +1002,15 @@ function Invoke-HeliosAutoLogin {
             # never trimmed — " openai " is an UNKNOWN type the hub instantiates as an
             # unconfigured agent that reads no key, so nothing may be pulled for it.
             $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).ToLowerInvariant() } else { '' }
-            # Only the four keyed types read a key (review finding): ProviderFactory's
+            # Only the five keyed types read a key (review finding): ProviderFactory's
             # ollama, azure-foundry-agent and unknown-type paths never call
             # SecretResolver, so an incidental apiKeyEnv / apiKeySecretName on such an
             # entry is dead config — it registers no reader (it cannot manufacture a
             # cross-family conflict against a real keyed provider) and no vault pair
             # (its secret would be pulled into the process for nothing and reported
             # as lighting a provider that never reads it). Said once, then ignored.
-            if ($provType -notin 'openai', 'anthropic', 'github-models', 'azure-openai') {
-                if ($provType.Trim() -in 'openai', 'anthropic', 'github-models', 'azure-openai') {
+            if ($provType -notin $keyedProviderTypes) {
+                if ($provType.Trim() -in $keyedProviderTypes) {
                     # A keyed type with surrounding whitespace is the one misconfiguration
                     # here that looks intentional: name it as the config fix it is.
                     Add-Step -Step "provider:$($provProp.Name)" -State 'needs-owner' -Detail "declares type '$([string]$prov.type)' with surrounding whitespace — ProviderFactory dispatches on the exact (case-folded) type, so the hub treats it as an unknown provider that reads no key; nothing is pulled or exported for it"
@@ -892,7 +1022,7 @@ function Invoke-HeliosAutoLogin {
                 if ($prov.PSObject.Properties['apiKeySecretName'] -and -not [string]::IsNullOrWhiteSpace([string]$prov.apiKeySecretName)) { $incidentalFields += 'apiKeySecretName' }
                 if ($incidentalFields.Count -gt 0) {
                     $typeLabel = if ($provType) { "type $provType" } else { 'no type' }
-                    Add-Step -Step "provider:$($provProp.Name)" -State 'skipped' -Detail "declares $($incidentalFields -join ' and ') but its $typeLabel reads no API key (ProviderFactory resolves a key only for openai, anthropic, github-models and azure-openai) — ignored: no variable is read or exported and no secret is pulled for it"
+                    Add-Step -Step "provider:$($provProp.Name)" -State 'skipped' -Detail "declares $($incidentalFields -join ' and ') but its $typeLabel reads no API key (ProviderFactory resolves a key only for $($keyedProviderTypes -join ', ')) — ignored: no variable is read or exported and no secret is pulled for it"
                 }
                 continue
             }
@@ -914,6 +1044,7 @@ function Invoke-HeliosAutoLogin {
                     'anthropic' { 'ANTHROPIC_API_KEY' }
                     'github-models' { 'GITHUB_MODELS_TOKEN' }
                     'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                    'anthropic-foundry' { 'ANTHROPIC_FOUNDRY_API_KEY' }
                     default { '' }
                 }
             }
@@ -926,7 +1057,9 @@ function Invoke-HeliosAutoLogin {
                 # custom endpoint, which this script never allows for the keyed path either.
                 $blankBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
                 $blankOrigin = if ($provType -eq 'github-models') { Test-PublicModelsOrigin -BaseUrl $blankBaseUrl } else { [pscustomobject]@{ Public = $true; Note = ''; Host = '' } }
-                $blankEndpointEnv = if ($prov.PSObject.Properties['endpointEnv'] -and $null -ne $prov.endpointEnv) { [string]$prov.endpointEnv } else { 'AZURE_OPENAI_ENDPOINT' }
+                # The endpoint variable the factory reads for the Entra-capable types
+                # (endpointEnv as declared, else the per-type default); '' otherwise.
+                $blankEndpointEnv = Get-EntraEndpointEnv -Provider $prov -Type $provType
                 $blankEnvProviders.Add([pscustomobject]@{ EndpointEnv = $blankEndpointEnv; Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; BaseUrl = $blankBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $blankOrigin); OriginNote = $blankOrigin.Note })
                 continue
             }
@@ -951,15 +1084,18 @@ function Invoke-HeliosAutoLogin {
                 if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { Test-EnvNameEquals $_.Env $envName }).Count) {
                     $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
                 }
-                # A secretless azure-openai entry never reaches the vault loop, where a
-                # pair's endpoint and Entra fallback are validated (review finding) —
-                # it is judged after the az lane instead (see step 2), never skipped.
-                if ($provType -eq 'azure-openai') {
-                    $secretlessEndpointProp = $prov.PSObject.Properties['endpointEnv']
-                    $secretlessAzureOpenAi.Add([pscustomobject]@{
+                # A secretless azure-openai / anthropic-foundry entry never reaches the
+                # vault loop, where a pair's endpoint and Entra fallback are validated
+                # (review finding) — it is judged after the az lane instead (see step 2),
+                # never skipped. The Foundry entry carries its baseUrl: config overrides
+                # the variable in CreateAnthropicFoundry.
+                if ($provType -in $entraProviderTypes) {
+                    $secretlessEntraProviders.Add([pscustomobject]@{
                         Name        = $provProp.Name
+                        Type        = $provType
                         Env         = $envName
-                        EndpointEnv = $(if ($null -eq $secretlessEndpointProp -or $null -eq $secretlessEndpointProp.Value) { 'AZURE_OPENAI_ENDPOINT' } else { [string]$secretlessEndpointProp.Value })
+                        EndpointEnv = (Get-EntraEndpointEnv -Provider $prov -Type $provType)
+                        BaseUrl     = $(if ($provType -eq 'anthropic-foundry') { $provBaseUrl } else { '' })
                     })
                 }
                 continue
@@ -977,14 +1113,13 @@ function Invoke-HeliosAutoLogin {
                 }
             }
             $pairIndex[$pairKey].Consumers.Add($provProp.Name)
-            $memberEndpointEnv = ''
-            if ($provType -eq 'azure-openai') {
-                $endpointProp = $prov.PSObject.Properties['endpointEnv']
-                $memberEndpointEnv = if ($null -eq $endpointProp -or $null -eq $endpointProp.Value) { 'AZURE_OPENAI_ENDPOINT' } else { [string]$endpointProp.Value }
-            }
+            # The endpoint variable the factory reads (azure-openai: AZURE_OPENAI_ENDPOINT
+            # by default; anthropic-foundry: ANTHROPIC_FOUNDRY_RESOURCE); '' for the rest.
+            $memberEndpointEnv = Get-EntraEndpointEnv -Provider $prov -Type $provType
             # github-models members carry their baseUrl too (review finding): the export
-            # lights the entry only when CreateGitHubModels accepts that URL.
-            $memberBaseUrl = if ($provType -eq 'github-models' -and $prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+            # lights the entry only when CreateGitHubModels accepts that URL. So do
+            # anthropic-foundry members: their baseUrl overrides the endpoint variable.
+            $memberBaseUrl = if ($provType -in 'github-models', 'anthropic-foundry') { $provBaseUrl } else { '' }
             $pairIndex[$pairKey].Members.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; EndpointEnv = $memberEndpointEnv; BaseUrl = $memberBaseUrl })
         }
         # CLI-owned variables join the reader map (review findings): an enabled codex
@@ -1061,36 +1196,40 @@ function Invoke-HeliosAutoLogin {
                 'ANTHROPIC_API_KEY' { ' + claude CLI' }
                 default { '' }
             }
-            # Entra fallback (review finding): CreateAzureOpenAi builds its client on
-            # DefaultAzureCredential whenever no key resolves, so for a pair whose
-            # variable is read ONLY by azure-openai entries a secret that cannot be
-            # read is an optional pull, not a defect. Any reader of another type on
-            # that variable is a different credential family (or a conflicting
-            # mapping) and was already excluded above — the guard here keeps the
-            # rule explicit rather than implied by that ordering.
-            $entraMembers = @($entry.Members | Where-Object { $_.Type -eq 'azure-openai' })
-            $otherReadersOfEnv = @(if ($envReaders.ContainsKey($entry.Env)) { $envReaders[$entry.Env] | Where-Object { $_.Type -ne 'azure-openai' } })
+            # Entra fallback (review finding): CreateAzureOpenAi and CreateAnthropicFoundry
+            # build their client on DefaultAzureCredential whenever no key resolves, so
+            # for a pair whose variable is read ONLY by entries of those types a secret
+            # that cannot be read is an optional pull, not a defect. Any reader of
+            # another type on that variable is a different credential family (or a
+            # conflicting mapping) and was already excluded above — the guard here
+            # keeps the rule explicit rather than implied by that ordering.
+            # EndpointEnvs lists the azure-openai endpoint variables only; the Foundry
+            # members are judged through Members (config baseUrl first) by the same call.
+            $entraMembers = @($entry.Members | Where-Object { $_.Type -in $entraProviderTypes })
+            $otherReadersOfEnv = @(if ($envReaders.ContainsKey($entry.Env)) { $envReaders[$entry.Env] | Where-Object { $_.Type -notin $entraProviderTypes } })
             $vaultPairs += [pscustomobject]@{
                 SecretName        = $entry.SecretName
                 Env               = $entry.Env
                 Lights            = (($entry.Consumers -join ', ') + $cliHint + ' — per config/aihub.json')
                 Members           = @($entry.Members)
                 EntraFallbackOnly = ($entraMembers.Count -gt 0 -and $otherReadersOfEnv.Count -eq 0)
-                EndpointEnvs      = @($entraMembers | ForEach-Object { $_.EndpointEnv } | Select-Object -Unique)
+                EndpointEnvs      = @($entraMembers | Where-Object { $_.Type -eq 'azure-openai' } | ForEach-Object { $_.EndpointEnv } | Select-Object -Unique)
             }
         }
         # Blank-apiKeyEnv entries of the vault-capable types (review finding). The
         # github-models ones are settled in step 3 (GITHUB_TOKEN is the hub's only
         # fallback for them); the rest are settled here: with an apiKeySecretName the
-        # hub resolves that secret itself, in-process, and azure-openai falls back to
-        # Entra ID either way — without any secret path the entry can never be
-        # configured, which only a config edit fixes, so it is an owner action.
+        # hub resolves that secret itself, in-process, and azure-openai / anthropic-foundry
+        # fall back to Entra ID either way — without any secret path the entry can never
+        # be configured, which only a config edit fixes, so it is an owner action.
         foreach ($blank in @($blankEnvProviders | Where-Object { $_.Type -ne 'github-models' })) {
             $blankStep = "provider:$($blank.Name)"
             $blankWhy = "declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (the $($blank.Type) default applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it"
-            if ($blank.Type -eq 'azure-openai') {
-                $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair ([pscustomobject]@{
-                    Env = $blankStep; Lights = $blankStep; EndpointEnvs = @($blank.EndpointEnv)
+            if ($blank.Type -in $entraProviderTypes) {
+                $endpointProblems = @(Get-EntraEndpointProblems -Pair ([pscustomobject]@{
+                    Env = $blankStep; Lights = $blankStep
+                    EndpointEnvs = @(if ($blank.Type -eq 'azure-openai') { $blank.EndpointEnv })
+                    Members = @([pscustomobject]@{ Name = $blank.Name; Type = $blank.Type; EndpointEnv = $blank.EndpointEnv; BaseUrl = $blank.BaseUrl })
                 }))
                 if ($endpointProblems.Count -gt 0) {
                     Add-Step -Step "$blankStep`:endpoint" -State 'needs-owner' -Detail ($endpointProblems -join '; ')
@@ -1106,14 +1245,14 @@ function Invoke-HeliosAutoLogin {
                 $vaultUriNote = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { '' } else { ' — AZURE_KEY_VAULT_URI is unset in this session, so that in-process pull cannot happen here' }
                 Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$vaultUriNote"
             }
-            elseif ($blank.Type -eq 'azure-openai') {
-                Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; with no apiKeySecretName either, CreateAzureOpenAi uses Entra ID (DefaultAzureCredential) — a supported state, not a defect"
+            elseif ($blank.Type -in $entraProviderTypes) {
+                Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; with no apiKeySecretName either, $(Get-EntraFactoryName -Type $blank.Type) uses Entra ID (DefaultAzureCredential) — a supported state, not a defect"
             }
             else {
                 Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy, and it declares no apiKeySecretName either — no credential path exists for it"
                 # Same wording and config label as auth-doctor's lane action, so the
                 # summary's unique filter collapses the two into one line.
-                $blankDefault = switch ($blank.Type) { 'openai' { 'OPENAI_API_KEY' } 'anthropic' { 'ANTHROPIC_API_KEY' } default { 'AZURE_OPENAI_API_KEY' } }
+                $blankDefault = switch ($blank.Type) { 'openai' { 'OPENAI_API_KEY' } 'anthropic' { 'ANTHROPIC_API_KEY' } 'anthropic-foundry' { 'ANTHROPIC_FOUNDRY_API_KEY' } default { 'AZURE_OPENAI_API_KEY' } }
                 Add-OwnerAction -Text "fix providers.{$($blank.Name)}.apiKeyEnv in ${aihubConfigLabel}: set a variable name (or remove the property to use $blankDefault) and/or add apiKeySecretName"
             }
         }
@@ -1121,7 +1260,7 @@ function Invoke-HeliosAutoLogin {
     # GITHUB_TOKEN's OWNERSHIP (review finding): CreateGitHubModels falls back to
     # GITHUB_TOKEN for every public github-models entry, so that variable belongs to
     # the GitHub credential family — yet an enabled consumer of ANOTHER family (an
-    # openai / anthropic / azure-openai entry, or a custom-endpoint Models entry) may
+    # openai / anthropic / azure-openai / anthropic-foundry entry, or a custom-endpoint Models entry) may
     # declare it as ITS apiKeyEnv, and the Key Vault stage then legitimately exports
     # that service's secret into it. Such a value is never a GitHub credential: the
     # models rungs below must not probe it against api.github.com (that would hand the
@@ -1184,7 +1323,7 @@ function Invoke-HeliosAutoLogin {
         $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
         $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
         # Readers of OTHER keyed types (review finding, same class as the custom
-        # endpoint): an openai/anthropic/azure-openai entry sharing the variable
+        # endpoint): an openai/anthropic/azure-openai/anthropic-foundry entry sharing the variable
         # would receive the GitHub credential too; a variable with conflicting
         # secret mappings is already a reported defect and gets nothing either.
         $foreignReaders = @()
@@ -1244,7 +1383,7 @@ function Invoke-HeliosAutoLogin {
     # verdict, and it is reached whatever the vault stage does next (nothing to pull,
     # az down, no vault URI, every pair populated).
     foreach ($presetPair in @($vaultPairs | Where-Object { Test-EnvValue $_.Env })) {
-        $presetProblems = @(Get-AzureOpenAiEndpointProblems -Pair $presetPair) + @(Get-GitHubModelsOriginProblems -Pair $presetPair)
+        $presetProblems = @(Get-EntraEndpointProblems -Pair $presetPair) + @(Get-GitHubModelsOriginProblems -Pair $presetPair)
         if ($presetProblems.Count -gt 0) {
             Add-Step -Step $presetPair.Env -State 'needs-owner' -Detail "already holds a value in this session (never clobbered), but the entries it lights stay unconfigured until this is fixed: $($presetProblems -join '; ')"
         }
@@ -1341,7 +1480,7 @@ function Invoke-HeliosAutoLogin {
                     # The same for a github-models entry whose custom baseUrl the
                     # factory rejects (review finding): the pull succeeded, the entry
                     # stays unconfigured, and the baseUrl repair is the owner action.
-                    $exportedEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair) + @(Get-GitHubModelsOriginProblems -Pair $pair)
+                    $exportedEndpointProblems = @(Get-EntraEndpointProblems -Pair $pair) + @(Get-GitHubModelsOriginProblems -Pair $pair)
                     if ($exportedEndpointProblems.Count -gt 0) {
                         Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights); but ProviderFactory still reports an entry unconfigured because $($exportedEndpointProblems -join '; ') — the repair is recorded as an owner action"
                     }
@@ -1350,20 +1489,23 @@ function Invoke-HeliosAutoLogin {
                     }
                 }
                 elseif ($pair.EntraFallbackOnly) {
-                    # OPTIONAL for azure-openai (review findings): CreateAzureOpenAi
-                    # builds its client on DefaultAzureCredential whenever no key
-                    # resolves — the chain the az lane this run established feeds — so
-                    # a secret that cannot be read leaves the provider usable through
-                    # Entra ID, and a mandatory secret-repair action would demand a
-                    # credential the hub does not need. Optional ONLY with a usable
-                    # endpoint, though: the factory reads endpointEnv
-                    # (AZURE_OPENAI_ENDPOINT by default) and reports the provider
-                    # unconfigured unless the value is an absolute http(s) URL — the
-                    # same rule applied here by name and shape (value never echoed).
-                    # An unset, blank-declared or malformed endpoint is the repair the
-                    # owner actually needs, so it carries the owner action the key does
-                    # not; auto-login never exports an endpoint, so it is never retired.
-                    $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair)
+                    # OPTIONAL for azure-openai and anthropic-foundry (review findings):
+                    # CreateAzureOpenAi / CreateAnthropicFoundry build their client on
+                    # DefaultAzureCredential whenever no key resolves — the chain the az
+                    # lane this run established feeds — so a secret that cannot be read
+                    # leaves the provider usable through Entra ID, and a mandatory
+                    # secret-repair action would demand a credential the hub does not
+                    # need. Optional ONLY with a usable endpoint, though: the factory
+                    # reads the endpoint first (endpointEnv — AZURE_OPENAI_ENDPOINT as an
+                    # absolute http(s) URL; ANTHROPIC_FOUNDRY_RESOURCE as a Foundry
+                    # resource name or https base URL, overridden by the entry's baseUrl)
+                    # and reports the provider unconfigured otherwise — the same rules
+                    # applied here by name and shape (values never echoed). An unset,
+                    # blank-declared or malformed endpoint is the repair the owner
+                    # actually needs, so it carries the owner action the key does not;
+                    # auto-login never exports an endpoint, so it is never retired.
+                    $endpointProblems = @(Get-EntraEndpointProblems -Pair $pair)
+                    $fallbackText = Get-EntraFallbackText -Pair $pair
                     # The az lane proves the fallback only when DefaultAzureCredential
                     # would actually reach the az CLI cache (review finding): an
                     # environment service principal, workload identity or managed
@@ -1378,14 +1520,14 @@ function Invoke-HeliosAutoLogin {
                     $hubPrincipalGap = $hubPrincipal.Gap
                     if ($endpointProblems.Count -eq 0 -and -not $hubPrincipalGap) {
                         $fedBy = if ($hubCredentialKind -eq 'az-cli') { 'the az CLI login the az lane established' } else { "the $hubCredentialKind, which scripts/verify/rest-connect.ps1 exercised end to end (token acquired, ARM answered)" }
-                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by $fedBy) when no key resolves, and its endpoint variable $($pair.EndpointEnvs -join ' / ') holds an absolute http(s) URL (name and shape checked only); no owner action"
+                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): $($fallbackText.Factory) falls back to Entra ID (DefaultAzureCredential, fed by $fedBy) when no key resolves, and $($fallbackText.Endpoint) (name and shape checked only); no owner action"
                     }
                     elseif ($endpointProblems.Count -eq 0) {
-                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID) and its endpoint variable holds an absolute http(s) URL, but $hubPrincipalGap"
-                        Add-OwnerAction -Text $(if ($hubPrincipal.Action) { $hubPrincipal.Action } else { "prove the hub's Entra principal for $($pair.Lights): grant the $hubCredentialKind 'Cognitive Services OpenAI User' on the Azure OpenAI resource (az role assignment create — owner-gated); or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established; or store the API key instead" })
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) ($($fallbackText.Factory) falls back to Entra ID) and $($fallbackText.Endpoint), but $hubPrincipalGap"
+                        Add-OwnerAction -Text $(if ($hubPrincipal.Action) { $hubPrincipal.Action } else { "prove the hub's Entra principal for $($pair.Lights): grant the $hubCredentialKind $($fallbackText.Role) (az role assignment create — owner-gated); or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established; or store the API key instead" })
                     }
                     else {
-                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID), but only with a usable endpoint: $($endpointProblems -join '; ') — the provider stays unconfigured until that is fixed"
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) ($($fallbackText.Factory) falls back to Entra ID), but only with a usable endpoint: $($endpointProblems -join '; ') — the provider stays unconfigured until that is fixed"
                     }
                 }
                 else {
@@ -1410,25 +1552,33 @@ function Invoke-HeliosAutoLogin {
         }
     }
 
-    # Secretless azure-openai entries (review finding): judged here, after the az
-    # lane, with the rules the vault loop applies to a pair whose secret is missing —
-    # the endpoint first (CreateAzureOpenAi checks it before any credential), then
-    # either the key that IS set (name checked only) or the Entra fallback, which is
-    # proven only by exercising the credential DefaultAzureCredential would select.
-    foreach ($secretless in $secretlessAzureOpenAi) {
+    # Secretless azure-openai / anthropic-foundry entries (review finding): judged
+    # here, after the az lane, with the rules the vault loop applies to a pair whose
+    # secret is missing — the endpoint first (CreateAzureOpenAi / CreateAnthropicFoundry
+    # check it before any credential), then either the key that IS set (name checked
+    # only) or the Entra fallback, which is proven only by exercising the credential
+    # DefaultAzureCredential would select.
+    foreach ($secretless in $secretlessEntraProviders) {
         $secretlessStep = "provider:$($secretless.Name)"
-        $secretlessLights = "provider '$($secretless.Name)' (azure-openai, no apiKeySecretName — per $aihubConfigLabel)"
-        $secretlessEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair ([pscustomobject]@{ Env = $secretless.Env; Lights = $secretlessLights; EndpointEnvs = @($secretless.EndpointEnv) }))
+        $secretlessFactory = Get-EntraFactoryName -Type $secretless.Type
+        $secretlessLights = "provider '$($secretless.Name)' ($($secretless.Type), no apiKeySecretName — per $aihubConfigLabel)"
+        $secretlessPair = [pscustomobject]@{
+            Env = $secretless.Env; Lights = $secretlessLights
+            EndpointEnvs = @(if ($secretless.Type -eq 'azure-openai') { $secretless.EndpointEnv })
+            Members = @([pscustomobject]@{ Name = $secretless.Name; Type = $secretless.Type; EndpointEnv = $secretless.EndpointEnv; BaseUrl = $secretless.BaseUrl })
+        }
+        $secretlessEndpointProblems = @(Get-EntraEndpointProblems -Pair $secretlessPair)
         if ($secretlessEndpointProblems.Count -gt 0) {
-            Add-Step -Step $secretlessStep -State 'needs-owner' -Detail "declares no apiKeySecretName (no vault pull exists for $($secretless.Env)), and CreateAzureOpenAi reports it unconfigured before any credential is considered: $($secretlessEndpointProblems -join '; ')"
+            Add-Step -Step $secretlessStep -State 'needs-owner' -Detail "declares no apiKeySecretName (no vault pull exists for $($secretless.Env)), and $secretlessFactory reports it unconfigured before any credential is considered: $($secretlessEndpointProblems -join '; ')"
             continue
         }
+        $secretlessEndpointText = (Get-EntraFallbackText -Pair $secretlessPair).Endpoint
         if (Test-EnvValue $secretless.Env) {
-            Add-Step -Step $secretlessStep -State 'ok' -Detail "$($secretless.Env) holds a value (name checked only) and $($secretless.EndpointEnv) is an absolute http(s) URL — CreateAzureOpenAi uses the key; no vault path is declared and none is needed"
+            Add-Step -Step $secretlessStep -State 'ok' -Detail "$($secretless.Env) holds a value (name checked only) and $secretlessEndpointText — $secretlessFactory uses the key; no vault path is declared and none is needed"
             continue
         }
         $secretlessOutcome = Get-EntraFallbackOutcome -Kind (Get-HubCredentialKind) -AzUsable ([bool]$azUsable) -AzState ([string]$azState) -Lights $secretlessLights -AzLaneHadAction ([bool]$azLaneHadAction)
-        Add-Step -Step $secretlessStep -State $secretlessOutcome.State -Detail "$($secretless.Env) is unset and no apiKeySecretName is declared, so CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential) with $($secretless.EndpointEnv) usable — $($secretlessOutcome.Detail)"
+        Add-Step -Step $secretlessStep -State $secretlessOutcome.State -Detail "$($secretless.Env) is unset and no apiKeySecretName is declared, so $secretlessFactory falls back to Entra ID (DefaultAzureCredential) with a usable endpoint ($secretlessEndpointText) — $($secretlessOutcome.Detail)"
         if ($secretlessOutcome.Action) { Add-OwnerAction -Text $secretlessOutcome.Action }
     }
 
