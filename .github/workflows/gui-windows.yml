@@ -1,0 +1,38 @@
+name: HELIOS Shell Windows Build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/gui/**'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - '.github/workflows/gui-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-shell-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-shell:
+    name: Build WinUI 3 Fabric Control shell
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Setup .NET from global.json
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          global-json-file: global.json
+      - name: Add Visual Studio MSBuild to PATH
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+        with:
+          msbuild-architecture: x64
+      - name: Restore HELIOS Shell
+        run: msbuild src\gui\HELIOS.Shell.sln -t:Restore -p:Configuration=Release -p:Platform=x64 -nologo
+      - name: Build HELIOS Shell
+        run: msbuild src\gui\HELIOS.Shell.sln -t:Build -p:Configuration=Release -p:Platform=x64 -nologo -m
