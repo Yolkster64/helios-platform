@@ -266,6 +266,66 @@ public static class HeliosFabricTools
         {
             throw new FileNotFoundException("Fabric contract does not exist.", fullPath);
         }
-        return fullPath;
+
+        var canonicalRoot = CanonicalizePath(repoRoot);
+        var canonicalPath = CanonicalizePath(fullPath);
+        var canonicalRelative = Path.GetRelativePath(canonicalRoot, canonicalPath);
+        if (Path.IsPathRooted(canonicalRelative)
+            || canonicalRelative.Equals("..", StringComparison.Ordinal)
+            || canonicalRelative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("Fabric config path must remain inside HELIOS_REPO_ROOT.");
+        }
+
+        return canonicalPath;
+    }
+
+    private static string CanonicalizePath(string path)
+    {
+        var normalized = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(normalized)
+            ?? throw new InvalidDataException("Path root could not be resolved.");
+        var segments = normalized[root.Length..]
+            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+        var current = root;
+        foreach (var segment in segments)
+        {
+            var next = Path.Combine(current, segment);
+            var linkTarget = TryResolveLinkTarget(next);
+            current = linkTarget is null
+                ? next
+                : Path.GetFullPath(linkTarget);
+        }
+
+        return Path.GetFullPath(current);
+    }
+
+    private static string? TryResolveLinkTarget(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return null;
+        }
+
+        FileSystemInfo node = Directory.Exists(path)
+            ? new DirectoryInfo(path)
+            : new FileInfo(path);
+        if ((node.Attributes & FileAttributes.ReparsePoint) == 0)
+        {
+            return null;
+        }
+
+        var target = node.ResolveLinkTarget(returnFinalTarget: true)
+            ?? throw new InvalidDataException("Failed to resolve symbolic link target.");
+        var targetPath = target.FullName;
+        if (Path.IsPathRooted(targetPath))
+        {
+            return targetPath;
+        }
+
+        var baseDirectory = Path.GetDirectoryName(node.FullName)
+            ?? throw new InvalidDataException("Link base directory could not be resolved.");
+        return Path.GetFullPath(Path.Combine(baseDirectory, targetPath));
     }
 }
