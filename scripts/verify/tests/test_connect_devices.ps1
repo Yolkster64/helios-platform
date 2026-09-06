@@ -239,6 +239,37 @@ try {
         $twinOut = & $bash.Source $twin --verify-only --json --tenant $tenant --repository owner/repo 2>$null
         Assert-True ($LASTEXITCODE -eq 0) 'Twin verify-only with both lanes ready must exit 0.'
         Assert-True ((($twinOut -join "`n") | ConvertFrom-Json).exitCode -eq 0) 'Twin JSON exitCode must match.'
+
+        # Apply path under `set -euo pipefail`: the code-parsing pipelines return 1 until
+        # the CLI prints a code, and `wait` returns the child's status - neither may end
+        # the script. Both flows accepted -> exit 0 with both lanes ready.
+        Reset-Shims -Gh 'ok' -Az 'ok'
+        $twinOut = & $bash.Source $twin --json --skip-chain --timeout-minutes 0.5 --tenant $tenant --repository owner/repo 2>$null
+        $twinCode = $LASTEXITCODE
+        $twinObject = ($twinOut -join "`n") | ConvertFrom-Json
+        Assert-True ($twinCode -eq 0) "Twin apply with both flows accepted must exit 0 (got $twinCode)."
+        Assert-True ((Get-Lane $twinObject 'github-login').detail -eq 'device code accepted; gh session verified') 'Twin gh lane not verified.'
+        Assert-True ((Get-Lane $twinObject 'azure-login').detail -eq 'device code accepted; az session verified') 'Twin az lane not verified.'
+        $shimLog = Get-ShimLog
+        Assert-True ($shimLog -match 'gh auth login[^\n]*GH_TOKEN=<unset>') 'Twin leaked GH_TOKEN into the gh login child.'
+        Assert-True ($shimLog -match "az login --use-device-code --tenant $tenant") 'Twin did not launch the az flow.'
+        # Text mode prints the table with both codes before the flows complete.
+        Reset-Shims -Gh 'ok' -Az 'ok'
+        $twinText = (& $bash.Source $twin --skip-chain --timeout-minutes 0.5 --tenant $tenant --repository owner/repo 2>&1) -join "`n"
+        Assert-True ($twinText -match 'GitHub -> https://github.com/login/device\s+code ABCD-1234') 'Twin table lacks the GitHub row.'
+        Assert-True ($twinText -match 'Azure\s+-> https://microsoft.com/devicelogin\s+code ABCDEFGHI') 'Twin table lacks the Azure row.'
+        # A refused login is a lane verdict (exit 2), not an errexit crash.
+        Reset-Shims -Gh 'refused' -Az 'ready'
+        $twinOut = & $bash.Source $twin --json --skip-chain --timeout-minutes 0.5 --tenant $tenant --repository owner/repo 2>$null
+        $twinCode = $LASTEXITCODE
+        $twinObject = ($twinOut -join "`n") | ConvertFrom-Json
+        Assert-True ($twinCode -eq 2) "Twin refused login must exit 2 (got $twinCode)."
+        Assert-True ((Get-Lane $twinObject 'github-login').detail -match '^refused') 'Twin must classify the refused lane.'
+        # --retry re-issues an expired code once.
+        Reset-Shims -Gh 'expired-then-ok' -Az 'ready'
+        $twinOut = & $bash.Source $twin --json --skip-chain --retry --timeout-minutes 0.5 --tenant $tenant --repository owner/repo 2>$null
+        Assert-True ($LASTEXITCODE -eq 0) 'Twin --retry must recover an expired code.'
+        Assert-True (([regex]::Matches((Get-ShimLog), 'gh auth login')).Count -eq 2) 'Twin --retry must launch the login exactly twice.'
     }
 
     # --- No model identifiers in the shipped files ------------------------------------------------

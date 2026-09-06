@@ -205,13 +205,18 @@ $cliSpecs = @(
             # read (any of the names below, presence only) or a written config file.
             # Neither surfaces a value, and a missing key is 'unknown' rather than
             # 'unauthenticated' because a config-file key is not visible from here.
+            # Presence = a non-whitespace value (auth-doctor.ps1 rule): an exported empty
+            # variable is not a key.
             $keyNames = @('OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'NOVITA_API_KEY', 'OLLAMA_API_KEY')
-            $present = @($keyNames | Where-Object { Test-Path "env:$_" })
-            $configPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.hermes/config.yaml'
+            $present = @($keyNames | Where-Object { -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
+            # A host without a resolvable profile directory (some service accounts) has
+            # no config file to look for; that is 'unknown', not a probe failure.
+            $profileDir = [Environment]::GetFolderPath('UserProfile')
+            $configPath = if ([string]::IsNullOrWhiteSpace($profileDir)) { '' } else { Join-Path $profileDir '.hermes/config.yaml' }
             if ($present.Count -gt 0) {
                 [pscustomobject]@{ Status = 'authenticated'; Detail = "provider key present by name: $($present -join ', ') (values never read)" }
             }
-            elseif (Test-Path -LiteralPath $configPath -PathType Leaf) {
+            elseif ($configPath -and (Test-Path -LiteralPath $configPath -PathType Leaf)) {
                 [pscustomobject]@{ Status = 'authenticated'; Detail = "~/.hermes/config.yaml exists (contents never read); run 'hermes setup' to change providers" }
             }
             else {

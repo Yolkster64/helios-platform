@@ -180,11 +180,19 @@ _cd_start() {
   fi
   echo $! >"$_cd_tmp/$lane.pid"
 }
+# Prints the lane's device code or nothing. Always exits 0: it is captured into
+# variables under `set -e -o pipefail`, and a grep that has not matched yet (the CLI
+# has not printed the code) must not terminate the script.
 _cd_code_of() {
-  local lane="$1" file="$_cd_tmp/$1.log"
+  local lane="$1" file="$_cd_tmp/$1.log" code=''
   [[ -f "$file" ]] || return 0
-  if [[ "$lane" == github ]]; then grep -oiE 'one-time code:?[[:space:]]*[A-Z0-9]{4}-[A-Z0-9]{4}' "$file" | grep -oE '[A-Z0-9]{4}-[A-Z0-9]{4}' | head -n1
-  else grep -oiE 'enter the code[[:space:]]+[A-Z0-9]{6,12}[[:space:]]+to authenticate' "$file" | grep -oE '[A-Z0-9]{6,12}' | head -n1; fi
+  if [[ "$lane" == github ]]; then
+    code="$(grep -oiE 'one-time code:?[[:space:]]*[A-Z0-9]{4}-[A-Z0-9]{4}' "$file" 2>/dev/null | grep -oE '[A-Z0-9]{4}-[A-Z0-9]{4}' | head -n1 || true)"
+  else
+    code="$(grep -oiE 'enter the code[[:space:]]+[A-Z0-9]{6,12}[[:space:]]+to authenticate' "$file" 2>/dev/null | grep -oE '[A-Z0-9]{6,12}' | head -n1 || true)"
+  fi
+  printf '%s' "$code"
+  return 0
 }
 _cd_verdict() {
   local lane="$1" code="$2" file="$_cd_tmp/$1.log" tail_text
@@ -211,7 +219,8 @@ _cd_run_flows() {
     if (( ! printed )); then
       local all=1; for lane in $lanes; do [[ -n "$(_cd_code_of "$lane")" ]] || all=0; done
       now=$(date +%s)
-      if (( all || ! running || now - deadline + timeout_s > 20 )); then
+      local elapsed=$(( now - (deadline - timeout_s) ))
+      if (( all || ! running || elapsed > 20 )); then
         _cd_log ''; _cd_log '  Enter these codes (any browser, any device):'
         for lane in $lanes; do
           local c; c="$(_cd_code_of "$lane")"; [[ -n "$c" ]] || c='(waiting for the CLI to print it)'
@@ -227,10 +236,15 @@ _cd_run_flows() {
   done
   for lane in $lanes; do
     pid="$(cat "$_cd_tmp/$lane.pid")"
+    # `wait` returns the child's status: a refused login is exit 1, which under
+    # `set -e` would end the script here instead of becoming a lane verdict.
+    rc=0
     if kill -0 "$pid" 2>/dev/null; then kill "$pid" 2>/dev/null || true; sleep 0.2; kill -9 "$pid" 2>/dev/null || true; rc=124
-    else wait "$pid" 2>/dev/null; rc=$?; fi
+    else wait "$pid" 2>/dev/null || rc=$?; fi
     local v; v="$(_cd_verdict "$lane" "$rc")"
-    local d; if (( rc == 124 )); then d="no completion within $_cd_timeout_minutes min"; else d="$(grep -v '^[[:space:]]*$' "$_cd_tmp/$lane.log" | tail -n1 | cut -c1-160)"; fi
+    local d
+    if (( rc == 124 )); then d="no completion within $_cd_timeout_minutes min"
+    else d="$(grep -v '^[[:space:]]*$' "$_cd_tmp/$lane.log" 2>/dev/null | tail -n1 | cut -c1-160 || true)"; fi
     printf -v "_cd_result_$lane" '%s' "$v"
     printf -v "_cd_detail_$lane" '%s' "$d"
   done
@@ -292,7 +306,7 @@ else
     if (( _cd_skip_app )); then _cd_add_lane github-app skipped '--skip-github-app'
     else
       _cd_log "  + pwsh $_cd_script_dir/connect-github-app.ps1 -Repository $_cd_repository -DispatchGovernance"
-      "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/connect-github-app.ps1" -Repository "$_cd_repository" -DispatchGovernance; _cd_rc=$?
+      _cd_rc=0; "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/connect-github-app.ps1" -Repository "$_cd_repository" -DispatchGovernance || _cd_rc=$?
       case "$_cd_rc" in
         0) _cd_add_lane github-app ready 'App registered, installed, governance dispatched' ;;
         2) _cd_add_lane github-app needs-owner 'connect-github-app.ps1 exited 2' 'pwsh scripts/bootstrap/connect-github-app.ps1 -DispatchGovernance (its Next column names the step)' ;;
@@ -302,7 +316,7 @@ else
     if (( _cd_skip_ops )); then _cd_add_lane ops-identity skipped '--skip-ops-identity'
     else
       _cd_log "  + pwsh $_cd_script_dir/connect-admin.ps1 -SkipGitHub -Repository $_cd_repository"
-      "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/connect-admin.ps1" -SkipGitHub -Repository "$_cd_repository"; _cd_rc=$?
+      _cd_rc=0; "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/connect-admin.ps1" -SkipGitHub -Repository "$_cd_repository" || _cd_rc=$?
       case "$_cd_rc" in
         0) _cd_add_lane ops-identity ready 'setup-tenant -OpsIdentity applied; export the three AZURE_* names it printed' ;;
         2) _cd_add_lane ops-identity needs-owner 'connect-admin.ps1 exited 2' 'pwsh scripts/bootstrap/connect-admin.ps1 -SkipGitHub (its Next column names the step)' ;;
@@ -310,16 +324,16 @@ else
       esac
     fi
     _cd_log "  + pwsh $_cd_script_dir/auto-login.ps1   (report only from bash; the loader below exports)"
-    "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/auto-login.ps1"; _cd_rc=$?
+    _cd_rc=0; "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/auto-login.ps1" || _cd_rc=$?
     if (( _cd_rc == 0 )); then _cd_add_lane vault-keys ready 'auto-login.ps1 reported ready' 'source scripts/bootstrap/load-env-from-keyvault.sh   # exports into this shell'
     else _cd_add_lane vault-keys needs-owner "auto-login.ps1 exited $_cd_rc" 'source scripts/bootstrap/load-env-from-keyvault.sh'; fi
     _cd_log "  + pwsh $_cd_script_dir/auth-doctor.ps1 -Json"
-    "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/auth-doctor.ps1" -Json; _cd_rc=$?
+    _cd_rc=0; "$_cd_pwsh" -NoProfile -File "$_cd_script_dir/auth-doctor.ps1" -Json || _cd_rc=$?
     if (( _cd_rc == 0 )); then _cd_add_lane doctor ready 'auth-doctor.ps1 -Json exited 0'
     else _cd_add_lane doctor needs-owner "auth-doctor.ps1 -Json exited $_cd_rc" 'pwsh scripts/bootstrap/auth-doctor.ps1 (read its lane table)'; fi
   fi
   _cd_log "  + bash $_cd_script_dir/first-run.sh --verify-only"
-  bash "$_cd_script_dir/first-run.sh" --verify-only; _cd_rc=$?
+  _cd_rc=0; bash "$_cd_script_dir/first-run.sh" --verify-only || _cd_rc=$?
   if (( _cd_rc == 0 )); then _cd_add_lane first-run ready 'first-run verify-only exited 0 (its checklist lists what is left)'
   else _cd_add_lane first-run failed "first-run verify-only exited $_cd_rc"; _cd_replay+=('bash scripts/bootstrap/first-run.sh --verify-only'); fi
 fi
