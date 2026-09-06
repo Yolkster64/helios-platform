@@ -148,6 +148,36 @@ variable "principal_id" {
   default     = ""
 }
 
+# --- Claude in Foundry: Azure Marketplace attestation (mirrors main.bicep) -----------
+
+variable "claude_organization_name" {
+  description = "Legal entity name sent to Anthropic as modelProviderData.organizationName with every Anthropic-format deployment (Azure Marketplace attestation — review the Anthropic Commercial Terms first). Empty string (the default) skips the Anthropic-format entries of additional_model_deployments: no Claude deployment is created or changed."
+  type        = string
+  default     = ""
+}
+
+variable "claude_country_code" {
+  description = "Two-letter ISO country code of the organization using Claude, sent as modelProviderData.countryCode."
+  type        = string
+  default     = "US"
+
+  validation {
+    condition     = length(var.claude_country_code) == 2
+    error_message = "claude_country_code must be exactly 2 characters (Bicep @minLength(2)/@maxLength(2))."
+  }
+}
+
+variable "claude_industry" {
+  description = "Industry of the organization using Claude, sent as modelProviderData.industry. Lowercase — the values the Foundry portal dropdown offers."
+  type        = string
+  default     = "technology"
+
+  validation {
+    condition     = contains(["technology", "finance", "healthcare", "education", "retail", "manufacturing", "government", "media", "other"], var.claude_industry)
+    error_message = "claude_industry must be one of technology, finance, healthcare, education, retail, manufacturing, government, media, other (Bicep @allowed)."
+  }
+}
+
 # --- Fleet burst VMSS (opt-in; mirrors the deployFleetVmss surface of main.bicep) ---
 
 variable "deploy_fleet_vmss" {

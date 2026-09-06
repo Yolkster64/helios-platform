@@ -14,7 +14,8 @@ here. If the two ever disagree, the Bicep wins.
 |---|---|
 | `Microsoft.CognitiveServices/accounts@2025-06-01` (kind `AIServices`, SystemAssigned identity, `allowProjectManagement`, custom subdomain, S0) | `azapi_resource.foundry_account` |
 | `Microsoft.CognitiveServices/accounts/projects@2025-06-01` | `azapi_resource.foundry_project` |
-| `Microsoft.CognitiveServices/accounts/deployments@2025-06-01` (primary quintet + `additionalModelDeployments`) | `azapi_resource.model_deployment` (for_each) |
+| `Microsoft.CognitiveServices/accounts/deployments@2025-06-01` (primary quintet + `additionalModelDeployments`, every format except `Anthropic`) | `azapi_resource.model_deployment` (for_each) |
+| `Microsoft.CognitiveServices/accounts/deployments@2025-10-01-preview` (Anthropic-format entries with the `modelProviderData` attestation — Claude in Foundry; skipped while `claudeOrganizationName` is empty) | `azapi_resource.claude_deployment` (for_each, `schema_validation_enabled = false` — the azapi analogue of the Bicep `BCP037` suppression) |
 | `Microsoft.KeyVault/vaults@2024-11-01` (RBAC, standard, 90-day soft delete) + conditional secrets | `azurerm_key_vault.main` + `azurerm_key_vault_secret.*` |
 | Azure AI User + Key Vault Secrets User role assignments (same role GUIDs, conditional on `principalId`) | `azurerm_role_assignment.*` |
 | `aiServiceAccountResourceId` BYO short-circuit | `count` on the account/project resources + `local.effective_account_id` |
@@ -121,8 +122,9 @@ terraform validate
 ## Outputs
 
 `ai_services_endpoint`, `open_ai_endpoint`, `project_endpoint`, `project_id`,
-`key_vault_uri`, `model_deployment_names`, `fleet_vmss_name`,
-`fleet_vmss_principal_id` — the same eight as the Bicep. When
+`key_vault_uri`, `ai_services_account_name`, `anthropic_foundry_base_url`,
+`model_deployment_names`, `fleet_vmss_name`, `fleet_vmss_principal_id` — the same
+names as the Bicep (the opt-in AI Search and learning-storage outputs are not mirrored). When
 `ai_service_account_resource_id` is set (BYO account), account/project/deployment
 outputs are empty, and the two fleet outputs are empty strings while
 `deploy_fleet_vmss` is off, matching the Bicep behavior.

@@ -23,6 +23,7 @@ re-express the same parameter surface on the modern Foundry account + project mo
 | `aiSearchName`, `storageName`, key vault for hub | AI Search + BYO storage arrive in a follow-up PR; Key Vault here stores **provider API keys**, not hub config |
 | `PROJECT_CONNECTION_STRING` output | `projectEndpoint` output (`https://<account>.services.ai.azure.com/api/projects/<project>`) |
 | — (no legacy equivalent) | `deployLearningStorage` (default `false`) + `learningStorePrincipalId` — opt-in RBAC-only storage account + `aihubOutcomes` table for the AIHub learning store (`modules/learning-storage.bicep`); the `learningTableEndpoint` output feeds `AZURE_LEARNING_TABLE_ENDPOINT` for `learning.mode=azure`/hybrid |
+| — (no legacy equivalent) | `claudeOrganizationName` (default `''`) + `claudeCountryCode` / `claudeIndustry` — the Marketplace attestation (`modelProviderData`) the Anthropic-format entries of `additionalModelDeployments` need (Claude in Foundry, below); the `aiServicesAccountName` / `anthropicFoundryBaseUrl` outputs feed `ANTHROPIC_FOUNDRY_RESOURCE` |
 
 Other deliberate changes:
 
@@ -40,7 +41,7 @@ Other deliberate changes:
 
 - `main.bicep` — entry point (resource-group scope)
 - `main.bicepparam` — deployment parameters (edit models here)
-- `modules/ai-foundry-account.bicep` — Foundry account + serialized model deployments + Azure AI User role
+- `modules/ai-foundry-account.bicep` — Foundry account + serialized model deployments (GA `2025-06-01` loop for first-party formats, chained `2025-10-01-preview` loop for Anthropic-format entries) + Azure AI User role
 - `modules/ai-foundry-project.bicep` — Foundry project (endpoint output)
 - `modules/keyvault.bicep` — RBAC Key Vault + conditional `anthropic-api-key` / `openai-api-key` / `github-models-token` secrets
 - `modules/fleet-vmss.bicep` — opt-in fleet burst VMSS + autoscale, OFF by default (see "Fleet burst capacity (VMSS)" below)
@@ -171,6 +172,71 @@ az deployment group what-if -g rg-helios-ai \
   --parameters deployAiSearchConnection=true
 ```
 
+## Claude in Foundry (Anthropic-format deployments)
+
+The hub's `anthropic-foundry` provider and `scripts/ai-integration/Connect-ClaudeFoundry.ps1`
+call Claude through this account's Messages API base URL,
+`https://<account>.services.ai.azure.com/anthropic` (Entra scope `https://ai.azure.com/.default`,
+`model` = deployment name), and expect deployments named `claude-sonnet-4-6`,
+`claude-haiku-4-5` and `claude-opus-4-6` (`ANTHROPIC_DEFAULT_{SONNET,HAIKU,OPUS}_MODEL`).
+Those three are declared as data in `main.bicepparam` — `additionalModelDeployments`
+entries with `format: 'Anthropic'`, `version: '1'`, `GlobalStandard`, capacity 25 (K TPM) —
+the shape the Learn deployment guide's starter kit uses ([Deploy Claude models in
+Microsoft Foundry using Bicep or Terraform](https://learn.microsoft.com/azure/developer/ai/how-to/deploy-claude-foundry),
+[Azure-Samples/claude](https://github.com/Azure-Samples/claude) `infra-bicep/infra/foundry.bicep`).
+
+Facts that shape the template (all from Microsoft Learn):
+
+- **Account.** Claude needs a Foundry project in a supported deployment location plus
+  Azure Marketplace access ([Deploy and use Claude models](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-claude),
+  Prerequisites) — this `kind: 'AIServices'` account with `allowProjectManagement: true`
+  and its project already are that; nothing changes on the account.
+- **Version.** `'1'` = Hosted on Anthropic infrastructure, `'2'` = Hosted on Azure.
+  Sonnet 4.6 and Opus 4.6 exist only as `'1'`; Haiku 4.5 offers both
+  ([Claude models in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/claude-models),
+  "Available Claude models").
+- **Region.** All three families are Global Standard in `eastus2` and `swedencentral`
+  (`westus2`: Sonnet and Opus only) — [Region availability by deployment type](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-from-partners#region-availability-by-deployment-type).
+  `rg-helios-ai` is bootstrapped in `eastus2` (`azure-up.sh` default; the account follows
+  the resource group's location), so the account qualifies — confirm with
+  `az cognitiveservices account show -g rg-helios-ai -n helios-aijcut --query location`.
+- **Quota.** Pay-as-you-go defaults: Sonnet 4.6 / Haiku 4.5 80K ITPM, Opus 4.6 40K ITPM
+  (same Claude models page, "Quotas and rate limits"); `capacity` is K TPM, so 25 fits all
+  three. Soft-deleted accounts hold Claude TPM quota for up to 48 hours (deployment guide,
+  Troubleshooting).
+- **Attestation.** Every Claude deployment must carry `modelProviderData`
+  (`organizationName`, `countryCode`, `industry`) — the Cognitive Services RP uses it to
+  accept the Anthropic Marketplace offer on your behalf, and a deployment without it fails
+  with `AnthropicOrganizationCreationException` (deployment guide, "Terms of use"; starter
+  kit README). That block exists only on `accounts/deployments@2025-10-01-preview`, so
+  `modules/ai-foundry-account.bicep` deploys Anthropic-format entries through a second
+  `@batchSize(1)` loop on that API version, chained after the GA `2025-06-01` loop; every
+  other deployment keeps the GA pin. The property is untyped in Bicep (`BCP037`
+  suppressed on that one line).
+
+**OFF by default — the live `rg-helios-ai` stack redeploys unchanged.**
+`claudeOrganizationName` is empty in `main.bicepparam`, and an empty organization name
+skips the Anthropic-format entries. The legal entity name is not a secret, but it is an
+attestation the owner makes (review the
+[Anthropic Commercial Terms](https://www.anthropic.com/legal/commercial-terms) first), so
+pass it at deploy time — what-if first:
+
+```bash
+az deployment group what-if -g rg-helios-ai \
+  --template-file infra/main.bicep --parameters infra/main.bicepparam \
+  --parameters claudeOrganizationName="<legal entity name>" claudeCountryCode=US claudeIndustry=technology
+az deployment group create -g rg-helios-ai \
+  --template-file infra/main.bicep --parameters infra/main.bicepparam \
+  --parameters claudeOrganizationName="<legal entity name>" claudeCountryCode=US claudeIndustry=technology
+```
+
+Expect three `Create` entries (`helios-aijcut/claude-sonnet-4-6`, `/claude-haiku-4-5`,
+`/claude-opus-4-6`) and no `Delete`. The `aiServicesAccountName` / `anthropicFoundryBaseUrl`
+outputs feed `ANTHROPIC_FOUNDRY_RESOURCE` in `.helios/azure.env` and
+`.helios/azure.env.ps1` (written by `scripts/bootstrap/azure-up.*`); calls authenticate
+with Entra ID, and the account's existing Azure AI User grant to `principalId` is the
+data-plane role this template manages.
+
 ## OIDC identity (GitHub Actions → Azure)
 
 `helios-deploy.yml` authenticates with **federated identity — no cloud credential is
@@ -237,11 +303,14 @@ Boundaries and operations:
 ## Outputs
 
 `aiServicesEndpoint`, `openAiEndpoint`, `projectEndpoint`, `projectId`, `keyVaultUri`,
-`modelDeploymentNames`, plus `fleetVmssName` / `fleetVmssPrincipalId` (both empty
+`modelDeploymentNames`, `aiServicesAccountName` / `anthropicFoundryBaseUrl` (the Foundry
+account name and its Claude Messages API base URL — `ANTHROPIC_FOUNDRY_RESOURCE` in
+`.helios/azure.env`; empty strings when an existing account was supplied), plus
+`fleetVmssName` / `fleetVmssPrincipalId` (both empty
 strings while the fleet VMSS is disabled — consumed by `scripts/fleet/scale-fleet.ps1`
 and by role assignments for cloud lanes respectively) and `aiSearchEndpoint` /
 `aiSearchConnectionName` / `aiSearchServiceId` (empty strings while the AI Search
 connection is disabled). Secrets are never output.
 Wire the endpoints into the AIHub via
-`.env` (see `.env.template`: `AZURE_OPENAI_ENDPOINT`, `AZURE_FOUNDRY_PROJECT_ENDPOINT`,
-`AZURE_KEY_VAULT_URI`).
+`.env` (see `.env.template`: `AZURE_OPENAI_ENDPOINT`, `ANTHROPIC_FOUNDRY_RESOURCE`,
+`AZURE_FOUNDRY_PROJECT_ENDPOINT`, `AZURE_KEY_VAULT_URI`).

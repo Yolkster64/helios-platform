@@ -56,6 +56,14 @@ locals {
     ]
   )
 
+  # Anthropic-format entries (Claude in Foundry) carry the modelProviderData
+  # attestation, which only accounts/deployments@2025-10-01-preview accepts; with
+  # no organization name they are skipped, exactly like the Bicep module
+  # (Bicep: standardDeployments / claudeDeploymentEntries).
+  claude_attested            = var.claude_organization_name != ""
+  standard_model_deployments = [for d in local.all_model_deployments : d if d.format != "Anthropic"]
+  claude_model_deployments   = local.claude_attested ? [for d in local.all_model_deployments : d if d.format == "Anthropic"] : []
+
   # Bicep: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', <id>)
   role_definition_prefix            = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions"
   azure_ai_user_role_id             = "53ca6127-db72-4b80-b1b0-d745d6d5456d" # Azure AI User
@@ -108,7 +116,7 @@ resource "azapi_resource" "foundry_account" {
 # dynamic-length collection, so reproduce the serial behavior with
 # `terraform apply -parallelism=1` (see README.md).
 resource "azapi_resource" "model_deployment" {
-  for_each = { for d in local.all_model_deployments : d.name => d if !local.ai_service_exists }
+  for_each = { for d in local.standard_model_deployments : d.name => d if !local.ai_service_exists }
 
   type      = "Microsoft.CognitiveServices/accounts/deployments@2025-06-01"
   name      = each.value.name
@@ -127,6 +135,50 @@ resource "azapi_resource" "model_deployment" {
       }
     }
   }
+}
+
+# Claude in Foundry (Bicep: the claudeDeployments loop). Anthropic-format entries
+# ride accounts/deployments@2025-10-01-preview because the Marketplace attestation
+# block (modelProviderData) the Cognitive Services RP requires for Claude exists
+# only there — a deployment without it fails with
+# AnthropicOrganizationCreationException. Shape per the Learn-cited starter kit
+# (https://learn.microsoft.com/azure/developer/ai/how-to/deploy-claude-foundry,
+# https://github.com/Azure-Samples/claude infra-bicep/infra/foundry.bicep).
+# schema_validation_enabled = false is the azapi analogue of the Bicep BCP037
+# suppression: modelProviderData is absent from the published schema.
+# depends_on mirrors the Bicep dependsOn so the two groups never create
+# concurrently on the account (still apply with -parallelism=1, see README.md).
+resource "azapi_resource" "claude_deployment" {
+  for_each = { for d in local.claude_model_deployments : d.name => d if !local.ai_service_exists }
+
+  type      = "Microsoft.CognitiveServices/accounts/deployments@2025-10-01-preview"
+  name      = each.value.name
+  parent_id = local.effective_account_id
+
+  schema_validation_enabled = false
+
+  body = {
+    sku = {
+      name     = each.value.sku_name
+      capacity = each.value.capacity
+    }
+    properties = {
+      model = {
+        format  = "Anthropic"
+        name    = each.value.model_name
+        version = each.value.version
+      }
+      modelProviderData = {
+        organizationName = var.claude_organization_name
+        countryCode      = var.claude_country_code
+        industry         = var.claude_industry
+      }
+      versionUpgradeOption = "OnceNewDefaultVersionAvailable"
+      raiPolicyName        = "Microsoft.DefaultV2"
+    }
+  }
+
+  depends_on = [azapi_resource.model_deployment]
 }
 
 # ---------------------------------------------------------------------------

@@ -25,9 +25,19 @@ output "key_vault_uri" {
   value       = azurerm_key_vault.main.vault_uri
 }
 
+output "ai_services_account_name" {
+  description = "Name of the Foundry (AIServices) account — the bare resource name scripts/ai-integration/Connect-ClaudeFoundry.ps1 and the hub's anthropic-foundry provider read from ANTHROPIC_FOUNDRY_RESOURCE (empty when an existing account was supplied)."
+  value       = local.ai_service_exists ? "" : local.account_name
+}
+
+output "anthropic_foundry_base_url" {
+  description = "Claude Messages API base URL on the Foundry account, https://<account>.services.ai.azure.com/anthropic — Entra scope https://ai.azure.com/.default, model = deployment name; carries no secret (empty when an existing account was supplied)."
+  value       = local.ai_service_exists ? "" : "https://${local.account_name}.services.ai.azure.com/anthropic"
+}
+
 output "model_deployment_names" {
   description = "Names of all model deployments created on the account."
-  value       = local.ai_service_exists ? [] : [for d in local.all_model_deployments : d.name]
+  value       = local.ai_service_exists ? [] : concat([for d in local.standard_model_deployments : d.name], [for d in local.claude_model_deployments : d.name])
 }
 
 output "fleet_vmss_name" {

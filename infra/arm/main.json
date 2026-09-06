@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "4887067231228496887"
+      "templateHash": "2549679529361897265"
     }
   },
   "definitions": {
@@ -160,6 +160,40 @@
       ],
       "metadata": {
         "description": "Additional model deployments beyond the primary one (multi-LLM surface)."
+      }
+    },
+    "claudeOrganizationName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Legal entity name sent to Anthropic as modelProviderData.organizationName with every Anthropic-format deployment (Azure Marketplace attestation — review the Anthropic Commercial Terms first). Empty string (the default) skips the Anthropic-format entries of additionalModelDeployments: no Claude deployment is created or changed."
+      }
+    },
+    "claudeCountryCode": {
+      "type": "string",
+      "defaultValue": "US",
+      "minLength": 2,
+      "maxLength": 2,
+      "metadata": {
+        "description": "Two-letter ISO country code of the organization using Claude, sent as modelProviderData.countryCode."
+      }
+    },
+    "claudeIndustry": {
+      "type": "string",
+      "defaultValue": "technology",
+      "allowedValues": [
+        "technology",
+        "finance",
+        "healthcare",
+        "education",
+        "retail",
+        "manufacturing",
+        "government",
+        "media",
+        "other"
+      ],
+      "metadata": {
+        "description": "Industry of the organization using Claude, sent as modelProviderData.industry. Lowercase — the values the Foundry portal dropdown offers."
       }
     },
     "aiServiceAccountResourceId": {
@@ -375,6 +409,15 @@
           },
           "principalId": {
             "value": "[parameters('principalId')]"
+          },
+          "claudeOrganizationName": {
+            "value": "[parameters('claudeOrganizationName')]"
+          },
+          "claudeCountryCode": {
+            "value": "[parameters('claudeCountryCode')]"
+          },
+          "claudeIndustry": {
+            "value": "[parameters('claudeIndustry')]"
           }
         },
         "template": {
@@ -385,7 +428,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "12379891679277951790"
+              "templateHash": "8082683581434139205"
             }
           },
           "definitions": {
@@ -456,10 +499,47 @@
               "metadata": {
                 "description": "Object ID of the principal granted Azure AI User on the account. Empty string skips the role assignment."
               }
+            },
+            "claudeOrganizationName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Legal entity name sent as modelProviderData.organizationName with every Anthropic-format deployment (Azure Marketplace attestation for Claude). Empty string skips the Anthropic-format entries of modelDeployments entirely."
+              }
+            },
+            "claudeCountryCode": {
+              "type": "string",
+              "defaultValue": "US",
+              "minLength": 2,
+              "maxLength": 2,
+              "metadata": {
+                "description": "Two-letter ISO country code sent as modelProviderData.countryCode."
+              }
+            },
+            "claudeIndustry": {
+              "type": "string",
+              "defaultValue": "technology",
+              "metadata": {
+                "description": "Industry sent as modelProviderData.industry — lowercase, one of the Foundry portal dropdown values (validated by main.bicep)."
+              }
             }
           },
           "variables": {
-            "azureAiUserRoleId": "53ca6127-db72-4b80-b1b0-d745d6d5456d"
+            "copy": [
+              {
+                "name": "standardDeploymentNames",
+                "count": "[length(variables('standardDeployments'))]",
+                "input": "[variables('standardDeployments')[copyIndex('standardDeploymentNames')].name]"
+              },
+              {
+                "name": "claudeDeploymentNames",
+                "count": "[length(variables('claudeDeploymentEntries'))]",
+                "input": "[variables('claudeDeploymentEntries')[copyIndex('claudeDeploymentNames')].name]"
+              }
+            ],
+            "azureAiUserRoleId": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+            "standardDeployments": "[filter(parameters('modelDeployments'), lambda('d', not(equals(coalesce(tryGet(lambdaVariables('d'), 'format'), 'OpenAI'), 'Anthropic'))))]",
+            "claudeDeploymentEntries": "[if(empty(parameters('claudeOrganizationName')), createArray(), filter(parameters('modelDeployments'), lambda('d', equals(coalesce(tryGet(lambdaVariables('d'), 'format'), 'OpenAI'), 'Anthropic'))))]"
           },
           "resources": {
             "account": {
@@ -484,26 +564,59 @@
             "deployments": {
               "copy": {
                 "name": "deployments",
-                "count": "[length(parameters('modelDeployments'))]",
+                "count": "[length(variables('standardDeployments'))]",
                 "mode": "serial",
                 "batchSize": 1
               },
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2025-06-01",
-              "name": "[format('{0}/{1}', parameters('accountName'), parameters('modelDeployments')[copyIndex()].name)]",
+              "name": "[format('{0}/{1}', parameters('accountName'), variables('standardDeployments')[copyIndex()].name)]",
               "sku": {
-                "name": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'skuName'), 'GlobalStandard')]",
-                "capacity": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'capacity'), 30)]"
+                "name": "[coalesce(tryGet(variables('standardDeployments')[copyIndex()], 'skuName'), 'GlobalStandard')]",
+                "capacity": "[coalesce(tryGet(variables('standardDeployments')[copyIndex()], 'capacity'), 30)]"
               },
               "properties": {
                 "model": {
-                  "format": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'format'), 'OpenAI')]",
-                  "name": "[coalesce(tryGet(parameters('modelDeployments')[copyIndex()], 'modelName'), parameters('modelDeployments')[copyIndex()].name)]",
-                  "version": "[parameters('modelDeployments')[copyIndex()].version]"
+                  "format": "[coalesce(tryGet(variables('standardDeployments')[copyIndex()], 'format'), 'OpenAI')]",
+                  "name": "[coalesce(tryGet(variables('standardDeployments')[copyIndex()], 'modelName'), variables('standardDeployments')[copyIndex()].name)]",
+                  "version": "[variables('standardDeployments')[copyIndex()].version]"
                 }
               },
               "dependsOn": [
                 "account"
+              ]
+            },
+            "claudeDeployments": {
+              "copy": {
+                "name": "claudeDeployments",
+                "count": "[length(variables('claudeDeploymentEntries'))]",
+                "mode": "serial",
+                "batchSize": 1
+              },
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-10-01-preview",
+              "name": "[format('{0}/{1}', parameters('accountName'), variables('claudeDeploymentEntries')[copyIndex()].name)]",
+              "sku": {
+                "name": "[coalesce(tryGet(variables('claudeDeploymentEntries')[copyIndex()], 'skuName'), 'GlobalStandard')]",
+                "capacity": "[coalesce(tryGet(variables('claudeDeploymentEntries')[copyIndex()], 'capacity'), 30)]"
+              },
+              "properties": {
+                "model": {
+                  "format": "Anthropic",
+                  "name": "[coalesce(tryGet(variables('claudeDeploymentEntries')[copyIndex()], 'modelName'), variables('claudeDeploymentEntries')[copyIndex()].name)]",
+                  "version": "[variables('claudeDeploymentEntries')[copyIndex()].version]"
+                },
+                "modelProviderData": {
+                  "organizationName": "[parameters('claudeOrganizationName')]",
+                  "countryCode": "[parameters('claudeCountryCode')]",
+                  "industry": "[parameters('claudeIndustry')]"
+                },
+                "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
+                "raiPolicyName": "Microsoft.DefaultV2"
+              },
+              "dependsOn": [
+                "account",
+                "deployments"
               ]
             },
             "aiUserRoleAssignment": {
@@ -538,16 +651,17 @@
               "type": "string",
               "value": "[format('https://{0}.openai.azure.com/', parameters('accountName'))]"
             },
+            "anthropicBaseUrl": {
+              "type": "string",
+              "value": "[format('https://{0}.services.ai.azure.com/anthropic', parameters('accountName'))]"
+            },
             "accountPrincipalId": {
               "type": "string",
               "value": "[reference('account', '2025-06-01', 'full').identity.principalId]"
             },
             "deploymentNames": {
               "type": "array",
-              "copy": {
-                "count": "[length(parameters('modelDeployments'))]",
-                "input": "[parameters('modelDeployments')[copyIndex()].name]"
-              }
+              "value": "[concat(variables('standardDeploymentNames'), variables('claudeDeploymentNames'))]"
             }
           }
         }
@@ -1621,6 +1735,20 @@
         "description": "Azure OpenAI-compatible endpoint on the Foundry account (empty when an existing account was supplied)."
       },
       "value": "[if(variables('aiServiceExists'), '', reference('foundryAccount').outputs.openAiEndpoint.value)]"
+    },
+    "aiServicesAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Foundry (AIServices) account — the bare resource name scripts/ai-integration/Connect-ClaudeFoundry.ps1 and the hub's anthropic-foundry provider read from ANTHROPIC_FOUNDRY_RESOURCE (empty when an existing account was supplied)."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryAccount').outputs.accountName.value)]"
+    },
+    "anthropicFoundryBaseUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Claude Messages API base URL on the Foundry account, https://<account>.services.ai.azure.com/anthropic — Entra scope https://ai.azure.com/.default, model = deployment name; carries no secret (empty when an existing account was supplied)."
+      },
+      "value": "[if(variables('aiServiceExists'), '', reference('foundryAccount').outputs.anthropicBaseUrl.value)]"
     },
     "projectEndpoint": {
       "type": "string",
