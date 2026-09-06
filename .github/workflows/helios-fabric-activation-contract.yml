@@ -1,0 +1,78 @@
+name: HELIOS Fabric activation contract
+
+on:
+  pull_request:
+    paths:
+      - 'config/devops/azure-devops-wif.v1.json'
+      - 'config/sharepoint/governance-publication.v1.json'
+      - 'config/collaboration/slack-linear-routing.v1.json'
+      - 'config/fabric/helios-fabric.v1.json'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'config/providers/helios-model-providers.v1.json'
+      - '.azuredevops/pipelines/helios-fabric-validation.yml'
+      - 'scripts/validation/validate_fabric_activation.py'
+      - '.github/workflows/helios-fabric-activation-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/devops/azure-devops-wif.v1.json'
+      - 'config/sharepoint/governance-publication.v1.json'
+      - 'config/collaboration/slack-linear-routing.v1.json'
+      - 'config/fabric/helios-fabric.v1.json'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'config/providers/helios-model-providers.v1.json'
+      - '.azuredevops/pipelines/helios-fabric-validation.yml'
+      - 'scripts/validation/validate_fabric_activation.py'
+      - '.github/workflows/helios-fabric-activation-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-activation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile validators
+        run: |
+          python -m py_compile scripts/validation/validate_helios_fabric.py
+          python -m py_compile scripts/validation/validate_model_providers.py
+          python -m py_compile scripts/validation/validate_fabric_activation.py
+      - name: Validate Fabric setup
+        run: |
+          python scripts/validation/validate_helios_fabric.py
+          python scripts/validation/validate_model_providers.py
+          python scripts/validation/validate_fabric_activation.py
+      - name: Verify Azure DevOps remains a plan/evidence mirror
+        run: |
+          set -euo pipefail
+          grep -q 'deployment group what-if' .azuredevops/pipelines/helios-fabric-validation.yml
+          if grep -q 'deployment group create' .azuredevops/pipelines/helios-fabric-validation.yml; then
+            echo 'Azure DevOps validation pipeline contains deployment authority.' >&2
+            exit 1
+          fi
+          grep -q 'applyParameterExists.*false' config/devops/azure-devops-wif.v1.json
+          grep -q 'productionDeploymentExists.*false' config/devops/azure-devops-wif.v1.json
+      - name: Publish activation evidence
+        run: |
+          mkdir -p validation-evidence
+          python scripts/validation/validate_fabric_activation.py > validation-evidence/fabric-activation.json
+          sha256sum \
+            config/devops/azure-devops-wif.v1.json \
+            config/sharepoint/governance-publication.v1.json \
+            config/collaboration/slack-linear-routing.v1.json \
+            .azuredevops/pipelines/helios-fabric-validation.yml \
+            > validation-evidence/SHA256SUMS
+          printf 'repository=%s\ncommit=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" > validation-evidence/source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-fabric-activation-${{ github.sha }}
+          path: validation-evidence
+          if-no-files-found: error
+          retention-days: 30
