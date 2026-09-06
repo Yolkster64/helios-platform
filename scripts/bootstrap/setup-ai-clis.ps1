@@ -187,7 +187,8 @@ $cliSpecs = @(
         }
     }
     # The fifth cliAgent in config/aihub.json. Optional: there is no public
-    # installer, and start-fleet.ps1 deliberately falls back to the non-model
+    # installer (curl | bash on Unix, iex (irm …) on Windows), and start-fleet.ps1
+    # deliberately falls back to the non-model
     # local stub without it — but a "complete" inventory must still SAY so
     # rather than report 4/4 and let setup-all claim full readiness.
     [pscustomobject]@{
@@ -196,9 +197,32 @@ $cliSpecs = @(
         NpmPackage  = $null
         Optional    = $true
         AgentShape  = 'hermes -p {assignee} chat -q {prompt}'
-        InstallHint = 'no public installer — see docs/architecture/HERMES_FLEET_AND_XCORE.md; without it the fleet runs the local stub (no model work)'
-        Auth        = 'authenticates via its own login/config; the fleet env contract (HERMES_KANBAN_*) needs no key'
-        AuthProbe   = $null # no public CLI surface to probe — -ProbeAuth reports 'unknown'
+        InstallHint = 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash   (Windows: iex (irm https://hermes-agent.nousresearch.com/install.ps1)) — no admin rights; see docs/architecture/HERMES_FLEET_AND_XCORE.md; without it the fleet runs the local stub (no model work)'
+        Auth        = 'provider keys by NAME in the environment or ~/.hermes/config.yaml (`hermes setup` writes it); the fleet env contract (HERMES_KANBAN_*) needs no key'
+        AuthProbe   = {
+            param($Command)
+            # Hermes has no `login status` verb; its readiness is a provider key it can
+            # read (any of the names below, presence only) or a written config file.
+            # Neither surfaces a value, and a missing key is 'unknown' rather than
+            # 'unauthenticated' because a config-file key is not visible from here.
+            # Presence = a non-whitespace value (auth-doctor.ps1 rule): an exported empty
+            # variable is not a key.
+            $keyNames = @('OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'NOVITA_API_KEY', 'OLLAMA_API_KEY')
+            $present = @($keyNames | Where-Object { -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
+            # A host without a resolvable profile directory (some service accounts) has
+            # no config file to look for; that is 'unknown', not a probe failure.
+            $profileDir = [Environment]::GetFolderPath('UserProfile')
+            $configPath = if ([string]::IsNullOrWhiteSpace($profileDir)) { '' } else { Join-Path $profileDir '.hermes/config.yaml' }
+            if ($present.Count -gt 0) {
+                [pscustomobject]@{ Status = 'authenticated'; Detail = "provider key present by name: $($present -join ', ') (values never read)" }
+            }
+            elseif ($configPath -and (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+                [pscustomobject]@{ Status = 'authenticated'; Detail = "~/.hermes/config.yaml exists (contents never read); run 'hermes setup' to change providers" }
+            }
+            else {
+                [pscustomobject]@{ Status = 'unknown'; Detail = 'no provider key by name and no ~/.hermes/config.yaml; run `hermes setup` once on the fleet host' }
+            }
+        }
     }
 )
 

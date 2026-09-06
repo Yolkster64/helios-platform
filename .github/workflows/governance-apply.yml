@@ -17,18 +17,34 @@
 #                                  GETs repos/{repo}/pages, which the Pages permission
 #                                  gates; without it the GET is a 403 and the plan
 #                                  would report Pages out of sync on every PR.
-#   apply  (push to main,          Credentials are chosen PER SCRIPT: rulesets and
-#           workflow_dispatch,     settings run with HELIOS_ADMIN_TOKEN when the owner
-#           schedule)              has stored it (else GITHUB_TOKEN, dry-run only plus
-#                                  a "needs HELIOS_ADMIN_TOKEN" row naming the owner
-#                                  step); labels and milestones ALWAYS run with
-#                                  GITHUB_TOKEN (issues: write is granted below), so a
-#                                  dead or under-scoped PAT can never take them down.
-#                                  The PAT is the single admin credential of the
-#                                  repo, defined in scripts/bootstrap/provision-github-secrets.ps1
-#                                  (and printed by scripts/bootstrap/first-run.sh): a
-#                                  fine-grained token with Administration RW, Contents RW,
-#                                  Issues RW, Pull requests RW, Pages RW, Metadata R, stored
+#   apply  (push to main,          Credentials are chosen PER SCRIPT. Rulesets and
+#           workflow_dispatch,     settings run with the first admin credential that
+#           schedule)              exists: the HELIOS GitHub App installation token
+#                                  (minted per run by the runner's first step when the
+#                                  HELIOS_APP_CLIENT_ID variable and the
+#                                  HELIOS_APP_PRIVATE_KEY secret are both stored), else
+#                                  HELIOS_ADMIN_TOKEN, else GITHUB_TOKEN (dry-run only
+#                                  plus a "needs an admin credential" row naming the
+#                                  owner step, app path first). Labels and milestones
+#                                  ALWAYS run with GITHUB_TOKEN (issues: write is
+#                                  granted below), so a dead or under-scoped admin
+#                                  credential can never take them down.
+#                                  The app is the durable authority: a private GitHub
+#                                  App, helios-control-<owner>, registered once by
+#                                  scripts/bootstrap/connect-github-app.ps1 from the
+#                                  owner's own machine (two clicks: Create, Install;
+#                                  it stores the three HELIOS_APP_* variables and the
+#                                  key). Installation tokens are minted per run, scoped
+#                                  to this repository and to Administration, Contents,
+#                                  Issues, Pull requests, Pages write + Metadata read,
+#                                  expire in an hour and never sit in a password
+#                                  manager; and a push or merge made with one fires
+#                                  on: push, which the cascade GITHUB_TOKEN cannot.
+#                                  The PAT stays as the manual fallback: a fine-grained
+#                                  token with Administration RW, Contents RW, Issues RW,
+#                                  Pull requests RW, Pages RW, Metadata R, defined in
+#                                  scripts/bootstrap/provision-github-secrets.ps1 (and
+#                                  printed by scripts/bootstrap/first-run.sh), stored
 #                                  once with `gh secret set HELIOS_ADMIN_TOKEN --repo <owner/repo>`.
 #
 # Which repository: every script is called with -Repository ${GITHUB_REPOSITORY}, so a
@@ -55,12 +71,17 @@
 #   1 = an item failed (replay list)      -> row "FAILED", the job fails
 #   2 = precondition/credential missing   -> row "needs owner", reported, never fails,
 #                                            with ONE exception: rulesets/settings
-#                                            exiting 2 on an apply that ran WITH the
-#                                            stored HELIOS_ADMIN_TOKEN means the PAT is
-#                                            expired, revoked or under-scoped, so that
-#                                            row is "FAILED" (::error) and the job fails
-# so a PR is never blocked by a missing owner credential, only by a real failure
-# (and a broken owner credential is a real failure).
+#                                            exiting 2 on an apply that ran WITH a real
+#                                            admin credential (the app token or the PAT)
+#                                            means that credential is expired, revoked
+#                                            or under-scoped, so that row is "FAILED"
+#                                            (::error naming the credential used) and
+#                                            the job fails
+# and, before any script runs, a stored app credential that fails to mint (app
+# uninstalled, key rotated, installation narrowed) fails the job outright with the
+# repair named - it never degrades to the PAT or GITHUB_TOKEN. So a PR is never
+# blocked by a missing owner credential, only by a real failure (and a broken
+# owner credential is a real failure).
 #
 # Every mutation is announced before it runs: the runner echoes the pwsh command
 # line (with the NAME of the credential it holds), and each script prints the exact
@@ -125,9 +146,10 @@ jobs:
     permissions:
       contents: read
       pages: read
-    # No `secrets:` handed over: the runner sees HAS_ADMIN_TOKEN=false and both of
-    # its credentials are the workflow token. apply is pinned false, so no branch
-    # of the runner can reach a -Apply invocation from a PR.
+    # No `secrets:` handed over: the runner mints no app token, sees
+    # HAS_ADMIN_TOKEN=false and both of its credentials are the workflow token.
+    # apply is pinned false, so no branch of the runner can reach a -Apply
+    # invocation from a PR.
     uses: ./.github/workflows/governance-run.yml
     with:
       run_mode: plan
@@ -147,7 +169,8 @@ jobs:
     # live Pages state so its diff is truthful. No script here touches a pull
     # request endpoint, so no pull-requests grant is held; add one in the same
     # commit as the first script that needs it. Rulesets/settings need admin, which
-    # no GITHUB_TOKEN grant can confer: that is what HELIOS_ADMIN_TOKEN is for.
+    # no GITHUB_TOKEN grant can confer: that is what the app installation token
+    # (or the HELIOS_ADMIN_TOKEN fallback) is for.
     permissions:
       contents: read
       issues: write
@@ -161,8 +184,11 @@ jobs:
       # token.
       apply: ${{ github.event_name == 'push' || github.event_name == 'schedule' || inputs.apply == true }}
       scope: ${{ inputs.scope || 'all' }}
-    # The owner's PAT when stored, else empty (same idiom as copilot-dispatch.yml);
-    # the runner falls back to the workflow token by itself. Passed by name only,
-    # never echoed.
+    # Both admin credentials when stored, else empty (same idiom as
+    # copilot-dispatch.yml): the app key pairs with vars.HELIOS_APP_CLIENT_ID,
+    # which the runner reads itself; the PAT is the fallback. The runner resolves
+    # the precedence and falls back to the workflow token by itself. Passed by
+    # name only, never echoed.
     secrets:
+      HELIOS_APP_PRIVATE_KEY: ${{ secrets.HELIOS_APP_PRIVATE_KEY }}
       HELIOS_ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN }}

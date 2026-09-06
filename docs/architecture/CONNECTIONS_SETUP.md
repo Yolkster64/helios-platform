@@ -312,11 +312,12 @@ The governance artifacts live in the repo — `.github/rulesets/main.json`,
 `.github/CODEOWNERS`, `.github/dependabot.yml`, and the PR/issue templates — and
 three settings turn them on. All three are now items of the Control fabric
 (§ below): `governance-apply.yml` applies them from `main` once the owner has
-stored `HELIOS_ADMIN_TOKEN`, so the clicks are the fallback, not the plan.
+connected the HELIOS GitHub App (or, as the fallback, stored
+`HELIOS_ADMIN_TOKEN`), so the clicks are the fallback, not the plan.
 
 1. **Apply the branch ruleset** — `pwsh scripts/github/apply-rulesets.ps1` first
    (dry run: prints the exact `gh api` POST/PUT calls, changes nothing), then
-   `-Apply` under repository admin (the workflow's PAT, or — until
+   `-Apply` under repository admin (the workflow's app token or PAT, or — until
    `governance-apply.yml` is on `main` — an owner `gh auth login` on a
    workstation). Idempotent: it GETs existing rulesets and updates by name instead
    of duplicating; exits 2 with an explanation when `gh` or auth is missing. The
@@ -400,12 +401,28 @@ credential missing). The workflow honors the same contract:
   (06:17 UTC: the drift net for merges that raise no push event; GitHub keeps
   scheduled runs off on forks unless enabled), or `workflow_dispatch` with `apply`
   (boolean, default false, which makes it a plan run with the real token) and
-  `scope` (`all|rulesets|settings|labels|milestones`): `GH_TOKEN` is `HELIOS_ADMIN_TOKEN`
-  when the owner has stored it, else `github.token` (`contents: read`,
-  `issues: write`, `pages: read`). Labels and milestones apply with either token.
-  Rulesets and settings apply **only** with the PAT; without it they print their
-  dry run and the summary row reads "needs HELIOS_ADMIN_TOKEN" with the owner step
-  spelled out. Exit 2 is reported, never red; exit 1 fails the job. Concurrency
+  `scope` (`all|rulesets|settings|labels|milestones`): for the two admin items
+  `GH_TOKEN` is, in order of precedence, the HELIOS GitHub App installation
+  token — minted in the runner's first step by `actions/create-github-app-token@v3`
+  when the `HELIOS_APP_CLIENT_ID` variable and the `HELIOS_APP_PRIVATE_KEY`
+  secret are both stored, scoped to this repository and to Administration,
+  Contents, Issues, Pull requests, Pages write + Metadata read, revoked when
+  the job ends — else `HELIOS_ADMIN_TOKEN` when the owner has stored the PAT,
+  else `github.token`; labels and milestones always apply with `github.token`
+  (`contents: read`, `issues: write`, `pages: read`). Rulesets and settings
+  apply **only** with one of the two real admin credentials; without either they
+  print their dry run and the summary row reads "needs an admin credential" with
+  the app path spelled out first and the PAT as the fallback. Exit 2 is
+  reported, never red, with one exception: a stored credential that is rejected.
+  An app credential that no longer mints (app uninstalled, key rotated,
+  installation narrowed) fails the mint step, so the job is red before any
+  script runs and the annotation names the repair — it never degrades to the
+  PAT or `github.token`; an admin item exiting 2 under a present credential is
+  a red row naming the credential used. Exit 1 fails the job. The summary's
+  header line carries `admin token: true (HELIOS_APP (installation token))` and
+  `app token: minted` (else `not configured` / `half-configured`; a pull-request
+  plan reads `registered (key not passed to plan runs)`, because secrets never
+  reach plan runs). Concurrency
   group `governance-apply`, never cancelled mid-pass (the plan job uses
   `governance-plan-<PR>` so a PR never queues behind an apply); every script is
   called with `-Repository $GITHUB_REPOSITORY`, so a fork reconciles itself and
@@ -416,10 +433,95 @@ live, 1 to create; settings — `allow_auto_merge` already true,
 `delete_branch_on_merge` false, `has_wiki` true, `pages` unreadable from here;
 labels — create 5, update 7, in sync 9; milestones — create 4.
 
-### The one owner step: `HELIOS_ADMIN_TOKEN`
+### The one owner step: connect the HELIOS GitHub App
 
-One fine-grained PAT is the repository's single admin credential. It lives in the
-Actions secret and the owner's password manager, nowhere else.
+The repository's admin authority is a private GitHub App, `helios-control-<owner>`
+(`helios-control-Yolkster64` on the live repository), registered once by
+`pwsh scripts/bootstrap/connect-github-app.ps1` from the owner's own machine,
+Cloud Shell or a Codespace — never from an agent container, whose transport
+rewrites GitHub credentials; the script detects that and refuses instead of
+reporting a false pass. Installation tokens are minted per run, expire after an
+hour, are scoped to this repository and to exactly the permissions the four
+scripts need, and never sit in a password manager; a push or merge made with one
+fires `on: push`, which the cascade `GITHUB_TOKEN` cannot.
+
+What the script does (`-VerifyOnly` reports and changes nothing; `-Json` emits
+the report as one object; report lanes `transport`, `app-registered`,
+`variables-stored`, `secret-stored`, `app-installed`, `governance-dispatched`):
+
+1. **Click one — Create.** It opens the GitHub App manifest flow with the app
+   pre-filled (name `helios-control-<owner>`, or `-AppName`; repository
+   permissions Administration, Contents, Issues, Pull requests, Pages, Actions,
+   Workflows = write, Metadata = read; no webhook; not public). You press
+   **Create GitHub App**; GitHub sends back a one-hour code, which the script
+   exchanges at `POST /app-manifests/{code}/conversions` (no auth by design).
+   The code arrives on a one-shot listener on a free `127.0.0.1` port
+   (`-CallbackPort 0`, the default; `-CallbackPort <int>` pins one), or with
+   `-CallbackPort -1` you paste it from the address bar; `-FromCode <env var
+   NAME>` takes a code you already hold.
+2. **What it stores.** Three repository *variables* — identifiers, not secrets:
+   `HELIOS_APP_CLIENT_ID`, `HELIOS_APP_ID`, `HELIOS_APP_SLUG` — and one
+   *secret*, `HELIOS_APP_PRIVATE_KEY` (the PEM, fed to `gh secret set` over
+   stdin). The `client_secret` and `webhook_secret` the conversion also returns
+   are discarded: the workflow never needs them, and they stay on the app page
+   where they can be deleted.
+3. **Click two — Install.** It opens
+   `https://github.com/apps/<slug>/installations/new/permissions?target_id=<owner id>`;
+   you press **Install** for this repository. The script waits up to
+   `-TimeoutMinutes` (15; `-SkipInstallWait` returns at once) for the
+   installation to appear and verifies it the way the workflow will: an
+   in-process app JWT, then `gh api /user/installations`.
+4. **Optional first apply.** `-DispatchGovernance` runs
+   `gh workflow run governance-apply.yml -f apply=true -f scope=all` (mind the
+   ruleset ordering rule in § GitHub governance).
+
+`-Repository <owner/name>` defaults to `Yolkster64/helios-platform`; a fork
+passes its own. `connect-devices.ps1` runs the whole thing for you right after
+the two device-code logins (`-SkipGitHubApp` to leave it out). The app itself
+lives at `https://github.com/settings/apps/<slug>` (profile → Settings →
+Developer settings → GitHub Apps); its installation at
+`https://github.com/settings/installations`.
+
+Verify from any shell whose `gh` is logged in as the owner:
+
+- `gh api /user/installations --jq '.installations[] | select(.app_slug == "helios-control-yolkster64") | {id, repository_selection}'`
+  lists the installation (the slug is the `HELIOS_APP_SLUG` variable:
+  `gh variable get HELIOS_APP_SLUG --repo Yolkster64/helios-platform`).
+- `gh variable list --repo Yolkster64/helios-platform` shows the three
+  `HELIOS_APP_*` variables; `gh secret list` shows `HELIOS_APP_PRIVATE_KEY`
+  (names only, which is all either command ever shows).
+- The next governance run's summary header reads
+  `admin token: true (HELIOS_APP (installation token))` and `app token: minted`,
+  and every admin row is `applied`.
+
+**Rotate the key**: on the app page generate a new private key, delete the old
+one, then from a shell whose `gh` is logged in as the owner:
+
+```bash
+gh secret set HELIOS_APP_PRIVATE_KEY --repo Yolkster64/helios-platform < key.pem
+rm key.pem
+```
+
+The value goes through that stdin redirect and nowhere else — not a chat, a
+workflow input, `.env`, or a shell history line. Re-running
+`connect-github-app.ps1` performs the same rotation behind the two clicks.
+
+**Uninstall**: `https://github.com/settings/installations` → the app →
+**Uninstall**. The next governance run goes red at the mint step with the
+repair named — never silently back to a weaker token. To retire the app
+entirely, delete it from `https://github.com/settings/apps/<slug>`, then
+`gh secret delete HELIOS_APP_PRIVATE_KEY --repo <repo>` and
+`gh variable delete HELIOS_APP_CLIENT_ID|HELIOS_APP_ID|HELIOS_APP_SLUG --repo <repo>`
+(one call each), so the runner sees "not configured" rather than
+"half-configured".
+
+#### Fallback: a fine-grained PAT (`HELIOS_ADMIN_TOKEN`)
+
+The PAT remains the manual fallback: the runner takes it whenever no app token
+was minted. It lives in the Actions secret and the owner's password manager,
+nowhere else. `scripts/bootstrap/connect-admin.ps1` automates everything around
+the one click (masked prompt or `-FromEnv HELIOS_ADMIN_TOKEN`, live
+`.permissions.admin` probe, `gh secret set` over stdin); by hand:
 
 1. GitHub → **Settings** (profile menu, not the repository) → **Developer
    settings** → **Personal access tokens** → **Fine-grained tokens** →
@@ -451,8 +553,8 @@ Actions secret and the owner's password manager, nowhere else.
    `gh api repos/Yolkster64/helios-platform/milestones` (the 4 manifest
    milestones).
 
-Rotation is the same steps 1–5; nothing in the repo references the value.
-Projects v2 stays outside this token on purpose: the board scripts need a classic
+Rotation of the PAT is the same steps 1–5; nothing in the repo references the
+value. Projects v2 stays outside both credentials on purpose: the board scripts need a classic
 PAT with the `project` scope (plus `repo` read) passed at run time (§ GitHub
 Project board), which is why `apply-repo-settings.ps1` prints the board commands
 instead of running them.
@@ -567,7 +669,7 @@ are `scripts/bootstrap/README.md` and `scripts/github/README.md`.
 | Linear | **First** switch Linear's own GitHub issue sync OFF for team John (loop warning above); create a Linear personal API key | Secret `LINEAR_API_KEY` (+ `linear.teamKey` in `config/connectors.json`); `provision-github-secrets.ps1 -Apply` or `gh secret set` | Label an issue `bug` (or another sync label) → `[GH-n]` issue appears in Linear; no new `[GH-` issue appears on GitHub afterwards |
 | Slack | Create an incoming webhook | Secret `SLACK_WEBHOOK_URL` (+ `slack.notifyOn` routing); `provision-github-secrets.ps1 -Apply` or `gh secret set` | Re-run any listed workflow; failure/`always` outcomes post to the channel |
 | Provider keys (Key Vault) | Run `pwsh scripts/bootstrap/set-provider-secrets.ps1` (dry run), then `-Apply` (masked prompt or `-FromEnv`) after `azure-up.sh` | Vault secrets `openai-api-key`, `anthropic-api-key`, `github-models-token` at `AZURE_KEY_VAULT_URI` (names from `config/aihub.json`) | `. scripts/bootstrap/auto-login.ps1` lights the providers; `helios-ai providers` |
-| Control fabric (ruleset, settings, labels, milestones) | Mint the fine-grained PAT (§ Control fabric click path), `gh secret set HELIOS_ADMIN_TOKEN` (or `provision-github-secrets.ps1 -Apply` with the env var set), then — once the workflow is on `main` — `gh workflow run governance-apply.yml -f apply=true -f scope=all`; interim `pwsh scripts/github/apply-rulesets.ps1 -Apply` under an owner `gh auth login`; ruleset only after PR #113's no-path-filter triggers are on `main` | Secret `HELIOS_ADMIN_TOKEN` (Administration/Contents/Issues/Pull requests/Pages RW, Metadata R on this repo only) | Job summary: every row `applied`/`ok`; `gh ruleset list`; `gh label list`; `gh api repos/Yolkster64/helios-platform/milestones` |
+| Control fabric (ruleset, settings, labels, milestones) | From your own machine: `pwsh scripts/bootstrap/connect-github-app.ps1 -DispatchGovernance` (§ Control fabric: two clicks, **Create GitHub App** then **Install**; `connect-devices.ps1` chains it after the device-code logins) — it dispatches `gh workflow run governance-apply.yml -f apply=true -f scope=all` once the workflow is on `main`; fallback: mint the fine-grained PAT and `gh secret set HELIOS_ADMIN_TOKEN` (or `provision-github-secrets.ps1 -Apply` with the env var set); interim `pwsh scripts/github/apply-rulesets.ps1 -Apply` under an owner `gh auth login`; ruleset only after PR #113's no-path-filter triggers are on `main` | Variables `HELIOS_APP_CLIENT_ID`, `HELIOS_APP_ID`, `HELIOS_APP_SLUG` + secret `HELIOS_APP_PRIVATE_KEY` (private app `helios-control-<owner>`: Administration/Contents/Issues/Pull requests/Pages/Actions/Workflows write, Metadata read; per-run installation token); fallback secret `HELIOS_ADMIN_TOKEN` (Administration/Contents/Issues/Pull requests/Pages RW, Metadata R on this repo only) | Job summary header `app token: minted`, every row `applied`/`ok`; `gh api /user/installations --jq '.installations[] | select(.app_slug == "helios-control-yolkster64") | .id'`; `gh ruleset list`; `gh label list`; `gh api repos/Yolkster64/helios-platform/milestones` |
 | Pages dashboard | Settings → Pages → Source: **GitHub Actions** (or the `pages` item of `apply-repo-settings.ps1` with the PAT), then `gh workflow run pages-dashboard.yml` | Pages `build_type=workflow`; "Allow auto-merge" is its sibling setting, measured already on | `gh api repos/Yolkster64/helios-platform/pages --jq .build_type` reads `workflow` from an owner login (the proxy blocks `/pages`); the dashboard URL in the run summary |
 | Branch prune | `gh workflow run branch-prune.yml` (plan), read the summary, then `-f apply=true -f keep=<a,b>` (`-f max_delete=<n>` above 200 deletions) | None (`GITHUB_TOKEN`, `contents: write` + `pull-requests: read`); every stale tip kept as tag `archive/<branch>` | `branch-prune-report` artifact; `git ls-remote --tags origin 'archive/*'` |
 | Issue hygiene (#54–#92) | Linear switch OFF first, then `pwsh scripts/github/close-duplicate-issues.ps1 -Apply` from an owner login or the PAT | None stored (`duplicate` label from the manifest) | Dry run reports 0 candidates; `gh issue list --label duplicate --state closed` |

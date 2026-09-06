@@ -17,6 +17,16 @@
       "signals": ["releases", "commits"]
     },
     {
+      "repo": "NousResearch/hermes-agent",
+      "because": "Upstream of the Yolkster64/hermes-agent-github fork: the Hermes CLI the fleet lanes spawn (`hermes -p <assignee> chat -q <prompt>`) and the kanban verbs the fleet contract assumes (claim/complete/block/swarm/daemon) ship here; installer and auth changes land in its releases first (HERMES_FLEET_AND_XCORE.md).",
+      "signals": ["releases", "commits"]
+    },
+    {
+      "repo": "linear/linear",
+      "because": "Linear's SDK monorepo (Yolkster64/linear is a fork): the GraphQL mutations linear-sync.yml hand-rolls are defined against its schema, so schema and SDK releases are the early warning for the sync lane.",
+      "signals": ["releases", "commits"]
+    },
+    {
       "repo": "modelcontextprotocol/csharp-sdk",
       "because": "The MCP SDK behind src/mcp/HELIOS.Mcp; protocol changes and breaking SDK releases land here first.",
       "signals": ["releases", "commits"]

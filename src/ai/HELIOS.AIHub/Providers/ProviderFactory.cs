@@ -92,9 +92,9 @@ public static class ProviderFactory
         }
         else
         {
+            // Connect-ClaudeFoundry.ps1 is named only for the default variable it sets.
             return new AnthropicFoundryAgent(name, displayName, provider.Model,
-                $"Set {endpointEnv} (Foundry resource name or https base URL) — " +
-                "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login.");
+                AnthropicFoundryAgent.MissingEndpointHint(endpointEnv));
         }
 
         if (!AnthropicFoundryAgent.TryResolveBaseUri(candidate, source, out var baseUri, out var hint))

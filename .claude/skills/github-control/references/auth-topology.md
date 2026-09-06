@@ -11,7 +11,7 @@ capability, not convenience — several capabilities are exclusive to one surfac
 | 1 | Actions `GITHUB_TOKEN` | A workflow acts on its own repo (contents, issues, PRs, wiki) | Trigger other workflows; manage Projects v2 |
 | 2 | Classic PAT, `project` scope | Anything Projects v2 (fields, items, field values) | Be stored repo-side (it is a run-time parameter) |
 | 3 | Fine-grained PAT | A narrow write the `GITHUB_TOKEN` is refused for (Copilot coding-agent assignment) | Projects v2 (classic-only) |
-| 4 | GitHub App | Workflow cascades, org-scale automation, ARC runner auth | Exists here yet — it doesn't (docs-only) |
+| 4 | GitHub App `helios-control-<owner>` | The governance admin items (rulesets, settings) in `governance-run.yml`; anything that must fire `on: push` (cascades) | Projects v2 (classic PAT only); approve production; be registered from an agent container |
 | 5 | `gh` CLI device flow | A human's interactive session | Export its token into another process's env |
 
 ## 1. Actions `GITHUB_TOKEN`: deny-all default, per-job opt-ins
@@ -68,26 +68,74 @@ and upgrades transparently when the secret exists; both jobs skip green with a
 `::notice::` when Copilot declines (`:66-69`, `:101-102`) — automation
 degrades, it does not fail the pipeline (`:10-14`).
 
-## 4. GitHub App — currently absent, and when to introduce one
+## 4. GitHub App — `helios-control-<owner>`, the durable admin authority
 
-No GitHub App is wired anywhere in this repo today. It appears only as a
-docs-level aspiration for ARC self-hosted runners:
-`docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md:47` (the
-`githubConfigSecret: helios-runners-app` Helm value — app id + installation id +
-private key) and `:55` ("Auth via a GitHub App (not PAT)").
+The repo's GitHub App exists: a private app named `helios-control-<owner>`
+(`helios-control-Yolkster64` on the live repository), registered by
+`scripts/bootstrap/connect-github-app.ps1` through the manifest flow. The
+script opens the pre-filled **Create GitHub App** page, receives the one-hour
+manifest code on a one-shot `127.0.0.1` listener (or pasted from the address
+bar with `-CallbackPort -1`), converts it at
+`POST /app-manifests/{code}/conversions` (unauthenticated by design), stores
+the identifiers as repository *variables* (`HELIOS_APP_CLIENT_ID`,
+`HELIOS_APP_ID`, `HELIOS_APP_SLUG`) and the PEM as the *secret*
+`HELIOS_APP_PRIVATE_KEY` over stdin, discards `client_secret` and
+`webhook_secret`, opens the one **Install** click
+(`https://github.com/apps/<slug>/installations/new/permissions?target_id=<owner id>`),
+then verifies with an in-process app JWT plus `gh api /user/installations`.
+It refuses to run over an injecting transport (the agent containers), so
+registration is an owner action from their own machine, Cloud Shell or a
+Codespace; `connect-devices.ps1` chains it after the device-code logins.
+Permissions: administration, contents, issues, pull_requests, pages, actions,
+workflows = write; metadata = read; no webhook; not public. The app page is
+`https://github.com/settings/apps/<slug>`; the PAT of surface 3 is now the
+fallback behind it, not the plan.
 
-Introduce one when you hit either wall:
+**Used for:**
 
-- **Workflow cascades.** `GITHUB_TOKEN` cannot trigger other workflows — a
-  push made with it won't fire `on: push`; use a GitHub App token for cascades
-  (`.claude/skills/automation-wiring/references/github-actions.md:88-89`).
-  Today the repo lives within this limit (e.g. the claude-foundry publish job
-  pushes a branch and opens a draft PR; CI on that PR fires because the PR is
-  opened by `gh` with the same token — verify CI actually ran before trusting
-  a green-looking draft).
-- **Org-scale Projects/board automation.** The classic PAT of surface 2 is
-  bound to one human user. An App gives installation-scoped, rotatable,
-  rate-limit-friendlier credentials once board automation must run unattended.
+- **The governance admin items.** `.github/workflows/governance-run.yml` mints
+  an installation token in its first step (`Mint the HELIOS GitHub App
+  installation token`, `id: app`, `actions/create-github-app-token@v3`:
+  `client-id` from the variable, `private-key` from the secret, `repositories`
+  = this repository, the six `permission-*` inputs) when BOTH
+  `vars.HELIOS_APP_CLIENT_ID` and the `HELIOS_APP_PRIVATE_KEY` secret are
+  present — tested through the job-level env booleans `HAS_APP_KEY` and
+  `HAS_APP_CLIENT_ID`, because the `secrets` context is not usable in `if:`.
+  Precedence for `ADMIN_TOKEN`: the installation token → `HELIOS_ADMIN_TOKEN`
+  (surface 3, the manual fallback) → `github.token`; the printed credential
+  name is `HELIOS_APP (installation token)` / `HELIOS_ADMIN_TOKEN` /
+  `GITHUB_TOKEN`. The token lives an hour, is scoped to the repository and to
+  those permissions, and is revoked when the job ends; the only long-lived
+  material is the key, rotated on the app page and re-stored with
+  `gh secret set HELIOS_APP_PRIVATE_KEY --repo <repo> < key.pem`.
+- **Workflow cascades.** A push or merge made with the installation token fires
+  `on: push`, which `GITHUB_TOKEN` cannot
+  (`.claude/skills/automation-wiring/references/github-actions.md:88-89`);
+  the governance apply after an auto-merged PR is the first consumer, and the
+  daily schedule stays as the drift net for anything still merged by
+  `GITHUB_TOKEN`.
+- **A broken credential is red, never silent.** A stored app credential that
+  no longer mints (uninstalled, key rotated on the app page, installation
+  narrowed below the requested permissions) fails the mint step and the job,
+  with the repair — `pwsh scripts/bootstrap/connect-github-app.ps1` from the
+  owner's machine — in the `::error`; only-the-variable or only-the-secret is
+  a `::warning` and the next credential in line.
+
+**Not used for:**
+
+- **Projects v2.** Still surface 2 — the classic PAT with the `project` scope;
+  an installation token does not carry it, so the board scripts keep taking
+  `-GitHubToken` at run time.
+- **Production approval.** GitHub protected environments stay the deployment
+  authority (`CLAUDE.md`); the app holds no `environments` permission and no
+  workflow asks it to approve anything.
+- **Azure.** The GitHub → Azure section below is OIDC; the app never touches
+  the cloud side.
+- **ARC runner auth.** Still the docs-level aspiration in
+  `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md:47,55`
+  (`githubConfigSecret: helios-runners-app`); when it lands it should be a
+  second, runner-scoped app — this app's key must not spread into a cluster
+  secret.
 
 ## GitHub → Azure: OIDC federation, no client secret anywhere
 

@@ -50,6 +50,7 @@
 #   bash scripts/bootstrap/first-run.sh --json               # the state JSON only on stdout
 #   bash scripts/bootstrap/first-run.sh --skip-setup         # skip step 5 (setup-everything)
 #   bash scripts/bootstrap/first-run.sh --managed-identity   # forward -UseManagedIdentity
+#   bash scripts/bootstrap/first-run.sh --connect            # step 0: both device codes in one sitting
 #
 # Exit codes: 0 = the chain ran (needs-owner lanes NEVER gate — they ARE the
 # checklist); 1 = internal failure (pwsh missing so no lane could be probed, or the
@@ -65,14 +66,16 @@ verify_only=""
 json_mode=""
 skip_setup=""
 managed_identity=""
+connect=""
 for arg in "$@"; do
   case "$arg" in
     --verify-only) verify_only=1 ;;
     --json) json_mode=1 ;;
     --skip-setup) skip_setup=1 ;;
     --managed-identity) managed_identity=1 ;;
+    --connect) connect=1 ;;
     -h|--help)
-      echo "usage: bash scripts/bootstrap/first-run.sh [--verify-only] [--json] [--skip-setup] [--managed-identity]"
+      echo "usage: bash scripts/bootstrap/first-run.sh [--verify-only] [--json] [--skip-setup] [--managed-identity] [--connect]"
       exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 1 ;;
   esac
@@ -126,6 +129,33 @@ if [[ -z "$pwsh_exe" ]]; then
   internal_failure=1
 fi
 
+# --- 0. --connect: both device codes in one sitting (scripts/bootstrap/connect-devices.ps1)
+# Runs before step 1 with the console inherited, logins only (-SkipChain): this
+# script IS the chain. Step 1 then skips its own auth prompts. Never under
+# --verify-only (a read-only pass changes no cached identity) and never without a
+# terminal on stdin (a device code needs a human).
+connect_done=""
+if [[ -n "$connect" ]]; then
+  if [[ -n "$verify_only" ]]; then
+    say "   --connect ignored under --verify-only (a read-only pass performs no login)."
+  elif [[ ! -t 0 || -n "$json_mode" ]]; then
+    say "   --connect needs a terminal on stdin and a visible console (not --json); the logins stay checklist items."
+  elif [[ -z "$pwsh_exe" ]]; then
+    say "   --connect needs pwsh; the logins stay checklist items."
+  else
+    say ""
+    say "-- 0. connect-devices (pwsh scripts/bootstrap/connect-devices.ps1 -SkipChain) --"
+    set +e
+    "$pwsh_exe" -NoProfile -File "$repo_root/scripts/bootstrap/connect-devices.ps1" -SkipChain
+    connect_exit=$?
+    set -e
+    say "   connect-devices exited $connect_exit (0 = both logins ready; 2 = a lane still needs you - see its table)"
+    # Only a clean exit hands the logins to step 1 as done; an expired, refused or
+    # precondition-stopped run leaves step 1 free to prompt for them again.
+    if [[ "$connect_exit" -eq 0 ]]; then connect_done=1; fi
+  fi
+fi
+
 # --- 1. cloud-shell-setup.sh (visible output; the device-code prompts must reach a human)
 setup_args=()
 if [[ -n "$verify_only" ]]; then
@@ -133,8 +163,9 @@ if [[ -n "$verify_only" ]]; then
 else
   setup_args+=(--skip-smoke)
   # A device-code login blocks on a human typing the code: no terminal on stdin,
-  # or stdout captured for --json, means the login is a checklist item instead.
-  if [[ ! -t 0 || -n "$json_mode" ]]; then
+  # or stdout captured for --json, means the login is a checklist item instead;
+  # after --connect the logins were just handled, so step 1 must not prompt again.
+  if [[ ! -t 0 || -n "$json_mode" || -n "$connect_done" ]]; then
     setup_args+=(--skip-auth)
   fi
 fi
@@ -388,6 +419,10 @@ def cover_load_actions():
 
 
 # --- logins ---
+# One sitting for both codes first; the two raw items after it are the by-hand path.
+if needs_owner("gh") or needs_owner("az"):
+    items.append(("GitHub + Azure device codes in one sitting",
+                  ["pwsh scripts/bootstrap/connect-devices.ps1   # both codes on one screen (verify-first), then the chain; bash twin: bash scripts/bootstrap/connect-devices.sh; or: bash scripts/bootstrap/first-run.sh --connect"]))
 if needs_owner("gh"):
     lines = [gh_login + "   # device code: gh prints a URL and a one-time code"]
     if lane_state("rest:github") == "ready":

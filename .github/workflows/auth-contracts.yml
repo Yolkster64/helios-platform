@@ -10,6 +10,11 @@ on:
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
       - 'scripts/verify/tests/test_auth_config.ps1'
+      - 'scripts/bootstrap/connect-devices.ps1'
+      - 'scripts/bootstrap/connect-devices.sh'
+      - 'scripts/bootstrap/connect-github-app.ps1'
+      - 'scripts/verify/tests/test_connect_devices.ps1'
+      - 'scripts/verify/tests/test_connect_github_app.ps1'
       - '.github/workflows/auth-contracts.yml'
   push:
     branches: [main]
@@ -21,6 +26,11 @@ on:
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
       - 'scripts/verify/tests/test_auth_config.ps1'
+      - 'scripts/bootstrap/connect-devices.ps1'
+      - 'scripts/bootstrap/connect-devices.sh'
+      - 'scripts/bootstrap/connect-github-app.ps1'
+      - 'scripts/verify/tests/test_connect_devices.ps1'
+      - 'scripts/verify/tests/test_connect_github_app.ps1'
       - '.github/workflows/auth-contracts.yml'
 
 permissions:
@@ -41,3 +51,11 @@ jobs:
           ./scripts/verify/tests/test_auth_readiness.ps1
           ./scripts/verify/tests/test_auth_boundaries.ps1
           ./scripts/verify/tests/test_auth_config.ps1
+      # The device-code helper and the GitHub App registration script: inert gh/az
+      # shims on PATH, no network, so the login and secret-handling contracts are
+      # proven on every change to either script.
+      - name: Verify the device-code helper and the GitHub App registration contracts
+        shell: pwsh
+        run: |
+          ./scripts/verify/tests/test_connect_devices.ps1
+          ./scripts/verify/tests/test_connect_github_app.ps1
