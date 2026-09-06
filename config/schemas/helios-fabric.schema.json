@@ -78,7 +78,10 @@
         "allowedUiFramework": { "const": "WinUI 3" },
         "forbiddenUiFrameworks": {
           "type": "array",
-          "contains": { "const": "WPF" },
+          "allOf": [
+            { "contains": { "const": "WPF" } },
+            { "contains": { "const": "UWP" } }
+          ],
           "minItems": 2,
           "uniqueItems": true,
           "items": { "type": "string" }
