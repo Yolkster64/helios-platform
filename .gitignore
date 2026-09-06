@@ -40,7 +40,15 @@ __pycache__/
 .Python
 
 ## Editor and IDE
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/mcp.json
+# Personal Claude Code allowlist (docs/mcp/CLIENT_SETUP.md, "Claude Code"): copied from the
+# tracked .claude/settings.local.json.example and never committed. Exact file name on
+# purpose, so the .example template stays tracked.
+.claude/settings.local.json
 .idea/
 *.swp
 *.swo

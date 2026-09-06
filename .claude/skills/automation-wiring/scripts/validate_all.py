@@ -112,6 +112,45 @@ def check_yaml(path: Path, report: Report) -> None:
                 check_workflow(path, doc, text, report)
 
 
+def iter_shell_scalars(doc: dict):
+    """Yield (label, text) for every scalar that executes: step `run:` blocks and the
+    `script:` input of actions/github-script. Nothing else in a workflow is evaluated
+    as code, so nothing else is an interpolation risk."""
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for index, step in enumerate(steps):
+            if not isinstance(step, dict):
+                continue
+            label = step.get("name") or step.get("id") or f"step {index + 1}"
+            run = step.get("run")
+            if isinstance(run, str):
+                yield f"{job_id} / {label} run:", run
+            uses = step.get("uses")
+            inputs = step.get("with")
+            if isinstance(uses, str) and uses.startswith("actions/github-script") \
+                    and isinstance(inputs, dict) and isinstance(inputs.get("script"), str):
+                yield f"{job_id} / {label} script:", inputs["script"]
+
+
+def locate_line(text: str, scalar: str, needle: str) -> int | None:
+    """Best-effort 1-based line of `needle` inside the block that `scalar` came from:
+    anchor on the block's first non-blank line, then search forward for the needle,
+    so an identical expression under `env:` above the block is not what gets named."""
+    anchor = next((line.strip() for line in scalar.splitlines() if line.strip()), "")
+    start = text.find(anchor) if anchor else -1
+    position = text.find(needle, start if start >= 0 else 0)
+    if position < 0:
+        return None
+    return text[:position].count("\n") + 1
+
+
 def is_workflow(path: Path) -> bool:
     return path.suffix in {".yml", ".yaml"} and path.parent.name == "workflows" \
         and path.parent.parent.name == ".github"
@@ -141,13 +180,25 @@ def check_workflow(path: Path, doc: dict, text: str, report: Report) -> None:
         if action in used:
             report.warn(path, why)
 
-    for match in INJECTABLE.finditer(text):
-        line = text[: match.start()].count("\n") + 1
-        report.error(
-            path,
-            f"line {line}: attacker-controlled `{match.group(0)}` interpolated directly; "
-            "pass it through `env:` and reference $VAR instead",
-        )
+    # Only the scalars a runner hands to a shell (or to github-script's JS) are
+    # injection sites. `env:` values, `concurrency` groups, `if:` conditions and
+    # ordinary `with:` inputs receive the expression as a plain value — putting the
+    # context there IS the recommended fix — so scanning the raw text flagged every
+    # correctly wired workflow (measured: 16 "errors", 12 of them the env: idiom).
+    for label, scalar in iter_shell_scalars(doc):
+        for match in INJECTABLE.finditer(scalar):
+            # A comparison (`… != null`, `… == 'x'`) evaluates to true/false before
+            # the shell sees it — a boolean literal, not attacker text.
+            if re.search(r"==|!=", match.group(0)):
+                continue
+            line = locate_line(text, scalar, match.group(0))
+            where = f"line {line}" if line else label
+            report.error(
+                path,
+                f"{where}: attacker-controlled `{match.group(0)}` interpolated directly "
+                f"into a shell/script block ({label}); pass it through `env:` and "
+                "reference $VAR instead",
+            )
 
     if "pull_request_target" in text and "actions/checkout" in text:
         report.warn(

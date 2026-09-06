@@ -5,6 +5,11 @@ on:
     - cron: '0 */6 * * *'  # Every 6 hours
   workflow_dispatch:
 
+# Health checks read the checkout and upload a report artifact (artifact upload
+# uses the runtime token, not a GITHUB_TOKEN permission).
+permissions:
+  contents: read
+
 jobs:
   health-check:
     name: System Health Check

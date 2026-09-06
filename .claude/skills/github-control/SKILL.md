@@ -40,9 +40,10 @@ anti-pattern: `references/auth-topology.md`.
   workflows still have no block at all and are the backlog, not the pattern
   (list in `references/auth-topology.md`).
 - **No stored Azure client secret.** Deploy auth is OIDC with repo *variables*
-  for the three identifiers (`azure-oidc-setup.sh:7-8`); `deploy.yml`'s
-  `AZURE_CLIENT_SECRET` env read is a known-red anti-pattern being removed in
-  this tranche (`docs/architecture/ROADMAP_MULTI_LLM.md:53`).
+  for the three identifiers (`azure-oidc-setup.sh:7-8`); the known-red
+  `deploy.yml` that read `AZURE_CLIENT_SECRET` is deleted
+  (`docs/architecture/ROADMAP_MULTI_LLM.md:53`) and no workflow reads a client
+  secret today — never reintroduce one.
 - **Required checks pin job-level check names** (e.g. `Build solution & run
   tests`, `.github/workflows/dotnet-build.yml:44`), never "everything in the
   workflow" — the allowed-to-fail `net11-preview` lane lives in the same file

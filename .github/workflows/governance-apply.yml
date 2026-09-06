@@ -1,0 +1,168 @@
+# Governance apply: reconciles the repository's checked-in GitHub truth with the
+# live repository through the four idempotent scripts under scripts/github/:
+#
+#   rulesets    apply-rulesets.ps1       .github/rulesets/*.json      needs repo ADMIN
+#   settings    apply-repo-settings.ps1  Pages/auto-merge/wiki flags  needs repo ADMIN
+#   labels      apply-labels.ps1         config/github/labels.json    needs issues:write
+#   milestones  apply-milestones.ps1     config/github/milestones.json needs issues:write
+#
+# Two jobs, split by authority rather than by script. Both call the same runner,
+# .github/workflows/governance-run.yml (a workflow_call reusable workflow: one copy
+# of the script loop instead of two), and differ only in what they hand it: the
+# token grant, the secret, and the apply/scope inputs.
+#   plan   (pull_request)          GITHUB_TOKEN only, contents: read + pages: read.
+#                                  Every script runs in dry-run and its diff lands in
+#                                  the job summary. Nothing is ever mutated from a PR.
+#                                  pages: read exists because apply-repo-settings.ps1
+#                                  GETs repos/{repo}/pages, which the Pages permission
+#                                  gates; without it the GET is a 403 and the plan
+#                                  would report Pages out of sync on every PR.
+#   apply  (push to main,          Credentials are chosen PER SCRIPT: rulesets and
+#           workflow_dispatch,     settings run with HELIOS_ADMIN_TOKEN when the owner
+#           schedule)              has stored it (else GITHUB_TOKEN, dry-run only plus
+#                                  a "needs HELIOS_ADMIN_TOKEN" row naming the owner
+#                                  step); labels and milestones ALWAYS run with
+#                                  GITHUB_TOKEN (issues: write is granted below), so a
+#                                  dead or under-scoped PAT can never take them down.
+#                                  The PAT is the single admin credential of the
+#                                  repo, defined in scripts/bootstrap/provision-github-secrets.ps1
+#                                  (and printed by scripts/bootstrap/first-run.sh): a
+#                                  fine-grained token with Administration RW, Contents RW,
+#                                  Issues RW, Pull requests RW, Pages RW, Metadata R, stored
+#                                  once with `gh secret set HELIOS_ADMIN_TOKEN --repo <owner/repo>`.
+#
+# Which repository: every script is called with -Repository ${GITHUB_REPOSITORY}, so a
+# run reconciles ONLY the repository it executes in. The scripts' own default targets
+# the upstream repo; without the explicit argument a fork's push to main would try to
+# mutate upstream (403 -> red job, or worse with a stored PAT that reaches upstream).
+#
+# When a push to main does NOT apply: a PR merged through the `automerge` label is
+# merged by GITHUB_TOKEN-armed auto-merge, and GitHub never cascades workflows from
+# GITHUB_TOKEN events (auto-merge.yml documents the same limitation), so that merge
+# raises no `push` run here. Two safety nets close the gap: the owner can run
+#   gh workflow run governance-apply.yml -f apply=true -f scope=all
+# right after such a merge, and the daily `schedule` below applies the checked-in
+# truth unattended (idempotent: an in-sync repository produces only "in sync" rows).
+#
+# Exit-code contract shared by all four scripts and honored by the runner:
+#   0 = success or clean dry run          -> row "applied" (mutations ran), "in sync
+#                                            (dry-run)" (nothing pending), or "dry-run:
+#                                            N pending change(s)" (the script printed N
+#                                            commands it would run); the row never says
+#                                            "clean" while changes are pending, because
+#                                            the summary table is what a reviewer reads
+#                                            without opening the details
+#   1 = an item failed (replay list)      -> row "FAILED", the job fails
+#   2 = precondition/credential missing   -> row "needs owner", reported, never fails,
+#                                            with ONE exception: rulesets/settings
+#                                            exiting 2 on an apply that ran WITH the
+#                                            stored HELIOS_ADMIN_TOKEN means the PAT is
+#                                            expired, revoked or under-scoped, so that
+#                                            row is "FAILED" (::error) and the job fails
+# so a PR is never blocked by a missing owner credential, only by a real failure
+# (and a broken owner credential is a real failure).
+#
+# Every mutation is announced before it runs: the runner echoes the pwsh command
+# line (with the NAME of the credential it holds), and each script prints the exact
+# `gh api` call before executing it.
+name: Governance Apply
+
+on:
+  pull_request:
+    paths:
+      - '.github/rulesets/**'
+      - 'config/github/**'
+      - 'scripts/github/**'
+      - '.github/workflows/governance-apply.yml'
+      - '.github/workflows/governance-run.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/rulesets/**'
+      - 'config/github/**'
+      - 'scripts/github/**'
+      - '.github/workflows/governance-apply.yml'
+      - '.github/workflows/governance-run.yml'
+  # Daily drift reconciliation: the safety net for merges that raise no push event
+  # (see the header). Off-hour minute so it does not pile onto the :00 spike; GitHub
+  # disables scheduled runs on forks by default, and -Repository keeps a fork that
+  # enables them pointed at itself.
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Execute the mutations (false = dry-run plan with the chosen token)'
+        type: boolean
+        default: false
+      scope:
+        description: 'Which truth to reconcile'
+        type: choice
+        default: all
+        options:
+          - all
+          - rulesets
+          - settings
+          - labels
+          - milestones
+
+# No workflow-level grant: each job declares exactly what it needs, and the called
+# runner inherits that grant (a called workflow can only narrow it). Concurrency is
+# likewise per job: the read-only plan must not queue behind (or be cancelled by)
+# an apply, so each job carries its own group below.
+permissions: {}
+
+jobs:
+  plan:
+    name: Plan (dry-run)
+    if: github.event_name == 'pull_request'
+    # One group per PR: a plan never mutates, so it needs no serialization against
+    # other PRs or the apply job; sharing a group would let GitHub cancel a PR's
+    # pending plan when two PRs on these paths push close together.
+    concurrency:
+      group: governance-plan-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: read
+    # No `secrets:` handed over: the runner sees HAS_ADMIN_TOKEN=false and both of
+    # its credentials are the workflow token. apply is pinned false, so no branch
+    # of the runner can reach a -Apply invocation from a PR.
+    uses: ./.github/workflows/governance-run.yml
+    with:
+      run_mode: plan
+      apply: false
+      scope: all
+
+  apply:
+    name: Apply (main / dispatch)
+    if: github.event_name != 'pull_request'
+    # One group for every apply, never cancelled: two reconciliations racing on the
+    # same repository could interleave their GET-diff-then-apply passes.
+    concurrency:
+      group: governance-apply
+      cancel-in-progress: false
+    # Least privilege for the workflow token: labels and milestones are issues
+    # resources (issues: write); pages: read lets apply-repo-settings.ps1 read the
+    # live Pages state so its diff is truthful. No script here touches a pull
+    # request endpoint, so no pull-requests grant is held; add one in the same
+    # commit as the first script that needs it. Rulesets/settings need admin, which
+    # no GITHUB_TOKEN grant can confer: that is what HELIOS_ADMIN_TOKEN is for.
+    permissions:
+      contents: read
+      issues: write
+      pages: read
+    uses: ./.github/workflows/governance-run.yml
+    with:
+      run_mode: apply
+      # A push to main IS the apply (the merged truth goes live) and so is the daily
+      # schedule (it exists to catch merges that raised no push event); a dispatch
+      # applies only when asked, so apply=false doubles as a plan run with the real
+      # token.
+      apply: ${{ github.event_name == 'push' || github.event_name == 'schedule' || inputs.apply == true }}
+      scope: ${{ inputs.scope || 'all' }}
+    # The owner's PAT when stored, else empty (same idiom as copilot-dispatch.yml);
+    # the runner falls back to the workflow token by itself. Passed by name only,
+    # never echoed.
+    secrets:
+      HELIOS_ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN }}
