@@ -22,7 +22,8 @@ Implementation checkpoint:
 - migration PR: `Yolkster64/helios-platform#154`
 - reviewed head: `3daefb0d3734dd05a10ddb864274d59d511f61d4`
 - replay base on current `main`: `c21ec24f41e61941c7f335b9835aba965c8f298b`
-- required checks: cutover contract, PR pipeline, .NET/build variants/module builds, complete CI, AI review, and Python Spoke are green; final security-scan is still running
+- merged commit: `50337e3faace1cdf8834db895fa5c5cf1f904a47`
+- required checks: pass on the unchanged reviewed head (`CI - Code Validation & Testing`: run `33998245259`, `PR Pipeline`: run `33998245249`, `Security Scanning`: check run `101392441801`)
 - canonical issue range: `Yolkster64/helios-platform#156` through `#183`
 - external tracking: SharePoint canonicalization checkpoint (linked from PR `#154`) and Linear `JOH-208`
 - boundary confirmation: no repository rename, Azure mutation, secret write, source archival, or production authorization has occurred

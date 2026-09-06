@@ -7,14 +7,15 @@ Checkpoint date: 2026-09-06
 - Migration PR: `Yolkster64/helios-platform#154`
 - Reviewed head: `3daefb0d3734dd05a10ddb864274d59d511f61d4`
 - Current-main replay base: `c21ec24f41e61941c7f335b9835aba965c8f298b`
-- Required-check status: cutover contract, PR pipeline, .NET/build variants/module builds, complete CI, AI review, and Python Spoke are green; final security-scan is still running.
+- Merge commit: `50337e3faace1cdf8834db895fa5c5cf1f904a47`
+- Required-check status: all required checks pass on the unchanged reviewed head (`CI - Code Validation & Testing` run `33998245259`, `PR Pipeline` run `33998245249`, `Security Scanning` check run `101392441801`).
 - Canonical issues: `Yolkster64/helios-platform#156` through `#183`
 - Evidence tracker: SharePoint canonicalization checkpoint (linked from PR `#154`) and Linear `JOH-208`
 - Safety boundary: no repository rename, Azure mutation, secret write, source archival, or production authorization has occurred.
 
 ## HC-001 acceptance checklist
 
-- [ ] PR `Yolkster64/helios-platform#154` passes every required check on the unchanged reviewed head.
+- [x] PR `Yolkster64/helios-platform#154` passes every required check on the unchanged reviewed head.
 - [ ] Current repository issues, pull requests, releases, branches, tags, Actions, environments, and rulesets are exported.
 - [ ] Repository is renamed in place by an authenticated repository administrator.
 - [ ] Default branch and redirects are verified after rename.
