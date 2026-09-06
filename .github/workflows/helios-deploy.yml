@@ -89,8 +89,23 @@ jobs:
       - name: Verify what-if resource group exists
         if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
         run: |
+          set -euo pipefail
+          deployment_name="helios-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          record="custody/record-what-if-precheck-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
           if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
-            echo "::error::What-if is read-only and will not create missing resource group '$AZURE_RESOURCE_GROUP'. Create it first or run deploy mode."
+            printf '%s\n' "ERROR: What-if is read-only and will not create missing resource group '$AZURE_RESOURCE_GROUP'. Create it first or run deploy mode." > "$stderr_file"
+            python3 scripts/validation/emit_deploy_custody_record.py \
+              --phase what-if-precheck \
+              --deployment-name "$deployment_name" \
+              --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --exit-code 1 \
+              --stdout-file "$stdout_file" \
+              --stderr-file "$stderr_file" \
+              --record-file "$record"
+            cat "$stderr_file" >&2
             exit 1
           fi
 
@@ -103,6 +118,7 @@ jobs:
           record="custody/record-what-if-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           stdout_file="$(mktemp)"
           stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
           set +e
           az deployment group what-if \
             -g "$AZURE_RESOURCE_GROUP" \
@@ -113,28 +129,14 @@ jobs:
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
-          create_count=0
-          modify_count=0
-          delete_count=0
-          if [ "$rc" -eq 0 ]; then
-            create_count="$(jq '[.properties.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
-            modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
-            delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
-          fi
-          stderr_preview="$(sed -E 's/([A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|KEY)[A-Za-z0-9_]*)=[^[:space:]]+/\1=[REDACTED]/Ig' "$stderr_file" | tail -n 20)"
-          jq -n \
-            --arg phase "what-if" \
-            --arg deploymentName "$deployment_name" \
-            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --argjson exitCode "$rc" \
-            --argjson createCount "$create_count" \
-            --argjson modifyCount "$modify_count" \
-            --argjson deleteCount "$delete_count" \
-            --arg stderrPreview "$stderr_preview" \
-            --arg stdoutDigestSha256 "$(sha256sum "$stdout_file" | awk '{print $1}')" \
-            --arg stderrDigestSha256 "$(sha256sum "$stderr_file" | awk '{print $1}')" \
-            '{phase:$phase, deploymentName:$deploymentName, timestamp:$timestamp, exitCode:$exitCode, summary:{create:$createCount, modify:$modifyCount, delete:$deleteCount}, stderrPreview:$stderrPreview, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
-            > "$record"
+          python3 scripts/validation/emit_deploy_custody_record.py \
+            --phase what-if \
+            --deployment-name "$deployment_name" \
+            --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --exit-code "$rc" \
+            --stdout-file "$stdout_file" \
+            --stderr-file "$stderr_file" \
+            --record-file "$record"
           if [ "$rc" -ne 0 ]; then
             echo "::error::Azure what-if failed (exit $rc). See sanitized custody artifact for diagnostics."
             exit "$rc"
@@ -149,6 +151,7 @@ jobs:
           record="custody/record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           stdout_file="$(mktemp)"
           stderr_file="$(mktemp)"
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
           set +e
           az deployment group create \
             -g "$AZURE_RESOURCE_GROUP" \
@@ -159,17 +162,14 @@ jobs:
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
-          stderr_preview="$(sed -E 's/([A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|KEY)[A-Za-z0-9_]*)=[^[:space:]]+/\1=[REDACTED]/Ig' "$stderr_file" | tail -n 20)"
-          jq -n \
-            --arg phase "deploy" \
-            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --argjson exitCode "$rc" \
-            --arg stderrPreview "$stderr_preview" \
-            --arg stdoutDigestSha256 "$(sha256sum "$stdout_file" | awk '{print $1}')" \
-            --arg stderrDigestSha256 "$(sha256sum "$stderr_file" | awk '{print $1}')" \
-            --slurpfile result "$stdout_file" \
-            '{phase:$phase, timestamp:$timestamp, exitCode:$exitCode, result:($result[0] // {}), stderrPreview:$stderrPreview, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
-            > "$record"
+          python3 scripts/validation/emit_deploy_custody_record.py \
+            --phase deploy \
+            --deployment-name "$deployment_name" \
+            --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --exit-code "$rc" \
+            --stdout-file "$stdout_file" \
+            --stderr-file "$stderr_file" \
+            --record-file "$record"
           if [ "$rc" -ne 0 ]; then
             echo "::error::Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics."
             exit "$rc"

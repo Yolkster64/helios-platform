@@ -102,13 +102,15 @@ jobs:
       - name: Extract Changed Files
         shell: pwsh -Command "& '{0}'"
         run: |
-          if ('${{ github.event_name }}' -eq 'pull_request') {
-            $base = '${{ github.event.pull_request.base.sha }}'
-            $head = '${{ github.event.pull_request.head.sha }}'
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $base = $event.pull_request.base.sha
+            $head = $event.pull_request.head.sha
             git diff --name-only $base $head | Tee-Object -Variable changedFiles
-          } elseif ('${{ github.event_name }}' -eq 'push') {
-            $before = '${{ github.event.before }}'
-            $after = '${{ github.sha }}'
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
+            $event = Get-Content $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $before = $event.before
+            $after = $env:GITHUB_SHA
             if ($before -match '^0+$') {
               git diff-tree --no-commit-id --name-only -r $after | Tee-Object -Variable changedFiles
             } else {
@@ -253,12 +255,31 @@ jobs:
       pull-requests: write
 
     steps:
+      - name: Decide PR comment mode
+        id: comment-guard
+        run: |
+          head_repo="$(python3 - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as handle:
+              event = json.load(handle)
+
+          print((((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}).get("full_name", ""))
+          PY
+          )"
+          if [ "$head_repo" = "$GITHUB_REPOSITORY" ]; then
+            echo "can_comment=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_comment=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Fork PR notice
-        if: ${{ github.event.pull_request.head.repo.fork }}
+        if: ${{ steps.comment-guard.outputs.can_comment != 'true' }}
         run: echo "::notice::Skipping PR comment update for forked pull requests because write-scoped comment APIs are restricted."
 
       - name: Generate Review Comment
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ steps.comment-guard.outputs.can_comment == 'true' }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

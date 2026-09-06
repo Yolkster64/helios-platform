@@ -17,6 +17,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/helios-deploy.yml"
 CONTRACT_WORKFLOW = ROOT / ".github/workflows/deploy-hardening-contract.yml"
+RECORD_SCRIPT = ROOT / "scripts/validation/emit_deploy_custody_record.py"
 
 
 def fail(message: str) -> None:
@@ -40,6 +41,18 @@ def _ensure_action(step: dict[str, Any], expected_prefix: str, message: str) -> 
     _require(uses.startswith(expected_prefix + "@"), message)
 
 
+def _ensure_permissions_are_read_only(job: dict[str, Any], message_prefix: str) -> None:
+    permissions = job.get("permissions")
+    if permissions is None:
+        return
+    _require(isinstance(permissions, dict), f"{message_prefix} permissions must be a mapping when present")
+    for scope, value in permissions.items():
+        _require(
+            str(value) == "read",
+            f"{message_prefix} permissions must not elevate {scope} beyond read",
+        )
+
+
 def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     if not path.is_file():
         fail(f"deploy workflow missing: {path.relative_to(ROOT)}")
@@ -58,6 +71,7 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     jobs = data.get("jobs") or {}
     deploy_job = jobs.get("deploy")
     _require(isinstance(deploy_job, dict), "deploy workflow must define jobs.deploy")
+    _ensure_permissions_are_read_only(deploy_job, "deploy job")
     steps = deploy_job.get("steps") or []
     _require(isinstance(steps, list) and steps, "jobs.deploy.steps must be a non-empty list")
 
@@ -93,8 +107,12 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
              "what-if custody must use ResourceIdOnly output to avoid sensitive payload capture")
     _require("record-what-if-" in what_if_run,
              "what-if must write a dedicated custody record")
+    _require(str(RECORD_SCRIPT.relative_to(ROOT)) in what_if_run,
+             "what-if step must use the shared deploy custody record helper")
     _require("exit \"$rc\"" in what_if_run,
              "what-if step must preserve az CLI exit codes")
+    _require("trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT" in what_if_run,
+             "what-if step must clean up raw temp output files")
 
     deploy = _find_step(steps, "Deploy Helios Infra (sanitized custody record)")
     deploy_if = str(deploy.get("if", ""))
@@ -105,8 +123,19 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
              "deploy step must write a dedicated custody record")
     _require("--query" in deploy_run and "provisioningState" in deploy_run,
              "deploy custody must capture allowlisted deployment fields only")
+    _require(str(RECORD_SCRIPT.relative_to(ROOT)) in deploy_run,
+             "deploy step must use the shared deploy custody record helper")
     _require("exit \"$rc\"" in deploy_run,
              "deploy step must preserve az CLI exit codes")
+    _require("trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT" in deploy_run,
+             "deploy step must clean up raw temp output files")
+
+    precheck = _find_step(steps, "Verify what-if resource group exists")
+    precheck_run = str(precheck.get("run", ""))
+    _require("record-what-if-precheck-" in precheck_run,
+             "what-if resource-group precheck must retain failure evidence")
+    _require(str(RECORD_SCRIPT.relative_to(ROOT)) in precheck_run,
+             "what-if resource-group precheck must use the shared deploy custody record helper")
 
     seal = _find_step(steps, "Seal custody manifest")
     seal_if = str(seal.get("if", ""))
@@ -135,6 +164,8 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
              "deploy workflow must not use stored creds JSON")
     _require("tee \"$record\"" not in text,
              "deploy workflow must not archive raw command output directly into custody records")
+    _require("stderrPreview" not in text,
+             "deploy workflow must not keep regex-redacted stderrPreview fields")
 
     return {
         "status": "passed",
@@ -154,10 +185,13 @@ def validate_contract_workflow(path: pathlib.Path = CONTRACT_WORKFLOW) -> None:
         fail(f"contract workflow missing: {path.relative_to(ROOT)}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     jobs = (data.get("jobs") or {}).get("contract") or {}
+    _ensure_permissions_are_read_only(jobs, "contract job")
     steps = jobs.get("steps") or []
     runs = "\n".join(str(step.get("run", "")) for step in steps)
     _require("validate_deploy_custody.py" in runs,
              "contract workflow must run validate_deploy_custody.py")
+    _require("test_emit_deploy_custody_record" in runs,
+             "contract workflow must run deploy custody helper tests")
     _require("unittest" in runs,
              "contract workflow must run deploy custody regression tests")
 
