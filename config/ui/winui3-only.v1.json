@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "activeUiRoot": "src/gui/HELIOS.Shell",
+  "activeSolution": "src/gui/HELIOS.Shell.sln",
+  "required": {
+    "language": "C#",
+    "targetFramework": "net10.0-windows",
+    "useWinUI": true,
+    "xamlNamespace": "Microsoft.UI.Xaml",
+    "compositionNamespace": "Microsoft.UI.Composition"
+  },
+  "temporaryTargetFrameworkBaseline": {
+    "path": "src/gui/HELIOS.Shell/HELIOS.Shell.csproj",
+    "current": "net8.0-windows10.0.19041.0",
+    "target": "net10.0-windows",
+    "issue": "HC-002",
+    "reason": "Keep the current compiling shell intact during repository cutover; upgrade and Windows-compile it in the dedicated GUI migration change"
+  },
+  "forbiddenInActiveCode": [
+    "<UseWPF>true</UseWPF>",
+    "System.Windows.Media",
+    "System.Windows.Controls",
+    "PresentationFramework",
+    "PresentationCore",
+    "Windows.UI.Xaml",
+    "Add-Type -AssemblyName PresentationFramework"
+  ],
+  "temporaryLegacyBaseline": [
+    {
+      "path": "HELIOS.Platform.csproj",
+      "reason": "Known non-compiling legacy root project; removal tracked by HC-002",
+      "expiresWhen": "HC-002 closes"
+    }
+  ],
+  "portingInputsNotInActiveSolution": [
+    {
+      "path": "src/gui/MonadoBlade.GUI",
+      "reason": "Contains historical WPF-era implementation and design logic; useful pieces must be ported to Microsoft.UI types through reviewed WinUI changes",
+      "issue": "HC-002"
+    }
+  ]
+}
