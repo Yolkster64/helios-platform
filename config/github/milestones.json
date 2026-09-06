@@ -4,6 +4,7 @@
     { "title": "Control fabric", "description": "Governance workflow, labels and milestones manifests, branch prune, issue hygiene, one-command bring-up (issue #109 / #98).", "due_on": "2026-09-06" },
     { "title": "GUI train T5", "description": "WinUI 3 shell phases P3-P6: metrics cards, Routing page, Fleet page with the /v1/fleet twin, effects and settings page (issue #112).", "due_on": "2026-09-10" },
     { "title": "Absorption tranche 5", "description": "Next absorption cadence tranche: watchlist benchmarks posted on the E-epics, absorption-candidate labels, governed Copilot dispatch.", "due_on": "2026-09-20" },
-    { "title": "Owner setup", "description": "Owner-only steps: HELIOS_ADMIN_TOKEN secret, Linear sync switch, first wiki page, Key Vault provider values, tenant sign-in.", "due_on": "2026-09-06" }
+    { "title": "Owner setup", "description": "Owner-only steps: HELIOS_ADMIN_TOKEN secret, Linear sync switch, first wiki page, Key Vault provider values, tenant sign-in.", "due_on": "2026-09-06" },
+    { "title": "Getting started", "description": "Onboarding foundation: every cross-LLM lane connected, docs/GETTING_STARTED.md on the README and the wiki, the getting-started issues on the board, the open-PR backlog triaged (epic issue #223).", "due_on": "2026-09-13" }
   ]
 }

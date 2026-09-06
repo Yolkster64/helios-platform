@@ -2,16 +2,16 @@
 name: Component Task
 about: Task for developing or maintaining a platform component
 title: "[COMPONENT] "
-labels: component-module
+labels: triage
 assignees: ""
 ---
 
 ## Component Details
 <!-- Specify which component this task is for -->
-**Component**: 
+**Component**:
 <!-- (core, modules, registry, cli, ui, or custom) -->
 
-**Version**: 
+**Version**:
 <!-- Target component version -->
 
 ## Task Description
@@ -56,6 +56,7 @@ export interface ComponentInterface {
 ## Implementation Details
 
 ### File Structure
+
 ```
 src/
 ├── component/
@@ -67,6 +68,7 @@ src/
 ```
 
 ### Key Functions/Classes
+
 - [ ] Function/Class 1
 - [ ] Function/Class 2
 - [ ] Function/Class 3
@@ -87,9 +89,9 @@ src/
 
 ## Performance Considerations
 <!-- Performance requirements and constraints -->
-- Memory limit: 
-- Execution time limit: 
-- Throughput requirements: 
+- Memory limit:
+- Execution time limit:
+- Throughput requirements:
 
 ## Security Considerations
 <!-- Any security implications or requirements -->
@@ -117,13 +119,14 @@ src/
 
 ## Estimated Effort
 <!-- Time estimate for completion -->
-- **Effort**: 
+- **Effort**:
   - [ ] 1-2 days
   - [ ] 3-5 days
   - [ ] 1-2 weeks
   - [ ] 2+ weeks
 
 ## Implementation Checklist
+
 - [ ] Create component files and structure
 - [ ] Implement core functionality
 - [ ] Add TypeScript types/interfaces
