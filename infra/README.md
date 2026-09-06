@@ -213,7 +213,9 @@ identifiers, not secrets; set them as **Actions variables** (the script prints t
 exact `gh variable set` one-liners). The workflow targets `rg-helios-ai` (override
 with the `AZURE_RESOURCE_GROUP` / `AZURE_LOCATION` repo variables) and only attempts
 `az group create` when the RG is missing, since the RG-scoped principal cannot
-create it.
+create it. `azure/login` pins `audience: api://AzureADTokenExchange`, and deploy
+custody records are allowlisted JSON summaries + digests (not raw payload archives).
+What-if mode is read-only and fails if the resource group does not already exist.
 
 **Audience hardening + immutable plan/deploy custody.** `helios-deploy.yml` pins the
 `azure/login` token audience to `api://AzureADTokenExchange` explicitly (matching the

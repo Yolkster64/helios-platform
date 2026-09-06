@@ -240,10 +240,8 @@ Three parts must agree exactly, or `azure/login` fails with an opaque
 3. **`azure/login@v2` gets identifiers, not secrets** — `client-id` / `tenant-id`
    / `subscription-id` from Actions **variables** (`vars.AZURE_CLIENT_ID` etc.;
    the legacy `secrets.*` location still works as a fallback). The workflow skips
-   gracefully when they are unset rather than going red. The login step pins
-   `audience: api://AzureADTokenExchange` explicitly (matching the federated
-   credential's audience) so a token is only minted for the intended exchange, not
-   whatever the action default happens to be.
+   gracefully when they are unset rather than going red, and pins
+   `audience: api://AzureADTokenExchange` so the token exchange audience is explicit.
 
 Least privilege on the Azure side (why these roles and no more,
 `infra/README.md` "OIDC identity"):
@@ -261,14 +259,10 @@ Rotation/revocation: **there is no secret to rotate**. Revoke by deleting the ap
 (`az ad app delete --id <AZURE_CLIENT_ID>`); re-establish by re-running the setup
 script and updating the `AZURE_CLIENT_ID` variable.
 
-**Immutable plan/deploy custody.** Beyond the identity, the deploy path keeps an
-audit trail of *what* it did: `helios-deploy.yml` names each deployment per run
-(`helios-<run_id>-<run_attempt>`), captures the what-if plan and the apply result
-verbatim, SHA-256-checksums them, and retains them for 90 days as an immutable GitHub
-artifact plus a run-identity manifest. `scripts/validation/validate_deploy_custody.py`
-(gated by the `deploy-hardening-contract` workflow) fails the build if a future edit
-drops the audience pin, the OIDC guard, the custody artifact, or reintroduces a stored
-client secret. This is the E5 absorption tranche (`ABSORPTION_LEDGER.md`).
+Deploy custody notes: `helios-deploy.yml` stores sealed, allowlisted records
+(manifest inputs, summary fields, and digests) instead of raw what-if/deploy payload
+dumps. Checksums provide tamper-evident integrity for retained artifacts, but
+authenticated provenance still comes from GitHub/Azure identity and run metadata.
 
 **Anti-pattern, in-repo:** the known-red `.github/workflows/deploy.yml` still
 references `secrets.AZURE_CLIENT_SECRET` — a stored client secret, the exact thing

@@ -85,15 +85,12 @@ discipline on the deploy path.
   (OIDC guards + orchestration inventory)
 - Extracts: custody/audit pattern, audience-hardening checks, OIDC guard patterns
 - Risks: assumes upstream pipeline; adapt to `helios-deploy.yml`
-- Landed (tranche-1): `helios-deploy.yml` pins the OIDC audience
-  `api://AzureADTokenExchange` on `azure/login`, names each deployment per run, and
-  seals the what-if plan / apply result into a SHA-256-checksummed, retained artifact
-  with a run-identity manifest (immutable plan/deploy custody). The invariants
-  (audience hardening, OIDC guard, no stored client secret, custody artifact) are
-  enforced by `scripts/validation/validate_deploy_custody.py` via the
-  `deploy-hardening-contract.yml` workflow. The MI→KV custody chain itself is the
-  already-wired `Key Vault Secrets User` grant in `infra/modules/keyvault.bicep`
-  (`docs/architecture/IDENTITY_ARCHITECTURE.md` §2).
+- Landed (tranche-1): `helios-deploy.yml` now pins OIDC audience
+  `api://AzureADTokenExchange`, separates read-only what-if from mutating deploy
+  behavior, records allowlisted custody metadata/results (not raw payload dumps),
+  and seals/upload artifacts even for failed attempts. Enforcement is in
+  `scripts/validation/validate_deploy_custody.py` via
+  `.github/workflows/deploy-hardening-contract.yml`.
 
 ## E6 — Private Azure edge & segmented network (`infra`) — open
 

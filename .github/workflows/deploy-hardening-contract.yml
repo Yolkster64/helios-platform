@@ -1,23 +1,22 @@
 name: Deploy hardening contract
 
-# Absorption E5 — Azure activation hardening (MI->KV custody, OIDC).
-# Enforces the audience-hardening, OIDC-guard, and immutable plan/deploy custody
-# invariants on .github/workflows/helios-deploy.yml so a future edit cannot
-# silently regress the deploy path's security posture.
-
 on:
   pull_request:
     paths:
       - '.github/workflows/helios-deploy.yml'
       - '.github/workflows/deploy-hardening-contract.yml'
+      - 'scripts/validation/emit_deploy_custody_record.py'
       - 'scripts/validation/validate_deploy_custody.py'
+      - 'scripts/validation/tests/test_emit_deploy_custody_record.py'
       - 'scripts/validation/tests/test_validate_deploy_custody.py'
   push:
     branches: [main]
     paths:
       - '.github/workflows/helios-deploy.yml'
       - '.github/workflows/deploy-hardening-contract.yml'
+      - 'scripts/validation/emit_deploy_custody_record.py'
       - 'scripts/validation/validate_deploy_custody.py'
+      - 'scripts/validation/tests/test_emit_deploy_custody_record.py'
       - 'scripts/validation/tests/test_validate_deploy_custody.py'
   workflow_dispatch:
 
@@ -31,13 +30,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate deploy hardening
+
+      - name: Install validator dependencies
+        run: python3 -m pip install --disable-pip-version-check pyyaml==6.0.2
+
+      - name: Validate deploy hardening contract
         run: python3 scripts/validation/validate_deploy_custody.py
-      - name: Validate deploy hardening regression tests
-        run: python3 -m unittest scripts.validation.tests.test_validate_deploy_custody
-      - name: Verify no stored cloud secret on the deploy path
-        shell: bash
-        run: |
-          set -euo pipefail
-          ! grep -R --line-number --fixed-string 'AZURE_CLIENT_SECRET' \
-            .github/workflows/helios-deploy.yml
+
+      - name: Run deploy hardening mutation tests
+        run: >-
+          python3 -m unittest
+          scripts.validation.tests.test_emit_deploy_custody_record
+          scripts.validation.tests.test_validate_deploy_custody
+          -v

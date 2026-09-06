@@ -5,7 +5,7 @@
     {
       "pr": 222,
       "title": "Add bounded XCore-9 evaluation service with F# analytics and stable contracts",
-      "status": "candidate",
+      "status": "absorbed",
       "epic": "E2",
       "why": "F# analytics service aligns with HELIOS.AIHub.Domain; evaluator contracts could back the fleet review pool.",
       "absorb": ["service contracts", "F# scoring modules"],
@@ -122,12 +122,12 @@
     {
       "pr": 224,
       "title": "Govern Azure activation path: MI to Key Vault secret binding, v2 audience hardening, and immutable plan/deploy custody",
-      "status": "absorbed",
+      "status": "candidate",
       "epic": "E5",
       "why": "MI-to-Key-Vault binding and custody discipline extend our OIDC + Key Vault stack.",
       "absorb": ["custody/audit pattern", "audience hardening checks"],
       "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"],
-      "absorbedInto": "helios-deploy.yml audience/immutable-custody hardening + scripts/validation/validate_deploy_custody.py (ABSORPTION_LEDGER E5 tranche-1)"
+      "absorbedInto": "E5 tranche-1 deploy hardening (helios-deploy.yml + validate_deploy_custody.py)"
     },
     {
       "pr": 260,
@@ -137,7 +137,7 @@
       "why": "Follow-up hardening on the same activation path; read together with #224.",
       "absorb": ["hardening checklist"],
       "risks": ["same as #224"],
-      "absorbedInto": "helios-deploy.yml audience/immutable-custody hardening + scripts/validation/validate_deploy_custody.py (ABSORPTION_LEDGER E5 tranche-1)"
+      "absorbedInto": "E5 tranche-1 deploy hardening (helios-deploy.yml + validate_deploy_custody.py)"
     },
     {
       "pr": 211,
