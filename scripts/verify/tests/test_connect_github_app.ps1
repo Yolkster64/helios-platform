@@ -192,6 +192,13 @@ exit 0
     Assert-True ($logText -match 'ENV_GH_TOKEN:<unset>') 'GH_TOKEN leaked into the gh child environment.'
     Assert-True ("$($store.StdOut)" -notmatch 'suite-only') 'The pem echoed back on stdout.'
 
+    # --- -FromCode: the exported code is trimmed before it can burn its single use ----------
+    [Environment]::SetEnvironmentVariable('GH_SHIM_PASTED_CODE', "  abc-123`r`n")
+    Assert-True ((Get-ManifestCodeFromEnv -Name 'GH_SHIM_PASTED_CODE') -eq 'abc-123') 'A padded exported code must be trimmed.'
+    [Environment]::SetEnvironmentVariable('GH_SHIM_PASTED_CODE', "`n")
+    Assert-True ((Get-ManifestCodeFromEnv -Name 'GH_SHIM_PASTED_CODE') -eq '') 'A whitespace-only exported code must read as empty.'
+    [Environment]::SetEnvironmentVariable('GH_SHIM_PASTED_CODE', $null)
+
     # --- Main flow with shims: transport control first, verify-only rows, exit codes --------
     $script:rateLimitAnswer = 60
     function Get-GitHubRateLimit { param([string]$Token = '') return $script:rateLimitAnswer }
@@ -324,7 +331,7 @@ finally {
     $env:PATH = $savedPath
     $env:GH_TOKEN = $savedGh
     $env:GITHUB_TOKEN = $savedGithub
-    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT', 'GH_SHIM_PAGES') { [Environment]::SetEnvironmentVariable($name, $null) }
+    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT', 'GH_SHIM_PAGES', 'GH_SHIM_PASTED_CODE') { [Environment]::SetEnvironmentVariable($name, $null) }
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 Write-Host "Passed $($script:cases) offline connect-github-app cases."

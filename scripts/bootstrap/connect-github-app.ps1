@@ -328,6 +328,15 @@ function Test-GhLoggedIn {
     return ($result.ExitCode -eq 0)
 }
 
+# The code as exported: a trailing newline or surrounding spaces from a copy or an
+# `export X=$(pbpaste)` must not reach the conversion (GitHub answers 404 for the
+# padded value, and the code is single-use, so a wrong first try burns it). The
+# paste prompt trims the same way.
+function Get-ManifestCodeFromEnv {
+    param([Parameter(Mandatory)][string]$Name)
+    return "$([Environment]::GetEnvironmentVariable($Name))".Trim()
+}
+
 function Get-GhJson {
     param([Parameter(Mandatory)][string[]]$Arguments)
     $result = Invoke-Gh -Arguments $Arguments
@@ -689,7 +698,7 @@ function Invoke-ConnectGitHubApp {
             if (-not (Test-EnvValue -Name $FromCode)) {
                 return (Write-Precondition -Message "-FromCode names $FromCode but it is unset or blank" -Fix @("export $FromCode=<the code from the ?code= redirect> and re-run within the hour") -Repository $Repository -Mode $mode)
             }
-            $code = [Environment]::GetEnvironmentVariable($FromCode)
+            $code = Get-ManifestCodeFromEnv -Name $FromCode
             Write-Report "  manifest code taken from `$env:$FromCode (value not shown)"
         }
         else {
