@@ -48,7 +48,7 @@ steps:
       versionSpec: '3.12'
       addToPath: true
 
-  - script: python -m pip install --disable-pip-version-check jsonschema
+  - script: python -m pip install --disable-pip-version-check jsonschema==4.26.0
     displayName: Install JSON Schema validator
 
   - script: python scripts/fabric/plan_helios_fabric.py --mode validate
