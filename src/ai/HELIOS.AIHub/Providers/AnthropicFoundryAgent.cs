@@ -216,11 +216,18 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
     /// The hint for a missing resource value. <c>Connect-ClaudeFoundry.ps1</c> exports only
     /// the default <see cref="DefaultEndpointEnv"/>, so an entry that overrides
     /// <c>endpointEnv</c> is pointed at the shell or <c>.helios/azure.env</c> instead of at
-    /// a script that would never set its variable.
+    /// a script that would never set its variable. Environment-variable names are
+    /// case-insensitive on Windows and case-sensitive elsewhere, so the comparison follows
+    /// the platform: on Windows a re-cased default is still the variable the script sets,
+    /// on Linux it is a different variable.
     /// </summary>
     internal static string MissingEndpointHint(string sourceName) =>
+        MissingEndpointHint(sourceName, OperatingSystem.IsWindows());
+
+    internal static string MissingEndpointHint(string sourceName, bool envNamesAreCaseInsensitive) =>
         $"Set {sourceName} (Foundry resource name or https base URL) — " +
-        (string.Equals(sourceName, DefaultEndpointEnv, StringComparison.Ordinal)
+        (string.Equals(sourceName, DefaultEndpointEnv,
+                envNamesAreCaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
             ? "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login, and azure-up writes it into .helios/azure.env."
             : $"set it in your shell or .helios/azure.env (scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets only the default {DefaultEndpointEnv}).");
 

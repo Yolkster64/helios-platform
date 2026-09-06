@@ -259,6 +259,26 @@ public class AnthropicFoundryAgentTests
         Assert.Contains("sets only the default ANTHROPIC_FOUNDRY_RESOURCE", hint);
     }
 
+    [Fact]
+    public void MissingEndpointHint_ReCasedDefault_IsTheDefaultWhereEnvNamesAreCaseInsensitive()
+    {
+        // Windows resolves environment variables case-insensitively, so a re-cased default
+        // is still the variable Connect-ClaudeFoundry.ps1 exports.
+        var hint = AnthropicFoundryAgent.MissingEndpointHint("anthropic_foundry_resource", envNamesAreCaseInsensitive: true);
+
+        Assert.Contains("Connect-ClaudeFoundry.ps1 sets it", hint);
+    }
+
+    [Fact]
+    public void MissingEndpointHint_ReCasedDefault_IsAnOverrideWhereEnvNamesAreCaseSensitive()
+    {
+        // On Linux the re-cased name is a different variable, which the script never sets.
+        var hint = AnthropicFoundryAgent.MissingEndpointHint("anthropic_foundry_resource", envNamesAreCaseInsensitive: false);
+
+        Assert.DoesNotContain("Connect-ClaudeFoundry.ps1 sets it", hint);
+        Assert.Contains("sets only the default ANTHROPIC_FOUNDRY_RESOURCE", hint);
+    }
+
     [Theory]
     [InlineData("http://x.services.ai.azure.com/anthropic")] // https only
     [InlineData("ftp://x.services.ai.azure.com")]

@@ -214,8 +214,11 @@ try {
             Write-Report ''
             Write-Report '-- 0. connect-devices (pwsh scripts/bootstrap/connect-devices.ps1 -SkipChain) --'
             & $pwshExe -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/connect-devices.ps1') -SkipChain
-            Write-Report "   connect-devices exited $LASTEXITCODE (0 = both logins ready; 2 = a lane still needs you - see its table)"
-            $connectDone = $true
+            $connectExit = [int]$LASTEXITCODE
+            Write-Report "   connect-devices exited $connectExit (0 = both logins ready; 2 = a lane still needs you - see its table)"
+            # Only a clean exit hands the logins to step 1 as done; an expired, refused
+            # or precondition-stopped run leaves step 1 free to prompt for them again.
+            $connectDone = ($connectExit -eq 0)
         }
     }
 

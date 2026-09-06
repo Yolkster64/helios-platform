@@ -150,7 +150,9 @@ if [[ -n "$connect" ]]; then
     connect_exit=$?
     set -e
     say "   connect-devices exited $connect_exit (0 = both logins ready; 2 = a lane still needs you - see its table)"
-    connect_done=1
+    # Only a clean exit hands the logins to step 1 as done; an expired, refused or
+    # precondition-stopped run leaves step 1 free to prompt for them again.
+    if [[ "$connect_exit" -eq 0 ]]; then connect_done=1; fi
   fi
 fi
 
