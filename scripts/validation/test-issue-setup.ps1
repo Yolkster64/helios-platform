@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $pwsh = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
+$bash = (Get-Command bash -CommandType Application | Select-Object -First 1).Source
 $checks = 0
 function Assert {
     param([bool]$Condition, [string]$Message)
@@ -32,18 +33,20 @@ function Put-Fixture {
 }
 function Invoke-Inert {
     param([string]$Relative, [string[]]$Arguments = @())
+    $isBash = $Relative.EndsWith('.sh')
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName = $pwsh
+    $psi.FileName = if ($isBash) { $bash } else { $pwsh }
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.WorkingDirectory = $sandbox
     # Never inherit any credential, cloud, or MCP environment into the fixture.
     $psi.Environment.Clear()
-    $psi.Environment['PATH'] = Split-Path $pwsh
+    $psi.Environment['PATH'] = $fixtureBin
     $psi.Environment['HOME'] = $sandbox
     $psi.Environment['USERPROFILE'] = $sandbox
-    foreach ($arg in @('-NoProfile', '-File', (Join-Path $sandbox $Relative)) + $Arguments) {
+    $prefix = if ($isBash) { @() } else { @('-NoProfile', '-File') }
+    foreach ($arg in $prefix + @((Join-Path $sandbox $Relative)) + $Arguments) {
         $psi.ArgumentList.Add($arg)
     }
     $proc = [System.Diagnostics.Process]::new()
@@ -65,8 +68,11 @@ function Invoke-Inert {
 
 $allPath = 'scripts/setup/setup-all.ps1'
 $chainPath = 'scripts/bootstrap/setup-everything.ps1'
+$firstPsPath = 'scripts/bootstrap/first-run.ps1'
+$firstShPath = 'scripts/bootstrap/first-run.sh'
 $allAst = Read-Ast (Join-Path $root $allPath)
 $chainAst = Read-Ast (Join-Path $root $chainPath)
+$null = Read-Ast (Join-Path $root $firstPsPath)
 foreach ($name in 'labels', 'milestones') {
     $null = Read-Ast (Join-Path $root "scripts/github/apply-$name.ps1")
 }
@@ -91,6 +97,13 @@ Assert ($calls[0].Extent.Text -notmatch '-Apply|-Fix') 'issue argv never forward
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) ('helios-issue-tests-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $sandbox
 try {
+    # Only these offline interpreters/utilities are reachable, never gh/az/dotnet.
+    $fixtureBin = Join-Path $sandbox 'fixture-bin'
+    $null = New-Item -ItemType Directory -Path $fixtureBin
+    foreach ($tool in 'pwsh', 'bash', 'python3', 'dirname', 'mkdir', 'rm', 'tee', 'date', 'cat') {
+        $source = (Get-Command $tool -CommandType Application | Select-Object -First 1).Source
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $fixtureBin $tool) -Target $source
+    }
     $repoRoot = $sandbox
     $Repository = 'test-owner/test.repo'
     $pwshExe = $pwsh
@@ -236,16 +249,16 @@ exit 0
     $defaultReport = $default.Text | ConvertFrom-Json
     Assert (@($defaultReport.components | Where-Object component -like 'issue-*').Count -eq 0) 'default excludes issue setup'
     foreach ($extra in @(), @('-Fix')) {
-        $run = Invoke-Inert $allPath (@('-Json', '-IncludeIssueSetup', '-Repository', $Repository) + $extra)
-        Assert ($run.Code -eq 2) 'opt-in attention exit'
+        $run = Invoke-Inert $allPath (@('-Json', '-Repository', $Repository) + $extra)
+        Assert ($run.Code -eq 2) 'automatic issue attention exit'
         $report = $run.Text | ConvertFrom-Json
         $issues = @($report.components | Where-Object component -like 'issue-*')
-        Assert ($issues.Count -eq 2) 'two opt-in components'
+        Assert ($issues.Count -eq 2) 'two automatic issue components'
         Assert (@($issues | Where-Object detail -notmatch 'live state unknown').Count -eq 0) 'real argv accepted; unknown exit0 nonready'
         Assert ($run.Text -notmatch 'UNTRUSTED') 'no raw producer output at process boundary'
     }
     foreach ($extra in @(), @('-Apply')) {
-        $run = Invoke-Inert $chainPath (@('-Json', '-IncludeIssueSetup', '-Repository', $Repository) + $extra)
+        $run = Invoke-Inert $chainPath (@('-Json', '-Repository', $Repository) + $extra)
         Assert ($run.Code -eq 0) 'report-first rollup exit preserved'
         $report = $run.Text | ConvertFrom-Json
         Assert (-not $report.ready) 'rollup degraded with unknown issue state'
@@ -255,18 +268,109 @@ exit 0
         }
         Assert ($run.Text -notmatch 'UNTRUSTED') 'rollup contains no raw producer output'
     }
-    $run = Invoke-Inert $chainPath @('-Json', '-Repository', $Repository)
-    Assert ($run.Text -notmatch 'issue-labels|issue-milestones|apply-labels|apply-milestones') 'repository alone does not opt in'
-    # Parameter guards must fail BEFORE any dependency is accessed.
-    Remove-Item (Join-Path $sandbox 'scripts/build') -Recurse
-    foreach ($entrypoint in $allPath, $chainPath) {
-        foreach ($bad in '', 'owner', 'https://github.com/owner/repo', 'a/b/c', 'a/b;exit', 'a/..', "a/b`n", '-a/b') {
-            $argv = @('-IncludeIssueSetup')
-            if ($bad) { $argv += @('-Repository', $bad) }
+    $run = Invoke-Inert $chainPath @('-Json')
+    Assert ($run.Code -eq 0) 'no-target chain exit preserved'
+    Assert ($run.Text -notmatch 'issue-labels|issue-milestones|apply-labels|apply-milestones') 'no-target chain excludes issue probes'
+
+    # Both real first-run twins -> real setup chain -> real inventory -> inert producers.
+    # Cloud setup / auto-login / provisioning are spies ONLY: never install, log in,
+    # look up credentials, or run live external commands, even in full mode.
+    foreach ($entrypoint in $firstPsPath, $firstShPath) {
+        Put-Fixture $entrypoint (Get-Content -Raw (Join-Path $root $entrypoint))
+    }
+    $spyStub = @'
+[CmdletBinding()]
+param([switch]$Json, [switch]$VerifyOnly, [switch]$SkipSmoke, [switch]$SkipAuth,
+      [switch]$UseManagedIdentity, [string]$Repository)
+$name = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+$bound = @{}
+foreach ($key in $PSBoundParameters.Keys) {
+    $value = $PSBoundParameters[$key]
+    $bound[$key] = if ($value -is [switch]) { [bool]$value } else { $value }
+}
+$bound | ConvertTo-Json | Set-Content (Join-Path $root "$name-spy.json")
+'{"lanes":[],"targets":[],"ownerActions":[]}'
+exit 0
+'@
+    foreach ($name in 'cloud-shell-setup', 'auto-login', 'provision-github-secrets') {
+        Put-Fixture "scripts/bootstrap/$name.ps1" $spyStub
+    }
+    Put-Fixture 'scripts/bootstrap/cloud-shell-setup.sh' 'printf "CLOUD_ARG:%s\n" "$@"; exit 0'
+    foreach ($entrypoint in $firstPsPath, $firstShPath) {
+        $isBash = $entrypoint.EndsWith('.sh')
+        foreach ($mode in 'default', 'target', 'verify', 'skip') {
+            Remove-Item (Join-Path $sandbox '*-spy.json') -Force -ErrorAction SilentlyContinue
+            $argv = @(if ($isBash) { '--json' } else { '-Json' })
+            if ($mode -ne 'default') {
+                $argv += $(if ($isBash) { @('--repository', $Repository) } else { @('-Repository', $Repository) })
+                $argv += $(if ($isBash) { '--managed-identity' } else { '-UseManagedIdentity' })
+            }
+            if ($mode -eq 'verify') { $argv += $(if ($isBash) { '--verify-only' } else { '-VerifyOnly' }) }
+            if ($mode -eq 'skip') { $argv += $(if ($isBash) { '--skip-setup' } else { '-SkipSetup' }) }
             $run = Invoke-Inert $entrypoint $argv
-            Assert ($run.Code -ne 0 -and $run.Text.Trim() -eq '') 'invalid/missing target fails before execution'
+            Assert ($run.Code -eq 0) "$entrypoint $mode executed: $($run.Error)"
+            $state = $run.Text | ConvertFrom-Json
+            Assert ($state.steps.Count -eq 6) 'all six first-run steps recorded'
+            Assert (@($state.steps | Where-Object { $_.exitCode -notin 0, -1 }).Count -eq 0) 'inert first-run children succeeded'
+            Assert ($state.verifyOnly -eq ($mode -eq 'verify')) 'verify-only state preserved'
+            $provisionArgs = Get-Content -Raw (Join-Path $sandbox 'provision-github-secrets-spy.json') | ConvertFrom-Json -AsHashtable
+            Assert ($provisionArgs.Json -eq $true) 'repo-secret dry-run JSON forwarded'
+            Assert ($provisionArgs.Count -eq $(if ($mode -eq 'default') { 1 } else { 2 })) 'only JSON and explicit target reach provision; never Apply'
+            if ($mode -eq 'default') {
+                Assert (-not $provisionArgs.ContainsKey('Repository')) 'no target preserves provisioning default'
+            } else {
+                Assert ($provisionArgs.Repository -ceq $Repository) 'same target reaches provision'
+            }
+            $setupStep = @($state.steps | Where-Object name -eq 'setup-everything')[0]
+            Assert ($setupStep.exitCode -eq $(if ($mode -eq 'skip') { -1 } else { 0 })) 'skip-setup preserved'
+            $issueActions = @($state.ownerActions | Where-Object action -match 'scripts/github/apply-(labels|milestones)')
+            $expectedCount = if ($mode -in 'target', 'verify') { 2 } else { 0 }
+            Assert ($issueActions.Count -eq $expectedCount) 'automatic issues reach first-run owner checklist unless no target or skipped'
+            foreach ($action in $issueActions) {
+                Assert ($action.action -match "-Repository $([regex]::Escape($Repository)) -Json$") 'issue target survives entire chain'
+                Assert ($action.action -notmatch '-Apply|-Fix') 'issue checklist stays dry-run'
+            }
+            $autoSpy = Join-Path $sandbox 'auto-login-spy.json'
+            Assert ((Test-Path $autoSpy) -eq ($mode -ne 'verify')) 'automatic login retained except verify-only'
+            if ($mode -ne 'verify') {
+                $autoArgs = Get-Content -Raw $autoSpy | ConvertFrom-Json -AsHashtable
+                Assert ($autoArgs.Json -eq $true) 'automatic login JSON unchanged'
+                Assert ($autoArgs.ContainsKey('UseManagedIdentity') -eq ($mode -ne 'default')) 'managed identity forwarding preserved'
+                Assert (-not $autoArgs.ContainsKey('Repository')) 'target not forwarded to auth'
+            }
+            if ($isBash) {
+                $cloudArgs = @(Get-Content (Join-Path $sandbox '.helios/bootstrap/first-run.log') |
+                    Where-Object { $_ -like 'CLOUD_ARG:*' })
+                $expected = if ($mode -eq 'verify') { 'CLOUD_ARG:--verify-only' } else { 'CLOUD_ARG:--skip-smoke|CLOUD_ARG:--skip-auth' }
+                Assert (($cloudArgs -join '|') -eq $expected) 'Bash cloud setup mode flags unchanged'
+            } else {
+                $cloudArgs = Get-Content -Raw (Join-Path $sandbox 'cloud-shell-setup-spy.json') | ConvertFrom-Json -AsHashtable
+                $expected = if ($mode -eq 'verify') { 'VerifyOnly' } else { 'SkipAuth|SkipSmoke' }
+                Assert ((@($cloudArgs.Keys | Sort-Object) -join '|') -eq $expected) 'PowerShell cloud setup mode flags unchanged'
+            }
+            $checklist = @($state.checklist.lines) -join "`n"
+            $replay = 'pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply'
+            if ($mode -ne 'default') { $replay += " -Repository $Repository" }
+            Assert ($checklist.Contains($replay)) 'printed provision replay retains same target (not executed)'
         }
     }
+    # Parameter guards must fail BEFORE any dependency is accessed.
+    Remove-Item (Join-Path $sandbox 'scripts/build') -Recurse
+    Remove-Item (Join-Path $sandbox '.helios') -Recurse -Force
+    Remove-Item (Join-Path $sandbox '*-spy.json') -Force
+    foreach ($entrypoint in $allPath, $chainPath, $firstPsPath, $firstShPath) {
+        $flag = if ($entrypoint.EndsWith('.sh')) { '--repository' } else { '-Repository' }
+        foreach ($bad in '', ' ', 'owner', 'https://github.com/owner/repo', 'a/b/c', 'a/b;exit', 'a/..', 'a/.', "a/b`n", '-a/b', 'a-/b', 'a/r?x', ('a' * 40 + '/b'), ('a/' + 'b' * 101)) {
+            $argv = @($flag, $bad)
+            $run = Invoke-Inert $entrypoint $argv
+            Assert ($run.Code -ne 0 -and $run.Text.Trim() -eq '') "$entrypoint invalid target fails before execution"
+        }
+        $run = Invoke-Inert $entrypoint @($flag)
+        Assert ($run.Code -ne 0 -and $run.Text.Trim() -eq '') 'missing target value rejected'
+    }
+    Assert (-not (Test-Path (Join-Path $sandbox '.helios'))) 'invalid first-run target creates no state'
+    Assert (@(Get-ChildItem $sandbox -Filter '*-spy.json').Count -eq 0) 'invalid first-run target invokes no child'
     Assert ($global:LASTEXITCODE -ne 0) 'expected failure leaves native exit state nonzero'
     Write-Host "PASS: $checks offline assertions (AST, strict reports, inert forwarding, owner aggregation, no mutation)."
 }

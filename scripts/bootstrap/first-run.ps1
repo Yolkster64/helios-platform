@@ -61,6 +61,11 @@ Emit the state object and nothing else on stdout (chained-script convention).
 .PARAMETER SkipSetup
 Skip step 5 (setup-everything.ps1); the auth steps and the repo-secret probe still run.
 
+.PARAMETER Repository
+Validated owner/repo target shared by setup-everything and provision-github-secrets.
+Automatically includes label/milestone dry-run probes in setup. Omit to preserve
+the existing child defaults (no issue probes). Does not grant access or apply changes.
+
 .PARAMETER UseManagedIdentity
 Forwarded to auto-login.ps1 (classic IMDS-only VMs expose no managed-identity
 endpoint variable, so the doctor tries `az login --identity` only when told to).
@@ -88,7 +93,10 @@ param(
 
     [switch]$SkipSetup,
 
-    [switch]$UseManagedIdentity
+    [switch]$UseManagedIdentity,
+
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 Set-StrictMode -Version Latest
@@ -242,13 +250,14 @@ try {
     }
     Invoke-JsonStep -Number 3 -Name 'rest-connect' -Script 'scripts/verify/rest-connect.ps1' -Arguments @('-Json')
     Invoke-JsonStep -Number 4 -Name 'auth-doctor' -Script 'scripts/bootstrap/auth-doctor.ps1' -Arguments @('-Json')
+    $repositoryArgs = @('-Json') + @(if ($Repository) { '-Repository'; $Repository })
     if ($SkipSetup) {
         Skip-Step -Number 5 -Name 'setup-everything' -Script 'scripts/bootstrap/setup-everything.ps1' -Why '-SkipSetup'
     }
     else {
-        Invoke-JsonStep -Number 5 -Name 'setup-everything' -Script 'scripts/bootstrap/setup-everything.ps1' -Arguments @('-Json')
+        Invoke-JsonStep -Number 5 -Name 'setup-everything' -Script 'scripts/bootstrap/setup-everything.ps1' -Arguments $repositoryArgs
     }
-    Invoke-JsonStep -Number 6 -Name 'provision-github-secrets' -Script 'scripts/bootstrap/provision-github-secrets.ps1' -Arguments @('-Json')
+    Invoke-JsonStep -Number 6 -Name 'provision-github-secrets' -Script 'scripts/bootstrap/provision-github-secrets.ps1' -Arguments $repositoryArgs
 
     # --- Merge ------------------------------------------------------------------------
     function Get-LaneRows {
@@ -357,6 +366,7 @@ try {
     }
     $ghLogin = 'gh auth login --hostname github.com --git-protocol https --web --scopes models:read'
     $provisionApply = 'pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply'
+    if ($Repository) { $provisionApply += " -Repository $Repository" }
     # The load step, once: the doctor's `(bash) or pwsh: ...` prose and connect-account's
     # `# after the az lane ...` comment are this same step in two wordings, so every
     # owner action starting with either command is covered by it.

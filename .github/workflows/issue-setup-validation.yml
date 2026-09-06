@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/setup/setup-all.ps1'
       - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/bootstrap/first-run.ps1'
+      - 'scripts/bootstrap/first-run.sh'
       - 'scripts/github/apply-labels.ps1'
       - 'scripts/github/apply-milestones.ps1'
       - 'config/github/labels.json'
@@ -16,6 +18,8 @@ on:
     paths:
       - 'scripts/setup/setup-all.ps1'
       - 'scripts/bootstrap/setup-everything.ps1'
+      - 'scripts/bootstrap/first-run.ps1'
+      - 'scripts/bootstrap/first-run.sh'
       - 'scripts/github/apply-labels.ps1'
       - 'scripts/github/apply-milestones.ps1'
       - 'config/github/labels.json'
@@ -37,3 +41,5 @@ jobs:
       - name: Validate issue setup offline
         shell: pwsh
         run: ./scripts/validation/test-issue-setup.ps1
+      - name: Parse Bash first-run
+        run: bash -n scripts/bootstrap/first-run.sh

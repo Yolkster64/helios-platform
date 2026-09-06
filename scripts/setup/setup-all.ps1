@@ -36,12 +36,10 @@ same convention as verify-readiness.ps1 -Json).
 Install what can be installed non-interactively (currently: the AI CLIs via npm).
 Verify-only otherwise, and still never auth-mutating.
 
-.PARAMETER IncludeIssueSetup
-Opt in to label and milestone readiness using existing dry-run JSON reports.
-Never forwards -Fix or -Apply to issue setup. Readiness does not prove write access.
-
 .PARAMETER Repository
-Explicit owner/repo target, required with -IncludeIssueSetup. No inferred default.
+Explicit owner/repo target. When supplied, automatically checks label and milestone
+readiness using existing dry-run JSON reports. No inferred default. Never forwards
+-Fix or -Apply to issue setup. Readiness does not prove write access.
 
 .EXAMPLE
 pwsh scripts/setup/setup-all.ps1
@@ -57,18 +55,12 @@ pwsh scripts/setup/setup-all.ps1 -Json | ConvertFrom-Json
 param(
     [switch]$Json,
     [switch]$Fix,
-    [switch]$IncludeIssueSetup,
     [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
     [string]$Repository
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-if ($IncludeIssueSetup -and -not $Repository) {
-    [Console]::Error.WriteLine('setup-all: -IncludeIssueSetup requires explicit -Repository owner/repo.')
-    exit 2
-}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $toolResolver = Join-Path $repoRoot 'scripts' 'build' 'tool-resolver.ps1'
@@ -637,8 +629,8 @@ else {
 $components += New-InformationalComponent -Name 'mcp-health' -Status $mcpHealthStatus -Detail $mcpHealthDetail
 Write-ChildOutput @($mcpHealthDetail)
 
-# --- g. Issue setup (explicit opt-in, dry-run only even with -Fix) ------------------
-if ($IncludeIssueSetup) {
+# --- g. Issue setup (automatic for an explicit target; dry-run even with -Fix) ------
+if ($Repository) {
     Write-Section ''
     Write-Section '-- g. Issue setup (labels and milestones; dry-run only) --'
     $components += @(Invoke-IssueSetup)
