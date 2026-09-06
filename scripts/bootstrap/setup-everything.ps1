@@ -202,7 +202,7 @@ function Invoke-ChainStep {
                 -not $_.PSObject.Properties['state'] -or
                 $_.state -notin @('ready', 'repaired', 'mismatch', 'needs-owner', 'unavailable')
             })
-        if ($lanes.Count -eq 0 -or $invalidLanes.Count -gt 0) { $report = $null }
+        if (@($lanes).Count -eq 0 -or @($invalidLanes).Count -gt 0) { $report = $null }
     }
     $state = if ($null -eq $report) { 'failed' } elseif ($exit -eq 0) { 'ok' } else { 'degraded' }
     [pscustomobject]@{

@@ -5,8 +5,8 @@ on:
     paths:
       - '.devcontainer/**'
       - 'global.json'
-      - 'scripts/bootstrap/setup-everything.ps1'
       - 'src/ai/HELIOS.AIHub.Cli/HELIOS.AIHub.Cli.csproj'
+      - 'scripts/bootstrap/setup-everything.ps1'
       - 'scripts/verify/tests/**'
       - '.github/workflows/setup-readiness.yml'
   push:
@@ -14,8 +14,8 @@ on:
     paths:
       - '.devcontainer/**'
       - 'global.json'
-      - 'scripts/bootstrap/setup-everything.ps1'
       - 'src/ai/HELIOS.AIHub.Cli/HELIOS.AIHub.Cli.csproj'
+      - 'scripts/bootstrap/setup-everything.ps1'
       - 'scripts/verify/tests/**'
       - '.github/workflows/setup-readiness.yml'
   workflow_dispatch:

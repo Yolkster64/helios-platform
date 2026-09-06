@@ -116,6 +116,12 @@ class SetupReadinessTests(unittest.TestCase):
         self.assertEqual(calls, ["toolchain", "identity"])
         self.assertFalse(report["ready"])
 
+    def test_empty_object_is_not_an_identity_report(self):
+        code, report, calls = self.run_chain({"identity": ({}, 0)}, flags=("-Apply",))
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, ["toolchain", "identity"])
+        self.assertFalse(report["ready"])
+
     def test_explicit_false_overrides_healthy_components(self):
         _, report, _ = self.run_chain({"inventory": ({"ready": False, "components": [{"component": "tools", "status": "ready"}]}, 0)})
         self.assertFalse(report["ready"])

@@ -1,13 +1,13 @@
-"""Check bootstrap failure propagation without installing or building anything."""
+"""Check bootstrap failure propagation and devcontainer wiring contracts."""
 
 import os
 from pathlib import Path
+import json
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-import json
 import xml.etree.ElementTree as ET
 
 
