@@ -92,3 +92,5 @@ try {
 }
 finally { [Environment]::SetEnvironmentVariable($fixtureName, $saved) }
 Write-Host "PASS: $cases bootstrap review assertions"
+# Do not propagate the last mocked CLI failure through the Actions pwsh epilogue.
+$global:LASTEXITCODE = 0
