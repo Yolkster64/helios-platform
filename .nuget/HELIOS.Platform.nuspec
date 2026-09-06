@@ -3,70 +3,34 @@
   <metadata>
     <id>HELIOS.Platform</id>
     <version>1.0.0</version>
-    <title>HELIOS Enterprise Platform</title>
+    <title>HELIOS Platform (legacy metadata)</title>
     <authors>HELIOS Development Team</authors>
     <owners>HELIOS</owners>
     <license type="expression">MIT</license>
-    <projectUrl>https://github.com/M0nado/helios-platform</projectUrl>
-    <repository type="git" url="https://github.com/M0nado/helios-platform.git" />
+    <projectUrl>https://github.com/Yolkster64/helios-platform</projectUrl>
+    <repository type="git" url="https://github.com/Yolkster64/helios-platform.git" />
     <description>
-      Complete enterprise automation platform with 6-phase deployment, 6 coordinated agents,
-      12+ AI services integration, 8-layer security, and real-time monitoring. Production-ready in 30 minutes.
+      Legacy nuspec metadata retained for migration reference only. The legacy core
+      package is quarantined and not validated for publication from this repository.
     </description>
     <summary>
-      HELIOS: Enterprise automation platform combining Azure infrastructure, 
-      multi-AI coordination, military-grade security, and real-time observability.
+      Legacy package metadata; do not publish until legacy core is brought back to a supported build state.
     </summary>
     <releaseNotes>
-      Initial Release v1.0.0
-      - Complete 6-phase deployment system
-      - 6 coordinated build agents
-      - 12+ AI services (Ollama, Azure OpenAI, Claude, etc)
-      - 8-layer military-grade security
-      - 7 real-time monitoring dashboards
-      - Cost optimization (85% reduction)
-      - Full Azure integration
+      Legacy metadata only. Publication intentionally unsupported while the root/core
+      project remains quarantined from supported CI build lanes.
     </releaseNotes>
     <copyright>Copyright 2026 HELIOS Development Team. All rights reserved.</copyright>
     <tags>azure,devops,deployment,agents,ai,security,monitoring,enterprise,automation</tags>
     <language>en-US</language>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <developmentDependency>false</developmentDependency>
-    
-    <dependencies>
-      <group targetFramework=".NETStandard2.1">
-        <dependency id="Azure.Identity" version="1.10.0" />
-        <dependency id="Azure.ResourceManager" version="1.6.0" />
-        <dependency id="Azure.Storage.Blobs" version="12.17.0" />
-        <dependency id="Azure.Cosmos" version="4.0.0" />
-        <dependency id="Docker.DotNet" version="3.125.5" />
-        <dependency id="Microsoft.Extensions.Configuration" version="8.0.0" />
-        <dependency id="Microsoft.Extensions.DependencyInjection" version="8.0.0" />
-        <dependency id="Serilog" version="3.0.1" />
-        <dependency id="Polly" version="8.0.0" />
-      </group>
-      
-      <group targetFramework=".NET8.0">
-        <dependency id="Azure.Identity" version="1.10.0" />
-        <dependency id="Azure.ResourceManager" version="1.6.0" />
-        <dependency id="Azure.Storage.Blobs" version="12.17.0" />
-        <dependency id="Azure.Cosmos" version="4.0.0" />
-        <dependency id="Docker.DotNet" version="3.125.5" />
-        <dependency id="Microsoft.Extensions.Configuration" version="8.0.0" />
-        <dependency id="Microsoft.Extensions.DependencyInjection" version="8.0.0" />
-        <dependency id="Serilog" version="3.0.1" />
-        <dependency id="Polly" version="8.0.0" />
-      </group>
-    </dependencies>
+    <developmentDependency>true</developmentDependency>
 
     <frameworkAssemblies>
     </frameworkAssemblies>
   </metadata>
   
   <files>
-    <file src="bin/Release/**/*.dll" target="lib" />
-    <file src="bin/Release/**/*.pdb" target="lib" />
-    <file src="README.md" target="" />
-    <file src="docs/**/*" target="docs" />
+    <file src=".nuget/HELIOS.Platform.nuspec.md" target="docs/HELIOS.Platform.nuspec.md" />
   </files>
 </package>

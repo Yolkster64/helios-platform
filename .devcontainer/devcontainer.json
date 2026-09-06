@@ -48,5 +48,5 @@
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "echo '== [1/4] native C++ spoke (optional; AIHub falls back to managed paths) =='; { command -v cmake >/dev/null 2>&1 && ./scripts/build/build-native.sh || echo 'SKIP: cmake missing or native build failed (non-fatal)'; }; echo '== [2/4] restore + build HELIOS.sln =='; dotnet restore HELIOS.sln || true; dotnet build HELIOS.sln -c Release --no-restore || true; echo '== [3/4] python spoke (ml extras, falling back to dependency-free) =='; python3 -m pip install -e 'src/ai/python[ml]' || python3 -m pip install -e src/ai/python || true; echo '== [4/4] helios-ai on PATH =='; sudo ln -sf \"$PWD/src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai\" /usr/local/bin/helios-ai || true; { command -v helios-ai >/dev/null 2>&1 && test -x src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai && echo 'helios-ai ready (try: helios-ai status)' || echo 'helios-ai symlinked; run: dotnet build HELIOS.sln -c Release'; }"
+  "postCreateCommand": "bash .devcontainer/onCreateCommand.sh"
 }

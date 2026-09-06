@@ -18,6 +18,7 @@ public class SystemDetector
     public static SystemPartitionInfo GetPartitionInfo()
     {
         var info = new SystemPartitionInfo();
+        var systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? "C:\\";
         
         try
         {
@@ -32,7 +33,10 @@ public class SystemDetector
                         TotalSize = drive.TotalSize,
                         AvailableSpace = drive.AvailableFreeSpace,
                         FileSystem = drive.DriveFormat,
-                        IsSystemDrive = drive.Name[0].ToString() == System.IO.Path.GetPathRoot(System.Reflection.Assembly.GetExecutingAssembly().Location)?[0].ToString(),
+                        IsSystemDrive = string.Equals(
+                            Path.GetPathRoot(drive.Name),
+                            systemRoot,
+                            StringComparison.OrdinalIgnoreCase),
                         VolumeLabel = drive.VolumeLabel
                     });
                 }
@@ -66,8 +70,10 @@ public class SystemDetector
                 }
             }
 
-            // Get license status via WMI
-            using (var searcher = new ManagementObjectSearcher(@"\\.\root\cimv2", "SELECT * FROM SoftwareLicensingService"))
+            // Get license status via WMI (licensed products with a partial key)
+            using (var searcher = new ManagementObjectSearcher(
+                       @"\\.\root\cimv2",
+                       "SELECT LicenseStatus FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL"))
             {
                 foreach (var item in searcher.Get())
                 {
