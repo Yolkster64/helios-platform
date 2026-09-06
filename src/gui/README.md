@@ -14,8 +14,9 @@ Requirements:
 - .NET 10 SDK (the repo-root `global.json` pins 10.0.400; the shell itself still
   targets `net8.0-windows10.0.19041.0`, which the .NET 10 SDK builds fine).
 - Visual Studio 2022 17.10+ with the **Windows application development** workload
-  (or plain `dotnet` CLI — the WinUI XAML compiler ships via the
-  `Microsoft.WindowsAppSDK` NuGet package, so VS is convenient but not mandatory).
+  (the GitHub Actions Windows build uses Visual Studio MSBuild because the hosted
+  `dotnet` MSBuild lacks the Windows App SDK PRI task assembly required by this
+  project on current runner images).
 - To *run* the produced exe: the [Windows App SDK 1.6 runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
   must be installed, because the project is unpackaged (`WindowsPackageType=None`) and
   deliberately **not** self-contained (`WindowsAppSDKSelfContained` unset).
@@ -63,10 +64,9 @@ The one structural fact to internalize before a GUI PR: **the shell has its own 
 (`src/gui/HELIOS.Shell.sln`), built on Windows, while CI builds `HELIOS.sln` on Linux.**
 Consequences:
 
-- **No CI check compiles your GUI change today.** The `windows-latest` job that would
-  build `HELIOS.Shell.sln` is a roadmap item (below), not a present reality. Build and
-  run locally on Windows before opening the PR — a green PR page does not mean the shell
-  still compiles.
+- **The shell has a focused Windows CI build** in
+  `.github/workflows/gui-windows.yml`, but you should still build and run locally on
+  Windows before opening the PR because CI only proves compile/restore health.
 - **GUI PRs must keep the root csproj glob guards intact.** The exact rule: the root
   `HELIOS.Platform.csproj` recursively globs `**/*.cs` (and, via WPF default items,
   `**/*.xaml`); `src/gui/**` must stay on its `<Compile Remove>` / `<Page Remove>`
@@ -108,9 +108,8 @@ Windows lane and can be built and CI-verified on any platform:
 
 ## Roadmap (PR6, per GUI_THEME_ANALYSIS.md / ROADMAP_MULTI_LLM.md)
 
-- **Windows CI**: a `windows-latest` job building `src/gui/HELIOS.Shell.sln` — a *new*
-  workflow, not a change to the existing Linux jobs. Deliberately not added yet to keep
-  this change-set out of `.github/workflows/`.
+- **Windows CI**: `.github/workflows/gui-windows.yml` restores and builds
+  `src/gui/HELIOS.Shell.sln` on `windows-latest` using Visual Studio MSBuild.
 - Routing page (editable task-routing grid) and Fleet page (Xcore-9s pool state); the
   NavigationView placeholders exist, disabled.
 - Provider metrics (latency, success rate, tokens) + Win2D sparklines once the hub
