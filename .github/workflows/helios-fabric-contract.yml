@@ -7,6 +7,7 @@ on:
       - 'config/schemas/helios-fabric.schema.json'
       - 'docs/fabric/**'
       - 'scripts/fabric/**'
+      - 'scripts/validation/validate_helios_fabric_policy.py'
       - 'tests/fabric/**'
       - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
       - '.azuredevops/pipelines/helios-fabric-validate.yml'
@@ -19,6 +20,7 @@ on:
       - 'config/fabric/**'
       - 'config/schemas/helios-fabric.schema.json'
       - 'scripts/fabric/**'
+      - 'scripts/validation/validate_helios_fabric_policy.py'
       - 'tests/fabric/**'
       - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
       - '.azuredevops/pipelines/helios-fabric-validate.yml'
@@ -120,32 +122,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Verify workflow permissions and source policy
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          contract = json.loads(Path('config/fabric/helios-fabric.v1.json').read_text(encoding='utf-8'))
-          assert contract['canonical']['productionEnabled'] is False
-          assert contract['security']['productionEnabled'] is False
-          assert contract['security']['applyDefault'] is False
-          assert contract['security']['secretValuesInRepository'] is False
-          assert contract['security']['externalWritesRequireApproval'] is True
-          assert contract['security']['allowedUiFramework'] == 'WinUI 3'
-          assert {'WPF', 'UWP'}.issubset(set(contract['security']['forbiddenUiFrameworks']))
-
-          workflow = Path('.github/workflows/helios-fabric-contract.yml').read_text(encoding='utf-8')
-          permissions_block = workflow.split('permissions:', 1)[1].split('concurrency:', 1)[0]
-          assert 'contents: read' in permissions_block
-          assert 'write' not in permissions_block
-          forbidden_patterns = (
-              'azure' + '/login',
-              'az ' + 'deployment',
-              'pull_request' + '_target',
-          )
-          for forbidden in forbidden_patterns:
-              assert forbidden not in workflow
-          PY
+      - name: Verify contract and workflow policy
+        # The checker lives in scripts/validation/ so this workflow file never
+        # literally contains the tokens the checker forbids (an inline assert
+        # would self-reference the very string it rejects and always fail).
+        run: python3 scripts/validation/validate_helios_fabric_policy.py

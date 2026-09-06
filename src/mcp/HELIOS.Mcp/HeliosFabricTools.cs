@@ -33,12 +33,21 @@ public static class HeliosFabricTools
         [Description(
             "Optional repository-relative path to an alternate Fabric JSON contract. " +
             "Paths outside HELIOS_REPO_ROOT are rejected.")]
-        string? configPath = null)
+        string? configPath = null) =>
+        BuildFabricPlanJson(startDirectory: null, requestedPath: configPath);
+
+    /// <summary>
+    /// Core of helios_fabric_plan_get, split out so tests can point it at a fabricated
+    /// repo root. <paramref name="startDirectory"/> = null means "resolve from
+    /// HELIOS_REPO_ROOT or by walking up from the process's cwd/base directory",
+    /// matching the other read-only tools' pattern.
+    /// </summary>
+    public static string BuildFabricPlanJson(string? startDirectory, string? requestedPath = null)
     {
         try
         {
-            var repoRoot = ResolveRepositoryRoot();
-            var path = ResolveConfigPath(repoRoot, configPath);
+            var repoRoot = ResolveRepositoryRoot(startDirectory);
+            var path = ResolveConfigPath(repoRoot, requestedPath);
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var root = document.RootElement;
 
@@ -182,8 +191,20 @@ public static class HeliosFabricTools
         }
     }
 
-    private static string ResolveRepositoryRoot()
+    private static string ResolveRepositoryRoot(string? startDirectory = null)
     {
+        // Explicit startDirectory (tests, or a caller that knows the root) is
+        // authoritative: walk up from it looking for the contract, but do NOT
+        // fall through to the process-wide fallbacks — that would leak the real
+        // checkout into a test fixture and hide the failure the test wants.
+        if (!string.IsNullOrWhiteSpace(startDirectory))
+        {
+            return WalkUpFor(startDirectory)
+                ?? throw new InvalidDataException(
+                    $"HELIOS Fabric contract not found from '{startDirectory}' or any parent " +
+                    $"(looking for {DefaultRelativePath}).");
+        }
+
         var configured = Environment.GetEnvironmentVariable("HELIOS_REPO_ROOT");
         if (!string.IsNullOrWhiteSpace(configured))
         {
@@ -196,19 +217,28 @@ public static class HeliosFabricTools
 
         foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
         {
-            var current = new DirectoryInfo(Path.GetFullPath(start));
-            while (current is not null)
+            if (WalkUpFor(start) is { } found)
             {
-                if (File.Exists(Path.Combine(current.FullName, DefaultRelativePath)))
-                {
-                    return current.FullName;
-                }
-                current = current.Parent;
+                return found;
             }
         }
 
         throw new InvalidDataException(
             "Repository root was not found. Set HELIOS_REPO_ROOT to the checked-out repository.");
+    }
+
+    private static string? WalkUpFor(string start)
+    {
+        var current = new DirectoryInfo(Path.GetFullPath(start));
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, DefaultRelativePath)))
+            {
+                return current.FullName;
+            }
+            current = current.Parent;
+        }
+        return null;
     }
 
     private static string ResolveConfigPath(string repoRoot, string? requestedPath)

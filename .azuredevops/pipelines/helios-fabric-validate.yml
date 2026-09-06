@@ -11,6 +11,7 @@ trigger:
       - config/fabric/**
       - config/schemas/helios-fabric.schema.json
       - scripts/fabric/**
+      - scripts/validation/validate_helios_fabric_policy.py
       - tests/fabric/**
       - src/mcp/HELIOS.Mcp/HeliosFabricTools.cs
       - .azuredevops/pipelines/helios-fabric-validate.yml
@@ -24,6 +25,7 @@ pr:
       - config/fabric/**
       - config/schemas/helios-fabric.schema.json
       - scripts/fabric/**
+      - scripts/validation/validate_helios_fabric_policy.py
       - tests/fabric/**
       - src/mcp/HELIOS.Mcp/HeliosFabricTools.cs
       - .azuredevops/pipelines/helios-fabric-validate.yml
@@ -60,6 +62,9 @@ steps:
 
   - script: python scripts/validation/validate_yolkster_cutover.py
     displayName: Validate Yolkster and WinUI 3 cutover contract
+
+  - script: python3 scripts/validation/validate_helios_fabric_policy.py
+    displayName: Enforce non-deployment Fabric boundary
 
   - task: UseDotNet@2
     displayName: Use .NET 10 SDK

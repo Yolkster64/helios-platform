@@ -90,6 +90,25 @@ Build it with:
 dotnet build src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj --configuration Release
 ```
 
+## CLI visibility
+
+The same sanitized envelope is reachable from the operator shell without an MCP client
+through the `helios-ai fabric-plan` subcommand. It walks up from the current directory
+to find `config/fabric/helios-fabric.v1.json`, applies the same fail-closed checks as
+`helios_fabric_plan_get` (production disabled, apply off, no repository-stored secret
+values, WinUI 3 active), and prints a compact JSON summary plus per-integration and
+per-phase readiness. Nothing is contacted; no credential value is read, printed, or
+serialized.
+
+```bash
+dotnet run --project src/ai/HELIOS.AIHub.Cli/HELIOS.AIHub.Cli.csproj \
+  --configuration Release -- fabric-plan
+```
+
+Exit code `0` when the contract validates. Exit code `1` when the file is missing,
+unreadable, or violates a fail-closed invariant — a one-line diagnostic goes to stderr,
+the JSON envelope is not printed, and no partial state leaks.
+
 ## Integration authorities
 
 | Integration | Role | Activation boundary |
@@ -156,6 +175,9 @@ convert “approval required” into “approved.”
 - execute planner regression tests;
 - build the .NET 10 MCP server;
 - verify WinUI 3-only and fail-closed invariants;
+- enforce the non-deployment Fabric boundary via
+  `scripts/validation/validate_helios_fabric_policy.py` (contract fail-closed markers,
+  workflow `contents: read`-only permission, and forbidden Azure-apply/OIDC tokens);
 - upload plan/evidence artifacts.
 
 The workflow has `contents: read` only. It receives no OIDC token and contains no Azure

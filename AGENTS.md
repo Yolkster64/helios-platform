@@ -45,7 +45,7 @@ Hermes and XCore are planning, routing, simulation, evaluation, and redacted-mem
 
 The provider-neutral AIHub routes OpenAI, Azure/Foundry, Claude, Copilot, local models, Hermes, and XCore through typed task/result, capability, approval, redaction, tracing, and evidence contracts. Provider-specific business logic must not leak into the WinUI application.
 
-The local MCP server in `.mcp.json` exposes bounded `helios_*` tools. Consequential operations are separate request/approval flows. Project MCP configuration from an untrusted branch must never be loaded in a credential-bearing workflow.
+The local MCP server in `.mcp.json` exposes bounded `helios_*` tools, including the read-only `helios_fabric_plan_get` that reports the sanitized HELIOS Fabric authority map, integration readiness, and gated phases from `config/fabric/helios-fabric.v1.json` (environment-variable names and presence only — values are never returned). Consequential operations are separate request/approval flows. Project MCP configuration from an untrusted branch must never be loaded in a credential-bearing workflow.
 
 ## Authoritative references
 

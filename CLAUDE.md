@@ -53,7 +53,7 @@ Run `/review-yolkster-cutover` or the `canonical-migration` agent before any rep
 
 The Python spoke provides analytics and engine recommendations behind a bounded process cap. Prototype engines never auto-execute. Hermes/XCore may route, simulate, score, reflect, and update redacted memory, but cannot grant itself cloud or production authority.
 
-The MCP server in `.mcp.json` exposes the governed `helios_*` tools for AI routing, status, providers, engines, infrastructure validation, absorption/fleet/auth status, Azure inventory, Foundry agents, and sanitized operator context. The Claude plugin under `plugins/helios-operator` uses the same MCP server and stores durable sanitized handoff state under the gitignored `.helios/operator` directory.
+The MCP server in `.mcp.json` exposes the governed `helios_*` tools for AI routing, status, providers, engines, infrastructure validation, absorption/fleet/auth status, Azure inventory, Foundry agents, sanitized operator context, and the read-only Fabric plan (`helios_fabric_plan_get`, mirrored by `helios-ai fabric-plan`). The Claude plugin under `plugins/helios-operator` uses the same MCP server and stores durable sanitized handoff state under the gitignored `.helios/operator` directory.
 
 ## Key architecture references
 
