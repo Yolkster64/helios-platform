@@ -95,7 +95,7 @@ jobs:
             fabric-plan.json
             config/fabric/helios-fabric.v1.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   mcp:
     name: Build HELIOS MCP Fabric tool
