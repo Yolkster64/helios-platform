@@ -1,4 +1,3 @@
-using System.Collections;
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -66,7 +65,6 @@ public static class HeliosFabricTools
             var canonical = root.GetProperty("canonical");
             var security = root.GetProperty("security");
             EnsureFailClosed(root, canonical, security);
-            IDictionary? environmentVariables = null;
 
             var integrations = new List<object>();
             var integrationStates = new Dictionary<string, string>(StringComparer.Ordinal);
