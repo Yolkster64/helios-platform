@@ -353,6 +353,26 @@ try {
         Assert-True ($twinCode -eq 2 -and $twinObject.failedPrecondition -match 'owner/name') 'Twin malformed repository must be a failed precondition naming the rule.'
         $twinOut = & $bash.Source $twin --json --skip-chain --tenant not-a-tenant --repository owner/repo 2>$null
         Assert-True ($LASTEXITCODE -eq 2 -and ((($twinOut -join "`n") | ConvertFrom-Json).failedPrecondition -match 'tenant id')) 'Twin malformed tenant must be a failed precondition naming the rule.'
+
+        # The twin's JSON escaper handles every raw-forbidden character, including the
+        # carriage return a CRLF-producing shell leaves in captured output.
+        $escaper = Join-Path $temp 'escape.sh'
+        $escapeLine = @((Get-Content -LiteralPath $twin) | Where-Object { $_ -match '^_cd_json_escape\(\)' })[0]
+        Set-Content -LiteralPath $escaper -Value $escapeLine -Encoding utf8
+        $escOut = Join-Path $temp 'esc.txt'
+        $escCmd = 'source "' + $escaper + '"; _cd_json_escape "$(printf ''a\r\nb\t"c\\'')" > "' + $escOut + '"'
+        & $bash.Source -c $escCmd
+        $escapedText = Get-Content -LiteralPath $escOut -Raw
+        Assert-True ($escapedText -notmatch "`r" -and $escapedText -match '\\r\\n') 'A carriage return must be escaped, never emitted raw.'
+        $pyCheck = Join-Path $temp 'esc_check.py'
+        @'
+import json, sys, pathlib
+s = pathlib.Path(sys.argv[1]).read_text()
+v = json.loads('"' + s + '"')
+print('OK' if v == 'a\r\nb\t"c\\' else 'BAD:' + repr(v))
+'@ | Set-Content -LiteralPath $pyCheck -Encoding utf8
+        $pyVerdict = (& python3 $pyCheck $escOut) -join ''
+        Assert-True ($pyVerdict -eq 'OK') "Escaped text must round-trip through a JSON parser (got $pyVerdict)."
     }
 
     # --- Dot-sourced contract ---------------------------------------------------------------------

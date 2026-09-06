@@ -85,7 +85,9 @@ _cd_mode='apply'; (( _cd_verify_only )) && _cd_mode='verify-only'
 
 _cd_log() { (( _cd_json )) || printf '%s\n' "$*"; }
 _cd_add_lane() { _cd_lane_names+=("$1"); _cd_lane_states+=("$2"); _cd_lane_details+=("$3"); _cd_lane_actions+=("${4:-}"); }
-_cd_json_escape() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\t'/\\t}"; printf '%s' "$s"; }
+# Every character JSON forbids raw inside a string: backslash, quote, newline, tab and
+# the carriage return CRLF-producing shells (Git Bash on Windows) leave in captured output.
+_cd_json_escape() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\r'/\\r}"; s="${s//$'\n'/\\n}"; s="${s//$'\t'/\\t}"; printf '%s' "$s"; }
 
 _cd_finish() {
   local exit_code="$1" precondition="${2:-}"
