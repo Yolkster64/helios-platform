@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "repositoryCurrent": "Yolkster64/helios-platform",
+  "repositoryTarget": "Yolkster64/helios-control",
+  "environments": [
+    {
+      "name": "azure-dev-plan",
+      "purpose": "Development OIDC login and exact-source what-if only",
+      "requiredReviewers": 0,
+      "allowedBranches": ["main", "release/*"],
+      "waitTimerMinutes": 0,
+      "applyAllowed": false
+    },
+    {
+      "name": "azure-dev-deploy",
+      "purpose": "Separately approved development deployment",
+      "requiredReviewers": 1,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 0,
+      "applyAllowed": true
+    },
+    {
+      "name": "azure-test-plan",
+      "purpose": "Test OIDC login and exact-source what-if only",
+      "requiredReviewers": 1,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 0,
+      "applyAllowed": false
+    },
+    {
+      "name": "azure-test-deploy",
+      "purpose": "Separately approved test deployment",
+      "requiredReviewers": 1,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 5,
+      "applyAllowed": true
+    },
+    {
+      "name": "azure-prod-plan",
+      "purpose": "Production what-if and evidence only",
+      "requiredReviewers": 2,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 10,
+      "applyAllowed": false
+    },
+    {
+      "name": "azure-prod-deploy",
+      "purpose": "Production deployment after independent authorization",
+      "requiredReviewers": 2,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 30,
+      "applyAllowed": false
+    },
+    {
+      "name": "sharepoint-governance",
+      "purpose": "Publish deterministic redacted governance evidence",
+      "requiredReviewers": 1,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 0,
+      "applyAllowed": true
+    },
+    {
+      "name": "collaboration-ops",
+      "purpose": "Post approved correlated Slack and Linear status events",
+      "requiredReviewers": 0,
+      "allowedBranches": ["main"],
+      "waitTimerMinutes": 0,
+      "applyAllowed": true
+    }
+  ],
+  "environmentReferences": {
+    "azure": [
+      "AZURE_CLIENT_ID",
+      "AZURE_TENANT_ID",
+      "AZURE_SUBSCRIPTION_ID",
+      "AZURE_RESOURCE_GROUP"
+    ],
+    "sharepoint": [
+      "MICROSOFT_TENANT_ID",
+      "SHAREPOINT_SITE_ID",
+      "SHAREPOINT_DRIVE_ID"
+    ],
+    "collaboration": [
+      "SLACK_BOT_TOKEN",
+      "SLACK_SIGNING_SECRET",
+      "LINEAR_API_KEY",
+      "LINEAR_WEBHOOK_SECRET"
+    ]
+  },
+  "rules": {
+    "valuesCommittedToRepository": false,
+    "secretReadbackAllowed": false,
+    "productionApplyEnabled": false,
+    "environmentCreationRequiresAdmin": true,
+    "protectionChangesRequireReview": true
+  }
+}
