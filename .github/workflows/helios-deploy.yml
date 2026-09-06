@@ -110,6 +110,7 @@ jobs:
             --template-file infra/main.bicep \
             --parameters infra/main.bicepparam \
             --result-format ResourceIdOnly \
+            --no-pretty-print \
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
@@ -117,9 +118,9 @@ jobs:
           modify_count=0
           delete_count=0
           if [ "$rc" -eq 0 ]; then
-            create_count="$(jq '[.properties.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
-            modify_count="$(jq '[.properties.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
-            delete_count="$(jq '[.properties.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
+            create_count="$(jq '[.changes[]? | select(.changeType=="Create")] | length' "$stdout_file")"
+            modify_count="$(jq '[.changes[]? | select(.changeType=="Modify")] | length' "$stdout_file")"
+            delete_count="$(jq '[.changes[]? | select(.changeType=="Delete")] | length' "$stdout_file")"
           fi
           jq -n \
             --arg phase "what-if" \
