@@ -22,7 +22,7 @@ PR #135's temporary `outcomeId: null` compatibility edit conflicted with merged 
 
 ## Easiest developer path
 
-Use an existing Codespace where available. Otherwise, creating one is an explicit GitHub compute operation subject to your account's quota/billing. For review, select branch `codex/setup-readiness-evidence` rather than the still-unfixed devcontainer on main. After the PR is reviewed and merged, ordinary new Codespaces can use main.
+Use an existing Codespace where available. Otherwise, creating one is an explicit GitHub compute operation subject to your account's quota/billing. When reviewing an unmerged setup change, select that pull request's head branch; after it merges, create new Codespaces from `main`.
 
 The browser is the client; builds/tests run inside the Codespace. A browser still consumes local resources. A Linux Codespace does not replace Windows for WinUI, device drivers, USB/VHDX execution, or physical device testing.
 
