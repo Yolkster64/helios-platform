@@ -12,7 +12,10 @@ where every page sits at the top level. Each copy is therefore rewritten here:
   URL (blob/ for links, raw/ for images, tree/ for directories);
 - a target that does not exist in the checkout is left untouched and reported, so
   a dead link in the source stays visible instead of being hidden by the rewrite;
-- absolute URLs, mailto: links, bare anchors and fenced code blocks are untouched.
+- a leading slash is repository-root-relative (as GitHub renders it), never a path on
+  the publishing machine;
+- absolute URLs, protocol-relative URLs, mailto: links, bare anchors and fenced code
+  blocks are untouched.
 
 The repository copy keeps its relative links (the repo-side link checks rely on
 them); only the wiki copy changes.
@@ -53,11 +56,16 @@ def page_name(source: str) -> str | None:
 
 def rewrite_target(source: str, target: str, repo: str, ref: str, root: str, is_image: bool):
     """Return (new_target, kind) where kind is one of page / url / kept / unresolved."""
-    if not target or target.startswith("#") or SCHEME_RE.match(target):
+    if not target or target.startswith("#") or target.startswith("//") or SCHEME_RE.match(target):
         return target, "kept"
     path, sep, fragment = target.partition("#")
-    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(source.replace(os.sep, "/")), path))
-    if resolved.startswith("../") or resolved == "..":
+    if path.startswith("/"):
+        # GitHub renders a leading slash as repository-root-relative; it is never a
+        # filesystem path on the machine running this script.
+        resolved = posixpath.normpath(path.lstrip("/"))
+    else:
+        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(source.replace(os.sep, "/")), path))
+    if resolved.startswith("../") or resolved in ("..", ".", "") or posixpath.isabs(resolved):
         return target, "unresolved"
     page = page_name(resolved)
     if page is not None and os.path.exists(os.path.join(root, resolved)):
@@ -139,6 +147,8 @@ def self_test() -> int:
             "[loop](architecture/REVIEW_LOOP.md#stopping-rule) [owner](OWNER_START_HERE.md) "
             "![logo](logo.png) [dir](../scripts/bootstrap/) [gone](missing.md) "
             "[abs](https://example.com/a.md) [anchor](#pick-your-path) [mail](mailto:x@example.com)\n"
+            "[rooted](/README.md#top) [rooted page](/docs/mcp/CLIENT_SETUP.md) [rooted gone](/nope/x.md) "
+            "[proto](//cdn.example.com/x.png) [dotdot](../../etc/passwd)\n"
             "```bash\n[not a link](../README.md)\n```\n"
             "[after fence](../README.md)\n"
         )
@@ -154,6 +164,10 @@ def self_test() -> int:
             "../scripts/bootstrap/": ("https://github.com/o/r/tree/main/scripts/bootstrap", "url"),
             "missing.md": ("missing.md", "unresolved"),
             "../README.md": ("https://github.com/o/r/blob/main/README.md", "url"),
+            "/README.md#top": ("https://github.com/o/r/blob/main/README.md#top", "url"),
+            "/docs/mcp/CLIENT_SETUP.md": ("Mcp-CLIENT_SETUP", "page"),
+            "/nope/x.md": ("/nope/x.md", "unresolved"),
+            "../../etc/passwd": ("../../etc/passwd", "unresolved"),
         }
         got = {target: (new, kind) for _, target, new, kind in rows}
         failures = [t for t, want in expect.items() if got.get(t) != want]
@@ -161,13 +175,14 @@ def self_test() -> int:
             print("self-test FAILED:", failures, rows)
             return 1
         if "[not a link](../README.md)" not in text or "(https://example.com/a.md)" not in text \
-                or "(#pick-your-path)" not in text or "(mailto:x@example.com)" not in text:
+                or "(#pick-your-path)" not in text or "(mailto:x@example.com)" not in text \
+                or "(//cdn.example.com/x.png)" not in text:
             print("self-test FAILED: untouched links changed")
             return 1
         if page_name("docs/architecture/nested/X.md") is not None or page_name("docs/PROJECT_SETUP.md") is not None:
             print("self-test FAILED: page_name maps an unpublished path")
             return 1
-    print("rewrite_links self-test: 8 rewrite rules, 4 untouched forms, page mapping — all as expected")
+    print("rewrite_links self-test: 12 rewrite rules, 5 untouched forms, page mapping — all as expected")
     return 0
 
 

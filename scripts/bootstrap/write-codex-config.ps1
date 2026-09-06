@@ -55,10 +55,11 @@ Copilot, so all three clients drive the same browser tool.
 
 .PARAMETER Json
 Emit ONE object and nothing else on stdout:
-  {script, generatedUtc, mode, path, repoRoot, mcpProject, fileExists, action, written,
-   message, exitCode}
+  {script, generatedUtc, mode, path, repoRoot, mcpProject, playwright, fileExists, action,
+   written, message, exitCode}
 action is one of create | append-section | replace-section | unchanged | refused |
-precondition-failed.
+precondition-failed. playwright is the pinned @playwright/mcp package rendered next to
+the helios table, or null when -SkipPlaywright was given.
 
 .EXAMPLE
 pwsh scripts/bootstrap/write-codex-config.ps1
