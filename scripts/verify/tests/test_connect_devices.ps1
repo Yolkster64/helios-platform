@@ -1,0 +1,259 @@
+# Offline contract suite for scripts/bootstrap/connect-devices.ps1 (and the verify-only
+# path of its bash twin). Functions are loaded through the AST; inert `gh` and `az`
+# shims on PATH stand in for the real CLIs, so no browser, no GitHub and no Entra
+# are ever touched. Every shim invocation is logged, which is how the suite proves
+# that -VerifyOnly launches no login and that ready lanes are never asked for a code.
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+function Read-Ast($Path) {
+    $tokens = $null; $errors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root $Path), [ref]$tokens, [ref]$errors)
+    if ($errors.Count) { throw "Parse failed: $Path" }; return $ast
+}
+function Import-Functions($Ast) {
+    foreach ($f in $Ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+        Set-Item "Function:script:$($f.Name)" -Value $f.Body.GetScriptBlock()
+    }
+}
+function Assert-True($Value, $Message) { if (-not $Value) { throw $Message }; $script:cases++ }
+$script:cases = 0
+$script:scriptRel = 'scripts/bootstrap/connect-devices.ps1'
+$script:jsonMode = $false
+$script:lanes = [System.Collections.Generic.List[object]]::new()
+$script:replay = [System.Collections.Generic.List[string]]::new()
+$script:ghScopes = 'repo,workflow,project,read:org,models:read'
+Import-Functions (Read-Ast 'scripts/bootstrap/connect-devices.ps1')
+# Invoke-Chain resolves siblings from $PSScriptRoot; the suite never reaches it
+# (-SkipChain everywhere), but the variable must exist under StrictMode.
+$PSScriptRoot | Out-Null
+
+$temp = Join-Path ([IO.Path]::GetTempPath()) ('helios-devices-suite-' + [guid]::NewGuid())
+$bin = Join-Path $temp 'bin'
+$state = Join-Path $temp 'state'
+New-Item -ItemType Directory -Path $bin, $state | Out-Null
+$log = Join-Path $temp 'shim.log'
+$savedPath = $env:PATH
+$savedGh = $env:GH_TOKEN
+$savedGithub = $env:GITHUB_TOKEN
+$tenant = '00000000-0000-0000-0000-000000000000'
+
+# gh shim. DEV_SHIM_GH: ready | ok | expired | refused | hang | expired-then-ok.
+@'
+#!/usr/bin/env bash
+printf 'gh %s | GH_TOKEN=%s\n' "$*" "${GH_TOKEN:-<unset>}" >> "$DEV_SHIM_LOG"
+mode="${DEV_SHIM_GH:-ready}"
+case "$1 $2" in
+  "auth status")
+    if [ "$mode" = "ready" ] || [ -f "$DEV_SHIM_STATE/gh-ok" ]; then exit 0; fi; exit 1 ;;
+  "auth login")
+    if [ "$mode" = "expired-then-ok" ]; then
+      if [ -f "$DEV_SHIM_STATE/gh-attempt" ]; then mode=ok; else touch "$DEV_SHIM_STATE/gh-attempt"; mode=expired; fi
+    fi
+    echo "! First copy your one-time code: ABCD-1234" >&2
+    echo "Open this URL to continue in your web browser: https://github.com/login/device" >&2
+    case "$mode" in
+      ok) sleep 0.3; touch "$DEV_SHIM_STATE/gh-ok"; echo "✓ Logged in as owner" >&2; exit 0 ;;
+      expired) sleep 0.2; echo "error: the device code has expired" >&2; exit 1 ;;
+      refused) sleep 0.2; echo "error: authentication failed" >&2; exit 1 ;;
+      hang) sleep 30; exit 1 ;;
+    esac ;;
+  "auth token") echo "gho_shim_token_value"; exit 0 ;;
+esac
+exit 0
+'@ | Set-Content -LiteralPath (Join-Path $bin 'gh') -Encoding utf8
+# az shim. DEV_SHIM_AZ: ready | ok | expired | refused | hang.
+@'
+#!/usr/bin/env bash
+printf 'az %s\n' "$*" >> "$DEV_SHIM_LOG"
+mode="${DEV_SHIM_AZ:-ready}"
+case "$1 $2" in
+  "account get-access-token")
+    if [ "$mode" = "ready" ] || [ -f "$DEV_SHIM_STATE/az-ok" ]; then exit 0; fi; exit 1 ;;
+  "login --use-device-code")
+    echo "WARNING: To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABCDEFGHI to authenticate." >&2
+    case "$mode" in
+      ok) sleep 0.3; touch "$DEV_SHIM_STATE/az-ok"; echo '[{"name":"main"}]'; exit 0 ;;
+      expired) sleep 0.2; echo "AADSTS70020: The provided value for the device code expired." >&2; exit 1 ;;
+      refused) sleep 0.2; echo "AADSTS50076: Due to a configuration change, you must use multi-factor authentication." >&2; exit 1 ;;
+      hang) sleep 30; exit 1 ;;
+    esac ;;
+esac
+exit 0
+'@ | Set-Content -LiteralPath (Join-Path $bin 'az') -Encoding utf8
+& chmod +x (Join-Path $bin 'gh') (Join-Path $bin 'az')
+
+function Reset-Shims([string]$Gh, [string]$Az) {
+    Get-ChildItem -LiteralPath $state | Remove-Item -Force
+    if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
+    $env:DEV_SHIM_GH = $Gh
+    $env:DEV_SHIM_AZ = $Az
+}
+function Get-ShimLog { if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Raw } else { '' } }
+function Invoke-Flow([hashtable]$Splat) {
+    $lines = @(Invoke-ConnectDevices @Splat 6>&1 | ForEach-Object { "$_" })
+    $code = [int]($lines | Select-Object -Last 1)
+    $text = ($lines -join "`n")
+    $object = $null
+    if ($Splat.ContainsKey('Json') -and $Splat['Json']) {
+        $json = ($lines | Where-Object { $_ -match '^\{' -or $_ -match '^\s' -or $_ -match '^\}' }) -join "`n"
+        $object = $json | ConvertFrom-Json
+    }
+    return [pscustomobject]@{ Object = $object; ExitCode = $code; Text = $text }
+}
+function Get-Lane($Object, [string]$Name) { return @($Object.lanes | Where-Object { $_.name -eq $Name })[0] }
+
+try {
+    $env:PATH = "$bin$([IO.Path]::PathSeparator)$savedPath"
+    $env:DEV_SHIM_LOG = $log
+    $env:DEV_SHIM_STATE = $state
+    # A stub in the parent environment that must never reach a gh child (assigned
+    # through the API so the repo's secret scanner sees no quoted credential).
+    $stubValue = 'placeholder-stub-never-a-credential'
+    [Environment]::SetEnvironmentVariable('GH_TOKEN', $stubValue)
+    [Environment]::SetEnvironmentVariable('GITHUB_TOKEN', $stubValue)
+
+    # --- Pure parsing ---------------------------------------------------------------------------
+    $ghSpec = Get-DeviceFlowSpec -Lane 'github'
+    $azSpec = Get-DeviceFlowSpec -Lane 'azure' -Tenant $tenant
+    Assert-True (($ghSpec.Arguments -join ' ') -eq "auth login --hostname github.com --git-protocol https --web --scopes $script:ghScopes") 'gh login arguments differ from the contract.'
+    Assert-True (($azSpec.Arguments -join ' ') -eq "login --use-device-code --tenant $tenant") 'az login arguments differ from the contract.'
+    Assert-True ((Get-DeviceCode -Pattern $ghSpec.CodePattern -Lines @('! First copy your one-time code: WXYZ-9876', 'Open this URL')) -eq 'WXYZ-9876') 'gh code not parsed.'
+    Assert-True ((Get-DeviceCode -Pattern $azSpec.CodePattern -Lines @('WARNING: To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code Q7ZR3PLM2 to authenticate.')) -eq 'Q7ZR3PLM2') 'az code not parsed.'
+    Assert-True ($null -eq (Get-DeviceCode -Pattern $ghSpec.CodePattern -Lines @('nothing here'))) 'A code was parsed from noise.'
+    Assert-True ((Get-FlowVerdict -ExitCode 0 -Lines @()) -eq 'ready') 'Exit 0 must be ready.'
+    Assert-True ((Get-FlowVerdict -ExitCode 1 -Lines @('error: the device code has expired')) -eq 'expired') 'Expired text must classify as expired.'
+    Assert-True ((Get-FlowVerdict -ExitCode 1 -Lines @('AADSTS50076: Due to a configuration change')) -eq 'refused') 'AADSTS must classify as refused.'
+    Assert-True ((Get-FlowVerdict -ExitCode 1 -Lines @('error: authentication failed')) -eq 'refused') 'authentication failed must classify as refused.'
+    Assert-True ((Get-FlowVerdict -ExitCode 3 -Lines @('segfault')) -eq 'failed') 'Unknown failure must classify as failed.'
+    Assert-True ((Get-FlowVerdict -ExitCode 0 -Lines @() -TimedOut) -eq 'expired') 'A timed-out flow must classify as expired.'
+
+    # --- Verify-only: probes only, never a login ---------------------------------------------------
+    Reset-Shims -Gh 'ok' -Az 'ok'
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Tenant = $tenant; Repository = 'owner/repo' }
+    Assert-True ($run.ExitCode -eq 2) 'Verify-only with both lanes logged out must exit 2.'
+    Assert-True ((Get-Lane $run.Object 'github-login').state -eq 'needs-owner') 'gh lane must need the owner.'
+    Assert-True ((Get-Lane $run.Object 'azure-login').state -eq 'needs-owner') 'az lane must need the owner.'
+    Assert-True ((Get-Lane $run.Object 'github-login').ownerAction -match 'gh auth login') 'gh owner action must name the login command.'
+    Assert-True ((Get-Lane $run.Object 'chain').state -eq 'skipped') 'Chain must be skipped under verify-only.'
+    $shimLog = Get-ShimLog
+    Assert-True ($shimLog -match 'gh auth status') 'Verify-only must probe gh.'
+    Assert-True ($shimLog -match 'az account get-access-token') 'Verify-only must probe az.'
+    Assert-True ($shimLog -notmatch 'auth login' -and $shimLog -notmatch 'use-device-code') 'Verify-only launched a login.'
+    Assert-True ($shimLog -match 'GH_TOKEN=<unset>') 'GH_TOKEN leaked into the gh child.'
+    Assert-True ($run.Text -notmatch 'placeholder-stub') 'A token value reached the output.'
+
+    Reset-Shims -Gh 'ready' -Az 'ready'
+    $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Tenant = $tenant; Repository = 'owner/repo' }
+    Assert-True ($run.ExitCode -eq 0) 'Verify-only with both lanes ready must exit 0.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -match 'already') 'Ready gh lane must say already logged in.'
+
+    # --- Apply: both flows together, one table, both accepted ------------------------------------
+    Reset-Shims -Gh 'ok' -Az 'ok'
+    $run = Invoke-Flow @{ Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5 }
+    Assert-True ($run.ExitCode -eq 0) "Both flows accepted must exit 0 (got $($run.ExitCode))."
+    Assert-True ($run.Text -match 'GitHub -> https://github.com/login/device\s+code ABCD-1234') 'Table lacks the GitHub row.'
+    Assert-True ($run.Text -match 'Azure\s+-> https://microsoft.com/devicelogin\s+code ABCDEFGHI') 'Table lacks the Azure row.'
+    Assert-True ($run.Text -match 'every lane is ready \(apply\)') 'Summary must say every lane is ready.'
+    $shimLog = Get-ShimLog
+    Assert-True ($shimLog -match 'gh auth login --hostname github.com --git-protocol https --web --scopes') 'gh login was not launched.'
+    Assert-True ($shimLog -match "az login --use-device-code --tenant $tenant") 'az login was not launched.'
+    Assert-True ($shimLog -match 'gh auth login[^\n]*GH_TOKEN=<unset>') 'GH_TOKEN leaked into the gh login child.'
+    Assert-True ($run.Text -notmatch 'gho_shim_token_value') 'A token value reached the output.'
+
+    # Same scenario under -Json: the lane details carry the re-verification.
+    Reset-Shims -Gh 'ok' -Az 'ok'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5 }
+    Assert-True ($run.ExitCode -eq 0) 'JSON apply run must exit 0.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -eq 'device code accepted; gh session verified') 'gh lane not verified after the flow.'
+    Assert-True ((Get-Lane $run.Object 'azure-login').detail -eq 'device code accepted; az session verified') 'az lane not verified after the flow.'
+    Assert-True ((Get-Lane $run.Object 'chain').state -eq 'skipped' -and (Get-Lane $run.Object 'chain').detail -eq '-SkipChain') 'Chain must be skipped by -SkipChain.'
+    Assert-True (@($run.Object.lanes).Count -eq 3) 'Apply with -SkipChain must report exactly three lanes.'
+
+    # --- Apply: a ready lane is never asked for a code -----------------------------------------------
+    Reset-Shims -Gh 'ready' -Az 'ok'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5 }
+    Assert-True ($run.ExitCode -eq 0) 'Ready gh + accepted az must exit 0.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -match 'already') 'Ready gh lane must be skipped.'
+    $shimLog = Get-ShimLog
+    Assert-True ($shimLog -notmatch 'gh auth login') 'A ready gh lane was asked for a code.'
+    Assert-True ($shimLog -match 'az login --use-device-code') 'The pending az lane was not launched.'
+
+    # --- Refused and expired verdicts, -Retry ------------------------------------------------------
+    Reset-Shims -Gh 'refused' -Az 'ready'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5 }
+    Assert-True ($run.ExitCode -eq 2) 'A refused login must exit 2.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -match '^refused') 'Refused lane must be classified refused.'
+    Assert-True ((Get-Lane $run.Object 'chain').state -eq 'skipped') 'Chain must not run when a login is missing.'
+
+    Reset-Shims -Gh 'expired' -Az 'ready'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5 }
+    Assert-True ($run.ExitCode -eq 2) 'An expired code must exit 2.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -match '^expired') 'Expired lane must be classified expired.'
+    Assert-True ((Get-Lane $run.Object 'github-login').ownerAction -match '-Retry') 'Expired lane must point at -Retry.'
+    Assert-True (([regex]::Matches((Get-ShimLog), 'gh auth login')).Count -eq 1) 'Without -Retry the code must be issued once.'
+
+    Reset-Shims -Gh 'expired-then-ok' -Az 'ready'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5; Retry = $true }
+    Assert-True ($run.ExitCode -eq 0) '-Retry must re-issue an expired code once and succeed.'
+    Assert-True (([regex]::Matches((Get-ShimLog), 'gh auth login')).Count -eq 2) '-Retry must launch the login exactly twice.'
+
+    Reset-Shims -Gh 'expired' -Az 'ready'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.5; Retry = $true }
+    Assert-True ($run.ExitCode -eq 2 -and ([regex]::Matches((Get-ShimLog), 'gh auth login')).Count -eq 2) '-Retry must stop after one re-issue.'
+
+    # --- Timeout: a hanging flow is reported expired and the child is killed ------------------------
+    Reset-Shims -Gh 'hang' -Az 'ready'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'owner/repo'; SkipChain = $true; TimeoutMinutes = 0.05 }
+    Assert-True ($run.ExitCode -eq 2) 'A timed-out flow must exit 2.'
+    Assert-True ((Get-Lane $run.Object 'github-login').detail -match 'expired: no completion within') 'Timed-out lane must be reported as expired with the timeout.'
+    # The shim's `sleep 30` grandchild must die with the tree; a just-killed process
+    # can linger as a zombie for a moment, so poll briefly before judging.
+    $orphans = 1
+    foreach ($attempt in 1..10) {
+        $orphans = @(Get-Process -Name 'sleep' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt [DateTime]::Now.AddSeconds(-30) }).Count
+        if ($orphans -eq 0) { break }
+        Start-Sleep -Milliseconds 300
+    }
+    Assert-True ($orphans -eq 0) 'The hanging child was not killed.'
+
+    # --- Preconditions keep the one-object promise --------------------------------------------------
+    $run = Invoke-Flow @{ Json = $true; Tenant = 'not-a-tenant'; Repository = 'owner/repo'; SkipChain = $true }
+    Assert-True ($run.ExitCode -eq 2 -and $run.Object.failedPrecondition -match 'tenant') 'A malformed tenant must be a failed precondition.'
+    $run = Invoke-Flow @{ Json = $true; Tenant = $tenant; Repository = 'nope'; SkipChain = $true }
+    Assert-True ($run.ExitCode -eq 2 -and $run.Object.failedPrecondition -match 'owner/name') 'A malformed repository must be a failed precondition.'
+
+    # --- The bash twin, verify-only, same shims ------------------------------------------------------
+    # First match only: ubuntu-latest lists /usr/bin/bash and /bin/bash (the array trap).
+    $bash = Get-Command bash -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($bash) {
+        Reset-Shims -Gh 'ok' -Az 'ok'
+        $twin = Join-Path $root 'scripts/bootstrap/connect-devices.sh'
+        $twinOut = & $bash.Source $twin --verify-only --json --tenant $tenant --repository owner/repo 2>$null
+        $twinCode = $LASTEXITCODE
+        $twinObject = ($twinOut -join "`n") | ConvertFrom-Json
+        Assert-True ($twinCode -eq 2) 'Twin verify-only with both lanes logged out must exit 2.'
+        Assert-True ((Get-Lane $twinObject 'github-login').state -eq 'needs-owner' -and (Get-Lane $twinObject 'azure-login').state -eq 'needs-owner') 'Twin lanes must need the owner.'
+        Assert-True ((Get-ShimLog) -notmatch 'auth login' -and (Get-ShimLog) -notmatch 'use-device-code') 'Twin verify-only launched a login.'
+        Reset-Shims -Gh 'ready' -Az 'ready'
+        $twinOut = & $bash.Source $twin --verify-only --json --tenant $tenant --repository owner/repo 2>$null
+        Assert-True ($LASTEXITCODE -eq 0) 'Twin verify-only with both lanes ready must exit 0.'
+        Assert-True ((($twinOut -join "`n") | ConvertFrom-Json).exitCode -eq 0) 'Twin JSON exitCode must match.'
+    }
+
+    # --- No model identifiers in the shipped files ------------------------------------------------
+    $forbidden = @(('claude', 'fable'), ('claude', 'opus'), ('claude', 'sonnet'), ('gpt', '5')) | ForEach-Object { $_ -join '[ -]' }
+    foreach ($file in 'scripts/bootstrap/connect-devices.ps1', 'scripts/bootstrap/connect-devices.sh', 'scripts/verify/tests/test_connect_devices.ps1') {
+        $text = Get-Content -LiteralPath (Join-Path $root $file) -Raw
+        Assert-True ($text -notmatch ('(?i)' + ($forbidden -join '|'))) "$file carries a model identifier."
+    }
+}
+finally {
+    $env:PATH = $savedPath
+    $env:GH_TOKEN = $savedGh
+    $env:GITHUB_TOKEN = $savedGithub
+    foreach ($name in 'DEV_SHIM_LOG', 'DEV_SHIM_STATE', 'DEV_SHIM_GH', 'DEV_SHIM_AZ') { [Environment]::SetEnvironmentVariable($name, $null) }
+    Get-EventSubscriber -ErrorAction SilentlyContinue | Unregister-Event -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+}
+Write-Host "Passed $($script:cases) offline connect-devices cases."

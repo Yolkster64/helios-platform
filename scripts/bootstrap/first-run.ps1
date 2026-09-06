@@ -66,6 +66,11 @@ Forwarded to auto-login.ps1 (classic IMDS-only VMs expose no managed-identity
 endpoint variable, so the doctor tries `az login --identity` only when told to).
 Ignored under -VerifyOnly (step 2 does not run).
 
+.PARAMETER Connect
+Step 0: run scripts/bootstrap/connect-devices.ps1 -SkipChain first (both device
+codes in one sitting, console inherited), then continue the chain with step 1's own
+auth prompts skipped. Ignored under -VerifyOnly, -Json, or without a console.
+
 .EXAMPLE
 pwsh scripts/bootstrap/first-run.ps1
 
@@ -88,7 +93,9 @@ param(
 
     [switch]$SkipSetup,
 
-    [switch]$UseManagedIdentity
+    [switch]$UseManagedIdentity,
+
+    [switch]$Connect
 )
 
 Set-StrictMode -Version Latest
@@ -193,6 +200,25 @@ try {
         $internalFailure = $true
     }
 
+    # --- 0. -Connect: both device codes in one sitting -------------------------------
+    # connect-devices.ps1 -SkipChain, console inherited: this script IS the chain, so
+    # only the logins run here and step 1 then skips its own auth prompts. Never
+    # under -VerifyOnly (a read-only pass changes no cached identity) and never
+    # without a console (a device code needs a human).
+    $connectDone = $false
+    if ($Connect) {
+        if ($VerifyOnly) { Write-Report '   -Connect ignored under -VerifyOnly (a read-only pass performs no login).' }
+        elseif ([Console]::IsInputRedirected -or $Json) { Write-Report '   -Connect needs a console (not -Json, stdin not redirected); the logins stay checklist items.' }
+        elseif (-not $pwshExe) { Write-Report '   -Connect needs pwsh; the logins stay checklist items.' }
+        else {
+            Write-Report ''
+            Write-Report '-- 0. connect-devices (pwsh scripts/bootstrap/connect-devices.ps1 -SkipChain) --'
+            & $pwshExe -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/connect-devices.ps1') -SkipChain
+            Write-Report "   connect-devices exited $LASTEXITCODE (0 = both logins ready; 2 = a lane still needs you - see its table)"
+            $connectDone = $true
+        }
+    }
+
     # --- 1. cloud-shell-setup, through its .ps1 twin ---------------------------------
     # The twin prefers Git Bash on Windows and refuses the System32 WSL launcher (it
     # cannot open this checkout's Windows path), prints the exact steps and exits 2
@@ -202,7 +228,7 @@ try {
     $setupArgs = @(if ($VerifyOnly) { '-VerifyOnly' } else { '-SkipSmoke' })
     # A device-code login blocks on a human typing the code: redirected stdin, or
     # stdout captured for -Json, means the login becomes a checklist item instead.
-    if (-not $VerifyOnly -and ([Console]::IsInputRedirected -or $Json)) { $setupArgs += '-SkipAuth' }
+    if (-not $VerifyOnly -and ([Console]::IsInputRedirected -or $Json -or $connectDone)) { $setupArgs += '-SkipAuth' }
     Write-Report ''
     Write-Report ('-- 1. cloud-shell-setup (pwsh {0} {1}) --' -f $setupScript, ($setupArgs -join ' '))
     if ($pwshExe) {
@@ -372,6 +398,11 @@ try {
     }
 
     # --- logins ---
+    # One sitting for both codes first; the two raw items after it are the by-hand path.
+    if ((Test-NeedsOwner 'gh') -or (Test-NeedsOwner 'az')) {
+        Add-Item -Title 'GitHub + Azure device codes in one sitting' -Lines @(
+            'pwsh scripts/bootstrap/connect-devices.ps1   # both codes on one screen (verify-first), then the chain; bash twin: bash scripts/bootstrap/connect-devices.sh; or: pwsh scripts/bootstrap/first-run.ps1 -Connect')
+    }
     if (Test-NeedsOwner 'gh') {
         $lines = @($ghLogin + '   # device code: gh prints a URL and a one-time code')
         if ((Get-LaneState 'rest:github') -eq 'ready') {
