@@ -9,8 +9,6 @@ on:
 # write access or its createComment call 403s.
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   ai-security-review:
@@ -104,11 +102,7 @@ jobs:
       - name: Extract Changed Files
         shell: pwsh -Command "& '{0}'"
         run: |
-          git diff --name-only HEAD~1 HEAD | Tee-Object -Variable changedFiles
-          Write-Host "Changed files:"
-          foreach ($file in $changedFiles) {
-            Write-Host "  - $file"
-          }
+          python3 scripts/validation/ai_code_review_changed_files.py
 
       - name: Check for Refactoring Opportunities
         shell: pwsh -Command "& '{0}'"
@@ -204,7 +198,7 @@ jobs:
   approval-gate:
     runs-on: ubuntu-latest
     name: Approval Gate
-    needs: [ai-security-review, code-quality-check]
+    needs: [ai-security-review, ai-codex-suggestions, code-quality-check]
     if: always()
     
     steps:
@@ -213,10 +207,16 @@ jobs:
           echo "AI review pipeline complete"
           echo "Status summary:"
           echo "  - Security Review: ${{ needs.ai-security-review.result }}"
+          echo "  - Codex Suggestions: ${{ needs.ai-codex-suggestions.result }}"
           echo "  - Code Quality: ${{ needs.code-quality-check.result }}"
           
           if [ "${{ needs.ai-security-review.result }}" != "success" ]; then
             echo "::error::Security review failed"
+            exit 1
+          fi
+
+          if [ "${{ needs.ai-codex-suggestions.result }}" != "success" ]; then
+            echo "::error::Codex suggestions job failed"
             exit 1
           fi
           
@@ -231,29 +231,53 @@ jobs:
     # Waits for the gate jobs and reports their REAL results — a static "all
     # verified" comment posted in parallel with the gates was misleading whenever
     # a gate later failed.
-    needs: [ai-security-review, code-quality-check, approval-gate]
+    needs: [ai-security-review, ai-codex-suggestions, code-quality-check, approval-gate]
     if: ${{ always() && github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Classify PR comment scope
+        id: comment-scope
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          head_repo="$(python3 -c "import json, os; print((((json.load(open(os.environ['EVENT_PATH'], encoding='utf-8')).get('pull_request') or {}).get('head') or {}).get('repo') or {}).get('full_name', ''))")"
+          if [ "${head_repo}" = "${REPO}" ]; then
+            echo "same_repo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "same_repo=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fork PR notice
+        if: ${{ steps.comment-scope.outputs.same_repo != 'true' }}
+        run: echo "::notice::Skipping PR comment update for external pull requests because write-scoped comment APIs are restricted."
 
       - name: Generate Review Comment
+        if: ${{ steps.comment-scope.outputs.same_repo == 'true' }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const mark = r => r === 'success' ? '✅' : r === 'skipped' ? '⏭️' : '❌';
             const security = '${{ needs.ai-security-review.result }}';
+            const suggestions = '${{ needs.ai-codex-suggestions.result }}';
             const quality = '${{ needs.code-quality-check.result }}';
             const gate = '${{ needs.approval-gate.result }}';
-            const allGreen = [security, quality, gate].every(r => r === 'success');
-            const comment = `
+            const allGreen = [security, suggestions, quality, gate].every(r => r === 'success');
+            const marker = '<!-- helios-ai-code-review -->';
+            const comment = `${marker}
             ## 🤖 AI Integration Pipeline Results
 
             **Pipeline Status**: ${allGreen ? '✅ Complete' : '⚠️ Attention needed'}
 
             ### Analysis Summary
             - ${mark(security)} Security scan: ${security}
+            - ${mark(suggestions)} Codex suggestions: ${suggestions}
             - ${mark(quality)} Code quality: ${quality}
             - ${mark(gate)} Approval gate: ${gate}
             
@@ -269,12 +293,28 @@ jobs:
             - Approve if all checks pass
             - Request changes if issues found
             
-            [AI Integration Docs](../../ai-integration/README.md)
+            [AI Integration Docs](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/ai-integration/README.md)
             `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+
+            const existing = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              issue_number: context.issue.number,
+              per_page: 100
             });
+            const prior = existing.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
+            if (prior) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prior.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
