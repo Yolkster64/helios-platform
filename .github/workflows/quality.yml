@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# Read-only by default; the one job that needs more (security-scan posts commit
+# statuses) widens its own grant below.
+permissions:
+  contents: read
+
 jobs:
   powershell-lint:
     name: PowerShell Linting & Analysis
@@ -76,35 +81,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      # Blocking: the previous version counted errors inside a `find | while`
+      # subshell (the count never reached the parent shell, so the step could not
+      # fail) and sat behind continue-on-error. Now the first invalid file names
+      # itself in an ::error annotation and xargs stops there (exit 255 aborts the
+      # remaining invocations). *.code-workspace is JSON too (workspace.code-workspace).
       - name: Validate JSON files
         run: |
-          error_count=0
-          find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read file; do
-            echo "Validating $file"
-            if ! python3 -m json.tool "$file" > /dev/null 2>&1; then
-              echo "❌ Invalid JSON: $file"
-              error_count=$((error_count + 1))
-            fi
-          done
-          
-          if [ $error_count -eq 0 ]; then
-            echo "✅ All JSON files valid"
-          else
-            echo "⚠️  Found $error_count invalid JSON files (non-blocking)"
-          fi
-        continue-on-error: true
+          set -euo pipefail
+          find . \( -name '*.json' -o -name '*.code-workspace' \) \
+            -not -path './node_modules/*' -not -path './.git/*' \
+            -not -path './bin/*' -not -path './obj/*' -print0 |
+            xargs -0 -n1 sh -c 'python3 -m json.tool "$1" >/dev/null 2>&1 || { echo "::error file=$1::invalid JSON: $1"; exit 255; }' _
+          echo "✅ All JSON files valid"
 
   security-scan:
-    name: Security Scanning
+    # "(quality)" suffix: ci-validation.yml publishes a job named "Security Scanning"
+    # too, and two checks sharing one name are indistinguishable in the PR checks
+    # list and in rulesets. Neither name is required by .github/rulesets/main.json.
+    name: Security Scanning (quality)
     runs-on: ubuntu-latest
+    # super-linter posts one commit status per linter (MULTI_STATUS) with
+    # GITHUB_TOKEN, which needs statuses: write; the read grant is for checkout.
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run security scan
         uses: github/super-linter/slim@v4
         env:
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Changed files only (measured on PR #208): with the default whole-codebase
+          # scope the per-linter statuses this job now publishes report the legacy
+          # src/core status documents and tests/UAT.md - none of them touched by the
+          # PR under review - so every PR read red for the same pre-existing lines.
+          # Scoped to the diff against DEFAULT_BRANCH, a status names the PR's own
+          # files; the legacy backlog is issue #144 (legacy removal).
+          VALIDATE_ALL_CODEBASE: false
+          # The repo's own markdownlint baseline (.markdownlint.json at the root, the
+          # one the dedicated markdown-lint job above applies) instead of super-linter's
+          # bundled template - one rule set for both jobs, so the two cannot disagree
+          # about the same file. Other linters keep super-linter's defaults (a missing
+          # rules file falls back to the bundled template).
+          LINTER_RULES_PATH: .
+          MARKDOWN_CONFIG_FILE: .markdownlint.json
           VALIDATE_CSHARP: true
           VALIDATE_JSON: true
           VALIDATE_MARKDOWN: true
