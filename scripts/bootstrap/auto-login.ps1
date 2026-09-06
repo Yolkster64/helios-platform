@@ -858,9 +858,12 @@ function Invoke-HeliosAutoLogin {
         if ($trimmed -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$') { return [pscustomobject]@{ Ok = $true; Kind = 'resource-name'; Note = 'a bare Foundry resource name (resolved to https://<name>.services.ai.azure.com/anthropic)' } }
         $parsed = $null
         if ([uri]::TryCreate($trimmed, [System.UriKind]::Absolute, [ref]$parsed) -and $parsed.Scheme -eq 'https' -and $parsed.Host) {
+            # Userinfo is rejected by TryResolveBaseUri too: a credential embedded in the
+            # resource value is never accepted, only the key or the Entra token.
+            if ($parsed.UserInfo) { return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'an https URL carrying userinfo (user:password@host) — a credential never belongs in the resource value; CreateAnthropicFoundry rejects it' } }
             return [pscustomobject]@{ Ok = $true; Kind = 'https-url'; Note = 'an absolute https base URL (normalized to its /anthropic base)' }
         }
-        return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'neither a Foundry resource name (letters, digits and hyphens, 1-64 characters, leading letter or digit) nor an absolute https URL' }
+        return [pscustomobject]@{ Ok = $false; Kind = 'rejected'; Note = 'neither a Foundry resource name (letters, digits and hyphens, 1-64 characters, leading letter or digit) nor an absolute https URL without userinfo' }
     }
     # The only provider types whose factory path calls SecretResolver at all, and the
     # two among them whose key is OPTIONAL because the factory falls back to Entra ID —

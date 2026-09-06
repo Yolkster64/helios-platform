@@ -255,12 +255,15 @@ public class AnthropicFoundryAgentTests
     [InlineData("under_score")]
     [InlineData("/relative/path")]
     [InlineData("x.services.ai.azure.com/anthropic")] // dotted host without scheme
+    [InlineData("https://user:dummy-not-a-credential@x.services.ai.azure.com/anthropic")] // userinfo never rides in the resource value
+    [InlineData("https://user@x.services.ai.azure.com/anthropic")]
     public void TryResolveBaseUri_Malformed_HintsNamingTheSource(string input)
     {
         Assert.False(AnthropicFoundryAgent.TryResolveBaseUri(input, "ANTHROPIC_FOUNDRY_RESOURCE", out var baseUri, out var hint));
         Assert.Null(baseUri);
         Assert.Contains("ANTHROPIC_FOUNDRY_RESOURCE", hint);
         Assert.Contains("https", hint);
+        Assert.DoesNotContain("dummy-not-a-credential", hint);
     }
 
     // ---- (e) Unconfigured: no HTTP, hint surfaces --------------------------------------
@@ -288,6 +291,41 @@ public class AnthropicFoundryAgentTests
         Assert.Equal(ProviderReadiness.Unconfigured, agent.Readiness);
         Assert.Contains(envName, agent.ConfigurationHint);
         Assert.Contains("https base URL", agent.ConfigurationHint);
+    }
+
+    [Fact]
+    public void Factory_BlankEndpointEnv_NoBaseUrl_IsUnconfigured_NamingTheConfigProperty()
+    {
+        // A declared-blank endpointEnv names no variable: the factory must not read the
+        // variable "" and the hint must name the config property, not an empty name.
+        var agent = Build(new ProviderOptions { Type = "anthropic-foundry", Model = "d", EndpointEnv = "" }, "some-key");
+
+        Assert.Equal(ProviderReadiness.Unconfigured, agent.Readiness);
+        Assert.Contains("endpointEnv", agent.ConfigurationHint);
+        Assert.Contains("ANTHROPIC_FOUNDRY_RESOURCE", agent.ConfigurationHint);
+        Assert.Contains("baseUrl", agent.ConfigurationHint);
+        Assert.DoesNotContain("Set  ", agent.ConfigurationHint);
+    }
+
+    [Fact]
+    public void Factory_BlankEndpointEnv_WithBaseUrl_StillResolves()
+    {
+        var agent = Build(new ProviderOptions { Type = "anthropic-foundry", Model = "d", EndpointEnv = "", BaseUrl = "https://x.services.ai.azure.com" }, "key");
+
+        Assert.Equal(ProviderReadiness.Ready, agent.Readiness);
+        Assert.Null(agent.ConfigurationHint);
+    }
+
+    [Fact]
+    public void Factory_AzureOpenAi_BlankEndpointEnv_IsUnconfigured_NamingTheConfigProperty()
+    {
+        // The same guard applies to the provider whose contract this one mirrors.
+        var agent = Assert.IsAssignableFrom<ProviderAgentBase>(
+            ProviderFactory.Create("azure-openai", new ProviderOptions { Type = "azure-openai", Model = "d", EndpointEnv = "" }, new FakeSecrets(null)));
+
+        Assert.Equal(ProviderReadiness.Unconfigured, agent.Readiness);
+        Assert.Contains("endpointEnv", agent.ConfigurationHint);
+        Assert.Contains("AZURE_OPENAI_ENDPOINT", agent.ConfigurationHint);
     }
 
     [Fact]

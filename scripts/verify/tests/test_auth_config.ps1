@@ -334,6 +334,7 @@ try {
         @{ V = 'https://helios-aijcut.services.ai.azure.com/anthropic/v1/messages'; Ok = $true; Kind = 'https-url' },
         @{ V = 'HTTPS://helios-aijcut.services.ai.azure.com'; Ok = $true; Kind = 'https-url' },
         @{ V = 'http://helios-aijcut.services.ai.azure.com/anthropic'; Ok = $false; Kind = 'rejected' },
+        @{ V = 'https://user:dummy-not-a-credential@helios-aijcut.services.ai.azure.com/anthropic'; Ok = $false; Kind = 'rejected' },
         @{ V = 'helios aijcut'; Ok = $false; Kind = 'rejected' },
         @{ V = 'helios_aijcut'; Ok = $false; Kind = 'rejected' },
         @{ V = '-helios'; Ok = $false; Kind = 'rejected' },

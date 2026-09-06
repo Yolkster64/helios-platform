@@ -132,9 +132,10 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
     /// Turns the configured endpoint value into the Foundry base URI
     /// (<c>https://&lt;resource&gt;.services.ai.azure.com/anthropic</c>) or a hint saying why
     /// it cannot. Accepts a bare resource name (<c>helios-aijcut</c>) or an absolute https
-    /// URL, which is normalized: trailing slashes dropped, a pasted <c>/v1/messages</c>
-    /// target URI trimmed back to its base, <c>/anthropic</c> appended when missing,
-    /// query/fragment discarded. Never throws — bad configuration is a readiness state.
+    /// URL without userinfo, which is normalized: trailing slashes dropped, a pasted
+    /// <c>/v1/messages</c> target URI trimmed back to its base, <c>/anthropic</c> appended
+    /// when missing, query/fragment discarded. Never throws — bad configuration is a
+    /// readiness state.
     /// </summary>
     /// <param name="sourceName">Where the value came from (env var name or config key), for the hint.</param>
     public static bool TryResolveBaseUri(
@@ -151,7 +152,7 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
             return false;
         }
 
-        hint = $"{sourceName} is neither a Foundry resource name nor an absolute https URL " +
+        hint = $"{sourceName} is neither a Foundry resource name nor an absolute https URL without userinfo " +
                "(expected e.g. 'helios-aijcut' or 'https://helios-aijcut.services.ai.azure.com/anthropic'); fix it to enable this provider.";
 
         if (trimmed.Any(char.IsWhiteSpace))
@@ -167,9 +168,13 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
             return true;
         }
 
+        // Userinfo (user:password@host) is rejected outright: a credential embedded in a
+        // resource value would ride along in config or an env var, and the SDK would send
+        // it — the only credentials this provider accepts are the key and the Entra token.
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
             || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrEmpty(uri.Host))
+            || string.IsNullOrEmpty(uri.Host)
+            || !string.IsNullOrEmpty(uri.UserInfo))
         {
             return false;
         }

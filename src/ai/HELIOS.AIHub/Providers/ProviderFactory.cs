@@ -68,10 +68,11 @@ public static class ProviderFactory
     {
         const string displayName = "Claude (Microsoft Foundry)";
         var endpointEnv = provider.EndpointEnv ?? AnthropicFoundryAgent.DefaultEndpointEnv;
-        var resource = Environment.GetEnvironmentVariable(endpointEnv);
 
         // Explicit baseUrl in config overrides the env-derived base URL; without either
-        // the provider is Unconfigured and the hint names the env var to set.
+        // the provider is Unconfigured and the hint names the env var to set. A
+        // declared-blank endpointEnv names no variable at all — the hint names the
+        // config defect instead of reading a variable called "".
         string? candidate;
         string source;
         if (!string.IsNullOrWhiteSpace(provider.BaseUrl))
@@ -79,7 +80,12 @@ public static class ProviderFactory
             candidate = provider.BaseUrl;
             source = $"baseUrl for provider '{name}' in config/aihub.json";
         }
-        else if (!string.IsNullOrWhiteSpace(resource))
+        else if (string.IsNullOrWhiteSpace(endpointEnv))
+        {
+            return new AnthropicFoundryAgent(name, displayName, provider.Model,
+                BlankEndpointEnvHint(name, AnthropicFoundryAgent.DefaultEndpointEnv) + ", or set baseUrl.");
+        }
+        else if (Environment.GetEnvironmentVariable(endpointEnv) is { } resource && !string.IsNullOrWhiteSpace(resource))
         {
             candidate = resource;
             source = endpointEnv;
@@ -140,13 +146,27 @@ public static class ProviderFactory
             model => client.GetChatClient(model).AsIChatClient());
     }
 
+    /// <summary>
+    /// Hint for an entry whose <c>endpointEnv</c> is declared blank: it names no variable,
+    /// so the factory must not read the variable "" — the repair is the config property.
+    /// </summary>
+    private static string BlankEndpointEnvHint(string name, string defaultEnv) =>
+        $"providers.{name}.endpointEnv in config/aihub.json is blank — set it to a variable name " +
+        $"(or remove the property to use {defaultEnv})";
+
     private static IChatProviderAgent CreateAzureOpenAi(string name, ProviderOptions provider, ISecretResolver secrets)
     {
-        var endpoint = Environment.GetEnvironmentVariable(provider.EndpointEnv ?? "AZURE_OPENAI_ENDPOINT");
+        var endpointEnv = provider.EndpointEnv ?? "AZURE_OPENAI_ENDPOINT";
+        if (string.IsNullOrWhiteSpace(endpointEnv))
+        {
+            return new ChatClientAgent(name, "Azure OpenAI", provider.Model, null,
+                BlankEndpointEnvHint(name, "AZURE_OPENAI_ENDPOINT") + ".");
+        }
+        var endpoint = Environment.GetEnvironmentVariable(endpointEnv);
         if (string.IsNullOrWhiteSpace(endpoint))
         {
             return new ChatClientAgent(name, "Azure OpenAI", provider.Model, null,
-                "Set AZURE_OPENAI_ENDPOINT (infra output 'openAiEndpoint').");
+                $"Set {endpointEnv} (infra output 'openAiEndpoint').");
         }
 
         // A malformed endpoint value is "unconfigured", not a construction crash — one

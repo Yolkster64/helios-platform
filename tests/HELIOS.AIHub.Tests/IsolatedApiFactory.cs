@@ -42,7 +42,9 @@ public sealed class IsolatedApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (!disposing)
+        // ConfigureWebHost may have thrown before the directory existed (shipped config
+        // not found); deleting nothing must not mask that failure.
+        if (!disposing || !Directory.Exists(_root))
         {
             return;
         }
