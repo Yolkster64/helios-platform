@@ -1,0 +1,102 @@
+# HELIOS Fabric validation and evidence pipeline.
+# This pipeline deliberately has no Azure service connection and no deployment task.
+# GitHub protected environments remain the deployment authority.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - config/fabric/**
+      - config/schemas/helios-fabric.schema.json
+      - scripts/fabric/**
+      - scripts/validation/validate_helios_fabric_policy.py
+      - tests/fabric/**
+      - src/mcp/HELIOS.Mcp/HeliosFabricTools.cs
+      - .azuredevops/pipelines/helios-fabric-validate.yml
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - config/fabric/**
+      - config/schemas/helios-fabric.schema.json
+      - scripts/fabric/**
+      - scripts/validation/validate_helios_fabric_policy.py
+      - tests/fabric/**
+      - src/mcp/HELIOS.Mcp/HeliosFabricTools.cs
+      - .azuredevops/pipelines/helios-fabric-validate.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  fabricPlan: $(Build.ArtifactStagingDirectory)/fabric-plan.json
+
+steps:
+  - checkout: self
+    clean: true
+    fetchDepth: 1
+    persistCredentials: false
+
+  - task: UsePythonVersion@0
+    displayName: Use Python 3.12
+    inputs:
+      versionSpec: '3.12'
+      addToPath: true
+
+  - script: python -m pip install --disable-pip-version-check jsonschema==4.26.0
+    displayName: Install JSON Schema validator
+
+  - script: python scripts/fabric/plan_helios_fabric.py --mode validate
+    displayName: Validate Fabric contract
+
+  - script: |
+      python - <<'PY'
+      import json
+      from pathlib import Path
+      from jsonschema import Draft202012Validator
+
+      schema = json.loads(Path("config/schemas/helios-fabric.schema.json").read_text(encoding="utf-8"))
+      instance = json.loads(Path("config/fabric/helios-fabric.v1.json").read_text(encoding="utf-8"))
+      Draft202012Validator(schema).validate(instance)
+      PY
+    displayName: Validate Fabric instance against Draft 2020-12 schema
+
+  - script: >-
+      python scripts/fabric/plan_helios_fabric.py
+      --mode plan
+      --output "$(fabricPlan)"
+    displayName: Build sanitized Fabric plan
+
+  - script: python -m unittest discover -s tests/fabric -p 'test_*.py' -v
+    displayName: Run Fabric planner tests
+
+  - script: python scripts/validation/validate_yolkster_cutover.py
+    displayName: Validate Yolkster and WinUI 3 cutover contract
+
+  - script: python3 scripts/validation/validate_helios_fabric_policy.py
+    displayName: Enforce non-deployment Fabric boundary
+
+  - task: UseDotNet@2
+    displayName: Use .NET 10 SDK
+    inputs:
+      packageType: sdk
+      version: '10.0.x'
+
+  - script: >-
+      dotnet build src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj
+      --configuration Release
+      --nologo
+    displayName: Build HELIOS MCP Fabric tool
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish sanitized Fabric evidence
+    condition: succeededOrFailed()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)
+      artifact: helios-fabric-plan
+      publishLocation: pipeline

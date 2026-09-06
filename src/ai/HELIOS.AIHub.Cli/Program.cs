@@ -329,6 +329,19 @@ public static class Program
                 return AbsorptionStatus.Execute(null, Console.Out, Console.Error);
             }
 
+            case "fabric-plan":
+            {
+                if (positionals.Count != 0)
+                {
+                    return Fail("Usage: helios-ai fabric-plan");
+                }
+                if (FindUnexpectedOption(options, "config") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for fabric-plan.");
+                }
+                return FabricPlan.Execute(null, Console.Out, Console.Error);
+            }
+
             case "help":
             case "--help":
             case "-h":
@@ -385,6 +398,7 @@ public static class Program
                                                                         config/fleet/fleet-topology.json). Advisory only — topology
                                                                         changes are config edits, never made by this command
               absorb-status                                             Upstream PR watchlist + benchmark reports as JSON (read-only)
+              fabric-plan                                               Sanitized HELIOS Fabric authority map + phase readiness (read-only, env-name-only)
               help                                                      This text
 
             Global options:

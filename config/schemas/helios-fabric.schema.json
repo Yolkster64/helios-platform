@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helios.local/schemas/helios-fabric.schema.json",
+  "title": "HELIOS Fabric configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "canonical",
+    "authorities",
+    "integrations",
+    "phases",
+    "security",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri-reference" },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentRepository",
+        "targetRepository",
+        "guiRepository",
+        "renameMode",
+        "productionEnabled"
+      ],
+      "properties": {
+        "currentRepository": { "type": "string", "minLength": 3 },
+        "targetRepository": { "type": "string", "minLength": 3 },
+        "guiRepository": { "type": "string", "minLength": 3 },
+        "renameMode": { "enum": ["in-place"] },
+        "productionEnabled": { "const": false }
+      }
+    },
+    "authorities": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "required": [
+        "source",
+        "deployment",
+        "workGraph",
+        "operations",
+        "governance",
+        "validationMirror",
+        "secrets"
+      ]
+    },
+    "integrations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/integration" }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applyDefault",
+        "productionEnabled",
+        "secretValuesInRepository",
+        "externalWritesRequireApproval",
+        "allowedUiFramework",
+        "forbiddenUiFrameworks"
+      ],
+      "properties": {
+        "applyDefault": { "const": false },
+        "productionEnabled": { "const": false },
+        "secretValuesInRepository": { "const": false },
+        "externalWritesRequireApproval": { "const": true },
+        "allowedUiFramework": { "const": "WinUI 3" },
+        "forbiddenUiFrameworks": {
+          "type": "array",
+          "allOf": [
+            { "contains": { "const": "WPF" } },
+            { "contains": { "const": "UWP" } }
+          ],
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "requiredFields", "retentionDays"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "requiredFields": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "retentionDays": { "type": "integer", "minimum": 30 }
+      }
+    }
+  },
+  "$defs": {
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "authority",
+        "desiredState",
+        "requiredEnv",
+        "healthChecks",
+        "allowed",
+        "denied"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "role": { "type": "string", "minLength": 1 },
+        "authority": { "type": "string", "minLength": 1 },
+        "desiredState": {
+          "enum": ["connected", "configured", "admin-binding-required", "connection-required", "disabled"]
+        },
+        "target": { "type": "object" },
+        "requiredEnv": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+        },
+        "healthChecks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "denied": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "dependsOn",
+        "requiredIntegrations",
+        "execution",
+        "mutatesExternalState",
+        "requiredApproval",
+        "outputs"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^F[0-9]{2}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^F[0-9]{2}$" }
+        },
+        "requiredIntegrations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+        },
+        "execution": { "enum": ["automated", "operator", "administrator"] },
+        "mutatesExternalState": { "type": "boolean" },
+        "requiredApproval": { "enum": ["none", "operator", "repository-admin", "tenant-admin", "production-owner"] },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,432 @@
+{
+  "$schema": "../schemas/helios-fabric.schema.json",
+  "schemaVersion": "1.0",
+  "canonical": {
+    "currentRepository": "Yolkster64/helios-platform",
+    "targetRepository": "Yolkster64/helios-control",
+    "guiRepository": "Yolkster64/helios-gui",
+    "renameMode": "in-place",
+    "productionEnabled": false
+  },
+  "authorities": {
+    "source": "GitHub",
+    "deployment": "GitHub protected environments",
+    "workGraph": "Linear",
+    "operations": "Slack",
+    "governance": "SharePoint Governance",
+    "validationMirror": "Azure DevOps",
+    "secrets": "Azure Key Vault"
+  },
+  "integrations": [
+    {
+      "id": "github",
+      "role": "source, review, release, and deployment authority",
+      "authority": "GitHub",
+      "desiredState": "connected",
+      "target": {
+        "currentRepository": "Yolkster64/helios-platform",
+        "targetRepository": "Yolkster64/helios-control",
+        "guiRepository": "Yolkster64/helios-gui",
+        "defaultBranch": "main"
+      },
+      "requiredEnv": [],
+      "healthChecks": ["repository-read", "pull-request-write", "actions-read", "issue-write"],
+      "allowed": ["read", "branch", "pull-request", "issue", "reviewed-merge", "release-evidence"],
+      "denied": ["force-push-protected-branch", "delete-repository", "secret-readback", "rename-without-admin-receipt"]
+    },
+    {
+      "id": "slack",
+      "role": "operational event and incident surface",
+      "authority": "Slack workspace owner",
+      "desiredState": "connection-required",
+      "target": {
+        "workspaceId": "T0BAFGSNY5P",
+        "conversationId": "D0BB80HRZFA",
+        "fallbackAllowed": false
+      },
+      "requiredEnv": ["SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET"],
+      "healthChecks": ["workspace-resolve", "conversation-resolve", "signature-test", "post-receipt"],
+      "allowed": ["post-redacted-event", "reply-by-correlation-id", "incident-status"],
+      "denied": ["cross-workspace-fallback", "deployment-approval", "token-display", "unbounded-history-export"]
+    },
+    {
+      "id": "linear",
+      "role": "canonical execution graph",
+      "authority": "Linear project owner",
+      "desiredState": "connected",
+      "target": {
+        "project": "Helios Integration Fabric",
+        "projectId": "89a5cdf8-f7a2-409f-b275-49ae37e39d6d",
+        "teamKey": "JOH",
+        "cutoverIssue": "JOH-208"
+      },
+      "requiredEnv": ["LINEAR_API_KEY", "LINEAR_WEBHOOK_SECRET"],
+      "healthChecks": ["project-read", "issue-write", "webhook-signature-test", "idempotency-test"],
+      "allowed": ["create-once", "comment", "status-update", "dependency-link"],
+      "denied": ["deployment-approval", "credential-storage", "duplicate-event-expansion"]
+    },
+    {
+      "id": "sharepoint",
+      "role": "governance and evidence publication",
+      "authority": "Microsoft 365 site owner",
+      "desiredState": "connected",
+      "target": {
+        "hostname": "heli0s-my.sharepoint.com",
+        "sitePath": "/personal/jmore_heli0s_onmicrosoft_com",
+        "governanceRoot": "Helios/Governance"
+      },
+      "requiredEnv": ["AZURE_TENANT_ID", "SHAREPOINT_SITE_ID", "SHAREPOINT_DRIVE_ID"],
+      "healthChecks": ["site-resolve", "drive-resolve", "folder-resolve", "upload-and-hash-verify"],
+      "allowed": ["publish-redacted-governance", "publish-checksum", "publish-deployment-evidence"],
+      "denied": ["tenant-wide-search", "unverified-upload-claim", "secret-publication", "permission-broadening"]
+    },
+    {
+      "id": "azure",
+      "role": "development cloud control plane",
+      "authority": "Azure subscription and environment owner",
+      "desiredState": "admin-binding-required",
+      "target": {
+        "environments": ["azure-dev", "azure-test", "azure-prod"],
+        "firstPermittedOperation": "development-what-if",
+        "applyDefault": false
+      },
+      "requiredEnv": ["AZURE_CLIENT_ID", "AZURE_TENANT_ID", "AZURE_SUBSCRIPTION_ID", "AZURE_RESOURCE_GROUP"],
+      "healthChecks": ["oidc-token-probe", "subscription-read", "resource-group-read", "bicep-what-if"],
+      "allowed": ["inventory", "validate", "development-what-if", "redacted-evidence"],
+      "denied": ["production-apply", "subscription-wide-rbac", "client-secret-creation", "token-display"]
+    },
+    {
+      "id": "azure-devops",
+      "role": "validation and evidence mirror",
+      "authority": "Azure DevOps project administrator",
+      "desiredState": "admin-binding-required",
+      "target": {
+        "organization": "Heli0sDev",
+        "serviceConnections": [
+          "helios-control-azure-wif-dev",
+          "helios-control-azure-wif-test",
+          "helios-control-azure-wif-prod"
+        ],
+        "deploymentAuthority": false
+      },
+      "requiredEnv": ["AZURE_DEVOPS_ORG", "AZURE_DEVOPS_PROJECT"],
+      "healthChecks": ["project-read", "wif-metadata-read", "pipeline-validate", "evidence-publish"],
+      "allowed": ["validate", "development-what-if", "publish-evidence"],
+      "denied": ["bypass-github-environment", "stored-client-secret", "production-deploy", "secret-readback"]
+    },
+    {
+      "id": "azure-key-vault",
+      "role": "runtime secret-reference authority",
+      "authority": "Azure Key Vault and managed identity",
+      "desiredState": "admin-binding-required",
+      "target": {
+        "uriEnv": "AZURE_KEY_VAULT_URI",
+        "readbackAllowed": false
+      },
+      "requiredEnv": ["AZURE_KEY_VAULT_URI"],
+      "healthChecks": ["vault-metadata-read", "managed-identity-reference-test", "readback-denial-test"],
+      "allowed": ["secret-reference", "version-metadata", "managed-identity-resolution"],
+      "denied": ["secret-readback", "plaintext-log", "pipeline-secret-list", "broad-data-plane-role"]
+    },
+    {
+      "id": "openai",
+      "role": "Codex and OpenAI provider lane",
+      "authority": "OpenAI project owner",
+      "desiredState": "configured",
+      "target": {
+        "apiKeyEnv": "OPENAI_API_KEY",
+        "projectIdEnv": "OPENAI_PROJECT_ID",
+        "keyVaultSecretName": "openai-api-key"
+      },
+      "requiredEnv": ["OPENAI_API_KEY"],
+      "healthChecks": ["minimal-response", "timeout-test", "budget-test", "redaction-test"],
+      "allowed": ["reasoning", "code-generation", "review", "evaluation", "draft-artifact"],
+      "denied": ["secret-readback", "automatic-merge", "automatic-deploy", "unapproved-tool-write"]
+    },
+    {
+      "id": "anthropic",
+      "role": "Claude Code and long-context provider lane",
+      "authority": "Anthropic organization owner",
+      "desiredState": "configured",
+      "target": {
+        "apiKeyEnv": "ANTHROPIC_API_KEY",
+        "keyVaultSecretName": "anthropic-api-key",
+        "projectInstructions": "CLAUDE.md"
+      },
+      "requiredEnv": ["ANTHROPIC_API_KEY"],
+      "healthChecks": ["minimal-message", "mcp-policy-test", "timeout-test", "redaction-test"],
+      "allowed": ["analysis", "review", "draft-code", "tests", "development-plan"],
+      "denied": ["secret-readback", "repository-admin", "azure-apply", "untrusted-pr-mcp-replacement"]
+    },
+    {
+      "id": "azure-foundry",
+      "role": "managed agent and enterprise-data lane",
+      "authority": "Azure AI Foundry project owner",
+      "desiredState": "admin-binding-required",
+      "target": {
+        "projectEndpointEnv": "AZURE_FOUNDRY_PROJECT_ENDPOINT",
+        "identityMode": "managed-identity-or-oidc"
+      },
+      "requiredEnv": ["AZURE_FOUNDRY_PROJECT_ENDPOINT"],
+      "healthChecks": ["project-read", "agent-inventory", "model-deployment-read", "trace-write-test"],
+      "allowed": ["agent-inventory", "development-agent-run", "trace", "evaluation"],
+      "denied": ["production-publish", "tenant-consent", "secret-readback", "self-granted-rbac"]
+    },
+    {
+      "id": "github-copilot",
+      "role": "inline coding and reviewed task dispatch",
+      "authority": "GitHub repository and Copilot policy owner",
+      "desiredState": "configured",
+      "target": {
+        "instructions": ".github/copilot-instructions.md",
+        "dispatchWorkflow": ".github/workflows/copilot-dispatch.yml"
+      },
+      "requiredEnv": [],
+      "healthChecks": ["instructions-present", "dispatch-contract", "pull-request-boundary"],
+      "allowed": ["suggest", "draft", "test", "pull-request-preparation"],
+      "denied": ["automatic-production-change", "ruleset-bypass", "secret-readback"]
+    },
+    {
+      "id": "helios-mcp",
+      "role": "shared local tool and status surface",
+      "authority": "HELIOS typed tool registry",
+      "desiredState": "connected",
+      "target": {
+        "transport": "stdio",
+        "project": "src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj",
+        "config": ".mcp.json"
+      },
+      "requiredEnv": [],
+      "healthChecks": ["dotnet-build", "tool-list", "stdio-jsonrpc", "read-only-plan"],
+      "allowed": ["status", "inventory", "plan", "advisory", "health"],
+      "denied": ["generic-shell", "unbounded-http", "secret-readback", "implicit-external-write"]
+    },
+    {
+      "id": "hermes-xcore",
+      "role": "local and fleet routing, execution scoring, and learning",
+      "authority": "HELIOS AIHub and fleet contracts",
+      "desiredState": "configured",
+      "target": {
+        "sourceLab": "Yolkster64/hermes-fleet-platforms",
+        "importMode": "owned-deltas-only",
+        "adaptiveRoutingDefault": false
+      },
+      "requiredEnv": [],
+      "healthChecks": ["fleet-topology-validate", "worker-smoke", "outcome-contract", "learning-idempotency"],
+      "allowed": ["route", "simulate", "execute-bounded-task", "score", "reflect", "redacted-memory"],
+      "denied": ["self-enable-provider", "azure-deploy", "rbac-change", "secret-readback", "production-approval"]
+    },
+    {
+      "id": "winui3-gui",
+      "role": "native Windows operator surface",
+      "authority": "Yolkster64/helios-gui",
+      "desiredState": "admin-binding-required",
+      "target": {
+        "currentSolution": "src/gui/HELIOS.Shell.sln",
+        "targetRepository": "Yolkster64/helios-gui",
+        "framework": "WinUI 3",
+        "targetFramework": "net10.0-windows"
+      },
+      "requiredEnv": [],
+      "healthChecks": ["winui-contract", "windows-x64-build", "msix-package", "accessibility-test"],
+      "allowed": ["operator-view", "plan-review", "approval-request", "sanitized-status"],
+      "denied": ["WPF", "UWP", "secret-display", "implicit-elevation", "automatic-shell-takeover"]
+    }
+  ],
+  "phases": [
+    {
+      "id": "F00",
+      "title": "Validate the Fabric contract",
+      "dependsOn": [],
+      "requiredIntegrations": [],
+      "execution": "automated",
+      "mutatesExternalState": false,
+      "requiredApproval": "none",
+      "outputs": ["validated-contract", "dependency-graph", "sanitized-plan"]
+    },
+    {
+      "id": "F01",
+      "title": "Inventory repository and fork state",
+      "dependsOn": ["F00"],
+      "requiredIntegrations": ["github"],
+      "execution": "automated",
+      "mutatesExternalState": false,
+      "requiredApproval": "none",
+      "outputs": ["repository-inventory", "fork-disposition", "source-sha-ledger"]
+    },
+    {
+      "id": "F02",
+      "title": "Rename the active core repository in place",
+      "dependsOn": ["F01"],
+      "requiredIntegrations": ["github"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "repository-admin",
+      "outputs": ["rename-receipt", "redirect-verification", "post-rename-inventory"]
+    },
+    {
+      "id": "F03",
+      "title": "Extract the native WinUI 3 GUI repository",
+      "dependsOn": ["F02"],
+      "requiredIntegrations": ["github", "winui3-gui"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "repository-admin",
+      "outputs": ["gui-repository", "source-provenance", "contract-package-reference"]
+    },
+    {
+      "id": "F04",
+      "title": "Build and package the WinUI 3 shell",
+      "dependsOn": ["F03"],
+      "requiredIntegrations": ["winui3-gui"],
+      "execution": "automated",
+      "mutatesExternalState": false,
+      "requiredApproval": "none",
+      "outputs": ["windows-build", "test-results", "unsigned-msix", "accessibility-report"]
+    },
+    {
+      "id": "F05",
+      "title": "Build and enumerate the HELIOS MCP surface",
+      "dependsOn": ["F00"],
+      "requiredIntegrations": ["helios-mcp"],
+      "execution": "automated",
+      "mutatesExternalState": false,
+      "requiredApproval": "none",
+      "outputs": ["mcp-build", "tool-catalog", "read-only-smoke-results"]
+    },
+    {
+      "id": "F06",
+      "title": "Validate AIHub and provider contracts without credentials",
+      "dependsOn": ["F05"],
+      "requiredIntegrations": ["openai", "anthropic", "azure-foundry", "hermes-xcore"],
+      "execution": "automated",
+      "mutatesExternalState": false,
+      "requiredApproval": "none",
+      "outputs": ["provider-contract-report", "routing-table-report", "budget-policy-report"]
+    },
+    {
+      "id": "F07",
+      "title": "Import selected Hermes and XCore deltas",
+      "dependsOn": ["F01", "F06"],
+      "requiredIntegrations": ["github", "hermes-xcore"],
+      "execution": "operator",
+      "mutatesExternalState": true,
+      "requiredApproval": "repository-admin",
+      "outputs": ["import-pull-request", "license-ledger", "compatibility-tests"]
+    },
+    {
+      "id": "F08",
+      "title": "Bind collaboration routes",
+      "dependsOn": ["F02", "F05"],
+      "requiredIntegrations": ["slack", "linear"],
+      "execution": "operator",
+      "mutatesExternalState": true,
+      "requiredApproval": "operator",
+      "outputs": ["slack-message-receipt", "linear-sync-receipt", "replay-test-results"]
+    },
+    {
+      "id": "F09",
+      "title": "Publish and verify governance evidence",
+      "dependsOn": ["F02", "F05"],
+      "requiredIntegrations": ["sharepoint"],
+      "execution": "operator",
+      "mutatesExternalState": true,
+      "requiredApproval": "tenant-admin",
+      "outputs": ["sharepoint-file-receipts", "uploaded-hashes", "publication-manifest"]
+    },
+    {
+      "id": "F10",
+      "title": "Create environment-bound Azure identities",
+      "dependsOn": ["F02", "F05"],
+      "requiredIntegrations": ["github", "azure", "azure-key-vault"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "tenant-admin",
+      "outputs": ["federated-credential-receipts", "rbac-scope-report", "environment-binding-report"]
+    },
+    {
+      "id": "F11",
+      "title": "Create Azure DevOps workload-identity connections",
+      "dependsOn": ["F10"],
+      "requiredIntegrations": ["azure", "azure-devops"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "tenant-admin",
+      "outputs": ["service-connection-receipts", "pipeline-validation", "authority-separation-test"]
+    },
+    {
+      "id": "F12",
+      "title": "Bind provider secret references",
+      "dependsOn": ["F10", "F06"],
+      "requiredIntegrations": ["azure-key-vault", "openai", "anthropic", "azure-foundry"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "tenant-admin",
+      "outputs": ["secret-reference-metadata", "readback-denial-proof", "provider-smoke-results"]
+    },
+    {
+      "id": "F13",
+      "title": "Run the development Azure what-if",
+      "dependsOn": ["F10", "F11"],
+      "requiredIntegrations": ["github", "azure", "azure-devops"],
+      "execution": "operator",
+      "mutatesExternalState": false,
+      "requiredApproval": "operator",
+      "outputs": ["what-if-json", "canonical-plan-hash", "review-summary"]
+    },
+    {
+      "id": "F14",
+      "title": "Run correlated end-to-end smoke tests",
+      "dependsOn": ["F04", "F07", "F08", "F09", "F12", "F13"],
+      "requiredIntegrations": ["github", "slack", "linear", "sharepoint", "openai", "anthropic", "azure-foundry", "helios-mcp", "hermes-xcore", "winui3-gui"],
+      "execution": "operator",
+      "mutatesExternalState": true,
+      "requiredApproval": "operator",
+      "outputs": ["correlated-receipt-chain", "health-matrix", "rollback-rehearsal"]
+    },
+    {
+      "id": "F15",
+      "title": "Seal migration and Fabric evidence",
+      "dependsOn": ["F14"],
+      "requiredIntegrations": ["github", "linear", "sharepoint"],
+      "execution": "operator",
+      "mutatesExternalState": true,
+      "requiredApproval": "operator",
+      "outputs": ["signed-cutover-manifest", "release-checksums", "final-source-shas"]
+    },
+    {
+      "id": "F16",
+      "title": "Consider production authorization",
+      "dependsOn": ["F15"],
+      "requiredIntegrations": ["github", "azure", "azure-key-vault"],
+      "execution": "administrator",
+      "mutatesExternalState": true,
+      "requiredApproval": "production-owner",
+      "outputs": ["separate-production-decision"]
+    }
+  ],
+  "security": {
+    "applyDefault": false,
+    "productionEnabled": false,
+    "secretValuesInRepository": false,
+    "externalWritesRequireApproval": true,
+    "allowedUiFramework": "WinUI 3",
+    "forbiddenUiFrameworks": ["WPF", "UWP"]
+  },
+  "evidence": {
+    "root": ".helios/evidence/fabric",
+    "requiredFields": [
+      "eventId",
+      "correlationId",
+      "sourceRepository",
+      "sourceSha",
+      "actor",
+      "operation",
+      "classification",
+      "timestamp",
+      "result",
+      "receiptUri"
+    ],
+    "retentionDays": 90
+  }
+}

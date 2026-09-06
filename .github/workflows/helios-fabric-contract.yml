@@ -1,0 +1,144 @@
+name: HELIOS Fabric Contract
+
+on:
+  pull_request:
+    paths:
+      - 'config/fabric/**'
+      - 'config/schemas/helios-fabric.schema.json'
+      - 'docs/fabric/**'
+      - 'scripts/fabric/**'
+      - 'scripts/validation/validate_helios_fabric_policy.py'
+      - 'tests/fabric/**'
+      - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
+      - '.azuredevops/pipelines/helios-fabric-validate.yml'
+      - '.claude/agents/fabric-setup.md'
+      - '.claude/commands/plan-fabric-setup.md'
+      - '.github/workflows/helios-fabric-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/fabric/**'
+      - 'config/schemas/helios-fabric.schema.json'
+      - 'scripts/fabric/**'
+      - 'scripts/validation/validate_helios_fabric_policy.py'
+      - 'tests/fabric/**'
+      - 'src/mcp/HELIOS.Mcp/HeliosFabricTools.cs'
+      - '.azuredevops/pipelines/helios-fabric-validate.yml'
+      - '.github/workflows/helios-fabric-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-fabric-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Validate Fabric topology and planner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install JSON Schema validator
+        run: python -m pip install --disable-pip-version-check jsonschema==4.26.0
+
+      - name: Validate Fabric contract
+        run: python scripts/fabric/plan_helios_fabric.py --mode validate
+
+      - name: Validate Fabric instance against Draft 2020-12 schema
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(Path("config/schemas/helios-fabric.schema.json").read_text(encoding="utf-8"))
+          instance = json.loads(Path("config/fabric/helios-fabric.v1.json").read_text(encoding="utf-8"))
+          Draft202012Validator(schema).validate(instance)
+          PY
+
+      - name: Build sanitized Fabric plan
+        run: >-
+          python scripts/fabric/plan_helios_fabric.py
+          --mode plan
+          --output fabric-plan.json
+
+      - name: Run Fabric planner regression tests
+        run: python -m unittest discover -s tests/fabric -p 'test_*.py' -v
+
+      - name: Verify fail-closed plan artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path('fabric-plan.json').read_text(encoding='utf-8'))
+          assert plan['status'] == 'passed'
+          result = plan['result']
+          assert result['contract']['integrations'] == 14
+          assert result['contract']['phases'] == 17
+          assert result['security']['productionEnabled'] is False
+          assert result['security']['applyDefault'] is False
+          assert result['security']['secretValuesRead'] is False
+          assert result['security']['externalMutationPerformed'] is False
+          assert result['security']['activeUiFramework'] == 'WinUI 3'
+          production = next(item for item in result['phases'] if item['id'] == 'F16')
+          assert production['readiness'] == 'production-disabled'
+          PY
+
+      - name: Validate existing Yolkster cutover and WinUI contract
+        run: python scripts/validation/validate_yolkster_cutover.py
+
+      - name: Compile Python planner
+        run: python -m compileall -q scripts/fabric tests/fabric
+
+      - name: Upload Fabric plan evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-fabric-plan
+          path: |
+            fabric-plan.json
+            config/fabric/helios-fabric.v1.json
+          if-no-files-found: error
+          retention-days: 90
+
+  mcp:
+    name: Build HELIOS MCP Fabric tool
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build MCP server
+        run: >-
+          dotnet build src/mcp/HELIOS.Mcp/HELIOS.Mcp.csproj
+          --configuration Release
+          --nologo
+
+  policy:
+    name: Enforce non-deployment Fabric boundary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify contract and workflow policy
+        # The checker lives in scripts/validation/ so this workflow file never
+        # literally contains the tokens the checker forbids (an inline assert
+        # would self-reference the very string it rejects and always fail).
+        run: python3 scripts/validation/validate_helios_fabric_policy.py
