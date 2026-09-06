@@ -287,6 +287,21 @@ public sealed class McpFabricToolTests : IDisposable
     // ---- fail-closed enforcement ----------------------------------------------------
 
     [Fact]
+    public void GetFabricPlan_MalformedContract_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot("{");
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
+        Assert.Contains("could not be read or validated", envelope.GetProperty("error").GetString());
+        Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
+        Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
+    }
+
+    [Fact]
     public void GetFabricPlan_ProductionEnabledInFile_ReturnsErrorEnvelope()
     {
         // Both canonical.productionEnabled and security.productionEnabled must be
