@@ -97,7 +97,7 @@ printf '\n'
 printf '%s\n' "Next steps:"
 printf '  %s\n' "cd ${workspace_root}"
 printf '  %s\n' "dotnet test tests/HELIOS.AIHub.Tests -c Release"
-printf '  %s\n' "source src/ai/python/.venv/bin/activate && python -m pytest src/ai/python/tests"
+printf '  %s\n' "cd src/ai/python && source .venv/bin/activate && python -m pytest tests"
 printf '  %s\n' "docker compose --env-file .devcontainer/local.env --profile database -f .devcontainer/docker-compose.yml up -d postgres"
 printf '\n'
 log_success "Devcontainer setup finished."

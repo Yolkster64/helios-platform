@@ -91,6 +91,7 @@ dotnet test tests/HELIOS.AIHub.Tests -c Release
 cd src/ai/python && python3 -m pytest tests
 cd /workspaces/<repo-name>
 bicep build infra/main.bicep --stdout
+cd /workspaces/<repo-name>
 python3 scripts/validation/validate_yolkster_cutover.py
 python3 -m unittest discover -s .devcontainer/tests
 ```
