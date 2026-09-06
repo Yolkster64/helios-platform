@@ -245,7 +245,7 @@ Write-Host "apply-rulesets: mode=$mode repository=$Repository rulesets=$($rulese
 # --- is (1) gh on PATH to make the calls and (2) a wire credential that can read
 # --- the repo and holds admin. Capture-then-$LASTEXITCODE; the captured output is
 # --- one boolean permission field, never credential material.
-$gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+$gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $wireOk = $false
 $wireAdmin = $false
 if ($gh) {

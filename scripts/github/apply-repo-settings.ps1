@@ -165,7 +165,7 @@ function Invoke-GhApi {
 # --- Wire-truth precondition (kept in sync with apply-rulesets.ps1 — see its
 # --- .NOTES): gh present, and under -Apply a wire credential that reads the repo
 # --- and holds admin. Capture-then-$LASTEXITCODE; output is one boolean field.
-$gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+$gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $wireOk = $false
 $wireAdmin = $false
 if ($gh) {
