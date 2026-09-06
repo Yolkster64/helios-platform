@@ -540,11 +540,28 @@ function Get-AppInstallationForOwner {
 # Repositories an installation can reach, through the OWNER's login (not the App):
 # /user/installations/{id}/repositories lists what the owner granted, which is the
 # question being asked.
+# Explicit per_page/page loop rather than `gh api --paginate`: for an object
+# response --paginate concatenates one JSON document per page, which no single
+# ConvertFrom-Json accepts, so a second page would read as "nothing found"
+# (apply-labels.ps1 pages the same way). Every element of the named collection
+# across pages, or $null when a page could not be read.
+function Get-GhJsonCollection {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Collection)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $separator = if ($Path.Contains('?')) { '&' } else { '?' }
+    for ($page = 1; $page -le 100; $page++) {
+        $body = Get-GhJson -Arguments @('api', "$Path${separator}per_page=100&page=$page")
+        if ($null -eq $body) { return $null }
+        $pageItems = @(Get-OptionalProperty $body $Collection @())
+        foreach ($item in $pageItems) { $items.Add($item) }
+        if ($pageItems.Count -lt 100) { break }
+    }
+    return , $items.ToArray()
+}
 function Get-UserInstallationRepositories {
     param([Parameter(Mandatory)][string]$InstallationId)
-    $body = Get-GhJson -Arguments @('api', "/user/installations/$InstallationId/repositories", '--paginate')
-    if ($null -eq $body) { return @() }
-    $repositories = Get-OptionalProperty $body 'repositories' @()
+    $repositories = Get-GhJsonCollection -Path "/user/installations/$InstallationId/repositories" -Collection 'repositories'
+    if ($null -eq $repositories) { return @() }
     return @($repositories | ForEach-Object { [string](Get-OptionalProperty $_ 'full_name' '') } | Where-Object { $_ })
 }
 
@@ -552,9 +569,9 @@ function Get-UserInstallationRepositories {
 # accounts the login can see, each with its app_slug.
 function Get-UserInstallationBySlug {
     param([Parameter(Mandatory)][string]$Slug)
-    $body = Get-GhJson -Arguments @('api', '/user/installations', '--paginate')
-    if ($null -eq $body) { return $null }
-    foreach ($installation in @(Get-OptionalProperty $body 'installations' @())) {
+    $installations = Get-GhJsonCollection -Path '/user/installations' -Collection 'installations'
+    if ($null -eq $installations) { return $null }
+    foreach ($installation in @($installations)) {
         if ([string]::Equals([string](Get-OptionalProperty $installation 'app_slug' ''), $Slug, [StringComparison]::Ordinal)) { return $installation }
     }
     return $null

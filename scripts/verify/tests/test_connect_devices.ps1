@@ -45,7 +45,10 @@ printf 'gh %s | GH_TOKEN=%s\n' "$*" "${GH_TOKEN:-<unset>}" >> "$DEV_SHIM_LOG"
 mode="${DEV_SHIM_GH:-ready}"
 case "$1 $2" in
   "auth status")
-    if [ "$mode" = "ready" ] || [ -f "$DEV_SHIM_STATE/gh-ok" ]; then exit 0; fi; exit 1 ;;
+    if [ "$mode" = "ready" ] || [ -f "$DEV_SHIM_STATE/gh-ok" ]; then
+      if [ -n "${DEV_SHIM_GH_SCOPES:-}" ]; then echo "  - Token scopes: ${DEV_SHIM_GH_SCOPES}"; fi
+      exit 0
+    fi; exit 1 ;;
   "auth login")
     if [ "$mode" = "expired-then-ok" ]; then
       if [ -f "$DEV_SHIM_STATE/gh-attempt" ]; then mode=ok; else touch "$DEV_SHIM_STATE/gh-attempt"; mode=expired; fi
@@ -145,6 +148,48 @@ try {
     Stop-DeviceFlow -Flow $flow
     Assert-True (@(Get-EventSubscriber).Count -eq $subscribersBefore) 'Stop-DeviceFlow left event subscribers behind.'
     Assert-True (@(Get-Job).Count -eq $jobsBefore) 'Stop-DeviceFlow left event jobs behind.'
+
+    # --- GitHub Models export: the scope is checked before anything is exported ---------------
+    $savedModels = $env:GITHUB_MODELS_TOKEN
+    [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $null)
+    $parsed = Get-TokenScopesFromStatus -Text "github.com`n  Logged in to github.com account owner (keyring)`n  - Active account: true`n  - Token scopes: 'gist', 'read:org', 'repo', 'models:read'"
+    Assert-True ($parsed.Listed -and ($parsed.Scopes -contains 'models:read') -and $parsed.Scopes.Count -eq 4) 'A quoted scope list must parse.'
+    $parsed = Get-TokenScopesFromStatus -Text "Token scopes: gist, read:org, repo"
+    Assert-True ($parsed.Listed -and ($parsed.Scopes -notcontains 'models:read') -and ($parsed.Scopes -contains 'read:org')) 'A bare scope list must parse.'
+    Assert-True (-not (Get-TokenScopesFromStatus -Text "Logged in to github.com account owner (GH_TOKEN)").Listed) 'No scope line must read as not listed.'
+    $env:DEV_SHIM_GH_SCOPES = "'repo', 'workflow', 'read:org'"
+    Reset-Shims -Gh 'ready' -Az 'ready'
+    $script:lanes = [System.Collections.Generic.List[object]]::new()
+    Invoke-ModelsExport -DotSourced
+    $lane = @($script:lanes)[0]
+    Assert-True ($lane.state -eq 'needs-owner' -and $lane.ownerAction -match 'gh auth refresh --hostname github.com --scopes models:read') 'A login without models:read must not be exported and must name gh auth refresh.'
+    Assert-True ([string]::IsNullOrEmpty($env:GITHUB_MODELS_TOKEN)) 'No token may be exported without models:read.'
+    Assert-True ((Get-ShimLog) -notmatch 'gh auth token') 'gh auth token must not run when the scope is missing.'
+    $env:DEV_SHIM_GH_SCOPES = "'repo', 'workflow', 'read:org', 'models:read'"
+    Reset-Shims -Gh 'ready' -Az 'ready'
+    $script:lanes = [System.Collections.Generic.List[object]]::new()
+    Invoke-ModelsExport -DotSourced
+    $lane = @($script:lanes)[0]
+    Assert-True ($lane.state -eq 'ready' -and $lane.detail -match 'models:read confirmed') 'A login with models:read must export with the proof named.'
+    Assert-True ($env:GITHUB_MODELS_TOKEN -eq 'gho_shim_token_value') 'The gh token must be exported into this session.'
+    Assert-True ($lane.detail -notmatch 'gho_shim') 'The token value must not appear in the lane detail.'
+    Assert-True ((Get-ShimLog) -match 'gh auth token[^\n]*GH_TOKEN=<unset>') 'GH_TOKEN leaked into the gh auth token child.'
+    [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $null)
+    $env:DEV_SHIM_GH_SCOPES = ''
+    Reset-Shims -Gh 'ready' -Az 'ready'
+    $script:lanes = [System.Collections.Generic.List[object]]::new()
+    Invoke-ModelsExport -DotSourced
+    $lane = @($script:lanes)[0]
+    Assert-True ($lane.state -eq 'ready' -and $lane.detail -match 'lists no scopes') 'A token with no scope list is exported and handed to auto-login for the wire check.'
+    Assert-True ($env:GITHUB_MODELS_TOKEN -eq 'gho_shim_token_value') 'The list-less token must still be exported.'
+    [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', 'placeholder-already-set')
+    $script:lanes = [System.Collections.Generic.List[object]]::new()
+    Invoke-ModelsExport -DotSourced
+    Assert-True (@($script:lanes)[0].detail -match 'already set') 'An existing GITHUB_MODELS_TOKEN is kept (name checked only).'
+    [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $savedModels)
+    $script:lanes = [System.Collections.Generic.List[object]]::new()
+    Invoke-ModelsExport
+    Assert-True (@($script:lanes)[0].state -eq 'needs-owner' -and @($script:lanes)[0].ownerAction -match 'dot-source') 'A child run cannot export and must say so.'
 
     # --- Verify-only: probes only, never a login ---------------------------------------------------
     Reset-Shims -Gh 'ok' -Az 'ok'
@@ -335,7 +380,7 @@ finally {
     $env:PATH = $savedPath
     $env:GH_TOKEN = $savedGh
     $env:GITHUB_TOKEN = $savedGithub
-    foreach ($name in 'DEV_SHIM_LOG', 'DEV_SHIM_STATE', 'DEV_SHIM_GH', 'DEV_SHIM_AZ') { [Environment]::SetEnvironmentVariable($name, $null) }
+    foreach ($name in 'DEV_SHIM_LOG', 'DEV_SHIM_STATE', 'DEV_SHIM_GH', 'DEV_SHIM_AZ', 'DEV_SHIM_GH_SCOPES') { [Environment]::SetEnvironmentVariable($name, $null) }
     Get-EventSubscriber -ErrorAction SilentlyContinue | Unregister-Event -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }

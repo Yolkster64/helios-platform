@@ -420,7 +420,9 @@ credential missing). The workflow honors the same contract:
   PAT or `github.token`; an admin item exiting 2 under a present credential is
   a red row naming the credential used. Exit 1 fails the job. The summary's
   header line carries `admin token: true (HELIOS_APP (installation token))` and
-  `app token: minted` (else `not configured` / `half-configured`). Concurrency
+  `app token: minted` (else `not configured` / `half-configured`; a pull-request
+  plan reads `registered (key not passed to plan runs)`, because secrets never
+  reach plan runs). Concurrency
   group `governance-apply`, never cancelled mid-pass (the plan job uses
   `governance-plan-<PR>` so a PR never queues behind an apply); every script is
   called with `-Repository $GITHUB_REPOSITORY`, so a fork reconciles itself and

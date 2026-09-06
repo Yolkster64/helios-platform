@@ -144,6 +144,11 @@ jobs:
           else admin_cred="GITHUB_TOKEN"; fi
           app_state="not configured"
           if [ "${HAS_APP_TOKEN:-false}" = "true" ]; then app_state="minted"
+          elif [ "${RUN_MODE:-plan}" != "apply" ]; then
+            # Plan runs never receive the secrets (governance-apply.yml passes them
+            # to the apply caller only), so the key half is unknowable here and the
+            # variable half on its own is a fact, not a defect: reported, never warned.
+            if [ "${HAS_APP_CLIENT_ID:-false}" = "true" ]; then app_state="registered (key not passed to plan runs)"; fi
           elif [ "${HAS_APP_KEY:-false}" != "${HAS_APP_CLIENT_ID:-false}" ]; then
             # One half stored, the other missing: a connect-github-app.ps1 run that
             # did not finish. Loud, because the next credential in line is a

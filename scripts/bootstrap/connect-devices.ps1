@@ -36,7 +36,11 @@ it can be, and this script does it:
                              $env:GITHUB_MODELS_TOKEN is set from the gh login, which
                              flips the github-models provider to Ready; when run as a
                              child the export line is printed instead (a child cannot
-                             export into your shell).
+                             export into your shell). The login's scope list from
+                             `gh auth status` must include models:read, else the lane
+                             names `gh auth refresh --scopes models:read` and exports
+                             nothing (a token with no scope list is exported and
+                             auto-login verifies it on the wire next).
        connect-github-app.ps1 -DispatchGovernance   the GitHub App (two browser clicks)
                              and the first governance apply; -SkipGitHubApp skips it.
        connect-admin.ps1 -SkipGitHub                the Azure ops identity via
@@ -256,6 +260,30 @@ function Test-GhReady {
     return ($result.ExitCode -eq 0)
 }
 
+# The scopes of the active gh login, read from the `Token scopes:` line that
+# `gh auth status` prints for OAuth logins (quoted since gh 2.40, bare before; a
+# fine-grained token or an older build prints none). Listed = the line existed.
+function Get-TokenScopesFromStatus {
+    param([AllowNull()][AllowEmptyString()][string]$Text)
+    $m = [regex]::Match("$Text", '(?im)^\s*-?\s*Token scopes:\s*(.*)$')
+    if (-not $m.Success) { return [pscustomobject]@{ Listed = $false; Scopes = @() } }
+    $names = @([regex]::Matches($m.Groups[1].Value, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+    if ($names.Count -eq 0) { $names = @($m.Groups[1].Value.Trim() -split '[,\s]+' | Where-Object { $_ }) }
+    return [pscustomobject]@{ Listed = $true; Scopes = $names }
+}
+
+function Get-GhTokenScopes {
+    $gh = Get-CliCommand -Name 'gh'
+    if (-not $gh) { return [pscustomobject]@{ Listed = $false; Scopes = @() } }
+    $result = Invoke-Captured -FilePath $gh.Source -Arguments @('auth', 'status', '--hostname', 'github.com', '--active') -ClearGitHubTokens
+    $text = "$($result.StdOut)`n$($result.StdErr)"
+    if ($result.ExitCode -ne 0 -and $text -match 'unknown flag') {
+        $result = Invoke-Captured -FilePath $gh.Source -Arguments @('auth', 'status', '--hostname', 'github.com') -ClearGitHubTokens
+        $text = "$($result.StdOut)`n$($result.StdErr)"
+    }
+    return (Get-TokenScopesFromStatus -Text $text)
+}
+
 function Test-AzReady {
     param([Parameter(Mandatory)][string]$Tenant)
     $az = Get-CliCommand -Name 'az'
@@ -434,33 +462,45 @@ function Invoke-SiblingScript {
     return $LASTEXITCODE
 }
 
+# The GitHub Models export lane, its own function so the offline suite can drive it
+# with the gh shim. An export only reaches the caller when this script was
+# dot-sourced (a child process cannot set the parent's environment), and a login
+# whose scope list lacks models:read is never exported: the provider would answer
+# 403 at the first call, so the lane names the one-line scope refresh instead.
+function Invoke-ModelsExport {
+    param([switch]$DotSourced)
+    if (-not $DotSourced) {
+        Add-Lane -Name 'github-models-export' -State 'needs-owner' -Detail 'a child process cannot export into your shell' -OwnerAction 'dot-source instead: . scripts/bootstrap/connect-devices.ps1   (bash: source scripts/bootstrap/connect-github.sh)'
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_MODELS_TOKEN)) {
+        Add-Lane -Name 'github-models-export' -State 'ready' -Detail 'GITHUB_MODELS_TOKEN already set (name checked only)'
+        return
+    }
+    $scopes = Get-GhTokenScopes
+    if ($scopes.Listed -and ($scopes.Scopes -notcontains 'models:read')) {
+        Add-Lane -Name 'github-models-export' -State 'needs-owner' -Detail "the active gh login lists no models:read scope (scopes: $($scopes.Scopes -join ', ')); nothing exported" -OwnerAction 'gh auth refresh --hostname github.com --scopes models:read   # then: . scripts/bootstrap/connect-devices.ps1'
+        return
+    }
+    $gh = Get-CliCommand -Name 'gh'
+    $token = Invoke-Captured -FilePath $gh.Source -Arguments @('auth', 'token', '--hostname', 'github.com') -ClearGitHubTokens
+    if ($token.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($token.StdOut)) {
+        $exported = "$($token.StdOut)".Trim()
+        [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $exported)
+        $exported = $null
+        $proof = if ($scopes.Listed) { 'models:read confirmed by gh auth status' } else { 'gh auth status lists no scopes for this token, so auto-login verifies models:read on the wire next' }
+        Add-Lane -Name 'github-models-export' -State 'ready' -Detail "GITHUB_MODELS_TOKEN exported into this shell from the gh login ($proof; value not shown)"
+    }
+    else {
+        Add-Lane -Name 'github-models-export' -State 'needs-owner' -Detail 'gh yielded no token' -OwnerAction 'export GITHUB_MODELS_TOKEN=$(gh auth token)'
+    }
+}
+
 function Invoke-Chain {
     param([string]$Repository, [switch]$SkipGitHubApp, [switch]$SkipOpsIdentity, [switch]$DotSourced)
     $bootstrap = $PSScriptRoot
 
-    # GitHub Models token: an export only reaches the caller when this script was
-    # dot-sourced; a child process cannot set the parent's environment.
-    if ($DotSourced) {
-        if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_MODELS_TOKEN)) {
-            Add-Lane -Name 'github-models-export' -State 'ready' -Detail 'GITHUB_MODELS_TOKEN already set (name checked only)'
-        }
-        else {
-            $gh = Get-CliCommand -Name 'gh'
-            $token = Invoke-Captured -FilePath $gh.Source -Arguments @('auth', 'token', '--hostname', 'github.com') -ClearGitHubTokens
-            if ($token.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($token.StdOut)) {
-                $exported = "$($token.StdOut)".Trim()
-                [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $exported)
-                $exported = $null
-                Add-Lane -Name 'github-models-export' -State 'ready' -Detail 'GITHUB_MODELS_TOKEN exported into this shell from the gh login (value not shown)'
-            }
-            else {
-                Add-Lane -Name 'github-models-export' -State 'needs-owner' -Detail 'gh yielded no token' -OwnerAction 'export GITHUB_MODELS_TOKEN=$(gh auth token)'
-            }
-        }
-    }
-    else {
-        Add-Lane -Name 'github-models-export' -State 'needs-owner' -Detail 'a child process cannot export into your shell' -OwnerAction 'dot-source instead: . scripts/bootstrap/connect-devices.ps1   (bash: source scripts/bootstrap/connect-github.sh)'
-    }
+    Invoke-ModelsExport -DotSourced:$DotSourced
 
     if ($SkipGitHubApp) {
         Add-Lane -Name 'github-app' -State 'skipped' -Detail '-SkipGitHubApp'

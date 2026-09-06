@@ -153,13 +153,22 @@ fi
 if [ "$1" = "secret" ] && [ "$2" = "list" ]; then
   if [ -n "$GH_SHIM_KEY_PRESENT" ]; then echo '[{"name":"HELIOS_APP_PRIVATE_KEY"}]'; else echo '[]'; fi; exit 0
 fi
-if [ "$1" = "api" ] && [ "$2" = "/user/installations" ]; then
-  if [ -n "$GH_SHIM_INSTALLED" ]; then
+# Paged listings: the path carries ?per_page=100&page=N; page 2+ is empty unless
+# GH_SHIM_PAGES asks for the two-page repository shape (100 fillers, then the target).
+if [ "$1" = "api" ] && [ "${2%%\?*}" = "/user/installations" ]; then
+  page="${2##*page=}"; [ "$page" = "$2" ] && page=1
+  if [ -n "$GH_SHIM_INSTALLED" ] && [ "$page" = "1" ]; then
     echo '{"installations":[{"id":777,"app_slug":"helios-control-owner","repository_selection":"selected","permissions":{"administration":"write","contents":"write"}}]}'
   else echo '{"installations":[]}'; fi; exit 0
 fi
-if [ "$1" = "api" ] && [ "$2" = "/user/installations/777/repositories" ]; then
-  echo '{"repositories":[{"full_name":"owner/repo"}]}'; exit 0
+if [ "$1" = "api" ] && [ "${2%%\?*}" = "/user/installations/777/repositories" ]; then
+  page="${2##*page=}"; [ "$page" = "$2" ] && page=1
+  if [ -n "$GH_SHIM_PAGES" ] && [ "$page" = "1" ]; then
+    names=""; for i in $(seq 1 100); do names="${names}{\"full_name\":\"owner/filler-$i\"},"; done
+    echo "{\"repositories\":[${names%,}]}"
+  elif [ -n "$GH_SHIM_PAGES" ] && [ "$page" = "2" ]; then echo '{"repositories":[{"full_name":"owner/repo"}]}'
+  elif [ "$page" = "1" ]; then echo '{"repositories":[{"full_name":"owner/repo"}]}'
+  else echo '{"repositories":[]}'; fi; exit 0
 fi
 if [ "$1" = "api" ] && [ "$2" = "user" ]; then echo '{"id":195981509}'; exit 0; fi
 exit 0
@@ -272,6 +281,21 @@ exit 0
     Assert-True ($run.ExitCode -eq 2) 'Uninstalled app must exit 2.'
     Assert-True ((Get-Lane $run.Object 'app-installed').ownerAction -match 'apps/helios-control-owner/installations/new') 'Install action must link the install page.'
 
+    # Paging: the installation and repository listings are read page by page, so a
+    # repository that only appears on the second page is still found (`--paginate`
+    # concatenated one document per page, which ConvertFrom-Json rejected).
+    $env:GH_SHIM_INSTALLED = '1'
+    $env:GH_SHIM_PAGES = '1'
+    Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+    $names = @(Get-UserInstallationRepositories -InstallationId '777')
+    Assert-True ($names.Count -eq 101 -and ($names -contains 'owner/repo')) "A second-page repository must be found (got $($names.Count) names)."
+    $pagingLog = Get-Content -LiteralPath $log -Raw
+    Assert-True ($pagingLog -match 'per_page=100&page=1' -and $pagingLog -match 'per_page=100&page=2' -and $pagingLog -notmatch 'page=3' -and $pagingLog -notmatch '--paginate') 'Paging must stop after the short page and never use --paginate.'
+    Assert-True ($null -ne (Get-UserInstallationBySlug -Slug 'helios-control-owner')) 'The installation must be found through the paged listing.'
+    Assert-True ($null -eq (Get-UserInstallationBySlug -Slug 'other-app')) 'A missing slug must be null through the paged listing.'
+    $env:GH_SHIM_PAGES = ''
+    $env:GH_SHIM_INSTALLED = ''
+
     # Precondition failures keep the one-object promise.
     $env:GH_SHIM_AUTH_EXIT = '1'
     $run = Invoke-Flow @{ VerifyOnly = $true; Json = $true; Repository = 'owner/repo' }
@@ -300,7 +324,7 @@ finally {
     $env:PATH = $savedPath
     $env:GH_TOKEN = $savedGh
     $env:GITHUB_TOKEN = $savedGithub
-    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT') { [Environment]::SetEnvironmentVariable($name, $null) }
+    foreach ($name in 'GH_SHIM_LOG', 'GH_SHIM_REGISTERED', 'GH_SHIM_KEY_PRESENT', 'GH_SHIM_INSTALLED', 'GH_SHIM_AUTH_EXIT', 'GH_SHIM_PAGES') { [Environment]::SetEnvironmentVariable($name, $null) }
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
 }
 Write-Host "Passed $($script:cases) offline connect-github-app cases."
