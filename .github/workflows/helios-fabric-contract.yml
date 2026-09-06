@@ -1,0 +1,112 @@
+name: HELIOS Fabric contract
+
+on:
+  pull_request:
+    paths:
+      - 'config/fabric/**'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'docs/fabric/**'
+      - 'scripts/validation/validate_helios_fabric.py'
+      - '.github/workflows/helios-fabric-contract.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/fabric/**'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'docs/fabric/**'
+      - 'scripts/validation/validate_helios_fabric.py'
+      - '.github/workflows/helios-fabric-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-fabric-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-fabric:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile validators
+        run: python -m compileall -q scripts/validation
+      - name: Validate canonical cutover
+        run: python scripts/validation/validate_yolkster_cutover.py
+      - name: Validate Fabric contracts
+        run: python scripts/validation/validate_helios_fabric.py
+      - name: Parse Fabric JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          files = [
+              Path('config/fabric/helios-fabric.v1.json'),
+              Path('config/connectors/helios-fabric.connections.v1.json'),
+              Path('config/agents/helios-fabric-roles.v1.json'),
+              Path('config/ui/winui3-only.v1.json'),
+          ]
+          for path in files:
+              with path.open(encoding='utf-8') as stream:
+                  json.load(stream)
+              print(f'validated {path}')
+          PY
+      - name: Verify production remains disabled
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          fabric = json.loads(Path('config/fabric/helios-fabric.v1.json').read_text())
+          assert fabric['safety']['productionEnabled'] is False
+          assert fabric['safety']['applyDefault'] is False
+          assert fabric['safety']['automaticAzureDeployment'] is False
+          assert fabric['identity']['clientSecretsAllowed'] is False
+          print('production and client-secret automation remain disabled')
+          PY
+      - name: Scan Fabric files for likely committed credentials
+        run: |
+          set -euo pipefail
+          paths=(
+            config/fabric
+            config/connectors/helios-fabric.connections.v1.json
+            config/agents/helios-fabric-roles.v1.json
+            docs/fabric
+            scripts/validation/validate_helios_fabric.py
+          )
+          if grep -RIE --binary-files=without-match \
+            '(sk-(proj-)?[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})' \
+            "${paths[@]}"; then
+            echo 'Possible committed credential detected.' >&2
+            exit 1
+          fi
+      - name: Publish validation evidence
+        run: |
+          mkdir -p validation-evidence
+          python scripts/validation/validate_helios_fabric.py > validation-evidence/helios-fabric-validation.json
+          printf 'repository=%s\ncommit=%s\nworkflow=%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_WORKFLOW" \
+            > validation-evidence/source.txt
+          sha256sum \
+            config/fabric/helios-fabric.v1.json \
+            config/connectors/helios-fabric.connections.v1.json \
+            config/agents/helios-fabric-roles.v1.json \
+            docs/fabric/HELIOS_FABRIC_SETUP.md \
+            docs/fabric/FABRIC_ACTIVATION_MATRIX.md \
+            > validation-evidence/SHA256SUMS
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-fabric-contract-${{ github.sha }}
+          path: validation-evidence
+          if-no-files-found: error
+          retention-days: 30
