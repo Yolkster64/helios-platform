@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -98,10 +99,10 @@ class IntegrationContractTests(unittest.TestCase):
             for segment in path:
                 definition = definition["items"] if isinstance(segment, int) else definition["properties"][segment]
             if "pattern" in definition:
-                self.assertIsNotNone(contracts.re.fullmatch(definition["pattern"], "a" * minimum))
-                self.assertIsNotNone(contracts.re.fullmatch(definition["pattern"], "a" * maximum))
-                self.assertIsNone(contracts.re.fullmatch(definition["pattern"], "a" * (minimum - 1)))
-                self.assertIsNone(contracts.re.fullmatch(definition["pattern"], "a" * (maximum + 1)))
+                self.assertIsNotNone(re.fullmatch(definition["pattern"], "a" * minimum))
+                self.assertIsNotNone(re.fullmatch(definition["pattern"], "a" * maximum))
+                self.assertIsNone(re.fullmatch(definition["pattern"], "a" * (minimum - 1)))
+                self.assertIsNone(re.fullmatch(definition["pattern"], "a" * (maximum + 1)))
             else:
                 self.assertEqual(definition.get("minLength", 0), minimum)
                 self.assertEqual(definition["maxLength"], maximum)
