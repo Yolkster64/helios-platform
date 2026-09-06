@@ -40,13 +40,15 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
 
-        // Shell rule (GUI_THEME_ANALYSIS.md): no logic in the shell. The only service is
-        // the thin REST client over helios-ai-api; the hub itself stays out of process.
+        // Shell rule (GUI_THEME_ANALYSIS.md): platform work remains behind service/view-model
+        // boundaries. AI Hub uses the thin REST client; Fabric Control renders only local
+        // readiness metadata and launches governed operator surfaces/commands.
         services.AddSingleton<AIHubApiClient>();
 
-        // Transient: each page instance gets its own VM, constructed on the UI thread so
-        // it can capture the page's DispatcherQueue.
+        // Transient: each page instance gets its own VM. AIHubPageViewModel is constructed
+        // on the UI thread so it can capture the page's DispatcherQueue.
         services.AddTransient<AIHubPageViewModel>();
+        services.AddTransient<FabricControlPageViewModel>();
 
         return services.BuildServiceProvider();
     }
