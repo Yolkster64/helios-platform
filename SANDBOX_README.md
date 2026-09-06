@@ -373,6 +373,7 @@ Get-PnpDeviceProperty -InstanceId <DeviceInstanceId>
 ## 📞 Support
 
 For issues, questions, or feature requests:
+
 - Check documentation files
 - Review unit tests for usage examples
 - Check Event Viewer for system events
@@ -459,5 +460,6 @@ await snapshotManager.RapidRollbackAsync(sandbox);
 **Last Updated:** 2024
 
 For more information, see:
+
 - [Configuration Guide](SANDBOX_CONFIGURATION_GUIDE.md)
 - [Complete Documentation](SANDBOX_DOCUMENTATION.md)

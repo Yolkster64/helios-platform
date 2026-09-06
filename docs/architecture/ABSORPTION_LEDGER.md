@@ -293,8 +293,8 @@ scripts, and submodule consolidation tooling. The planner profiles and inventory
 model are the durable ideas; the orchestrators are era-specific.
 
 - PRs: #71 (integration planner with profiles), #72 (deep-AI orchestrator: inventory
-  + workflow + docs), #73 (deep AI & workflow automation), #77 (automation workflows
-  + control-plane scripts + submodule consolidation tooling), #68 (SRE Agent
+  - workflow + docs), #73 (deep AI & workflow automation), #77 (automation workflows
+  - control-plane scripts + submodule consolidation tooling), #68 (SRE Agent
   deployment automation docs and assets)
 - Extracts: planner profile shape, inventory model; submodule tooling defers to E7's
   governance

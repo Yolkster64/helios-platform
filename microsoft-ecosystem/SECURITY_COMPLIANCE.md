@@ -7,12 +7,14 @@
 ### 1. Identity & Access Management
 
 **Multi-Factor Authentication (MFA)**
+
 - Enforce for all admins: REQUIRED
 - Enforce for all users: RECOMMENDED
 - Methods: Authenticator app (primary), Phone call (secondary)
 - Remember device: 30 days for regular users, 7 days for admins
 
 **Role-Based Access Control (RBAC)**
+
 ```
 Principle: Least Privilege
 - Admins: Only those who need admin access
@@ -22,6 +24,7 @@ Principle: Least Privilege
 ```
 
 **Service Principals**
+
 - One service principal per application
 - Use certificate-based auth (not secrets)
 - Rotate credentials every 90 days
@@ -30,6 +33,7 @@ Principle: Least Privilege
 ### 2. Network Security
 
 **Network Segmentation**
+
 ```
 Frontend Tier (Public)
 ├── Allow: HTTPS (443)
@@ -47,6 +51,7 @@ Database Tier (Private)
 ```
 
 **Encryption**
+
 - At Rest: AES-256 (Azure Storage Service Encryption)
 - In Transit: TLS 1.2+ (enforced)
 - Key Management: Azure Key Vault
@@ -55,18 +60,21 @@ Database Tier (Private)
 ### 3. Data Protection
 
 **Data Classification**
+
 - Public: Non-sensitive, shareable
 - Internal: Company use only
 - Confidential: Restricted access
 - Highly Confidential: Maximum security (credentials, keys)
 
 **Data Loss Prevention (DLP)**
+
 - Block sharing of highly confidential data
 - Require encryption for transit
 - Audit all data access
 - Alert on suspicious patterns
 
 **Backup Strategy**
+
 - Frequency: Daily
 - Retention: 30 days (rolling)
 - Location: Geo-redundant (2+ regions)
@@ -76,6 +84,7 @@ Database Tier (Private)
 ### 4. Endpoint Security
 
 **Device Compliance Requirements**
+
 ```
 Windows 11:
 - BitLocker encryption: Required
@@ -101,12 +110,14 @@ iOS/Android:
 ### 5. Monitoring & Logging
 
 **Logs Retention**
+
 - Application Logs: 90 days hot, 2 years cold storage
 - Audit Logs: 2 years minimum (compliance requirement)
 - Security Logs: 3 years (legal hold)
 - Backup Logs: 7 years (disaster recovery)
 
 **Real-time Alerting**
+
 ```
 CRITICAL (Page on-call immediately):
 - Database failure or unavailable
@@ -145,6 +156,7 @@ MEDIUM (Next business day):
 | **DPO (if applicable)** | Designate Data Protection Officer |
 
 **Checklist**:
+
 - [ ] Data inventory documented
 - [ ] DPA signed with all vendors
 - [ ] Privacy impact assessment (PIA) completed
@@ -167,6 +179,7 @@ MEDIUM (Next business day):
 | **Incident Response** | 60-day breach investigation |
 
 **Checklist**:
+
 - [ ] BAA signed with Microsoft
 - [ ] BAAs signed with all subcontractors
 - [ ] Encryption enabled on all systems
@@ -190,6 +203,7 @@ MEDIUM (Next business day):
 **Audit Frequency**: Annual (Type II: 6-month minimum observation period)
 
 **Checklist**:
+
 - [ ] Control matrix documented
 - [ ] Evidence collected for all controls
 - [ ] Testing procedures documented
@@ -233,6 +247,7 @@ Level 3 (Viewer):
 ### Change Management
 
 **All changes must follow**:
+
 1. Submit change ticket 24 hours in advance
 2. Get approval from change advisory board (CAB)
 3. Communicate to stakeholders
@@ -241,6 +256,7 @@ Level 3 (Viewer):
 6. Document results
 
 **Emergency Changes** (< 24 hours):
+
 - Require VP-level approval
 - Execute with caution
 - Post-incident review required
@@ -248,6 +264,7 @@ Level 3 (Viewer):
 ### Audit Procedures
 
 **Monthly Audits**:
+
 - [ ] Review all IAM changes
 - [ ] Verify MFA is enforced
 - [ ] Check for unused accounts (90+ days inactive)
@@ -255,12 +272,14 @@ Level 3 (Viewer):
 - [ ] Audit privileged account usage
 
 **Quarterly Audits**:
+
 - [ ] Full access review (manager sign-off)
 - [ ] Vulnerability scan results
 - [ ] Compliance assessment
 - [ ] Disaster recovery test
 
 **Annual Audits**:
+
 - [ ] SOC 2 Type II audit
 - [ ] GDPR/HIPAA compliance review
 - [ ] Security penetration test

@@ -71,18 +71,21 @@ HELIOS solves one problem: **How do I deploy, secure, automate, and monitor a co
 Each phase builds on the previous, from infrastructure through AI:
 
 ### **Phase 0: Preflight** ✈️
+
 - System validation
 - Dependency checks
 - Credential verification
 - **What it does**: Ensures your system is ready
 
 ### **Phase 1: Infrastructure** 🏗️
+
 - Azure resource provisioning
 - Storage setup (Cosmos, Blob, Redis)
 - Networking configuration
 - **What it does**: Creates cloud foundation
 
 ### **Phase 2: Security** 🔒
+
 - Identity management
 - Authentication system
 - Secret management
@@ -90,6 +93,7 @@ Each phase builds on the previous, from infrastructure through AI:
 - **What it does**: Protects everything
 
 ### **Phase 3: Services** 🖥️
+
 - API Gateway deployment
 - Software stack setup
 - Cache layer configuration
@@ -97,6 +101,7 @@ Each phase builds on the previous, from infrastructure through AI:
 - **What it does**: Deploys core services
 
 ### **Phase 4: AI Integration** 🤖
+
 - AI service connections
 - Model management
 - Agent orchestration
@@ -104,6 +109,7 @@ Each phase builds on the previous, from infrastructure through AI:
 - **What it does**: Adds AI capabilities
 
 ### **Phase 5: Monitoring** 📊
+
 - Dashboard setup
 - Metrics collection
 - Log aggregation
@@ -111,6 +117,7 @@ Each phase builds on the previous, from infrastructure through AI:
 - **What it does**: Provides visibility
 
 ### **Phase 6: Verification** ✅
+
 - Health checks
 - Performance validation
 - Security audits
@@ -124,36 +131,42 @@ Each phase builds on the previous, from infrastructure through AI:
 Each component handles a specific responsibility:
 
 ### **1. Storage Layer**
+
 **Purpose**: Persistent data management  
 **Technologies**: Azure Cosmos DB, Blob Storage, Redis, Event Grid  
 **Handles**: Data storage, caching, events  
 **Example**: "Where does user data live?"
 
 ### **2. Security Layer**
+
 **Purpose**: Protect all access and data  
 **Technologies**: Azure Identity, KeyVault, encryption, audit logs  
 **Handles**: Authentication, authorization, secrets, compliance  
 **Example**: "Who can access what?"
 
 ### **3. Software Stack**
+
 **Purpose**: Core services and functionality  
 **Technologies**: .NET services, containers, APIs  
 **Handles**: Business logic, APIs, integrations  
 **Example**: "What services are available?"
 
 ### **4. API Gateway**
+
 **Purpose**: Intelligent request routing and protection  
 **Technologies**: Rate limiting, circuit breakers, caching  
 **Handles**: Request routing, protection, optimization  
 **Example**: "Route this request efficiently"
 
 ### **5. Analytics & Monitoring**
+
 **Purpose**: Real-time system visibility  
 **Technologies**: Metrics, logs, dashboards, alerts  
 **Handles**: Performance tracking, issue detection  
 **Example**: "Is the system healthy?"
 
 ### **6. Task Orchestration**
+
 **Purpose**: Automate complex workflows  
 **Technologies**: Task queues, scheduling, agents  
 **Handles**: Automation, scheduling, parallel work  
@@ -176,6 +189,7 @@ HELIOS integrates multiple AI services and intelligently routes requests:
 | **Custom Agents** | Task-specific | Domain logic |
 
 **Intelligent Routing**: System automatically chooses best service based on:
+
 - Task complexity
 - Cost optimization
 - Response time needs

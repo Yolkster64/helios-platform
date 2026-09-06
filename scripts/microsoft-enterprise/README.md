@@ -59,6 +59,7 @@ microsoft-enterprise/
 ## Features
 
 ### Azure Integration (7 scripts)
+
 - **azure-auth.ps1**: Multi-method authentication (Service Principal, Interactive, Managed Identity, Certificate)
 - **resource-manager.ps1**: Resource group management, ARM template deployment, tagging, locks
 - **vm-orchestrator.ps1**: VM provisioning, lifecycle management, snapshots, extensions
@@ -68,6 +69,7 @@ microsoft-enterprise/
 - **cost-analyzer.ps1**: Cost analysis, budget management, optimization recommendations
 
 ### Azure Entra Integration (6 scripts)
+
 - **entra-sync.ps1**: Directory synchronization, conflict resolution, health monitoring
 - **user-management.ps1**: User provisioning, lifecycle, bulk operations, profiles
 - **group-management.ps1**: Group creation, dynamic groups, membership management
@@ -76,6 +78,7 @@ microsoft-enterprise/
 - **mfa-enforcement.ps1**: MFA setup, device registration, compliance reporting
 
 ### Microsoft 365 Integration (6 scripts)
+
 - **teams-provisioning.ps1**: Team creation, channels, membership, governance
 - **sharepoint-setup.ps1**: Site creation, lists, permissions, sharing policies
 - **exchange-config.ps1**: Distribution groups, mailbox audit, forwarding rules
@@ -84,24 +87,28 @@ microsoft-enterprise/
 - **compliance-setup.ps1**: DLP policies, audit logging, retention policies
 
 ### Copilot Integration (4 stub scripts)
+
 - **copilot-integration.ps1**: Copilot API management and instance creation
 - **prompt-templates.ps1**: Prompt template management and versioning
 - **usage-analytics.ps1**: Usage tracking and analytics reporting
 - **custom-copilots.ps1**: Custom Copilot creation and configuration
 
 ### Purview Integration (4 stub scripts)
+
 - **data-governance.ps1**: Data classification and governance policies
 - **compliance-dashboard.ps1**: Compliance monitoring and reporting
 - **risk-management.ps1**: Risk assessment and mitigation
 - **audit-logs.ps1**: Audit logging and compliance auditing
 
 ### Fabric Integration (4 stub scripts)
+
 - **workspace-management.ps1**: Workspace creation and management
 - **lakehouse-setup.ps1**: Lakehouse provisioning and configuration
 - **data-pipelines.ps1**: Data pipeline creation and orchestration
 - **reporting.ps1**: Report generation and distribution
 
 ### Power Platform (4 stub scripts)
+
 - **power-apps.ps1**: Power Apps management and creation
 - **power-bi.ps1**: Power BI workspace and report management
 - **power-automate.ps1**: Flow creation and management
@@ -110,6 +117,7 @@ microsoft-enterprise/
 ## Prerequisites
 
 ### Required PowerShell Modules
+
 ```powershell
 # Azure
 Install-Module -Name Az.Accounts -Force
@@ -133,6 +141,7 @@ Install-Module -Name MicrosoftFabric -Force  # When available
 ```
 
 ### Required Permissions
+
 - Azure: Subscription Reader, Contributor roles
 - Entra: Global Administrator or appropriate role
 - Microsoft 365: Global Administrator or delegated role
@@ -142,6 +151,7 @@ Install-Module -Name MicrosoftFabric -Force  # When available
 ## Configuration
 
 ### Environment Variables
+
 Set these before running scripts:
 
 ```powershell
@@ -155,6 +165,7 @@ $env:NOTIFICATION_EMAIL = "admin@helios.onmicrosoft.com"
 ```
 
 ### Configuration Files
+
 - **azure-config.json**: Azure service configuration
 - **entra-config.json**: Entra ID configuration
 - **m365-config.json**: Microsoft 365 configuration
@@ -164,6 +175,7 @@ $env:NOTIFICATION_EMAIL = "admin@helios.onmicrosoft.com"
 ## Usage Examples
 
 ### Azure Authentication
+
 ```powershell
 # Service Principal
 . .\azure\azure-auth.ps1 -AuthType ServicePrincipal -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
@@ -176,6 +188,7 @@ $env:NOTIFICATION_EMAIL = "admin@helios.onmicrosoft.com"
 ```
 
 ### Resource Management
+
 ```powershell
 . .\azure\resource-manager.ps1
 $rg = New-ResourceGroup -ResourceGroupName "helios-rg" -Location "eastus"
@@ -183,6 +196,7 @@ $templates = Get-DeploymentHistory -ResourceGroupName "helios-rg"
 ```
 
 ### VM Orchestration
+
 ```powershell
 . .\azure\vm-orchestrator.ps1
 $vm = New-VirtualMachine -ResourceGroupName "helios-rg" -VMName "helios-vm01" `
@@ -191,6 +205,7 @@ $vm = New-VirtualMachine -ResourceGroupName "helios-rg" -VMName "helios-vm01" `
 ```
 
 ### Entra User Management
+
 ```powershell
 . .\entra\user-management.ps1
 $user = New-EntraUser -UserPrincipalName "john.doe@helios.onmicrosoft.com" `
@@ -198,6 +213,7 @@ $user = New-EntraUser -UserPrincipalName "john.doe@helios.onmicrosoft.com" `
 ```
 
 ### Teams Provisioning
+
 ```powershell
 . .\m365\teams-provisioning.ps1
 $team = New-Team -TeamName "Engineering" -TeamDescription "Engineering Team" -Visibility Private
@@ -206,6 +222,7 @@ $team = New-Team -TeamName "Engineering" -TeamDescription "Engineering Team" -Vi
 ## Error Handling & Logging
 
 All scripts include comprehensive:
+
 - **Structured Logging**: Timestamped logs with severity levels
 - **Error Handling**: Try-catch blocks with detailed error messages
 - **Validation**: Input parameter validation
@@ -225,6 +242,7 @@ Logs are written to: `C:\Logs\HELIOS\{Component}\`
 ## Troubleshooting
 
 ### Connection Issues
+
 ```powershell
 # Test Azure connection
 Test-AzureConnection
@@ -237,6 +255,7 @@ Get-AzureADCurrentSessionInfo
 ```
 
 ### Module Issues
+
 ```powershell
 # Update modules
 Update-Module -Name Az.Accounts -Force

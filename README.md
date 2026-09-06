@@ -69,7 +69,7 @@ engineering contract.
 
 ## Prerequisites
 
-- .NET SDK 8
+- .NET SDK 10 (see `global.json` for the minimum SDK and roll-forward policy)
 - PowerShell 7 (`pwsh`) for the automation layer under `scripts/`
 - Python 3.10 or newer
 - Git

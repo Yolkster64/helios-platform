@@ -5,6 +5,7 @@ Complete guide to creating, reviewing, and merging pull requests effectively.
 ---
 
 ## Table of Contents
+
 1. [PR Title Format](#pr-title-format)
 2. [PR Description Template](#pr-description-template)
 3. [Testing Requirements](#testing-requirements)
@@ -28,6 +29,7 @@ Follow this format:
 ### Title Examples
 
 **✓ Good Titles:**
+
 ```
 feat(auth): implement JWT token validation | Fixes #234
 fix(dashboard): resolve widget overlap on mobile | Fixes #567
@@ -40,6 +42,7 @@ chore(deps): upgrade React to 18.2.0
 ```
 
 **✗ Bad Titles:**
+
 ```
 fixes stuff
 update file
@@ -171,12 +174,14 @@ After: All requests validated before processing
 ### Unit Tests
 
 **Required for:**
+
 - New functions/methods
 - Modified existing logic
 - Bug fixes
 - Edge cases
 
 **Example:**
+
 ```typescript
 describe('AuthService.validateToken', () => {
   it('should validate valid token', () => {
@@ -203,12 +208,14 @@ describe('AuthService.validateToken', () => {
 ### Integration Tests
 
 **Required for:**
+
 - Multi-component interactions
 - API endpoints
 - Database operations
 - External service calls
 
 **Example:**
+
 ```typescript
 describe('API Token Validation', () => {
   it('should reject request without token', async () => {
@@ -238,11 +245,13 @@ describe('API Token Validation', () => {
 ### Test Coverage
 
 **Minimum requirements:**
+
 - New code: 80% coverage
 - Modified code: 80% coverage
 - Overall: No decrease in project coverage
 
 **Verify coverage:**
+
 ```bash
 npm test -- --coverage
 # Should show 80%+ for new/modified files
@@ -279,6 +288,7 @@ Before submitting PR:
 ### What Reviewers Check
 
 **Functionality:**
+
 ```markdown
 □ Code does what PR description says
 □ Feature works as expected
@@ -288,6 +298,7 @@ Before submitting PR:
 ```
 
 **Code Quality:**
+
 ```markdown
 □ Code is clean and readable
 □ Follows project style guide
@@ -298,6 +309,7 @@ Before submitting PR:
 ```
 
 **Testing:**
+
 ```markdown
 □ Tests exist for new code
 □ Tests pass locally
@@ -307,6 +319,7 @@ Before submitting PR:
 ```
 
 **Documentation:**
+
 ```markdown
 □ README/docs updated if needed
 □ API documentation current
@@ -316,6 +329,7 @@ Before submitting PR:
 ```
 
 **Security:**
+
 ```markdown
 □ No hardcoded credentials
 □ Input properly validated
@@ -327,6 +341,7 @@ Before submitting PR:
 ```
 
 **Performance:**
+
 ```markdown
 □ No obvious performance issues
 □ Database queries optimized
@@ -338,6 +353,7 @@ Before submitting PR:
 ### Reviewer Comment Types
 
 **Request Change (Required):**
+
 ```markdown
 Request change
 "This function needs null checking."
@@ -345,6 +361,7 @@ Request change
 ```
 
 **Suggestion (Nice to Have):**
+
 ```markdown
 Suggestion
 "Consider extracting this to a utility function."
@@ -352,6 +369,7 @@ Suggestion
 ```
 
 **Question (Clarification):**
+
 ```markdown
 Question
 "Why did you choose this approach over X?"
@@ -359,6 +377,7 @@ Question
 ```
 
 **Praise (Recognition):**
+
 ```markdown
 Praise
 "Great solution! Very clean implementation."
@@ -372,6 +391,7 @@ Praise
 ### PR Review Workflow
 
 **Step 1: Create and Submit**
+
 ```markdown
 1. Create PR with complete description
 2. Link related issues
@@ -381,6 +401,7 @@ Praise
 ```
 
 **Step 2: Initial Review**
+
 ```markdown
 1. Reviewer(s) read PR description
 2. Review code changes
@@ -390,6 +411,7 @@ Praise
 ```
 
 **Step 3: Author Responds**
+
 ```markdown
 1. Read review feedback
 2. Discuss any disagreements
@@ -399,6 +421,7 @@ Praise
 ```
 
 **Step 4: Final Approval**
+
 ```markdown
 1. Reviewer(s) verify changes
 2. Re-approve PR
@@ -407,6 +430,7 @@ Praise
 ```
 
 **Step 5: Merge**
+
 ```markdown
 1. Ensure branch is up-to-date
 2. Click merge button (squash commits)
@@ -417,6 +441,7 @@ Praise
 ### Approval Tiers
 
 **Tier 1: Any Reviewer (Documentation, Comments)**
+
 ```markdown
 - README updates
 - Documentation corrections
@@ -428,6 +453,7 @@ Minimum approvals: 1
 ```
 
 **Tier 2: Core Team (Features, Fixes)**
+
 ```markdown
 - New features
 - Bug fixes
@@ -439,6 +465,7 @@ Minimum approvals: 1 (must be core team)
 ```
 
 **Tier 3: Multiple Reviewers (Critical Changes)**
+
 ```markdown
 - API changes
 - Security changes
@@ -450,6 +477,7 @@ Minimum approvals: 2 (including specialists)
 ```
 
 **Tier 4: Lead Approval (Major Changes)**
+
 ```markdown
 - Architecture changes
 - Major refactoring
@@ -485,6 +513,7 @@ Tech Lead: "Agreed. Use async/await for consistency."
 ### Merge Options
 
 **Option 1: Squash and Merge (RECOMMENDED)**
+
 ```
 Advantages:
 - Clean linear history
@@ -500,6 +529,7 @@ Result in main:
 ```
 
 **Option 2: Rebase and Merge**
+
 ```
 Advantages:
 - Linear history
@@ -515,6 +545,7 @@ Result in main:
 ```
 
 **Option 3: Create Merge Commit (NOT RECOMMENDED)**
+
 ```
 Advantages:
 - Preserves branch history

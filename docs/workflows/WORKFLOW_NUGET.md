@@ -29,6 +29,7 @@ The `nuget.yml` workflow handles .NET package creation, versioning, and publishi
 ## Workflow Purpose
 
 **Goals**:
+
 - ✅ Build across multiple .NET versions (6.0, 7.0, 8.0)
 - ✅ Build across multiple platforms (Windows, Linux)
 - ✅ Run tests on each configuration
@@ -98,6 +99,7 @@ jobs:
 **Steps breakdown**:
 
 1. **Checkout**
+
    ```yaml
    - uses: actions/checkout@v4
      with:
@@ -105,6 +107,7 @@ jobs:
    ```
 
 2. **Setup .NET**
+
    ```yaml
    - uses: actions/setup-dotnet@v4
      with:
@@ -112,12 +115,15 @@ jobs:
    ```
 
 3. **Restore Dependencies**
+
    ```bash
    dotnet restore
    ```
+
    Restores NuGet packages from `packages.config` or `.csproj`
 
 4. **Build Solution**
+
    ```bash
    dotnet build src/HELIOS.Platform/HELIOS.Platform.csproj \
      -c Release \
@@ -125,7 +131,7 @@ jobs:
      --no-restore \
      -v minimal
    ```
-   
+
    **Build flags**:
    - `-c Release` - Release configuration
    - `-f net8.0` - Target framework
@@ -133,6 +139,7 @@ jobs:
    - `-v minimal` - Minimal logging
 
 5. **Run Tests**
+
    ```bash
    dotnet test tests/ \
      -c Release \
@@ -142,6 +149,7 @@ jobs:
    ```
 
 6. **Upload Results**
+
    ```yaml
    - uses: actions/upload-artifact@v3
      with:
@@ -167,6 +175,7 @@ jobs:
 ### Version Format
 
 Follow semantic versioning:
+
 ```
 Major.Minor.Patch[-Prerelease]
 
@@ -226,6 +235,7 @@ dotnet pack src/HELIOS.Platform/HELIOS.Platform.csproj \
 ```
 
 **Output**:
+
 ```
 artifacts/
 └── HELIOS.Platform.1.0.0.nupkg
@@ -285,6 +295,7 @@ jobs:
 ### Publishing Steps
 
 1. **Download Package**
+
    ```yaml
    - uses: actions/download-artifact@v3
      with:
@@ -292,6 +303,7 @@ jobs:
    ```
 
 2. **Push to NuGet.org**
+
    ```powershell
    $nupkgs = Get-ChildItem download -Recurse -Filter "*.nupkg"
    foreach ($nupkg in $nupkgs) {
@@ -308,6 +320,7 @@ jobs:
    - `--skip-duplicate` - Don't fail if version exists
 
 3. **Create GitHub Release**
+
    ```yaml
    - uses: actions/create-release@v1
      env:
@@ -382,12 +395,14 @@ foreach ($nupkg in $nupkgs) {
 ### Creating a Release
 
 **Method 1: Git tag**
+
 ```bash
 git tag -a v1.0.0 -m "Release version 1.0.0"
 git push origin v1.0.0
 ```
 
 **Method 2: GitHub UI**
+
 1. Go to Releases
 2. Draft new release
 3. Set tag name: `v1.0.0`
@@ -464,6 +479,7 @@ v1.0.0-rc.1           # Release candidate
 ## Best Practices
 
 ✅ **Do**:
+
 - Use semantic versioning
 - Keep version in .csproj
 - Test on all frameworks
@@ -472,6 +488,7 @@ v1.0.0-rc.1           # Release candidate
 - Document releases
 
 ❌ **Don't**:
+
 - Hardcode versions
 - Publish duplicate versions
 - Skip testing

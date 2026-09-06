@@ -1,8 +1,10 @@
 # NuGet Dependency Audit Report
+
 Repository: helios-platform
 Date: 2026-04-23 21:56:33
 
 Executive Summary:
+
 - Total Projects Analyzed: 6
 - Total Packages Reviewed: 45+
 - Packages Updated: 20
@@ -11,6 +13,7 @@ Executive Summary:
 
 Security Findings:
 KubernetesClient 14.0.2 has MODERATE severity vulnerability (GHSA-w7r3-mgwf-4mqq)
+
 - Current Version: 14.0.2
 - Latest Version: 19.0.2
 - Status: NOT UPDATED - Major version bump requires manual review
@@ -18,12 +21,14 @@ KubernetesClient 14.0.2 has MODERATE severity vulnerability (GHSA-w7r3-mgwf-4mqq
 Packages Updated (20 total):
 
 Patch Updates:
+
 - Azure.ResourceManager.Storage: 1.6.0 -> 1.6.2
 - Microsoft.CodeAnalysis.NetAnalyzers: 10.0.201 -> 10.0.203
 - System.Data.SqlClient: 4.8.6 -> 4.9.1
 - Moq: 4.20.69 -> 4.20.72
 
 Minor Updates:
+
 - Azure.Data.Tables: 12.8.0 -> 12.11.0
 - Azure.Identity: 1.11.4 -> 1.21.0
 - Azure.Messaging.EventHubs: 5.11.3 -> 5.12.2
@@ -44,6 +49,7 @@ Minor Updates:
 - xunit.runner.visualstudio: 2.5.4 -> 3.1.5
 
 Build Status: SUCCESS
+
 - All packages restore successfully
 - No new compilation errors introduced
 - All updated packages are compatible

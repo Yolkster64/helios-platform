@@ -5,6 +5,7 @@
 The HELIOS Platform Command-Line Interface (CLI) provides powerful tools for system management, deployment, and monitoring.
 
 ## Table of Contents
+
 1. [Basic Commands](#basic-commands)
 2. [Deployment Commands](#deployment-commands)
 3. [Configuration Commands](#configuration-commands)
@@ -17,6 +18,7 @@ The HELIOS Platform Command-Line Interface (CLI) provides powerful tools for sys
 ## Basic Commands
 
 ### `helios help`
+
 Display general help information and command listing.
 
 ```bash
@@ -24,6 +26,7 @@ helios help
 ```
 
 **Output:**
+
 ```
 ═══════════════════════════════════════════════════════════
   HELIOS Platform v1.0.0
@@ -42,6 +45,7 @@ Commands:
 ```
 
 ### `helios version`
+
 Display application version and build information.
 
 ```bash
@@ -49,6 +53,7 @@ helios version
 ```
 
 **Output:**
+
 ```
 ✓ HELIOS Platform v1.0.0
   Build: 20260417
@@ -57,6 +62,7 @@ helios version
 ```
 
 ### `helios status`
+
 Check the current status of all system components.
 
 ```bash
@@ -64,6 +70,7 @@ helios status
 ```
 
 **Output:**
+
 ```
 ═══════════════════════════════════════════════════════════
   System Status
@@ -82,15 +89,18 @@ Security Module       ✓ OK         1.0.0      45s ago
 ## Deployment Commands
 
 ### `helios deploy [provider] [options]`
+
 Deploy HELIOS Platform to specified cloud provider.
 
 **Supported Providers:**
+
 - `azure` - Microsoft Azure
 - `aws` - Amazon Web Services
 - `gcp` - Google Cloud Platform
 - `local` - Local deployment
 
 **Options:**
+
 ```
 --config PATH         Path to deployment configuration file
 --region REGION       Target deployment region
@@ -113,6 +123,7 @@ helios deploy local --env dev --verbose
 ```
 
 **Output Example:**
+
 ```
 ℹ Preparing deployment to Azure...
 ✓ Configuration validated
@@ -129,6 +140,7 @@ helios deploy local --env dev --verbose
 ## Configuration Commands
 
 ### `helios config set [key] [value]`
+
 Set a configuration parameter.
 
 ```bash
@@ -143,6 +155,7 @@ helios config set debug.enabled true
 ```
 
 ### `helios config get [key]`
+
 Retrieve a configuration value.
 
 ```bash
@@ -154,6 +167,7 @@ helios config get security.*
 ```
 
 ### `helios config list`
+
 List all current configuration settings.
 
 ```bash
@@ -161,6 +175,7 @@ helios config list
 ```
 
 **Output Example:**
+
 ```
 ℹ Current Configuration
 ────────────────────────────────────────────────────────────
@@ -174,6 +189,7 @@ logging.level         INFO
 ```
 
 ### `helios config validate`
+
 Validate current configuration for errors.
 
 ```bash
@@ -183,6 +199,7 @@ helios config validate
 **Output Examples:**
 
 Success:
+
 ```
 ✓ Configuration is valid
 ✓ All required parameters present
@@ -190,6 +207,7 @@ Success:
 ```
 
 With Warnings:
+
 ```
 ⚠ Configuration validation completed with warnings
 ⚠ WARNING: SSL certificate will expire in 30 days
@@ -202,6 +220,7 @@ With Warnings:
 ## Monitoring Commands
 
 ### `helios monitor [interval]`
+
 Monitor real-time system metrics.
 
 ```bash
@@ -213,6 +232,7 @@ helios monitor
 ```
 
 **Output Example:**
+
 ```
 ═══════════════════════════════════════════════════════════
   System Metrics (Refresh: 2s)  [14:30:45]
@@ -227,9 +247,11 @@ Average Latency:  42ms
 ```
 
 ### `helios logs [filter] [options]`
+
 View system logs with filtering and search capabilities.
 
 **Options:**
+
 ```
 --level LEVEL        Filter by log level (error, warning, info, debug)
 --component COMP     Filter by component name
@@ -255,6 +277,7 @@ helios logs --level warning --since 30m
 ```
 
 **Output Example:**
+
 ```
 ═══════════════════════════════════════════════════════════
   System Logs (Level: info)
@@ -273,6 +296,7 @@ helios logs --level warning --since 30m
 ## System Commands
 
 ### `helios health-check`
+
 Run comprehensive system health check.
 
 ```bash
@@ -280,6 +304,7 @@ helios health-check
 ```
 
 **Output Example:**
+
 ```
 ═══════════════════════════════════════════════════════════
   System Health Check
@@ -297,6 +322,7 @@ Overall Status:              ✓ HEALTHY
 ```
 
 ### `helios update`
+
 Check for and install updates.
 
 ```bash
@@ -311,6 +337,7 @@ helios update --version 1.0.1
 ```
 
 ### `helios info`
+
 Display detailed system information.
 
 ```bash
@@ -318,6 +345,7 @@ helios info
 ```
 
 **Output Example:**
+
 ```
 ═══════════════════════════════════════════════════════════
   HELIOS Platform - System Information
@@ -353,6 +381,7 @@ Network:
 ## Help & Support
 
 ### `helios help [command]`
+
 Show detailed help for a specific command.
 
 ```bash
@@ -377,6 +406,7 @@ helios help config
 ### Common Troubleshooting
 
 **"Connection refused" error:**
+
 ```bash
 # Check service status
 helios status
@@ -389,6 +419,7 @@ helios health-check
 ```
 
 **"Permission denied" error:**
+
 ```bash
 # Run as administrator
 helios --admin [command]
@@ -398,6 +429,7 @@ sudo helios [command]
 ```
 
 **Performance issues:**
+
 ```bash
 # Monitor system metrics
 helios monitor
@@ -408,4 +440,3 @@ helios logs --level error --follow
 # Run health check
 helios health-check
 ```
-

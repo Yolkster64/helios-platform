@@ -459,6 +459,7 @@ Invoke-Pester -Path ".\tests\test-phase-0-unit.ps1" `
 ### CI/CD Integration
 
 Tests automatically run on every commit:
+
 - GitHub Actions triggers on push
 - Tests run in parallel
 - Results posted to pull request
@@ -539,6 +540,7 @@ $Coverage = @("$PSScriptRoot\..\Phase-0-Optimize.ps1")
 ## Best Practices
 
 ✓ **Do:**
+
 - Test one thing per test
 - Use descriptive test names
 - Keep tests fast (<100ms each)
@@ -548,6 +550,7 @@ $Coverage = @("$PSScriptRoot\..\Phase-0-Optimize.ps1")
 - Use BeforeAll for one-time setup
 
 ✗ **Don't:**
+
 - Make tests depend on each other
 - Test multiple functions in one test
 - Use real files/registry in tests

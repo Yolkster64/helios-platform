@@ -7,6 +7,7 @@ We welcome contributions! Here's how to get started.
 ## Getting Started
 
 ### Prerequisites
+
 - Windows 11 Pro or Server 2022+
 - Visual Studio 2022 or VS Code
 - .NET 8.0 SDK
@@ -33,33 +34,43 @@ dotnet test
 ## Types of Contributions
 
 ### 1. Plugin Development
+
 Create custom plugins extending HELIOS functionality:
+
 - See docs/v3.6.0/FEATURES_GUIDE.md > Plugin System
 - Use IPlugin interface
 - Publish to marketplace
 
 ### 2. Feature Implementation
+
 Add new features to core platform:
+
 - File an issue first (discuss approach)
 - Follow code style guidelines
 - Add tests for new functionality
 - Update documentation
 
 ### 3. Bug Fixes
+
 Fix existing bugs:
+
 - Reference GitHub issue number
 - Include regression tests
 - Update CHANGELOG.md
 
 ### 4. Documentation
+
 Improve documentation:
+
 - Fix typos and clarify instructions
 - Add code examples
 - Update outdated information
 - Translate to other languages
 
 ### 5. Testing
+
 Improve test coverage:
+
 - Add unit tests for untested code
 - Add integration tests for workflows
 - Report test failures
@@ -74,6 +85,7 @@ Improve test coverage:
 - **Line Length**: Max 120 characters
 
 Example:
+
 ```csharp
 public class CloudSyncService
 {
@@ -100,6 +112,7 @@ public class CloudSyncService
 
 Types: feat, fix, docs, style, refactor, perf, test, chore
 Example:
+
 ```
 feat(cloud-sync): Add AWS S3 support
 
@@ -140,6 +153,7 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ## Reporting Issues
 
 When reporting bugs:
+
 1. Check existing issues first
 2. Provide clear reproduction steps
 3. Include HELIOS version and OS

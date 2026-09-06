@@ -5,6 +5,7 @@ Standards for monitoring, alerting, and maintaining repository health.
 ---
 
 ## Table of Contents
+
 1. [Dashboard Monitoring](#dashboard-monitoring)
 2. [Alert Setup](#alert-setup)
 3. [Performance Tracking](#performance-tracking)
@@ -520,6 +521,7 @@ Optimizations:
 ## Maintenance Tasks
 
 ### Daily (5 minutes)
+
 ```markdown
 □ Check dashboard alerts
 □ Review failed builds
@@ -527,6 +529,7 @@ Optimizations:
 ```
 
 ### Weekly (30 minutes)
+
 ```markdown
 □ Review metrics
 □ Check dependency updates
@@ -535,6 +538,7 @@ Optimizations:
 ```
 
 ### Monthly (1 hour)
+
 ```markdown
 □ Security audit
 □ Performance review
@@ -544,6 +548,7 @@ Optimizations:
 ```
 
 ### Quarterly (2 hours)
+
 ```markdown
 □ Major security audit
 □ Infrastructure review
@@ -553,6 +558,7 @@ Optimizations:
 ```
 
 ### Annually (4 hours)
+
 ```markdown
 □ Complete security assessment
 □ Architecture review

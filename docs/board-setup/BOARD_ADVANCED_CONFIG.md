@@ -230,6 +230,7 @@ Test Procedure:
 ### For Growing Teams
 
 **Current Configuration Supports:**
+
 - 200-300 concurrent users
 - 1,000+ issues
 - 8 views
@@ -642,6 +643,7 @@ Used for:
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Audience: DevOps, Admins

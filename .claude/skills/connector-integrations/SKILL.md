@@ -20,7 +20,7 @@ as existing.
 | Slack notifications | `SLACK_WEBHOOK_URL` | `.github/workflows/notify-slack.yml` | `slack` (`config/connectors.json:3-21`) |
 
 - **Linear** mirrors sync-labeled GitHub issues into team `JOH`, one-directional
-  (GitHub is the source of truth): `[GH-{number}] ` title prefix, label mapping per
+  (GitHub is the source of truth): `"[GH-{number}] "` title prefix, label mapping per
   `githubLabelToLinear`, close/reopen moves the Linear workflow state, and a
   comment-back links the mirror (`linear-sync.yml:1-9,156-167`).
 - **Slack** posts CI/deploy outcomes on `workflow_run` completion of the six

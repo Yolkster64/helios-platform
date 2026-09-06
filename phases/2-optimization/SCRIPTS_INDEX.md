@@ -1,4 +1,5 @@
 # HELIOS Phase 2: Scripts Index
+
 ## Complete List of Optimization Scripts
 
 ---
@@ -6,11 +7,13 @@
 ## SCRIPTS ORGANIZATION
 
 All Phase 2 scripts are located in:
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts\
 ```
 
 Each optimization has:
+
 - **Optimization script** - Applies the optimization
 - **Undo script** - Reverses the changes (where applicable)
 - **Test script** - Verifies the changes were applied
@@ -25,12 +28,14 @@ Each optimization has:
 **Purpose:** Disable unnecessary Windows services
 
 **What It Does:**
+
 - Stops 15-20 unnecessary services
 - Sets their startup type to "Disabled"
 - Prevents them from starting at boot
 - Frees CPU, RAM, and disk I/O
 
 **Services Disabled:**
+
 ```
 DiagTrack                    (Telemetry collection)
 dmwappushservice             (Diagnostic data)
@@ -50,12 +55,14 @@ TermService                  (Remote Desktop - optional)
 ```
 
 **Usage:**
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 .\optimize-services-disable.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Stopping service: DiagTrack
 [✓] Disabling service: DiagTrack
@@ -68,11 +75,13 @@ Log saved to: ..\logs\services-disabled.log
 ```
 
 **Performance Impact:**
+
 - Boot time: -20-40 seconds
 - RAM freed: 200-500 MB
 - CPU idle: -5-10 percentage points
 
 **File Output:**
+
 ```
 services-backup.reg          (Registry before/after)
 services-disabled.log        (List of disabled services)
@@ -85,11 +94,13 @@ services-disabled.log        (List of disabled services)
 **Purpose:** Re-enable disabled services
 
 **What It Does:**
+
 - Re-enables specific disabled services
 - Sets startup type back to original
 - Starts the service
 
 **Usage:**
+
 ```powershell
 # Re-enable all disabled services
 .\undo-services-disable.ps1
@@ -99,6 +110,7 @@ services-disabled.log        (List of disabled services)
 ```
 
 **Interactive Mode:**
+
 ```
 Which services would you like to re-enable?
 [1] All services
@@ -109,6 +121,7 @@ Choice: [1-3]
 ```
 
 **Output:**
+
 ```
 [?] Re-enable DiagTrack? (Y/N): Y
 [✓] Re-enabling service: DiagTrack
@@ -124,16 +137,19 @@ Choice: [1-3]
 **Purpose:** Verify which services are disabled/enabled
 
 **What It Does:**
+
 - Lists all disabled services
 - Shows their current status
 - Compares to baseline
 
 **Usage:**
+
 ```powershell
 .\test-services-state.ps1
 ```
 
 **Output:**
+
 ```
 === PHASE 2 DISABLED SERVICES ===
 Service Name          | Status      | Startup Type | CPU Impact
@@ -156,12 +172,14 @@ Estimated RAM Freed: 300 MB
 **Purpose:** Remove unnecessary programs from startup
 
 **What It Does:**
+
 - Removes shortcuts from Startup folder
 - Removes entries from Registry Run keys
 - Disables auto-start scheduled tasks
 - Reduces startup programs from 40+ to 10-15
 
 **Startup Items Removed:**
+
 ```
 OneDrive.lnk                 (Cloud sync)
 Cortana.lnk                  (Voice assistant)
@@ -175,11 +193,13 @@ CTF Loader                   (Text service)
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-startup-remove.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Removing: OneDrive.lnk from Startup folder
 [✓] Removing: UpdateAssistant from Registry Run
@@ -193,12 +213,14 @@ Log: ..\logs\startup-removed.log
 ```
 
 **Files Output:**
+
 ```
 startup-backup.reg           (Backup of startup items)
 startup-removed.log          (What was removed)
 ```
 
 **Performance Impact:**
+
 - Boot time: -30-60 seconds
 - Time to desktop: -40-50 seconds
 - Disk I/O during boot: -50-70%
@@ -210,11 +232,13 @@ startup-removed.log          (What was removed)
 **Purpose:** Restore startup programs
 
 **What It Does:**
+
 - Restores startup folder shortcuts
 - Restores Registry Run keys
 - Re-enables startup tasks
 
 **Usage:**
+
 ```powershell
 # Interactive mode
 .\undo-startup-remove.ps1
@@ -227,6 +251,7 @@ startup-removed.log          (What was removed)
 ```
 
 **Output:**
+
 ```
 Startup items removed:
 1. OneDrive
@@ -249,16 +274,19 @@ Which would you like to restore? (comma-separated): 1, 2
 **Purpose:** Show current startup programs
 
 **What It Does:**
+
 - Lists all programs set to launch at startup
 - Shows startup locations (folder, registry, scheduler)
 - Compares to Phase 2 baseline
 
 **Usage:**
+
 ```powershell
 .\test-startup-state.ps1
 ```
 
 **Output:**
+
 ```
 === PHASE 2 STARTUP ANALYSIS ===
 
@@ -289,12 +317,14 @@ Reduction: 75% ✓
 **Purpose:** Optimize memory, CPU, and paging
 
 **What It Does:**
+
 - Adjusts memory allocation settings
 - Configures page file for optimal size
 - Sets process priorities
 - Enables memory optimization
 
 **Registry Changes:**
+
 ```
 DisablePagingExecutive: 0 → 1
 LargeSystemCache: 0 → 1
@@ -302,11 +332,13 @@ ClearPageFileAtShutdown: 0 → 1
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-resources-tune.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Disabling paging of executive
 [✓] Enabling large system cache
@@ -328,6 +360,7 @@ RESTART REQUIRED for changes to take effect
 ```
 
 **Performance Impact:**
+
 - Available RAM: +500 MB to 2 GB
 - App launch speed: +15-30%
 - Multitasking: +30-50% better
@@ -341,16 +374,19 @@ RESTART REQUIRED for changes to take effect
 **Purpose:** Restore original resource settings
 
 **What It Does:**
+
 - Reverts memory settings to defaults
 - Resets page file to Windows managed
 - Restores process priorities
 
 **Usage:**
+
 ```powershell
 .\undo-resources-tune.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Restoring default memory settings
 [✓] Resetting page file to Windows-managed
@@ -369,16 +405,19 @@ RESTART REQUIRED
 **Purpose:** Show current resource configuration
 
 **What It Does:**
+
 - Shows memory settings
 - Shows page file configuration
 - Shows available RAM
 
 **Usage:**
+
 ```powershell
 .\test-resources-state.ps1
 ```
 
 **Output:**
+
 ```
 === RESOURCE CONFIGURATION ===
 
@@ -409,6 +448,7 @@ Configuration: Phase 2 Optimized ✓
 **Purpose:** Control and throttle background processes
 
 **What It Does:**
+
 - Limits SearchIndexer to off-hours only
 - Disables Superfetch on SSDs
 - Throttles Windows Update to 10% bandwidth
@@ -416,6 +456,7 @@ Configuration: Phase 2 Optimized ✓
 - Schedules intensive tasks for maintenance windows
 
 **Tasks Modified:**
+
 ```
 SearchIndexer       - Disabled (or scheduled for 2-5 AM)
 SysMain             - Disabled on SSD
@@ -426,6 +467,7 @@ Windows Update      - Bandwidth limited
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-background-processes.ps1
 
@@ -434,6 +476,7 @@ Windows Update      - Bandwidth limited
 ```
 
 **Output:**
+
 ```
 [✓] Detecting storage type: SSD
     → SysMain will be DISABLED (not beneficial on SSD)
@@ -457,6 +500,7 @@ Changes take effect immediately
 ```
 
 **Performance Impact:**
+
 - System responsiveness: +40-60%
 - Disk I/O freezes: 70-90% reduction
 - CPU spikes: 50-70% reduction
@@ -468,17 +512,20 @@ Changes take effect immediately
 **Purpose:** Restore normal background process behavior
 
 **What It Does:**
+
 - Re-enables SearchIndexer normal operation
 - Re-enables Superfetch
 - Removes Windows Update bandwidth throttling
 - Restores process priorities
 
 **Usage:**
+
 ```powershell
 .\undo-background-processes.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Enabling SearchIndexer normal operation
 [✓] Re-enabling Superfetch
@@ -495,16 +542,19 @@ Changes take effect immediately
 **Purpose:** Show current background process configuration
 
 **What It Does:**
+
 - Lists scheduled tasks and their status
 - Shows process priorities
 - Shows throttling limits
 
 **Usage:**
+
 ```powershell
 .\test-background-state.ps1
 ```
 
 **Output:**
+
 ```
 === BACKGROUND PROCESS STATUS ===
 
@@ -537,6 +587,7 @@ Configuration: Phase 2 Optimized ✓
 **Purpose:** Reduce visual effects for better performance
 
 **What It Does:**
+
 - Disables window animations
 - Disables transparency effects
 - Removes drop shadows
@@ -544,6 +595,7 @@ Configuration: Phase 2 Optimized ✓
 - Optimizes font rendering
 
 **Changes:**
+
 ```
 ✗ Window minimize/maximize animation
 ✗ Transparency (taskbar, windows)
@@ -554,11 +606,13 @@ Configuration: Phase 2 Optimized ✓
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-visual-effects.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Disabling window animations
 [✓] Disabling transparency effects
@@ -578,6 +632,7 @@ Appearance: Slightly more "flat" but MUCH snappier
 ```
 
 **Performance Impact:**
+
 - GPU load: 50-70% reduction (idle)
 - System responsiveness: +10-20%
 - Battery life: +5-10% (laptops)
@@ -589,17 +644,20 @@ Appearance: Slightly more "flat" but MUCH snappier
 **Purpose:** Restore all visual effects
 
 **What It Does:**
+
 - Re-enables animations
 - Re-enables transparency
 - Restores drop shadows
 - Restores smooth scrolling
 
 **Usage:**
+
 ```powershell
 .\undo-visual-effects.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Re-enabling window animations
 [✓] Re-enabling transparency effects
@@ -618,15 +676,18 @@ Performance impact: +15-30% GPU load (returns)
 **Purpose:** Show current visual effects configuration
 
 **What It Does:**
+
 - Lists which effects are enabled/disabled
 - Shows GPU impact
 
 **Usage:**
+
 ```powershell
 .\test-visual-effects-state.ps1
 ```
 
 **Output:**
+
 ```
 === VISUAL EFFECTS STATUS ===
 
@@ -650,6 +711,7 @@ Appearance: Slightly simpler, significantly faster ✓
 **Purpose:** Optimize TCP/IP for better network performance
 
 **What It Does:**
+
 - Enables TCP Window Scaling
 - Enables TCP Timestamps
 - Enables SACK (Selective Acknowledgment)
@@ -659,6 +721,7 @@ Appearance: Slightly simpler, significantly faster ✓
 - Expands DNS cache
 
 **Registry Changes:**
+
 ```
 TcpWindowSize: 65535 → 1073741824 (1 GB window)
 TcpTimestamps: 0 → 1
@@ -668,11 +731,13 @@ TCPNoDelay: 0 → 1
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-network-settings.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Enabling TCP Window Scaling
     Packet size: 65 KB (was 4 KB)
@@ -708,6 +773,7 @@ Log: ..\logs\network-optimized.log
 ```
 
 **Performance Impact:**
+
 - Download speed: +30-50%
 - Upload speed: +20-40%
 - Latency: -5-15%
@@ -720,15 +786,18 @@ Log: ..\logs\network-optimized.log
 **Purpose:** Restore default network settings
 
 **What It Does:**
+
 - Disables TCP Window Scaling
 - Resets TCP/IP to defaults
 
 **Usage:**
+
 ```powershell
 .\undo-network-settings.ps1
 ```
 
 **Output:**
+
 ```
 [✓] Resetting TCP/IP to default settings
 [✓] Disabling hardware optimizations
@@ -744,15 +813,18 @@ Log: ..\logs\network-optimized.log
 **Purpose:** Show current network optimization status
 
 **What It Does:**
+
 - Shows TCP/IP settings
 - Shows network adapter status
 
 **Usage:**
+
 ```powershell
 .\test-network-state.ps1
 ```
 
 **Output:**
+
 ```
 === NETWORK CONFIGURATION ===
 
@@ -781,6 +853,7 @@ Expected improvement: 30-50% faster downloads
 **Purpose:** Clean up temporary files and optimize storage
 
 **What It Does:**
+
 - Deletes temporary files
 - Empties Recycle Bin
 - Cleans Windows Update cache
@@ -788,6 +861,7 @@ Expected improvement: 30-50% faster downloads
 - Compresses old files (optional)
 
 **Files Deleted:**
+
 ```
 C:\Windows\Temp\*              - Windows temp folder
 C:\Users\ADMIN\AppData\Local\Temp\* - User temp folder
@@ -796,6 +870,7 @@ C:\$Windows.~BT\*              - Old Windows install cache (if old)
 ```
 
 **Usage:**
+
 ```powershell
 .\optimize-storage-cleanup.ps1
 
@@ -804,6 +879,7 @@ C:\$Windows.~BT\*              - Old Windows install cache (if old)
 ```
 
 **Output:**
+
 ```
 [✓] Deleting temporary files
     C:\Windows\Temp\
@@ -839,6 +915,7 @@ Log: ..\logs\storage-cleaned.log
 ```
 
 **Performance Impact:**
+
 - Disk space freed: 5-20 GB
 - File access speed: 15-30% faster (defrag)
 - Program load time: 10-20% faster
@@ -852,11 +929,13 @@ Log: ..\logs\storage-cleaned.log
 **Purpose:** Note - Cleanup cannot be undone
 
 **What It Does:**
+
 - Files deleted in cleanup are permanently removed
 - Cannot be recovered (they are temp files)
 - Undo not available for this optimization
 
 **If you need to undo:**
+
 1. Restore from backup
 2. Or restore from System Restore Point
 3. Or recover from Recycle Bin (if not emptied too long ago)
@@ -868,16 +947,19 @@ Log: ..\logs\storage-cleaned.log
 **Purpose:** Show storage optimization status
 
 **What It Does:**
+
 - Shows disk space used
 - Shows fragmentation level
 - Shows temporary files present
 
 **Usage:**
+
 ```powershell
 .\test-storage-state.ps1
 ```
 
 **Output:**
+
 ```
 === STORAGE STATUS ===
 
@@ -909,17 +991,20 @@ Storage: Phase 2 Optimized ✓
 **Purpose:** Run all Phase 2 optimizations in sequence
 
 **What It Does:**
+
 - Runs all optimization scripts in proper order
 - Handles dependencies
 - Creates comprehensive log
 - Gives option to reboot
 
 **Usage:**
+
 ```powershell
 .\run-all-optimizations.ps1
 ```
 
 **Execution Order:**
+
 ```
 1. Service Disabling
 2. Startup Optimization
@@ -932,6 +1017,7 @@ Storage: Phase 2 Optimized ✓
 ```
 
 **Output:**
+
 ```
 === HELIOS PHASE 2: COMPLETE OPTIMIZATION ===
 
@@ -977,16 +1063,19 @@ Reboot now? (Y/N): Y
 **Purpose:** Undo all Phase 2 optimizations
 
 **What It Does:**
+
 - Runs all undo scripts in reverse order
 - Restores settings to Phase 2 baseline
 - Does NOT undo cleanup (can't recover deleted files)
 
 **Usage:**
+
 ```powershell
 .\run-all-undos.ps1
 ```
 
 **Output:**
+
 ```
 === PHASE 2 ROLLBACK ===
 
@@ -1024,6 +1113,7 @@ Reboot now? (Y/N): Y
 **Purpose:** Create performance baseline before optimization
 
 **What It Does:**
+
 - Measures boot time
 - Measures app launch times
 - Measures available RAM
@@ -1031,11 +1121,13 @@ Reboot now? (Y/N): Y
 - Saves baseline for comparison
 
 **Usage:**
+
 ```powershell
 .\create-baseline-snapshot.ps1
 ```
 
 **Output:**
+
 ```
 === CREATING PERFORMANCE BASELINE ===
 
@@ -1068,17 +1160,20 @@ Ready for comparison after optimization!
 **Purpose:** Compare before & after performance
 
 **What It Does:**
+
 - Runs performance tests
 - Compares to saved baseline
 - Shows percentage improvements
 - Creates detailed report
 
 **Usage:**
+
 ```powershell
 .\compare-performance.ps1
 ```
 
 **Output:**
+
 ```
 === PHASE 2 PERFORMANCE COMPARISON ===
 
@@ -1151,6 +1246,7 @@ END (Phase 2 Complete!)
 ## SCRIPT LOCATION & RUNNING
 
 ### Directory Structure
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\
 ├── scripts/
@@ -1174,6 +1270,7 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\
 ### Running Scripts
 
 **Option 1: Run Master Script (Recommended)**
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 .\run-all-optimizations.ps1
@@ -1181,6 +1278,7 @@ cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 ```
 
 **Option 2: Run Individual Optimizations**
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 .\optimize-services-disable.ps1
@@ -1189,6 +1287,7 @@ cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 ```
 
 **Option 3: Test First, Then Optimize**
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\2-optimization\scripts
 .\create-baseline-snapshot.ps1          # Capture baseline

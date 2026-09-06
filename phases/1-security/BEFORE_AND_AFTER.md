@@ -9,6 +9,7 @@ This document shows exactly what your system looks like before Phase 1, after Ph
 ### BEFORE Phase 1: Unsecured System
 
 #### Security Posture
+
 ```
 ┌─────────────────────────────────────────┐
 │        UNSECURED WINDOWS PC             │
@@ -25,6 +26,7 @@ This document shows exactly what your system looks like before Phase 1, after Ph
 ```
 
 #### What Can Happen
+
 1. **Malware Execution**: Any downloaded file can run
 2. **Network Attacks**: Remote access possible on open ports
 3. **Data Theft**: Sensitive files in plain text
@@ -142,6 +144,7 @@ System Resource Usage:      Low
 ### AFTER Phase 1: Hardened System
 
 #### Security Posture
+
 ```
 ┌──────────────────────────────────────┐
 │     HARDENED SECURITY FORTRESS       │
@@ -158,6 +161,7 @@ System Resource Usage:      Low
 ```
 
 #### What Happens Now
+
 1. **Program Whitelisting**: Only approved apps run
 2. **Network Lockdown**: Only trusted connections allowed
 3. **Data Encryption**: Sensitive files locked with encryption
@@ -354,6 +358,7 @@ System Resource Usage:      +20-30%
 #### Scenario 1: User Downloads Malware
 
 **BEFORE Phase 1:**
+
 ```
 User downloads malware.exe from internet
     ↓
@@ -371,6 +376,7 @@ System compromised
 ```
 
 **AFTER Phase 1:**
+
 ```
 User downloads malware.exe from internet
     ↓
@@ -390,6 +396,7 @@ System protected ✅
 #### Scenario 2: Ransomware Attack from Network
 
 **BEFORE Phase 1:**
+
 ```
 Attacker scans network for open ports
     ↓
@@ -407,6 +414,7 @@ Business halted
 ```
 
 **AFTER Phase 1:**
+
 ```
 Attacker scans network for open ports
     ↓
@@ -424,6 +432,7 @@ System protected ✅
 #### Scenario 3: Password File Stolen
 
 **BEFORE Phase 1:**
+
 ```
 Attacker steals hard drive from laptop
     ↓
@@ -441,6 +450,7 @@ Account takeover
 ```
 
 **AFTER Phase 1:**
+
 ```
 Attacker steals hard drive from laptop
     ↓
@@ -462,6 +472,7 @@ Data protected ✅
 #### Scenario 4: Privilege Escalation Attempt
 
 **BEFORE Phase 1:**
+
 ```
 Malware runs as Standard User
     ↓
@@ -475,6 +486,7 @@ System fully compromised
 ```
 
 **AFTER Phase 1:**
+
 ```
 Malware runs as Restricted-Guest account
     ↓
@@ -575,6 +587,7 @@ Cost: 15 minutes of IT review, zero data loss, system protected
 ## Key Takeaways
 
 ### Before Phase 1
+
 - ❌ System is wide open
 - ❌ Any malware runs with full privileges
 - ❌ Network is exposed on dangerous ports
@@ -583,6 +596,7 @@ Cost: 15 minutes of IT review, zero data loss, system protected
 - ❌ No audit trail
 
 ### After Phase 1
+
 - ✅ System is hardened
 - ✅ Only whitelisted programs run
 - ✅ Network is sealed with strict firewall
@@ -591,6 +605,7 @@ Cost: 15 minutes of IT review, zero data loss, system protected
 - ✅ Complete audit trail for investigations
 
 ### The Security-Performance Tradeoff
+
 - **Speed loss**: ~30% startup, ~10-15% runtime = acceptable
 - **Security gain**: 99% threat reduction = invaluable
 

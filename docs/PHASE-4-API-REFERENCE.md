@@ -11,9 +11,11 @@
 ### Authentication Endpoints
 
 #### POST /api/v1/auth/login
+
 Register a user and receive JWT tokens
 
 **Request:**
+
 ```json
 {
   "username": "user@example.com",
@@ -22,6 +24,7 @@ Register a user and receive JWT tokens
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -36,6 +39,7 @@ Register a user and receive JWT tokens
 ```
 
 **Response (Failure - 401):**
+
 ```json
 {
   "error": "Invalid credentials",
@@ -46,9 +50,11 @@ Register a user and receive JWT tokens
 ---
 
 #### POST /api/v1/auth/register
+
 Register a new user account
 
 **Request:**
+
 ```json
 {
   "username": "newuser@example.com",
@@ -60,6 +66,7 @@ Register a new user account
 ```
 
 **Response (Success - 201):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -72,9 +79,11 @@ Register a new user account
 ---
 
 #### POST /api/v1/auth/refresh
+
 Refresh access token using refresh token
 
 **Request:**
+
 ```json
 {
   "refreshToken": "r0F3kL9mP2jQ5xW8zY1b4c7d..."
@@ -82,6 +91,7 @@ Refresh access token using refresh token
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -92,14 +102,17 @@ Refresh access token using refresh token
 ---
 
 #### POST /api/v1/auth/logout
+
 Logout current user and invalidate tokens
 
 **Request:** (Requires Authorization header)
+
 ```
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "message": "Logout successful"
@@ -111,9 +124,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Health Check Endpoints
 
 #### GET /api/v1/health
+
 Check API health status
 
 **Response (200):**
+
 ```json
 {
   "status": "healthy",
@@ -125,9 +140,11 @@ Check API health status
 ---
 
 #### GET /api/v1/health/ready
+
 Readiness probe for orchestrators
 
 **Response (200):**
+
 ```json
 {
   "ready": true,
@@ -142,9 +159,11 @@ Readiness probe for orchestrators
 ---
 
 #### GET /api/v1/health/live
+
 Liveness probe for orchestrators
 
 **Response (200):**
+
 ```json
 {
   "live": true,
@@ -157,9 +176,11 @@ Liveness probe for orchestrators
 ### User Management Endpoints
 
 #### GET /api/v1/users/{id}
+
 Get user profile (Requires Auth)
 
 **Response (200):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -177,9 +198,11 @@ Get user profile (Requires Auth)
 ---
 
 #### PUT /api/v1/users/{id}
+
 Update user profile (Requires Auth + Authorization)
 
 **Request:**
+
 ```json
 {
   "firstName": "Jane",
@@ -189,6 +212,7 @@ Update user profile (Requires Auth + Authorization)
 ```
 
 **Response (200):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -203,6 +227,7 @@ Update user profile (Requires Auth + Authorization)
 ---
 
 #### DELETE /api/v1/users/{id}
+
 Delete user account (Requires Auth + Admin)
 
 **Response (204):** No Content
@@ -212,9 +237,11 @@ Delete user account (Requires Auth + Admin)
 ### Task Management Endpoints
 
 #### POST /api/v1/tasks
+
 Create a new task (Requires Auth)
 
 **Request:**
+
 ```json
 {
   "name": "Generate report",
@@ -226,6 +253,7 @@ Create a new task (Requires Auth)
 ```
 
 **Response (201):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -242,9 +270,11 @@ Create a new task (Requires Auth)
 ---
 
 #### GET /api/v1/tasks/{id}
+
 Get task details (Requires Auth)
 
 **Response (200):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440001",
@@ -259,15 +289,18 @@ Get task details (Requires Auth)
 ---
 
 #### GET /api/v1/tasks
+
 List user's tasks (Requires Auth)
 
 **Query Parameters:**
+
 - `page` (default: 1)
 - `pageSize` (default: 20, max: 100)
 - `status` (pending, running, completed, failed)
 - `priority` (critical, high, normal, low, deferred)
 
 **Response (200):**
+
 ```json
 {
   "items": [
@@ -288,9 +321,11 @@ List user's tasks (Requires Auth)
 ---
 
 #### PUT /api/v1/tasks/{id}
+
 Update task (Requires Auth)
 
 **Request:**
+
 ```json
 {
   "name": "Generate monthly report",
@@ -303,6 +338,7 @@ Update task (Requires Auth)
 ---
 
 #### DELETE /api/v1/tasks/{id}
+
 Delete task (Requires Auth)
 
 **Response (204):** No Content
@@ -312,9 +348,11 @@ Delete task (Requires Auth)
 ### AI Integration Endpoints
 
 #### POST /api/v1/ai/prompt
+
 Submit AI prompt (Requires Auth)
 
 **Request:**
+
 ```json
 {
   "content": "Generate a summary of Q1 performance",
@@ -327,6 +365,7 @@ Submit AI prompt (Requires Auth)
 ```
 
 **Response (201):**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440002",
@@ -342,14 +381,17 @@ Submit AI prompt (Requires Auth)
 ---
 
 #### GET /api/v1/ai/cost-estimate
+
 Estimate cost for AI operation (Requires Auth)
 
 **Query Parameters:**
+
 - `model` (required): gpt-4, gpt-3.5-turbo, claude-3
 - `inputLength` (required): Expected input text length
 - `outputLength` (optional, default: 100)
 
 **Response (200):**
+
 ```json
 {
   "estimatedCost": 0.0045,
@@ -364,13 +406,16 @@ Estimate cost for AI operation (Requires Auth)
 ### Analytics Endpoints
 
 #### GET /api/v1/analytics/metrics
+
 Get aggregated system metrics (Requires Auth + Admin)
 
 **Query Parameters:**
+
 - `window` (default: 1h): 1h, 24h, 7d, 30d
 - `metric` (optional): specific metric to retrieve
 
 **Response (200):**
+
 ```json
 {
   "window": "1h",
@@ -390,9 +435,11 @@ Get aggregated system metrics (Requires Auth + Admin)
 ---
 
 #### GET /api/v1/analytics/performance
+
 Get performance percentiles (Requires Auth + Admin)
 
 **Response (200):**
+
 ```json
 {
   "latencyPercentiles": {
@@ -462,10 +509,12 @@ Token expires after 1 hour. Use refresh token to obtain new access token.
 ## 🔄 Pagination
 
 List endpoints support pagination with:
+
 - `page`: Page number (default: 1)
 - `pageSize`: Items per page (default: 20, max: 100)
 
 Response format:
+
 ```json
 {
   "items": [...],

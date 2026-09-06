@@ -5,6 +5,7 @@
 ## Common Tasks
 
 ### Cloud Synchronization
+
 ```
 Enable sync:    Settings > Cloud Sync > Provider > Enable
 Configure:      Settings > Cloud Sync > [Provider] > Options
@@ -14,6 +15,7 @@ Resolve conflicts: Dashboard > Cloud Sync > Conflicts > Resolve
 ```
 
 ### Plugin Management
+
 ```
 Browse plugins:     Extensions > Plugin Marketplace
 Install plugin:     Marketplace > [Plugin] > Install
@@ -26,6 +28,7 @@ View logs:          Installed Plugins > [Plugin] > Logs
 ```
 
 ### Dashboard
+
 ```
 Access:           https://localhost:8080
 Overview:         Dashboard > Overview (system metrics)
@@ -36,6 +39,7 @@ Custom views:     Dashboard > + Add View (create custom)
 ```
 
 ### Theme & Appearance
+
 ```
 Switch theme:     Settings > Appearance > Theme > Light/Dark/Auto
 Create custom:    Settings > Appearance > Custom Theme > Create
@@ -45,6 +49,7 @@ Color picker:     Click [#] button next to color field
 ```
 
 ### Health & Monitoring
+
 ```
 Check health:     Dashboard > Health Status
 View metrics:     Dashboard > Metrics > [Metric Type]

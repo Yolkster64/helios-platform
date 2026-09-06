@@ -42,6 +42,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `INTEGRATION_HEALTH_REPORT.md`
 
 **Validates:**
+
 - Core system directories
 - Configuration files
 - GitHub integration
@@ -53,6 +54,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Network connectivity
 
 **Example Usage:**
+
 ```powershell
 .\check-integration-health.ps1
 .\check-integration-health.ps1 -Verbose
@@ -67,6 +69,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `SYSTEM_CONNECTIONS_REPORT.md`
 
 **Validates:**
+
 - GitHub Actions workflow connectivity
 - NuGet package source availability
 - GitHub Pages deployment configuration
@@ -76,6 +79,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Cross-system integration points
 
 **Example Usage:**
+
 ```powershell
 .\validate-connections.ps1
 .\validate-connections.ps1 -Verbose
@@ -90,6 +94,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `PERFORMANCE_OPTIMIZATION_REPORT.md`
 
 **Analyzes:**
+
 - CPU usage and capacity
 - Memory allocation and utilization
 - Disk I/O performance
@@ -100,6 +105,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Resource contention
 
 **Example Usage:**
+
 ```powershell
 .\optimize-performance.ps1
 .\optimize-performance.ps1 -ApplyOptimizations
@@ -114,6 +120,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `SECURITY_HARDENING_REPORT.md`
 
 **Checks:**
+
 - Git security configuration
 - Secret management practices
 - Branch protection rules
@@ -125,6 +132,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Compliance requirements
 
 **Example Usage:**
+
 ```powershell
 .\harden-security.ps1
 .\harden-security.ps1 -Verbose
@@ -139,6 +147,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `CONFIGURATION_SYNC_REPORT.md`
 
 **Manages:**
+
 - Configuration file synchronization
 - Consistency verification
 - Reference updates
@@ -148,6 +157,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Index updates
 
 **Example Usage:**
+
 ```powershell
 .\sync-configuration.ps1
 .\sync-configuration.ps1 -ApplySyncFixes
@@ -162,6 +172,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `DEPENDENCY_UPDATE_REPORT.md`
 
 **Checks:**
+
 - NPM package updates
 - NuGet package updates
 - PowerShell module versions
@@ -170,6 +181,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Security vulnerabilities
 
 **Example Usage:**
+
 ```powershell
 .\update-dependencies.ps1
 .\update-dependencies.ps1 -ApplyUpdates
@@ -185,6 +197,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `CROSS_REFERENCE_REPORT.md`
 
 **Validates:**
+
 - Markdown links
 - File imports
 - Code cross-references
@@ -194,6 +207,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Cross-document references
 
 **Example Usage:**
+
 ```powershell
 .\validate-cross-references.ps1
 .\validate-cross-references.ps1 -FixBrokenReferences
@@ -208,6 +222,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `INTEGRATION_ADJUSTMENT_REPORT.md`
 
 **Adjusts:**
+
 - Timing parameters
 - Communication channels
 - Logging levels
@@ -217,6 +232,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Network optimization
 
 **Example Usage:**
+
 ```powershell
 .\adjust-integration.ps1
 .\adjust-integration.ps1 -ApplyAdjustments
@@ -231,6 +247,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** `COMPREHENSIVE_TUNING_REPORT.md` + all individual reports
 
 **Executes:**
+
 - All 8 optimization scripts
 - Result coordination
 - Priority matrix generation
@@ -238,6 +255,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Safe change application
 
 **Example Usage:**
+
 ```powershell
 .\comprehensive-system-tuning.ps1
 .\comprehensive-system-tuning.ps1 -ApplyChanges
@@ -253,6 +271,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 **Output:** Logs and summary files
 
 **Performs:**
+
 - Health checks
 - Connection verification
 - Performance monitoring
@@ -262,6 +281,7 @@ The HELIOS Platform Integration Optimization suite provides 10 specialized scrip
 - Log rotation
 
 **Example Usage:**
+
 ```powershell
 .\daily-maintenance.ps1
 .\daily-maintenance.ps1 -SendEmail -EmailTo "admin@helios-platform.local"
@@ -318,24 +338,29 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 ## When to Run Each Script
 
 ### Daily
+
 - `daily-maintenance.ps1` - Automated health checks
 
 ### Weekly
+
 - `check-integration-health.ps1` - Full health assessment
 - `validate-connections.ps1` - Integration verification
 - `harden-security.ps1` - Security audit
 
 ### Monthly
+
 - `comprehensive-system-tuning.ps1` - Full optimization
 - `update-dependencies.ps1` - Dependency review
 - `adjust-integration.ps1` - Parameter tuning
 
 ### As Needed
+
 - `sync-configuration.ps1` - After config changes
 - `validate-cross-references.ps1` - Before releases
 - `optimize-performance.ps1` - Performance issues
 
 ### Before Production Release
+
 - `comprehensive-system-tuning.ps1`
 - `harden-security.ps1`
 - `validate-cross-references.ps1`
@@ -345,16 +370,19 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 ### Health Report Status
 
 **HEALTHY** ✅
+
 - All systems operational
 - No critical issues
 - Minor warnings acceptable
 
 **UNHEALTHY** ❌
+
 - Critical issues detected
 - Requires immediate action
 - May impact availability
 
 **WARNINGS** ⚠️
+
 - Non-critical issues
 - Address within 24 hours
 - May impact performance
@@ -378,24 +406,28 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 ### Based on Report Findings
 
 #### If Issues Found in Health Check
+
 1. Review specific failures
 2. Check resource availability
 3. Run `optimize-performance.ps1`
 4. Investigate affected system
 
 #### If Connection Problems Found
+
 1. Check network connectivity
 2. Verify API endpoints
 3. Review authentication tokens
 4. Check firewall rules
 
 #### If Performance Issues Found
+
 1. Check CPU/Memory usage
 2. Review process list
 3. Optimize resource allocation
 4. Consider scaling
 
 #### If Security Issues Found
+
 1. **CRITICAL:** Immediate action required
 2. Review branch protection
 3. Audit access controls
@@ -407,6 +439,7 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 ### Before Running Scripts
 
 ✅ **Do:**
+
 - Run on test environment first
 - Backup current configuration
 - Read specific script documentation
@@ -414,6 +447,7 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 - Run during maintenance window
 
 ❌ **Don't:**
+
 - Run on production without testing
 - Ignore error messages
 - Skip backup steps
@@ -423,6 +457,7 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 ### Applying Changes
 
 **Safe to Apply Automatically:**
+
 - Configuration synchronization
 - Cross-reference fixes
 - Logging level adjustments
@@ -430,12 +465,14 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 - DNS cache settings
 
 **Requires Testing:**
+
 - Connection pool modifications
 - Retry policy changes
 - Resource allocation tuning
 - Performance optimizations
 
 **Requires Approval:**
+
 - Security policy changes
 - Workflow modifications
 - Dependency updates
@@ -447,6 +484,7 @@ Register-ScheduledTask -TaskName "HELIOS-Daily-Maintenance" -Trigger $trigger -A
 
 **Problem:** Script fails to run
 **Solution:**
+
 ```powershell
 # Check execution policy
 Get-ExecutionPolicy
@@ -457,12 +495,14 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 **Problem:** Permission denied
 **Solution:**
+
 - Run PowerShell as Administrator
 - Check file permissions
 - Verify account privileges
 
 **Problem:** Module not found
 **Solution:**
+
 ```powershell
 # Install required modules
 Install-Module -Name ModuleName -Force
@@ -473,12 +513,14 @@ Import-Module -Name ModuleName
 
 **Problem:** Report file not created
 **Solution:**
+
 - Check output path exists
 - Verify write permissions
 - Check disk space
 
 **Problem:** Report is empty
 **Solution:**
+
 - Run with -Verbose flag
 - Check for errors in execution
 - Verify data collection
@@ -487,6 +529,7 @@ Import-Module -Name ModuleName
 
 **Problem:** Cannot connect to endpoints
 **Solution:**
+
 - Check network connectivity
 - Verify firewall rules
 - Check DNS resolution
@@ -530,6 +573,7 @@ A: Archive for compliance, share with team, track trends over time.
 ### Reporting Issues
 
 Document:
+
 - Script name and parameters
 - Full error message
 - System configuration
@@ -539,6 +583,7 @@ Document:
 ### Performance Issues
 
 Provide:
+
 - Performance report findings
 - System specifications
 - Current load/usage

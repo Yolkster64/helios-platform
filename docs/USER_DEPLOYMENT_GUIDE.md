@@ -24,6 +24,7 @@
 **What happens on first login**:
 
 1. **Authentication Screen**
+
    ```
    ╔════════════════════════════════════════╗
    │  HELIOS Platform Login                 │
@@ -40,6 +41,7 @@
    ```
 
 2. **Welcome Screen** (first time only)
+
    ```
    ╔════════════════════════════════════════╗
    │  Welcome to HELIOS Platform!           │
@@ -100,6 +102,7 @@
 **HELIOS Platform organizes your infrastructure into logical units**:
 
 #### 1. **Environments**
+
 ```
 What it is: Isolated deployment spaces (Dev, Test, Prod)
 
@@ -117,6 +120,7 @@ Production Environment
 ```
 
 #### 2. **Applications**
+
 ```
 What it is: Your business services (payment API, user management, etc.)
 
@@ -140,6 +144,7 @@ User Management Service
 ```
 
 #### 3. **Resources**
+
 ```
 What it is: Infrastructure components (databases, cache, storage)
 
@@ -166,6 +171,7 @@ Azure Blob Storage
 ```
 
 #### 4. **Policies & Rules**
+
 ```
 What it is: Automated behaviors and constraints
 
@@ -200,6 +206,7 @@ Security Policy
 **HELIOS deploys your application through 6 phases**:
 
 #### Phase 0: Preflight Checks
+
 ```
 What happens:
 ✓ Validate configuration syntax
@@ -217,6 +224,7 @@ If any check fails:
 ```
 
 #### Phase 1: Infrastructure Setup
+
 ```
 What happens:
 ✓ Provision compute resources
@@ -242,6 +250,7 @@ Log window shows each action:
 ```
 
 #### Phase 2: Security Configuration
+
 ```
 What happens:
 ✓ Generate/install SSL certificates
@@ -267,6 +276,7 @@ Verify afterwards:
 ```
 
 #### Phase 3: Service Deployment
+
 ```
 What happens:
 ✓ Deploy your application code
@@ -293,6 +303,7 @@ All replicas healthy: ✓
 ```
 
 #### Phase 4: AI Integration
+
 ```
 What happens:
 ✓ Configure AI services
@@ -318,6 +329,7 @@ Performance: Optimized for latency
 ```
 
 #### Phase 5: Monitoring & Verification
+
 ```
 What happens:
 ✓ Enable monitoring
@@ -369,6 +381,7 @@ Final Report:
 #### Step 1: Click "Deploy New Application"
 
 **UI Flow**:
+
 ```
 Dashboard → [Deploy App] button
     ↓
@@ -382,6 +395,7 @@ Choose deployment method:
 #### Step 2: Configure Application
 
 **What you enter**:
+
 ```
 Application Name:           payment-api
 Description:               Payment processing API for orders
@@ -416,6 +430,7 @@ Configuration:
 #### Step 3: Configure Auto-Scaling
 
 **Automatic scaling rules**:
+
 ```
 When CPU goes above 70%:
   → Add another replica (up to 10 max)
@@ -434,6 +449,7 @@ When memory exceeds 85%:
 #### Step 4: Review & Deploy
 
 **Final verification**:
+
 ```
 ╔═══════════════════════════════════════════╗
 ║   Review Deployment Configuration         ║

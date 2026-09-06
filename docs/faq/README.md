@@ -6,11 +6,11 @@ Answers to the most common questions about HELIOS Platform.
 
 ## 📋 Quick Navigation
 
-- **[General Questions](#general-questions)** - About the platform
-- **[Technical Questions](#technical-questions)** - Technical topics
-- **[Deployment Questions](#deployment-questions)** - Deployment and operations
-- **[Integration Questions](#integration-questions)** - Third-party integration
-- **[Support Questions](#support-questions)** - Getting help
+- **[General Questions](#-general-questions)** - About the platform
+- **[Technical Questions](#-technical-questions)** - Technical topics
+- **[Deployment Questions](#-deployment-questions)** - Deployment and operations
+- **[Integration Questions](#-integration-questions)** - Third-party integration
+- **[Support Questions](#-support-questions)** - Getting help
 
 ---
 
@@ -23,6 +23,7 @@ Answers to the most common questions about HELIOS Platform.
 ### Q: Who should use HELIOS Platform?
 
 **A:** HELIOS Platform is designed for:
+
 - System administrators managing complex infrastructure
 - DevOps engineers automating deployments
 - Architects designing scalable systems
@@ -31,7 +32,8 @@ Answers to the most common questions about HELIOS Platform.
 
 ### Q: What are the system requirements?
 
-**A:** 
+**A:**
+
 - Windows 10 (version 1909+) or Windows Server 2016+
 - .NET Runtime 6.0 or higher
 - Minimum 500 MB disk space
@@ -41,6 +43,7 @@ Answers to the most common questions about HELIOS Platform.
 ### Q: What is the licensing model?
 
 **A:** HELIOS Platform is available under multiple licensing models:
+
 - **Community Edition**: Free for non-commercial use
 - **Professional Edition**: Per-user licensing
 - **Enterprise Edition**: Volume licensing and support
@@ -50,6 +53,7 @@ See the LICENSE file for details.
 ### Q: What platforms are supported?
 
 **A:** Currently supported:
+
 - ✅ Windows 10+
 - ✅ Windows Server 2016+
 - 🔜 Linux (planned)
@@ -95,7 +99,7 @@ helios restart
 
 ### Q: How do I enable debug logging?
 
-**A:** 
+**A:**
 
 ```powershell
 # Set logging level to debug
@@ -142,6 +146,7 @@ helios deploy --component="MyApp" --target="production"
 ### Q: What is a deployment target?
 
 **A:** Targets define where deployments run:
+
 - **local**: Local machine
 - **development**: Development environment
 - **staging**: Staging environment
@@ -187,6 +192,7 @@ helios deployment rollback <deployment-id> --version=1.0.0
 ### Q: Can I integrate with cloud providers?
 
 **A:** Yes, HELIOS supports:
+
 - ✅ AWS
 - ✅ Azure
 - ✅ Google Cloud Platform
@@ -214,6 +220,7 @@ public class MyPlugin : IPlugin
 ### Q: Can I extend HELIOS Platform?
 
 **A:** Yes, through:
+
 - **Plugins**: Custom functionality
 - **Webhooks**: Event-driven integration
 - **APIs**: Direct integration
@@ -223,6 +230,7 @@ See [API Reference](../api/README.md) and [Plugin Development](../guides/PLUGIN_
 ### Q: How do I integrate with monitoring systems?
 
 **A:** HELIOS provides:
+
 - **Metrics API**: Export metrics
 - **Logs API**: Stream logs
 - **Webhooks**: Event notifications
@@ -236,6 +244,7 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 ### Q: Where can I find documentation?
 
 **A:** Documentation is organized by topic:
+
 - **[Getting Started](../guides/GETTING_STARTED.md)** - New users
 - **[User Guides](../user-guides/README.md)** - How-to guides
 - **[Architecture](../architecture/README.md)** - Technical details
@@ -244,7 +253,8 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 
 ### Q: How do I report a bug?
 
-**A:** 
+**A:**
+
 1. Check [Troubleshooting Guide](./README.md) first
 2. Collect diagnostic information: `helios diagnose`
 3. Create an issue with:
@@ -255,7 +265,8 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 
 ### Q: How do I request a feature?
 
-**A:** 
+**A:**
+
 1. Check [Roadmap](../guides/ROADMAP.md) for planned features
 2. Check existing issues/discussions
 3. Create a feature request with:
@@ -265,14 +276,16 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 
 ### Q: How do I get help with installation?
 
-**A:** 
+**A:**
+
 1. See [Installation Guide](../user-guides/INSTALLATION.md)
 2. Check [Troubleshooting: Installation](./README.md#issue-installation-issues)
-3. Review [FAQ](#technical-questions)
+3. Review [FAQ](#-technical-questions)
 
 ### Q: How do I get help with configuration?
 
 **A:**
+
 1. See [Configuration Guide](../user-guides/CONFIGURATION.md)
 2. Review [FAQ](#q-how-do-i-configure-helios-platform)
 3. Check [Troubleshooting](./README.md)
@@ -280,6 +293,7 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 ### Q: How do I get help with deployments?
 
 **A:**
+
 1. See [Deployment Guide](../user-guides/DEPLOYMENT.md)
 2. Review deployment examples
 3. Check [Troubleshooting: Deployment Issues](./README.md#issue-3-deployment-failed)
@@ -287,6 +301,7 @@ See [Monitoring Guide](../user-guides/MONITORING.md).
 ### Q: What versions are supported?
 
 **A:** See [Version Management Guide](../guides/VERSION_MANAGEMENT.md) for:
+
 - Supported versions
 - Version lifecycle
 - Upgrade procedures

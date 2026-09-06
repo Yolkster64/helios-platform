@@ -72,6 +72,7 @@
 ## Component Communication Flow
 
 ### Synchronous Communication
+
 ```
 Component A                 API Gateway              Component B
     │                          │                        │
@@ -88,6 +89,7 @@ Component A                 API Gateway              Component B
 ```
 
 ### Asynchronous Communication
+
 ```
 Component A                 API Gateway              Component B
     │                          │                        │
@@ -102,6 +104,7 @@ Component A                 API Gateway              Component B
 ```
 
 ### Event-Driven Communication
+
 ```
 Component A                 Event Bus                Component B
     │                          │                        │
@@ -443,6 +446,7 @@ Component A                 Event Bus                Component B
 ## Redundancy Elimination
 
 ### Before (Without Shared Infrastructure)
+
 ```
 Component A          Component B          Component C
 ├─ Logging           ├─ Logging           ├─ Logging
@@ -452,9 +456,11 @@ Component A          Component B          Component C
 ├─ DB Ops            ├─ DB Ops            ├─ DB Ops
 └─ ...repeated...    └─ ...repeated...    └─ ...repeated...
 ```
+
 ❌ Code Duplication | Maintenance Burden | Inconsistency
 
 ### After (With Shared Infrastructure)
+
 ```
 Component A      Component B      Component C
 ├─ Core Logic    ├─ Core Logic    ├─ Core Logic
@@ -470,6 +476,7 @@ Component A      Component B      Component C
     ├─ DB Ops (1 copy)
     └─ ...unified...
 ```
+
 ✅ Single Source of Truth | Easy Maintenance | Consistency
 
 ---

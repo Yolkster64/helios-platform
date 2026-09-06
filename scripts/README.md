@@ -9,6 +9,7 @@ Complete PowerShell automation framework for setting up, configuring, and optimi
 ## 📋 Overview
 
 This suite provides production-ready scripts for:
+
 - **Board Setup**: Create 25 custom fields, 8 phase templates, 4 automation rules, 6 board views
 - **Integration**: Link GitHub issues, PR workflows, status updates, notifications
 - **Optimization**: Performance tuning for GitHub Actions, builds, deployments
@@ -18,6 +19,7 @@ This suite provides production-ready scripts for:
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - PowerShell 5.1 or higher
 - GitHub Personal Access Token with `repo`, `workflow`, and `project` scopes
 - Organization administrator access
@@ -72,6 +74,7 @@ scripts/
 ## 📊 Custom Fields (25 Total)
 
 ### Tier 1: Core Planning (5 fields)
+
 - Priority (Critical/High/Medium/Low)
 - Sprint (Sprint 1-4, Backlog)
 - Effort (XS/S/M/L/XL/XXL)
@@ -79,6 +82,7 @@ scripts/
 - DueDate
 
 ### Tier 2: Execution (5 fields)
+
 - AssignedTo
 - ProgressStatus (0-100% stages)
 - QAStatus (Pending/In QA/Approved/Failed)
@@ -86,6 +90,7 @@ scripts/
 - TimeEstimate
 
 ### Tier 3: Review & Approval (5 fields)
+
 - ReviewStatus (Not Reviewed/In Review/Changes Requested/Approved)
 - ReviewedBy
 - ApprovalRequired (Yes/No)
@@ -93,6 +98,7 @@ scripts/
 - ComplianceCheck (Passed/Failed/Pending)
 
 ### Tier 4: Deployment & Integration (5 fields)
+
 - DeploymentEnvironment (Dev/Staging/Production/All)
 - DeploymentStatus (Not Deployed/Deployed to Dev/etc.)
 - IntegrationPoints
@@ -100,6 +106,7 @@ scripts/
 - DataMigration (Required/Not Required/In Progress/Completed)
 
 ### Tier 5: Analytics & Metrics (5 fields)
+
 - SuccessMetrics
 - UserImpact (High/Medium/Low/Internal Only)
 - PerformanceImpact (Positive/Neutral/Negative/TBD)
@@ -118,6 +125,7 @@ scripts/
 8. **Post-Launch & Monitoring** - Ongoing (14+ days)
 
 Each template includes:
+
 - Acceptance criteria
 - Success metrics
 - Field defaults
@@ -142,6 +150,7 @@ Each template includes:
 ## 🔗 GitHub Ecosystem Integration
 
 Integrated with:
+
 - Issues → Project Board linking
 - PR → Workflow triggering
 - Workflow → Status updates
@@ -151,21 +160,25 @@ Integrated with:
 ## 📈 Performance Optimization
 
 ### GitHub Actions
+
 - Concurrency control (max 3 concurrent)
 - Aggressive caching strategy
 - Job matrix optimization
 
 ### Build System
+
 - Incremental compilation
 - Parallel builds (4 jobs)
 - Artifact caching
 
 ### Deployment
+
 - Blue-green deployment strategy
 - Canary releases (10% → 25% → 50% → 100%)
 - Automatic rollback on failures
 
 ### Resources
+
 - Alpine-based containers
 - G1GC garbage collection
 - Connection pooling (50 connections)
@@ -173,6 +186,7 @@ Integrated with:
 ## 📊 Monitoring & Alerting
 
 ### Performance Metrics
+
 - Workflow Duration
 - Deployment Success Rate
 - Build Cache Hit Rate
@@ -181,12 +195,14 @@ Integrated with:
 - Resource Utilization
 
 ### Health Checks
+
 - GitHub API (60s interval)
 - Project Board (300s interval)
 - Workflow Engine (120s interval)
 - Deployment Pipeline (180s interval)
 
 ### Alert Routing
+
 - **Critical**: Slack + Email + PagerDuty
 - **High**: Slack + Email
 - **Medium**: Slack only
@@ -195,6 +211,7 @@ Integrated with:
 ## 🛠️ Individual Script Usage
 
 ### Board Setup
+
 ```powershell
 .\scripts\board-setup\setup-board.ps1 `
     -GitHubToken $token `
@@ -205,6 +222,7 @@ Integrated with:
 ```
 
 ### Custom Fields
+
 ```powershell
 .\scripts\board-setup\setup-custom-fields.ps1 `
     -GitHubToken $token `
@@ -214,6 +232,7 @@ Integrated with:
 ```
 
 ### GitHub Integration
+
 ```powershell
 .\scripts\integration\setup-github-ecosystem.ps1 `
     -GitHubToken $token `
@@ -225,6 +244,7 @@ Integrated with:
 ```
 
 ### Performance Optimization
+
 ```powershell
 .\scripts\optimization\run-optimization.ps1 `
     -RepositoryOwner "helios" `
@@ -234,6 +254,7 @@ Integrated with:
 ```
 
 ### Board Validation
+
 ```powershell
 .\scripts\board-setup\validate-board.ps1 `
     -GitHubToken $token `
@@ -246,7 +267,9 @@ Integrated with:
 ## 🧪 Features
 
 ### Dry-Run Mode
+
 Preview changes without applying them:
+
 ```powershell
 .\scripts\setup\complete-system-setup.ps1 `
     -GitHubToken $token `
@@ -259,7 +282,9 @@ Preview changes without applying them:
 ```
 
 ### Skip Steps
+
 Skip specific setup components:
+
 ```powershell
 .\scripts\setup\complete-system-setup.ps1 `
     -GitHubToken $token `
@@ -271,7 +296,9 @@ Skip specific setup components:
 ```
 
 ### Verbose Logging
+
 Enable detailed output:
+
 ```powershell
 .\scripts\setup\complete-system-setup.ps1 `
     ... `
@@ -288,6 +315,7 @@ All scripts generate:
 4. **Markdown Guides** - Documentation of setup
 
 ### Sample Report
+
 ```json
 {
   "timestamp": "2024-04-13T10:30:00",
@@ -306,6 +334,7 @@ All scripts generate:
 ## 🔄 Rollback Procedures
 
 ### Restore from Backup
+
 ```powershell
 # Backups are stored in logs directory
 # Restore by deleting new configurations and restoring from backup
@@ -313,29 +342,35 @@ cp logs/custom-fields-backup_TIMESTAMP.json .fields/backup.json
 ```
 
 ### Disable Automation Rules
+
 Edit `.automation/rule-*.json` files and set `"enabled": false`
 
 ### Remove Custom Fields
+
 Delete corresponding `.fields/*.json` files and re-run validation
 
 ## 🚨 Troubleshooting
 
 ### GitHub Authentication Failed
+
 - Verify token has `repo`, `workflow`, `project` scopes
 - Check token hasn't expired
 - Verify organization access
 
 ### Project Not Found
+
 - Verify project number is correct
 - Ensure you have access to organization
 - Check project exists in organization
 
 ### Fields Already Exist
+
 - Scripts handle duplicates gracefully
 - Use validation script to check status
 - Manually delete duplicates if needed
 
 ### Integration Not Working
+
 - Check webhook URLs are configured
 - Verify repository permissions
 - Review integration logs
@@ -343,23 +378,29 @@ Delete corresponding `.fields/*.json` files and re-run validation
 ## 📚 Configuration Files
 
 ### board-config.json
+
 Overall board configuration template
 
 ### integration-mapping.json
+
 Field mappings between GitHub and project board
 
 ### optimization-parameters.json
+
 Performance tuning settings
 
 ### monitoring-rules.json
+
 Metric thresholds and health check intervals
 
 ### alert-thresholds.json
+
 Alert severity levels and escalation policies
 
 ## ✅ Validation Checklist
 
 After running setup:
+
 - [ ] 25 custom fields visible in project
 - [ ] 8 phase templates available
 - [ ] 4 automation rules enabled
@@ -372,6 +413,7 @@ After running setup:
 ## 📞 Support
 
 For issues or questions:
+
 1. Check logs in `logs/` directory
 2. Review validation report
 3. Run validation script again

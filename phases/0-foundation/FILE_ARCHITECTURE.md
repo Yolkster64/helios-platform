@@ -77,11 +77,13 @@ C:\HELIOS\
 ```
 
 **Permissions:**
+
 - Owner: SYSTEM and Administrators
 - User: Read/Execute (can't delete system files)
 - Size: ~10-15 GB initially
 
 **What Gets Here & Why**:
+
 - Phase scripts must be on C: to run during startup
 - HELIOS needs centralized command center
 - On system drive for faster access
@@ -104,11 +106,13 @@ C:\Program Files\
 ```
 
 **Permissions**:
+
 - Owner: SYSTEM
 - User: Read/Execute
 - Size: Grows as applications installed
 
 **What Gets Here & Why**:
+
 - Standard Windows convention for programs
 - Central location for all apps
 - Protected from accidental deletion
@@ -140,11 +144,13 @@ C:\Windows\
 ```
 
 **Permissions**:
+
 - Owner: SYSTEM
 - User: Limited (read only)
 - Size: ~25-30 GB
 
 **What Gets Here & Why**:
+
 - This is where Windows MUST be installed
 - Cannot be changed during Phase 0
 - Protected from user modification
@@ -165,11 +171,13 @@ C:\ProgramData\
 ```
 
 **Permissions**:
+
 - Owner: SYSTEM
 - Apps: Read/Write
 - Users: Read only
 
 **What Gets Here & Why**:
+
 - Shared between all user accounts
 - Programs need centralized configuration
 - Not backed up to user profiles
@@ -194,11 +202,13 @@ C:\Users\ADMIN\AppData\
 ```
 
 **Permissions**:
+
 - Owner: User (ADMIN)
 - User: Full access
 - Others: No access
 
 **What Gets Here & Why**:
+
 - User-specific settings stored here
 - Separate from system settings
 - Can be backed up per-user
@@ -238,6 +248,7 @@ D:\Users\ADMIN\
 ```
 
 **Permissions**:
+
 - Owner: User (ADMIN)
 - User: Full access
 - Others: No access (or read-only)
@@ -245,6 +256,7 @@ D:\Users\ADMIN\
 **Size**: Grows with user files (0 - unlimited)
 
 **What Gets Here & Why**:
+
 - Separated from system drive for safety
 - Easy to back up as single unit
 - If C: fails, D: data survives
@@ -276,6 +288,7 @@ D:\Backups\
 ```
 
 **Permissions**:
+
 - Owner: SYSTEM and ADMIN
 - User: Read/Write for management
 - Others: No access
@@ -283,6 +296,7 @@ D:\Backups\
 **Size**: 100 GB - 300 GB+ depending on backup strategy
 
 **What Gets Here & Why**:
+
 - On separate drive for redundancy
 - Can be backed up to external storage
 - Never deleted during Windows reinstall
@@ -306,11 +320,13 @@ D:\Projects\
 ```
 
 **Permissions**:
+
 - Owner: User/Project owner
 - Collaborators: Shared access if needed
 - Others: No access
 
 **What Gets Here & Why**:
+
 - Active work stays accessible on D:
 - Separates in-progress from completed work
 - Can be backed up to external storage
@@ -333,11 +349,13 @@ D:\Archive\
 ```
 
 **Permissions**:
+
 - Owner: User
 - Access: Read-only (prevents accidental deletion)
 - Others: No access
 
 **What Gets Here & Why**:
+
 - Historical data kept for reference
 - Not actively used but kept for records
 - Can be archived to external storage
@@ -370,11 +388,13 @@ HKLM:\SOFTWARE\
 ```
 
 **Permissions**:
+
 - SYSTEM: Full access
 - Administrators: Full access
 - Users: Read only (mostly)
 
 **What Gets Here & Why**:
+
 - System-wide settings must be here
 - Cannot be changed by regular users
 - Critical to Windows operation
@@ -395,10 +415,12 @@ HKCU:\Software\
 ```
 
 **Permissions**:
+
 - Current User: Full access
 - Others: No access
 
 **What Gets Here & Why**:
+
 - User-specific preferences stored here
 - Roams if in network domain
 - Backed up as part of user profile
@@ -453,13 +475,15 @@ C:\Windows\Logs\                         # Windows system logs
 
 **Format**: Structured text (PSLogParser format for PowerShell logs)
 
-**Retention**: 
+**Retention**:
+
 - Recent (current month): C:\HELIOS\logs\
 - Archived (by month): D:\Backups\Logs\Archive\
 
 ### System Event Logs
 
 Visible in Event Viewer:
+
 ```
 Windows Logs\
 ├── System                               # Hardware, driver, services
@@ -501,7 +525,8 @@ C:\Users\[User]\AppData\                # Hidden by default
 D:\System Volume Information\           # Hidden by default
 ```
 
-**Why Hidden**: 
+**Why Hidden**:
+
 - Prevent accidental deletion
 - Keep user interface cleaner
 - System internals

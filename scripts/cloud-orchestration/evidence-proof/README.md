@@ -70,8 +70,7 @@ Remediation checklist:
 1. Allowlist `*.sharepoint.com` (and `*.svc.ms`) on the outbound proxy for the
    host running the proof.
 2. If the proxy requires authentication, configure it for the whole session,
-   e.g. `[System.Net.WebRequest]::DefaultWebProxy.Credentials =
-   [System.Net.CredentialCache]::DefaultNetworkCredentials`, or set
+   e.g. `[System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials`, or set
    `HTTPS_PROXY` with credentials.
 3. Re-run the proof; the verdict flips from `PartiallyProven-407Blocked` to
    `Proven` once both transports pass.

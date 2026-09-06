@@ -7,21 +7,25 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 ## 🎯 Guide Categories
 
 ### 📥 Installation & Setup
+
 - **[Installation Guide](./INSTALLATION.md)** - Step-by-step installation instructions
 - **[Configuration Guide](./CONFIGURATION.md)** - Configure HELIOS for your environment
 - **[Quick Start](./QUICK_START.md)** - Get running in 5 minutes
 
 ### 🚀 Deployment & Operations
+
 - **[Deployment Guide](./DEPLOYMENT.md)** - Deploy applications and components
 - **[Operations Manual](./OPERATIONS.md)** - Day-to-day operations
 - **[Monitoring Guide](./MONITORING.md)** - Monitor your deployments
 
 ### 👥 User Management
+
 - **[User Administration](./USER_ADMIN.md)** - Manage users and roles
 - **[Access Control](./ACCESS_CONTROL.md)** - Configure permissions
 - **[Security Guide](./SECURITY.md)** - Security best practices
 
 ### 🔧 Advanced Topics
+
 - **[Common Tasks](./COMMON_TASKS.md)** - How-to guides for frequent tasks
 - **[Troubleshooting](./TROUBLESHOOTING.md)** - Problem solving
 - **[Performance Tuning](./PERFORMANCE.md)** - Optimize your system
@@ -31,12 +35,14 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 ## 🎓 Learning Paths
 
 ### Path 1: New User (30 minutes)
+
 1. [Getting Started](../guides/GETTING_STARTED.md) (5 min)
 2. [Installation Guide](./INSTALLATION.md) (10 min)
 3. [Quick Start](./QUICK_START.md) (10 min)
 4. [Common Tasks](./COMMON_TASKS.md) (5 min)
 
 ### Path 2: System Administrator (1 hour)
+
 1. [Installation Guide](./INSTALLATION.md)
 2. [Configuration Guide](./CONFIGURATION.md)
 3. [User Administration](./USER_ADMIN.md)
@@ -44,6 +50,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 5. [Security Guide](./SECURITY.md)
 
 ### Path 3: Developer (1.5 hours)
+
 1. [Getting Started](../guides/GETTING_STARTED.md)
 2. [Deployment Guide](./DEPLOYMENT.md)
 3. [API Reference](../api/README.md)
@@ -51,6 +58,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 5. [Examples](../../examples/README.md)
 
 ### Path 4: Platform Architect (2+ hours)
+
 1. [Architecture Overview](../architecture/README.md)
 2. [System Design](../architecture/SYSTEM_OVERVIEW.md)
 3. [Components](../architecture/COMPONENTS.md)
@@ -79,6 +87,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 ## 🔍 Find What You Need
 
 ### By Task
+
 - **Installing HELIOS** → [Installation Guide](./INSTALLATION.md)
 - **Deploying an application** → [Deployment Guide](./DEPLOYMENT.md)
 - **Managing users** → [User Administration](./USER_ADMIN.md)
@@ -87,6 +96,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 - **Improving performance** → [Performance Tuning](./PERFORMANCE.md)
 
 ### By Role
+
 - **End User** → Start with [Getting Started](../guides/GETTING_STARTED.md)
 - **Administrator** → Start with [Installation Guide](./INSTALLATION.md)
 - **Developer** → Start with [Deployment Guide](./DEPLOYMENT.md)
@@ -94,6 +104,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 - **Architect** → Start with [Architecture](../architecture/README.md)
 
 ### By Topic
+
 - **Installation** → [Installation Guide](./INSTALLATION.md)
 - **Configuration** → [Configuration Guide](./CONFIGURATION.md)
 - **Deployment** → [Deployment Guide](./DEPLOYMENT.md)
@@ -107,6 +118,7 @@ Complete guides for using HELIOS Platform across different scenarios and use cas
 ## 📝 Guide Features
 
 Each guide includes:
+
 - ✅ Clear step-by-step instructions
 - ✅ Real-world examples
 - ✅ Screenshots and diagrams
@@ -119,12 +131,14 @@ Each guide includes:
 ## 🔗 Quick Links
 
 ### Essential Guides
+
 - [Getting Started](../guides/GETTING_STARTED.md) - New users start here
 - [Installation Guide](./INSTALLATION.md) - How to install
 - [Configuration Guide](./CONFIGURATION.md) - How to configure
 - [Deployment Guide](./DEPLOYMENT.md) - How to deploy
 
 ### Support Resources
+
 - [FAQ](../faq/README.md) - Common questions
 - [Troubleshooting](./TROUBLESHOOTING.md) - Problem solving
 - [API Reference](../api/README.md) - Technical details

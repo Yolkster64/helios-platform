@@ -41,11 +41,13 @@ C:\
 ## 🖥️ Component 1: Dashboard Application
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\Dashboard\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\Dashboard\
 ├─ app\
@@ -81,6 +83,7 @@ C:\Program Files\HELIOS\Dashboard\
 ```
 
 ### Key Files
+
 | File | Purpose | Editable |
 |------|---------|----------|
 | `app/config.js` | Port, database connection, theme | ✅ Yes |
@@ -89,6 +92,7 @@ C:\Program Files\HELIOS\Dashboard\
 | `logs/dashboard.log` | Troubleshooting | ❌ Read-only |
 
 ### Access Points
+
 - **Web Interface:** http://localhost:9000
 - **API Endpoint:** http://localhost:9000/api
 - **WebSocket:** ws://localhost:9000 (real-time updates)
@@ -99,11 +103,13 @@ C:\Program Files\HELIOS\Dashboard\
 ## 🤖 Component 2: AI Learning Engine
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\AI\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\AI\
 ├─ models\
@@ -158,6 +164,7 @@ C:\Program Files\HELIOS\AI\
 ```
 
 ### Key Files
+
 | File | Purpose | Editable |
 |------|---------|----------|
 | `models/latest/` | Current active ML models | ❌ No (auto-updated) |
@@ -166,6 +173,7 @@ C:\Program Files\HELIOS\AI\
 | `engine/config.yaml` | Learning parameters | ✅ Yes (advanced users) |
 
 ### How AI Models Are Updated
+
 ```
 Daily 1:00 AM
 ├─ Load last 7 days of production data
@@ -183,6 +191,7 @@ Weekly 3:00 AM
 ```
 
 ### Disk Space Usage
+
 ```
 Typical Storage:
 ├─ Models: 50-100 MB (6 models, multiple versions)
@@ -200,11 +209,13 @@ Max: 5 GB (with full 365-day history)
 ## 🔧 Component 3: Auto-Healing System
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\AutoHealing\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\AutoHealing\
 ├─ rules\
@@ -246,6 +257,7 @@ C:\Program Files\HELIOS\AutoHealing\
 ```
 
 ### Healing Rules Example
+
 ```json
 {
   "connection-pool-exhaustion": {
@@ -263,6 +275,7 @@ C:\Program Files\HELIOS\AutoHealing\
 ```
 
 ### Auto-Healing Log Example
+
 ```
 [2024-02-15 14:32:15] DETECTION: Connection pool at 98%
 [2024-02-15 14:32:16] ACTION: Executing expand-pool.ps1
@@ -277,11 +290,13 @@ C:\Program Files\HELIOS\AutoHealing\
 ## 👤 Component 4: Profile Management
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\Profiles\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\Profiles\
 ├─ builtin\
@@ -314,6 +329,7 @@ C:\Program Files\HELIOS\Profiles\
 ```
 
 ### Profile Definition Example
+
 ```json
 {
   "name": "HighTraffic",
@@ -351,11 +367,13 @@ C:\Program Files\HELIOS\Profiles\
 ## ⚙️ Component 5: Automation Workflows
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\Workflows\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\Workflows\
 ├─ builtin\                    ← Pre-built by HELIOS
@@ -395,6 +413,7 @@ C:\Program Files\HELIOS\Workflows\
 ```
 
 ### Workflow Definition Example
+
 ```json
 {
   "name": "DailyBackup",
@@ -442,11 +461,13 @@ C:\Program Files\HELIOS\Workflows\
 ## ⚡ Component 6: Performance AI
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\PerformanceAI\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\PerformanceAI\
 ├─ models\
@@ -485,6 +506,7 @@ C:\Program Files\HELIOS\PerformanceAI\
 ```
 
 ### Recommendation Example
+
 ```json
 {
   "recommendation-id": "REC-00451",
@@ -508,11 +530,13 @@ C:\Program Files\HELIOS\PerformanceAI\
 ## 📊 Component 7: Reporting System
 
 ### Location
+
 ```
 C:\Program Files\HELIOS\Reporting\
 ```
 
 ### Directory Structure
+
 ```
 C:\Program Files\HELIOS\Reporting\
 ├─ templates\
@@ -552,6 +576,7 @@ C:\Program Files\HELIOS\Reporting\
 ```
 
 ### Typical Report Storage
+
 ```
 Generate rate:
 ├─ Daily Report: 1 per day = 30/month = 360/year
@@ -576,11 +601,13 @@ Annual Storage:
 ## 🗄️ Database Storage
 
 ### Location
+
 ```
 C:\ProgramData\HELIOS\database\
 ```
 
 ### PostgreSQL Tables Structure
+
 ```
 PostgreSQL Database: helios_phase3
 
@@ -623,6 +650,7 @@ Key Tables:
 ```
 
 ### Disk Space Usage
+
 ```
 Typical Database Size (PostgreSQL):
 ├─ Active Metrics: 50-100 GB (3 months, high frequency)
@@ -642,6 +670,7 @@ Recommended Storage: 500 GB - 1 TB
 ## 📝 Logging Locations
 
 ### All Log Files
+
 ```
 Main Logs:
 ├─ C:\Program Files\HELIOS\Logs\
@@ -665,6 +694,7 @@ Main Logs:
 ```
 
 ### Log Rotation
+
 ```
 Daily Logs:
 ├─ Active log: dashboard.log
@@ -682,6 +712,7 @@ Monthly Archive:
 ## 🔐 Security & Permissions
 
 ### File Permissions
+
 ```
 C:\Program Files\HELIOS\       → Administrators: Full
                                → HELIOS Services: Read/Execute
@@ -697,6 +728,7 @@ Sensitive Files:
 ```
 
 ### Database Permissions
+
 ```
 PostgreSQL helios_phase3 Database:
 ├─ helios_app user: Full access to all tables
@@ -709,6 +741,7 @@ PostgreSQL helios_phase3 Database:
 ## 📈 Growth Projections
 
 ### Typical Storage Growth Over 1 Year
+
 ```
 Month 1: 80 GB
 ├─ Metrics: 10 GB
@@ -729,6 +762,7 @@ At this point, growth stabilizes around 25-30 GB/month
 ```
 
 ### Recommended Maintenance
+
 ```
 Monthly:
 ├─ Review log sizes

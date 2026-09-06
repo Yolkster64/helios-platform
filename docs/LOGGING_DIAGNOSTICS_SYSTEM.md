@@ -3,6 +3,7 @@
 ## Overview
 
 The HELIOS Platform Logging & Diagnostics System provides a comprehensive, production-ready solution for:
+
 - **Multi-level structured logging** with Serilog
 - **Log rotation, archival, and aggregation**
 - **Crash reporting and analysis**
@@ -581,6 +582,7 @@ Version 1.0.0 - Production Ready
 ## Changelog
 
 ### v1.0.0
+
 - Initial release
 - 14 core components
 - Complete documentation

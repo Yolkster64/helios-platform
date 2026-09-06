@@ -78,9 +78,11 @@ Response to User
 ## 🔍 Detailed Component Descriptions
 
 ### **1. HeliosDeployment** 🎬
+
 **What it is**: Main orchestrator that coordinates all deployment phases.
 
 **What it does**:
+
 - Validates all components before deployment
 - Executes deployment in phases (0-7)
 - Tracks deployment state and progress
@@ -88,6 +90,7 @@ Response to User
 - Provides status reporting
 
 **Key Methods**:
+
 - `ValidateAsync()` - Checks all components ready
 - `DeployAsync(tier)` - Runs deployment phases
 - `GetStatusAsync()` - Current status
@@ -95,6 +98,7 @@ Response to User
 - `UndeployAsync()` - Remove everything
 
 **Example Usage**:
+
 ```csharp
 var deployment = new HeliosDeployment();
 await deployment.ValidateAsync();
@@ -104,17 +108,20 @@ var result = await deployment.DeployAsync(DeploymentTier.Enterprise);
 ---
 
 ### **2. API Gateway** 🚪
+
 **File**: `BackendServices/ApiGateway/RateLimitAndCircuitBreaker.cs`
 
 **What it is**: Intelligent gateway that protects backend services.
 
 **What it does**:
+
 - **Rate Limiting**: Restricts requests per client (prevents abuse)
 - **Circuit Breaker**: Stops requests to failing services (prevent cascades)
 - **Request Tracking**: Logs all incoming requests
 - **Error Handling**: Gracefully handles failures
 
 **How it works**:
+
 1. Request arrives
 2. Check rate limit for client
 3. If exceeded, return 429 (Too Many Requests)
@@ -124,6 +131,7 @@ var result = await deployment.DeployAsync(DeploymentTier.Enterprise);
 7. Log metrics
 
 **Configuration**:
+
 - Max requests per minute: configurable
 - Circuit breaker threshold: 50% errors in 10s
 - Timeout: 30 seconds
@@ -131,11 +139,13 @@ var result = await deployment.DeployAsync(DeploymentTier.Enterprise);
 ---
 
 ### **3. Authentication Service** 🔐
+
 **File**: `BackendServices/AuthService/JwtTokenService.cs`
 
 **What it is**: JWT token manager for authentication.
 
 **What it does**:
+
 - Generate JWT tokens for users
 - Validate token signatures
 - Check token expiration
@@ -143,12 +153,14 @@ var result = await deployment.DeployAsync(DeploymentTier.Enterprise);
 - Manage token refresh
 
 **Key Methods**:
+
 - `GenerateToken(userId, claims)` - Create new token
 - `ValidateToken(token)` - Check token is valid
 - `RefreshToken(token)` - Get new token
 - `GetClaims(token)` - Extract claims
 
 **Token Format**:
+
 ```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.
 eyJzdWIiOiJ1c2VyMTIzIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.
@@ -158,11 +170,13 @@ SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 ---
 
 ### **4. Caching Service** 💾
+
 **File**: `BackendServices/DataService/CacheService.cs`
 
 **What it is**: Redis-based caching layer.
 
 **What it does**:
+
 - Stores frequently accessed data in memory
 - Reduces database queries
 - Speeds up responses
@@ -170,16 +184,19 @@ SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 - Tracks cache hit/miss rates
 
 **How it improves performance**:
+
 - DB query: 100ms
 - Cache hit: 1ms
 - **100x faster!**
 
 **Cache Strategy**:
+
 - Time-based expiration: 5-60 minutes
 - LRU eviction: Remove old data when full
 - Invalidation: Clear when data changes
 
 **Example**:
+
 ```csharp
 // Check cache
 var cached = cache.Get("user:123");
@@ -196,11 +213,13 @@ return user;
 ---
 
 ### **5. Analytics Service** 📊
+
 **File**: `BackendServices/Analytics/AnalyticsService.cs`
 
 **What it is**: Metrics collection and performance tracking.
 
 **What it does**:
+
 - Records every request (endpoint, method, status, latency)
 - Calculates statistics (average, min, max response time)
 - Detects anomalies (unusual patterns)
@@ -208,6 +227,7 @@ return user;
 - Sends alerts on problems
 
 **Metrics Tracked**:
+
 - Request count (per endpoint)
 - Response times (avg, min, max, p95, p99)
 - Error rates
@@ -216,11 +236,13 @@ return user;
 - AI service response times
 
 **Performance Thresholds**:
+
 - Warning: Response time > 1 second
 - Critical: Response time > 5 seconds
 - Alert: Error rate > 5%
 
 **Usage**:
+
 ```csharp
 analytics.RecordRequest(
     endpoint: "/api/users",
@@ -233,11 +255,13 @@ analytics.RecordRequest(
 ---
 
 ### **6. AI Integration Service** 🤖
+
 **File**: `BackendServices/AIIntegration/AIIntegrationService.cs`
 
 **What it is**: Manager for multiple AI services.
 
 **What it does**:
+
 - Connects to Ollama, Azure AI, Claude, etc.
 - Routes requests to best service
 - Handles model loading/unloading
@@ -253,6 +277,7 @@ analytics.RecordRequest(
 | Copilot | Low | Free | Code tasks |
 
 **Routing Logic**:
+
 ```
 Request comes in
   ↓
@@ -274,11 +299,13 @@ Return to user
 ---
 
 ### **7. Task Orchestrator** ⚙️
+
 **File**: `BackendServices/TaskOrchestrator/TaskOrchestrator.cs`
 
 **What it is**: Workflow and job management system.
 
 **What it does**:
+
 - Creates and manages long-running tasks
 - Handles task dependencies
 - Schedules tasks for future execution
@@ -287,6 +314,7 @@ Return to user
 - Queues background work
 
 **Task Lifecycle**:
+
 ```
 1. Create task
 2. Queue (waiting)
@@ -297,6 +325,7 @@ Return to user
 ```
 
 **Example Task**:
+
 ```csharp
 var task = orchestrator.CreateTask(
     name: "ProcessUserReport",
@@ -311,6 +340,7 @@ var task = orchestrator.CreateTask(
 ## 🔄 Data Flow Examples
 
 ### **Example 1: User Login**
+
 ```
 1. User sends login request
    POST /auth/login { username, password }
@@ -335,6 +365,7 @@ var task = orchestrator.CreateTask(
 ```
 
 ### **Example 2: Fetch User Profile**
+
 ```
 1. Request with auth token
    GET /api/users/123
@@ -367,6 +398,7 @@ var task = orchestrator.CreateTask(
 ```
 
 ### **Example 3: AI Analysis**
+
 ```
 1. Request AI analysis
    POST /api/analyze { text: "..." }

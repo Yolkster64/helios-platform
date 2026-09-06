@@ -418,6 +418,7 @@ Invoke-Pester -Path ".\tests\*-system.ps1" -Output Verbose -Pester @{
 ## System Test Report
 
 Example output:
+
 ```
 ═══════════════════════════════════════════════════════════
 HELIOS Platform v2 - System Test Report
@@ -490,6 +491,7 @@ OVERALL RESULT: ✓ SYSTEM READY FOR DEPLOYMENT
 ## Success Criteria
 
 System tests pass when:
+
 - ✅ All phases execute without errors
 - ✅ Functionality tests pass (21/21)
 - ✅ Performance improvements measured and documented

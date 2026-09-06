@@ -3,6 +3,7 @@
 ## Quick Start - Service Usage Examples
 
 ### 1. Deep Learning Predictor
+
 ```csharp
 var predictor = ServiceContainer.Instance.GetService<IDeepLearningPredictor>();
 
@@ -18,6 +19,7 @@ Console.WriteLine($"Confidence: {string.Join(",", prediction.ConfidenceScores)}"
 ```
 
 ### 2. AutoML Optimizer
+
 ```csharp
 var optimizer = ServiceContainer.Instance.GetService<IAutoMLOptimizer>();
 
@@ -30,6 +32,7 @@ Console.WriteLine($"Accuracy: {selection.AccuracyScore:P2}");
 ```
 
 ### 3. Federated Learning
+
 ```csharp
 var fedLearning = ServiceContainer.Instance.GetService<IFederatedLearning>();
 
@@ -44,6 +47,7 @@ var stats = await fedLearning.GetStatsAsync();
 ```
 
 ### 4. Reinforcement Learning
+
 ```csharp
 var rl = ServiceContainer.Instance.GetService<IReinforcementLearning>();
 
@@ -58,6 +62,7 @@ var stats = await rl.GetPolicyStatsAsync();
 ```
 
 ### 5. NLP Analyzer
+
 ```csharp
 var nlp = ServiceContainer.Instance.GetService<INLPAnalyzer>();
 
@@ -73,6 +78,7 @@ var anomalies = await nlp.DetectLogAnomaliesAsync(logMessages);
 ```
 
 ### 6. Seasonality Detector
+
 ```csharp
 var detector = ServiceContainer.Instance.GetService<ISeasonalityDetector>();
 
@@ -86,6 +92,7 @@ Console.WriteLine($"Trend: {decomp.TrendVarianceRatio:P2}");
 ```
 
 ### 7. Anomaly Prediction
+
 ```csharp
 var anomaly = ServiceContainer.Instance.GetService<IAnomalyPrediction>();
 
@@ -106,6 +113,7 @@ var predictions = await anomaly.PredictAnomaliesAsync(data, stepsAhead: 5);
 ## Service Registration
 
 ### In Program.cs:
+
 ```csharp
 using HELIOS.Platform.Core;
 using HELIOS.Platform.Core.Performance;
@@ -144,6 +152,7 @@ AdvancedMLServiceRegistration.RegisterAdvancedMLServices(logger, cache);
 ## Configuration
 
 ### Default Timeouts:
+
 - AutoML Model Selection: 5 seconds
 - Deep Learning Prediction: 10 seconds cache
 - NLP Analysis: 10 minutes cache
@@ -151,6 +160,7 @@ AdvancedMLServiceRegistration.RegisterAdvancedMLServices(logger, cache);
 - Anomaly Detection: 30 seconds cache
 
 ### Thread Safety:
+
 - All services are thread-safe
 - Concurrent usage supported
 - No external synchronization needed
@@ -160,11 +170,13 @@ AdvancedMLServiceRegistration.RegisterAdvancedMLServices(logger, cache);
 ## Error Handling
 
 All services throw:
+
 - `ArgumentNullException`: For null parameters
 - `ArgumentException`: For invalid arguments
 - `InvalidOperationException`: For invalid states
 
 Example:
+
 ```csharp
 try
 {
@@ -185,6 +197,7 @@ catch (Exception ex)
 ## Logging
 
 All services log important events:
+
 ```csharp
 logger.Info("Model trained successfully");
 logger.Warning("Cache miss for prediction");
@@ -210,15 +223,19 @@ logger.Error("Failed to process: {error}");
 ## Troubleshooting
 
 ### Issue: Service not found in ServiceContainer
+
 **Solution**: Ensure `RegisterAdvancedMLServices()` is called before accessing services
 
 ### Issue: Slow predictions
+
 **Solution**: Check if cache TTL is appropriate, consider batch processing
 
 ### Issue: High memory usage
+
 **Solution**: Clear replay buffers (RL), reduce batch sizes, adjust cache settings
 
 ### Issue: Inaccurate predictions
+
 **Solution**: Provide more training data, adjust smoothing parameters, retrain models
 
 ---
@@ -226,12 +243,14 @@ logger.Error("Failed to process: {error}");
 ## Best Practices
 
 1. **Always use async/await**
+
 ```csharp
 var result = await service.MethodAsync(...);  // ✅ Good
 var result = service.MethodAsync(...).Result;  // ❌ Avoid
 ```
 
 2. **Handle nulls properly**
+
 ```csharp
 if (data?.Length > 0)  // ✅ Good
 {
@@ -240,11 +259,13 @@ if (data?.Length > 0)  // ✅ Good
 ```
 
 3. **Use services from ServiceContainer**
+
 ```csharp
 var service = ServiceContainer.Instance.GetService<IService>();  // ✅ Good
 ```
 
 4. **Log important operations**
+
 ```csharp
 logger.Info($"Processing {data.Length} items");  // ✅ Good
 ```
@@ -254,6 +275,7 @@ logger.Info($"Processing {data.Length} items");  // ✅ Good
 ## Advanced Usage
 
 ### Custom Hyperparameters (AutoML):
+
 ```csharp
 var hyperparameters = new Dictionary<string, double>
 {
@@ -264,6 +286,7 @@ var hyperparameters = new Dictionary<string, double>
 ```
 
 ### Experience Replay (RL):
+
 ```csharp
 var experience = new Experience
 {
@@ -277,6 +300,7 @@ await rl.TrainBatchAsync(experiences);
 ```
 
 ### Custom Sentiment Thresholds (NLP):
+
 ```csharp
 // Sentiment > 0.2 = positive
 // Sentiment < -0.2 = negative  
@@ -288,6 +312,7 @@ await rl.TrainBatchAsync(experiences);
 ## Integration Patterns
 
 ### Pattern 1: Prediction Pipeline
+
 ```csharp
 // Train → Predict → Cache
 await deepLearning.TrainAsync(data, 10, 20);
@@ -295,6 +320,7 @@ var prediction = await deepLearning.PredictAsync(input, 10, 5);
 ```
 
 ### Pattern 2: Model Selection Pipeline
+
 ```csharp
 // Evaluate → Select → Optimize
 var selection = await automl.SelectBestModelAsync(data, targets);
@@ -302,6 +328,7 @@ var tuning = await automl.OptimizeHyperparametersAsync(selection.ModelType, data
 ```
 
 ### Pattern 3: Distributed Training
+
 ```csharp
 // Train local → Aggregate → Global
 var local = await fedLearning.TrainLocalAsync("node1", data, 10);
@@ -313,11 +340,13 @@ var global = await fedLearning.AggregateUpdatesAsync(nodeUpdates);
 ## Metrics & Monitoring
 
 ### Performance Metrics:
+
 - Prediction latency (<50ms)
 - Cache hit rate (70-85%)
 - Model accuracy (reported per service)
 
 ### Health Checks:
+
 ```csharp
 // Verify service health
 var metrics = await deepLearning.GetMetricsAsync();

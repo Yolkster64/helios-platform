@@ -45,12 +45,14 @@ Before starting Phase 1, ensure you have:
 ## What Changes
 
 ### Visible Changes
+
 - New **Admin**, **Standard**, **Restricted** user account tiers
 - Programs won't launch unless explicitly allowed (AppLocker approval)
 - Some network tools blocked (by firewall)
 - Quarantine folder appears at `C:\Vault\Quarantine`
 
 ### Invisible Changes
+
 - Windows Registry hardening (HKLM:\System\CurrentControlSet\Services)
 - Firewall rules (Windows Defender Firewall with Advanced Security)
 - Vault encryption settings (BitLocker-compatible)
@@ -58,6 +60,7 @@ Before starting Phase 1, ensure you have:
 - Defender + Malwarebytes scheduled scans
 
 ### Performance Impact
+
 - **Startup**: +30-60 seconds (additional security checks)
 - **Program Launch**: +2-5 seconds first run (AppLocker validation)
 - **Disk Access**: Minimal (< 5% overhead)

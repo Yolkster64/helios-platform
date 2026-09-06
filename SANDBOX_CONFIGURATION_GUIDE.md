@@ -1,23 +1,27 @@
 # Sandbox Environment Configuration Guide
 
 ## Overview
+
 Phase 10 provides a comprehensive sandbox environment for safely analyzing suspicious files without affecting the main system. This guide covers configuration, deployment, and usage of all sandbox services.
 
 ## System Requirements
 
 ### Hardware
+
 - **CPU**: Multi-core processor (minimum 4 cores recommended)
 - **RAM**: 8 GB minimum (16 GB recommended)
 - **Disk**: 50 GB free space (for sandbox partition H:)
 - **GPU**: Optional NVIDIA GPU for pass-through support
 
 ### Software
+
 - **OS**: Windows 10/11 (Pro, Enterprise, or Education edition)
 - **.NET**: .NET 8.0 or later
 - **Windows Sandbox**: Enable optional feature (Windows 10 Pro/Enterprise and above)
 - **Hyper-V**: Enable for VM-based sandboxes (alternative to Windows Sandbox)
 
 ### Permissions
+
 - Administrator privileges required
 - UAC (User Account Control) enabled
 
@@ -339,19 +343,23 @@ await orchestrator.ShutdownAsync();
 ## Performance Tuning
 
 ### CPU Optimization
+
 - Allocate 2-4 cores for analysis tasks
 - Monitor CPU usage: `Get-Process | Sort-Object CPU -Descending`
 
 ### Memory Optimization
+
 - Base allocation: 2-4 GB RAM per sandbox
 - Monitor: `Get-Process | Sort-Object WorkingSet -Descending`
 
 ### Disk Optimization
+
 - Use SSD for snapshots
 - Enable compression for long-term storage
 - Periodic cleanup: `Get-ChildItem H:\Sandbox -Recurse | Where {$_.LastAccessTime -lt (Get-Date).AddDays(-30)} | Remove-Item`
 
 ### Network Optimization
+
 - Use local analysis when possible
 - Restrict network bandwidth for suspected malware
 - Enable DNS-over-HTTPS for safety
@@ -399,6 +407,7 @@ Get-NetFirewallRule -Direction Inbound -Action Block
 ## Troubleshooting
 
 ### Windows Sandbox Not Available
+
 ```powershell
 # Verify feature is installed
 Get-WindowsOptionalFeature -FeatureName "Containers-DisposableClientVM"
@@ -408,6 +417,7 @@ Enable-WindowsOptionalFeature -FeatureName "Containers-DisposableClientVM" -All
 ```
 
 ### Hyper-V Issues
+
 ```powershell
 # Check Hyper-V status
 Get-VMHost
@@ -417,6 +427,7 @@ Get-ComputerInfo | Select-Object HyperVRequirementVirtualizationCapable
 ```
 
 ### Disk Space Issues
+
 ```powershell
 # Clean old snapshots
 Remove-Item "H:\Snapshots\*" -Recurse -Force
@@ -426,6 +437,7 @@ Compact-Volume -DriveLetter H -UsageType Default
 ```
 
 ### Network Isolation Problems
+
 ```powershell
 # Check firewall rules
 Get-NetFirewallProfile
@@ -505,6 +517,7 @@ foreach (var result in results)
 ## Support and Documentation
 
 For issues and additional information:
+
 - Review log files in `%APPDATA%\HELIOS\Logs\`
 - Check system events in Event Viewer
 - Contact HELIOS support team

@@ -274,11 +274,13 @@ if (retryResult.Success)
 ### OneDrive Provider
 
 **Authentication:**
+
 - Uses OAuth2 with Microsoft Graph API
 - Requires access token (with optional refresh token for token renewal)
 - Supports delegated and application permissions
 
 **Key Features:**
+
 - Full file upload/download support
 - File listing with metadata
 - Quota information (total, used, remaining)
@@ -286,6 +288,7 @@ if (retryResult.Success)
 - Proper error handling and retry logic
 
 **API Endpoints:**
+
 - `GET /me/drive` - Get quota information
 - `GET /me/drive/root:/{path}:/children` - List files
 - `PUT /me/drive/root:/{path}:/content` - Upload file
@@ -295,11 +298,13 @@ if (retryResult.Success)
 ### Azure Storage Provider
 
 **Authentication:**
+
 - Uses storage account name and key
 - Supports connection strings
 - Connection pooling for performance
 
 **Key Features:**
+
 - Blob container operations
 - File listing with filtering
 - Size and quota tracking
@@ -307,6 +312,7 @@ if (retryResult.Success)
 - Optimized batch operations
 
 **Container:**
+
 - Default container: `helios-sync`
 - Auto-created on initialization
 - Supports hierarchical path structure with `/`
@@ -398,6 +404,7 @@ The engine maintains an in-memory cache of file sync states for performance. Cac
 ### Retry Logic
 
 Failed operations are automatically queued with exponential backoff:
+
 - Max retries: 3
 - Retry intervals: 1s, 2s, 4s
 
@@ -446,6 +453,7 @@ if (!result.Success)
 ## Telemetry
 
 Each sync operation provides:
+
 - Files processed count
 - Successful syncs count
 - Conflict count and details

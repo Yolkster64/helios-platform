@@ -24,6 +24,7 @@ Reduce HELIOS Platform operational costs by 60-70% through intelligent CI/CD opt
 | **Total Current** | - | - | - | **$153** |
 
 ### 1.2 Annual Cost
+
 ```
 Monthly:  $153
 Annual:   $153 × 12 = $1,836
@@ -55,6 +56,7 @@ Bandwidth (33%):         $50
 ### 2.1 Build Minutes Reduction
 
 #### Current State
+
 ```
 Metrics:
 - Builds per month:      300
@@ -123,6 +125,7 @@ Scheduled tests (20/month):
 ```
 
 **Total GitHub Actions Savings:**
+
 ```
 Before:  $78/month × 12 = $936/year
 After:   $30/month × 12 = $360/year
@@ -136,6 +139,7 @@ Savings: $576/year (62%)
 ### 3.1 Artifact Management
 
 #### Current Strategy
+
 ```
 All artifacts retained: 30 days
 Average size: 50 GB at any time
@@ -169,6 +173,7 @@ Skip debug builds, keep only releases
 | **Total** | **-85%** | **$23.75** |
 
 **Storage Costs:**
+
 ```
 Before:  $25/month × 12 = $300/year
 After:   $1.25/month × 12 = $15/year
@@ -182,6 +187,7 @@ Savings: $285/year (95%)
 ### 4.1 Bandwidth Reduction Strategy
 
 #### Current Usage
+
 ```
 Artifact downloads:      25/month × 2 MB = 50 GB
 API responses:          5,000/month
@@ -215,6 +221,7 @@ Reduce log verbosity: -70% log size
 | **Total** | **$50** | **$18** | **$32** |
 
 **Bandwidth Savings:**
+
 ```
 Before:  $50/month × 12 = $600/year
 After:   $18/month × 12 = $216/year
@@ -228,11 +235,13 @@ Savings: $384/year (64%)
 ### 5.1 Runner Optimization
 
 #### Standard Runner Costs
+
 ```
 Ubuntu runner: $0.01 per minute (included in GitHub billing)
 ```
 
 #### Optimization
+
 ```
 1. Batch similar jobs
 2. Use matrix builds efficiently
@@ -332,6 +341,7 @@ Savings:           $(153 - ($github + $storage + $bandwidth))/month
 ## 8. Implementation Timeline
 
 ### Phase 1: Quick Wins (Week 1)
+
 **Estimated Savings: $30-40/month**
 
 - [ ] Enable GitHub Actions caching
@@ -341,6 +351,7 @@ Savings:           $(153 - ($github + $storage + $bandwidth))/month
 - [ ] Expected savings: $30/month
 
 ### Phase 2: Optimization (Week 2-3)
+
 **Estimated Savings: $40-60/month**
 
 - [ ] Implement parallel builds
@@ -350,6 +361,7 @@ Savings:           $(153 - ($github + $storage + $bandwidth))/month
 - [ ] Expected savings: $50/month
 
 ### Phase 3: Advanced (Week 4)
+
 **Estimated Savings: $10-20/month**
 
 - [ ] Log optimization
@@ -359,6 +371,7 @@ Savings:           $(153 - ($github + $storage + $bandwidth))/month
 - [ ] Expected savings: $15/month
 
 ### Phase 4: Monitoring (Ongoing)
+
 **Time: 1 hour/month**
 
 - [ ] Track actual vs. target costs
@@ -414,6 +427,7 @@ Year 3:
 ## 10. Implementation Checklist
 
 ### Phase 1: GitHub Actions (2-3 hours)
+
 - [ ] Implement caching strategy
 - [ ] Create matrix builds
 - [ ] Add conditional execution
@@ -421,6 +435,7 @@ Year 3:
 - [ ] **Target: -$40-50/month**
 
 ### Phase 2: Storage (1-2 hours)
+
 - [ ] Reduce retention period
 - [ ] Setup compression
 - [ ] Configure archival
@@ -428,6 +443,7 @@ Year 3:
 - [ ] **Target: -$20-25/month**
 
 ### Phase 3: Bandwidth (1-2 hours)
+
 - [ ] Setup CDN caching
 - [ ] Enable compression
 - [ ] Batch API calls
@@ -435,6 +451,7 @@ Year 3:
 - [ ] **Target: -$20-30/month**
 
 ### Phase 4: Monitoring (1 hour)
+
 - [ ] Create cost dashboard
 - [ ] Setup alerts
 - [ ] Document procedures

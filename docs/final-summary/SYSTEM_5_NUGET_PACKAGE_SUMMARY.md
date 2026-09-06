@@ -55,6 +55,7 @@ NuGet Distribution System
 ✅ Release process verified  
 
 **Package Details:**
+
 - Name: HELIOS.Platform
 - URL: https://www.nuget.org/packages/HELIOS.Platform/
 - Current Version: 2.0.0
@@ -84,16 +85,19 @@ NuGet Distribution System
 ## Installation Methods
 
 **Via NuGet Package Manager:**
+
 ```powershell
 Install-Package HELIOS.Platform
 ```
 
 **Via .NET CLI:**
+
 ```bash
 dotnet add package HELIOS.Platform
 ```
 
 **Via PackageReference (direct edit .csproj):**
+
 ```xml
 <PackageReference Include="HELIOS.Platform" Version="2.0.0" />
 ```

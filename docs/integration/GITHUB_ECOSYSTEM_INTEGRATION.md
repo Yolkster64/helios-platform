@@ -1,4 +1,5 @@
 # GITHUB ECOSYSTEM INTEGRATION GUIDE
+
 **HELIOS Platform - Complete GitHub Workflow Automation**
 
 **Document Version:** 1.0
@@ -20,6 +21,7 @@ The HELIOS Platform integrates with GitHub's complete ecosystem to automate deve
 **Trigger:** Issue created in GitHub repository
 
 **Flow:**
+
 ```
 GitHub Issue Created
     ↓
@@ -43,6 +45,7 @@ Notify Assignee (if assigned)
 ### 1.2 Label System & Board Columns
 
 **Label Taxonomy:**
+
 ```
 Category: Type
 ├─ type:bug (Critical fixes)
@@ -74,6 +77,7 @@ Category: Area
 ```
 
 **Board Columns:**
+
 ```
 1. Backlog
    - New issues
@@ -174,6 +178,7 @@ Board-to-issue sync accuracy        100%        100%      ✅
 **Trigger:** PR opened or updated
 
 **Workflows Triggered:**
+
 ```
 PR Opened
     ↓
@@ -209,6 +214,7 @@ PR Ready for Review (all green)
 ### 2.2 Workflow Configuration
 
 **Lint Workflow (.github/workflows/lint.yml):**
+
 ```yaml
 name: Lint
 on:
@@ -239,6 +245,7 @@ jobs:
 ```
 
 **Build Workflow (.github/workflows/build.yml):**
+
 ```yaml
 name: Build
 on:
@@ -462,6 +469,7 @@ Level 4: Escalation
 **Trigger:** Workflow status change
 
 **Automation:**
+
 ```
 Workflow Completes
     ↓
@@ -653,6 +661,7 @@ Documentation Portal (GitHub Pages):
 ### 6.2 Auto-Generated Documentation
 
 **API Documentation (from code):**
+
 ```
 Source: C# XML comments in code
 Generator: Swagger/OpenAPI extractor
@@ -662,6 +671,7 @@ Format: OpenAPI 3.0 specification
 ```
 
 **Architecture Documentation (from design docs):**
+
 ```
 Source: docs/ directory Markdown files
 Generator: Hugo / Jekyll
@@ -672,6 +682,7 @@ Navigation: Auto-generated from file structure
 ```
 
 **Integration Documentation (from this repo):**
+
 ```
 Source: docs/integration/ directory
 Generator: Markdown to HTML converter

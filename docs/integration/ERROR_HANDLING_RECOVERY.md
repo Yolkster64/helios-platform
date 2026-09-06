@@ -1,4 +1,5 @@
 # ERROR HANDLING & RECOVERY GUIDE
+
 **HELIOS Platform - Failure Scenarios & Recovery Procedures**
 
 **Document Version:** 1.0
@@ -11,6 +12,7 @@
 ### 1.1 Critical Scenario: Security System Unavailable
 
 **Impact:**
+
 ```
 Severity: CRITICAL (P1)
 Affected Systems: ALL (cannot authenticate)
@@ -20,6 +22,7 @@ Recovery Window: 30 minutes
 ```
 
 **Detection:**
+
 ```
 Automatic Detection:
 - Failed auth attempts: > 3 consecutive
@@ -32,6 +35,7 @@ Notification: Immediate to on-call
 ```
 
 **Root Causes:**
+
 ```
 1. Security Service Crash (40% probability)
 2. Database Connectivity Loss (30%)
@@ -40,6 +44,7 @@ Notification: Immediate to on-call
 ```
 
 **Recovery Procedure (Automatic + Manual):**
+
 ```
 Phase 1: Automatic Recovery (30 seconds)
 ├─ Detect failure (5s)
@@ -72,6 +77,7 @@ User Experience: Transparent (auto) to 5-minute outage (manual)
 ```
 
 **Rollback Capability:**
+
 ```
 Rollback Procedure:
 1. If secondary system faulty:
@@ -93,6 +99,7 @@ Rollback Time: 10 seconds (config) to 5 minutes (data)
 ```
 
 **Data Consistency Checks:**
+
 ```
 After Recovery - Verify:
 
@@ -125,6 +132,7 @@ Success Criteria: 100% consistency verified
 ### 1.2 High Impact Scenario: Build Agent Failure
 
 **Impact:**
+
 ```
 Severity: HIGH (P2)
 Affected Systems: Build pipeline
@@ -134,6 +142,7 @@ Recovery Window: 5-10 minutes
 ```
 
 **Detection:**
+
 ```
 Triggers:
 - Build start timeout > 30 seconds
@@ -146,6 +155,7 @@ Notification: Alert to Slack #builds
 ```
 
 **Recovery Procedure:**
+
 ```
 Automatic Recovery (60 seconds):
 1. Detect failure (5s)
@@ -163,6 +173,7 @@ If Retry Fails:
 ```
 
 **Manual Intervention:**
+
 ```
 Phase 2: Operator Intervention (5 minutes)
 
@@ -203,6 +214,7 @@ Phase 2: Operator Intervention (5 minutes)
 ### 1.3 Medium Impact: Network Partition
 
 **Impact:**
+
 ```
 Severity: MEDIUM (P3)
 Affected Systems: Inter-system communication
@@ -212,6 +224,7 @@ Recovery Window: 10-20 minutes
 ```
 
 **Detection:**
+
 ```
 Symptoms:
 - Ping timeouts between systems
@@ -224,6 +237,7 @@ Monitoring: Continuous ping monitoring
 ```
 
 **Recovery Procedure:**
+
 ```
 Automatic Response (30 seconds):
 1. Detect partition
@@ -263,6 +277,7 @@ Data Loss: None (queued)
 ### 1.4 Data Corruption Scenario
 
 **Impact:**
+
 ```
 Severity: CRITICAL (P1)
 Affected Systems: Database / Storage
@@ -272,6 +287,7 @@ Recovery Window: 30 minutes max
 ```
 
 **Detection:**
+
 ```
 Triggers:
 - Checksum verification failure
@@ -284,6 +300,7 @@ Notification: CRITICAL alert + page on-call
 ```
 
 **Recovery Procedure:**
+
 ```
 Immediate Response (30 seconds):
 1. Detect corruption
@@ -314,6 +331,7 @@ Data Loss Window: < 5 minutes (last backup)
 ```
 
 **Prevention Mechanisms:**
+
 ```
 Before Corruption Occurs:
 
@@ -346,6 +364,7 @@ Before Corruption Occurs:
 ### 2.1 Error Cascade Prevention
 
 **Firewall Pattern:**
+
 ```
 System A
     ↓ (request fails)
@@ -364,6 +383,7 @@ Error HANDLED - doesn't cascade
 ```
 
 **Timeout Configuration:**
+
 ```
 Timeout Hierarchy (prevents cascading):
 

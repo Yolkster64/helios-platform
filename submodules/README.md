@@ -112,6 +112,7 @@ submodules/PHASE-X-ModuleName/
 ### For Team Leads
 
 **Start here**:
+
 1. `DEVELOPMENT_ROADMAP.md` - Phase timelines and deliverables
 2. `PARALLEL_WORK_PLAN.md` - Team allocation strategy
 3. `SUBMODULE_DEPENDENCIES.md` - Critical path analysis
@@ -120,6 +121,7 @@ submodules/PHASE-X-ModuleName/
 ### For Developers
 
 **Start here**:
+
 1. `CONTRIBUTION_GUIDE.md` - How to contribute
 2. Pick a submodule from this index
 3. Read the submodule's `README.md` and `PLAIN_ENGLISH_GUIDE.md`
@@ -128,6 +130,7 @@ submodules/PHASE-X-ModuleName/
 ### For QA/Integration
 
 **Start here**:
+
 1. `INTEGRATION_CHECKPOINTS.md` - Phase integration tests
 2. `STATUS_TRACKING_SYSTEM.md` - Status metrics
 3. Phase README files for integration points
@@ -136,6 +139,7 @@ submodules/PHASE-X-ModuleName/
 ### For Release Management
 
 **Start here**:
+
 1. `VERSION_MANAGEMENT.md` - Versioning policy
 2. `DEVELOPMENT_ROADMAP.md` - Release schedule
 3. Phase README files for release content
@@ -144,42 +148,49 @@ submodules/PHASE-X-ModuleName/
 ## Submodule Quick Links
 
 ### Phase 0 (Foundation)
+
 - [PHASE-0-USB-Creator](./PHASE-0-USB-Creator/)
 - [PHASE-0-Windows-Installer](./PHASE-0-Windows-Installer/)
 - [PHASE-0-Partition-Manager](./PHASE-0-Partition-Manager/)
 - [PHASE-0-System-Setup](./PHASE-0-System-Setup/)
 
 ### Phase 1 (Security)
+
 - [PHASE-1-AppLocker](./PHASE-1-AppLocker/)
 - [PHASE-1-Windows-Firewall](./PHASE-1-Windows-Firewall/)
 - [PHASE-1-Credential-Vault](./PHASE-1-Credential-Vault/)
 - [PHASE-1-Malware-Quarantine](./PHASE-1-Malware-Quarantine/)
 
 ### Phase 2 (Optimization)
+
 - [PHASE-2-Service-Manager](./PHASE-2-Service-Manager/)
 - [PHASE-2-Startup-Optimizer](./PHASE-2-Startup-Optimizer/)
 - [PHASE-2-Resource-Monitor](./PHASE-2-Resource-Monitor/)
 - [PHASE-2-System-Tuning](./PHASE-2-System-Tuning/)
 
 ### Phase 3 (Intelligence)
+
 - [PHASE-3-Control-Dashboard](./PHASE-3-Control-Dashboard/)
 - [PHASE-3-AI-Core](./PHASE-3-AI-Core/)
 - [PHASE-3-Self-Healing](./PHASE-3-Self-Healing/)
 - [PHASE-3-User-Profiles](./PHASE-3-User-Profiles/)
 
 ### Components
+
 - [COMPONENT-AI-Dashboard](./COMPONENT-AI-Dashboard/)
 - [COMPONENT-Vault-Dynamics](./COMPONENT-Vault-Dynamics/)
 - [COMPONENT-Threat-Intelligence](./COMPONENT-Threat-Intelligence/)
 - [COMPONENT-Performance-Tuner](./COMPONENT-Performance-Tuner/)
 
 ### Ecosystem
+
 - [ECOSYSTEM-Exchange-Integration](./ECOSYSTEM-Exchange-Integration/)
 - [ECOSYSTEM-Azure-Integration](./ECOSYSTEM-Azure-Integration/)
 - [ECOSYSTEM-Teams-Integration](./ECOSYSTEM-Teams-Integration/)
 - [ECOSYSTEM-OneDrive-Sync](./ECOSYSTEM-OneDrive-Sync/)
 
 ### AI Integration
+
 - [AI-INTEGRATION-Anomaly-Detector](./AI-INTEGRATION-Anomaly-Detector/)
 - [AI-INTEGRATION-Predictive-Maintenance](./AI-INTEGRATION-Predictive-Maintenance/)
 - [AI-INTEGRATION-NLI](./AI-INTEGRATION-NLI/)
@@ -187,12 +198,14 @@ submodules/PHASE-X-ModuleName/
 ## Total Submodule Count
 
 **By Phase**:
+
 - Phase 0: 4 submodules
 - Phase 1: 4 submodules
 - Phase 2: 4 submodules
 - Phase 3: 4 submodules
 
 **By Type**:
+
 - Core (Phases): 16 submodules
 - Components: 4 submodules
 - Ecosystem: 4 submodules
@@ -211,9 +224,11 @@ submodules/PHASE-X-ModuleName/
    - `FILE_ARCHITECTURE.md` (code structure)
    - `SCRIPTS_INDEX.md` (available functions)
 3. **Run tests**:
+
    ```powershell
    Invoke-Pester tests/ -Verbose
    ```
+
 4. **Start contributing**:
    - Follow `SUBMODULE_TEMPLATE.md`
    - Read `CONTRIBUTION_GUIDE.md`

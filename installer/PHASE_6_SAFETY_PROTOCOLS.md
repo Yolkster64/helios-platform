@@ -7,6 +7,7 @@ Complete safety verification and testing protocols for HELIOS Platform 2.0 insta
 ### 1.1 Platform Coverage
 
 #### Windows 7
+
 - [ ] Windows 7 SP1 (32-bit)
   - Minimum requirements verification
   - Installation completion
@@ -20,6 +21,7 @@ Complete safety verification and testing protocols for HELIOS Platform 2.0 insta
   - Rollback test
 
 #### Windows 10
+
 - [ ] Windows 10 (1909 - November 2019)
   - Standard installation
   - Feature selection
@@ -36,6 +38,7 @@ Complete safety verification and testing protocols for HELIOS Platform 2.0 insta
   - Service registration
 
 #### Windows 11
+
 - [ ] Windows 11 (22H2 - Latest)
   - Standard installation
   - Feature selection
@@ -45,6 +48,7 @@ Complete safety verification and testing protocols for HELIOS Platform 2.0 insta
 ### 1.2 Security Configuration Combinations
 
 Each platform tested with:
+
 - [ ] Windows Defender active
 - [ ] Windows Firewall enabled
 - [ ] User Account Control (UAC) enabled

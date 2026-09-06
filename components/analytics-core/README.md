@@ -9,6 +9,7 @@ Comprehensive data collection, analysis, and reporting system for HELIOS Platfor
 Analytics Core collects system and custom metrics, performs analysis, and generates reports. Build dashboards, track trends, and export data for business intelligence.
 
 **Key Facts:**
+
 - **Phase:** 1
 - **Standalone:** ✅ Yes - Fully independent
 - **Requires:** .NET Framework 4.6.1+, SQL Server Express (optional)

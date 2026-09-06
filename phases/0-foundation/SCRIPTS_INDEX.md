@@ -25,6 +25,7 @@ Complete list of all Phase 0 scripts with descriptions and quick reference.
 **Purpose**: Creates a bootable Windows 11 installation USB drive
 
 **What It Does**:
+
 - Takes Windows 11 ISO file
 - Copies files to USB drive
 - Makes USB bootable
@@ -33,6 +34,7 @@ Complete list of all Phase 0 scripts with descriptions and quick reference.
 **Dependencies**: Windows 11 ISO file (7GB+)
 
 **Inputs** (Script Prompts You For):
+
 ```
 1. Path to Windows 11 ISO file
    Example: D:\Downloads\Windows11.iso
@@ -45,11 +47,13 @@ Complete list of all Phase 0 scripts with descriptions and quick reference.
 ```
 
 **Outputs Created**:
+
 - Bootable USB drive with Windows 11 files
 - No files created on your computer
 - USB becomes unusable for regular storage
 
 **Exit Codes**:
+
 ```
 0 = Success (USB created)
 1 = ISO file not found
@@ -61,6 +65,7 @@ Complete list of all Phase 0 scripts with descriptions and quick reference.
 **Estimated Runtime**: 10-20 minutes
 
 **Command**:
+
 ```powershell
 # Run as Administrator
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -68,6 +73,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Related Files**:
+
 - Reads: Windows 11 ISO file (your Downloads folder typically)
 - Writes: USB drive (all data erased)
 - Logs: C:\HELIOS\logs\phase0\usb-creator-[DATE].log
@@ -81,18 +87,21 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Purpose**: Performs fresh Windows 11 installation
 
 **What It Does**:
+
 - Starts Windows Setup wizard
 - Guides you through installation
 - Installs Windows to selected drive
 - Creates initial system partitions
 
 **Dependencies**:
+
 - Bootable USB (from usb-creator.ps1)
 - Blank or wipeable hard drive
 - 30-60 minutes free
 - Restart capability
 
 **How To Execute**:
+
 1. Insert USB created by usb-creator.ps1
 2. Restart computer
 3. Press boot menu key (F12, F2, ESC, DEL)
@@ -101,6 +110,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 6. Accept license, select drive, wait
 
 **Inputs** (Windows Setup Asks You For):
+
 ```
 1. Accept Windows 11 License
    Choose: Accept
@@ -116,6 +126,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Outputs Created**:
+
 - Fresh Windows 11 installation
 - System partitions created
 - New user account created
@@ -125,17 +136,20 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Estimated Runtime**: 20-30 minutes for installation + 10-15 min initial setup
 
 **Important Notes**:
+
 - Computer will restart multiple times (normal)
 - Screen may go black briefly (normal)
 - No user input needed during copying phase
 - Internet helpful (but not required)
 
 **Troubleshooting**:
+
 - If USB won't boot: Try different USB port; check BIOS boot order
 - If installation fails: Try different USB drive; verify ISO integrity
 - If slow: Using USB 2.0 port (try USB 3.0); older USB drive
 
 **Related Files**:
+
 - Reads: USB drive (Windows installation files)
 - Writes: Hard drive (entire drive if not partitioned)
 - Logs: C:\Windows\Logs\Setup\
@@ -149,6 +163,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Purpose**: Sets up disk partitions (C: system, D: data)
 
 **What It Does**:
+
 - Analyzes current disk layout
 - Creates system partition (C:)
 - Creates data partition (D:)
@@ -156,12 +171,14 @@ cd C:\HELIOS\phases\0-foundation\scripts
 - Formats and assigns drive letters
 
 **Dependencies**:
+
 - Windows installed and running
 - Administrator access
 - At least 100GB free space
 - Admin PowerShell session
 
 **Inputs** (Script Prompts You For):
+
 ```
 1. Which disk to partition? (usually Disk 0)
    Choose: 0, 1, 2, etc.
@@ -179,6 +196,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Outputs Created**:
+
 ```
 Partition Layout:
 ├── C: drive (System)
@@ -194,12 +212,14 @@ Partition Layout:
 ```
 
 **System Changes**:
+
 - C: drive formatted NTFS
 - D: drive formatted NTFS
 - Drive letters assigned (C: and D:)
 - Recovery partition created
 
 **Exit Codes**:
+
 ```
 0 = Success (partitions created)
 1 = Disk not found
@@ -211,6 +231,7 @@ Partition Layout:
 **Estimated Runtime**: 5-15 minutes (depending on drive size)
 
 **Command**:
+
 ```powershell
 # Run as Administrator
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -218,12 +239,14 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Important Notes**:
+
 - May require restart to apply changes
 - Drive letters change may happen (D: might become E:)
 - Recovery partition is hidden (normal)
 - Can be run again to adjust sizes
 
 **Related Files**:
+
 - Reads: Disk configuration
 - Writes: Partition table, drive formatting
 - Logs: C:\HELIOS\logs\phase0\partition-manager-[DATE].log
@@ -237,6 +260,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Purpose**: Creates folder structure for file organization
 
 **What It Does**:
+
 - Creates C:\HELIOS\ directory tree
 - Creates D:\Users\ folder structure
 - Creates D:\Backups\ structure
@@ -244,12 +268,14 @@ cd C:\HELIOS\phases\0-foundation\scripts
 - Verifies folder creation
 
 **Dependencies**:
+
 - Windows installed and running
 - C: and D: drives exist
 - Administrator access
 - PowerShell admin session
 
 **Inputs** (Script Prompts You For):
+
 ```
 1. Confirm folder creation?
    Shows: Summary of folders to create
@@ -261,6 +287,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Outputs Created**:
+
 ```
 On C: drive:
 ├── C:\HELIOS\phases\
@@ -285,11 +312,13 @@ On D: drive:
 **Total Folders**: ~30 main + subfolders
 
 **Folder Permissions Set**:
+
 - Current user (ADMIN): Full control
 - SYSTEM: Full control
 - Other users: None (private folders)
 
 **Exit Codes**:
+
 ```
 0 = Success (all folders created)
 1 = Drives not found
@@ -301,6 +330,7 @@ On D: drive:
 **Estimated Runtime**: 2-5 minutes
 
 **Command**:
+
 ```powershell
 # Run as Administrator
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -308,12 +338,14 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Important Notes**:
+
 - Safe to run multiple times (skips existing folders)
 - No data loss (just creates empty folders)
 - Creates hidden folders if needed
 - Sets up for future phases
 
 **Related Files**:
+
 - Reads: Disk information
 - Writes: Creates folders only (no files)
 - Logs: C:\HELIOS\logs\phase0\storage-setup-[DATE].log
@@ -327,6 +359,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Purpose**: Configures initial system settings and baseline
 
 **What It Does**:
+
 - Enables required Windows features
 - Disables unnecessary services
 - Configures power settings
@@ -335,12 +368,14 @@ cd C:\HELIOS\phases\0-foundation\scripts
 - Validates configuration
 
 **Dependencies**:
+
 - Windows 11 installed
 - Administrator access
 - PowerShell admin session
 - Internet recommended (for updates)
 
 **Inputs** (Script Prompts You For):
+
 ```
 1. Windows version check
    Requirement: Windows 11 (will fail on earlier versions)
@@ -357,6 +392,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 **Outputs Created**:
 
 **Windows Features Enabled**:
+
 ```
 - Hyper-V (virtualization)
 - Windows Sandbox (isolated environment)
@@ -368,6 +404,7 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Services Modified**:
+
 ```
 Disabled (for performance):
 - Search Indexer
@@ -385,6 +422,7 @@ Enabled (for security/function):
 ```
 
 **Settings Changed**:
+
 ```
 Power Plan: High Performance
 - Sleep: Disabled
@@ -408,6 +446,7 @@ Security:
 ```
 
 **System Changes**:
+
 - Registry modifications
 - Service startup types changed
 - Group Policy updates
@@ -415,6 +454,7 @@ Security:
 - User Account Control configured
 
 **Exit Codes**:
+
 ```
 0 = Success (baseline configured)
 1 = Not Windows 11
@@ -426,6 +466,7 @@ Security:
 **Estimated Runtime**: 5-15 minutes
 
 **Command**:
+
 ```powershell
 # Run as Administrator
 cd C:\HELIOS\phases\0-foundation\scripts
@@ -433,17 +474,20 @@ cd C:\HELIOS\phases\0-foundation\scripts
 ```
 
 **Important Notes**:
+
 - System may restart automatically
 - Changes are comprehensive (affects many settings)
 - Restore point created (can revert if needed)
 - Safe to run multiple times (idempotent)
 
 **Recovery**:
+
 - Restore point: "HELIOS-Phase0-Baseline" created before changes
 - Can revert via System Restore if needed
 - No permanent changes (all reversible)
 
 **Related Files**:
+
 - Reads: Current system configuration
 - Writes: Registry, services, settings
 - Creates: System Restore Point
@@ -475,6 +519,7 @@ Ready for Phase 1
 ```
 
 **Can Skip?**
+
 - USB Creator: Only if already have bootable media
 - Windows Installer: Only if Windows already fresh-installed
 - Partition Manager: Only if already have C: and D: drives
@@ -482,6 +527,7 @@ Ready for Phase 1
 - System Baseline: Recommended to always run (safe to re-run)
 
 **Run Together?**
+
 - No. Each depends on previous step's output.
 - Must complete one fully before starting next.
 - Exception: Can re-run same script multiple times.
@@ -512,6 +558,7 @@ C:\HELIOS\logs\phase0\
 ```
 
 **View Logs**:
+
 ```powershell
 # See recent logs
 Get-ChildItem C:\HELIOS\logs\phase0\ | Sort-Object LastWriteTime -Descending
@@ -550,6 +597,7 @@ Select-String -Path "C:\HELIOS\logs\phase0\*.log" -Pattern "ERROR"
 ## Performance Notes
 
 **Fastest Sequence on SSD**:
+
 - usb-creator: ~10 min
 - windows-installer: ~20 min
 - partition-manager: ~5 min
@@ -558,6 +606,7 @@ Select-String -Path "C:\HELIOS\logs\phase0\*.log" -Pattern "ERROR"
 - **Total**: ~45 minutes
 
 **Slowest Sequence on HDD**:
+
 - usb-creator: ~20 min (slow drive speed)
 - windows-installer: ~35 min (HDD write speed)
 - partition-manager: ~10 min (disk operations)
@@ -566,6 +615,7 @@ Select-String -Path "C:\HELIOS\logs\phase0\*.log" -Pattern "ERROR"
 - **Total**: ~85 minutes
 
 **Ways To Speed Up**:
+
 - Use USB 3.0 port (not 2.0)
 - Use high-speed USB drive (not cheap drive)
 - Install on SSD (much faster than HDD)
@@ -577,11 +627,13 @@ Select-String -Path "C:\HELIOS\logs\phase0\*.log" -Pattern "ERROR"
 ## Script Source Code
 
 All scripts available at:
+
 ```
 C:\HELIOS\phases\0-foundation\scripts\
 ```
 
 Scripts are:
+
 - PowerShell 5.1+ compatible
 - Commented and documented
 - Open source (readable)

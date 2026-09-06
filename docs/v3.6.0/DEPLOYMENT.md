@@ -5,6 +5,7 @@
 ## Deployment Checklist
 
 ### Pre-Deployment
+
 - [ ] Windows Server 2022 or Windows 11 Pro verified
 - [ ] 4GB+ RAM available
 - [ ] 10GB+ free disk space
@@ -15,6 +16,7 @@
 - [ ] Backup strategy documented
 
 ### Installation
+
 - [ ] Download latest release package
 - [ ] Verify package SHA-256 hash
 - [ ] Run installer as administrator
@@ -24,6 +26,7 @@
 - [ ] Setup cloud providers (if needed)
 
 ### Post-Installation
+
 - [ ] Verify dashboard accessible at https://localhost:8080
 - [ ] Test cloud sync functionality
 - [ ] Install required plugins
@@ -35,6 +38,7 @@
 ## Configuration Guide
 
 Core settings in appsettings.json:
+
 ```json
 {
   "server": {
@@ -59,12 +63,14 @@ Core settings in appsettings.json:
 ## Monitoring & Health Checks
 
 ### Health Check Endpoint
+
 ```
 GET /api/health/status
 Returns: { status: "Healthy", components: { ... } }
 ```
 
 ### Key Metrics to Monitor
+
 - CPU usage (target: <70%)
 - Memory usage (target: <80%)
 - Disk usage (target: >10% free)
@@ -86,6 +92,7 @@ Returns: { status: "Healthy", components: { ... } }
 ## Rollback Procedures
 
 If update fails:
+
 1. Stop HELIOS services
 2. Restore application from backup
 3. Restore database from backup
@@ -95,16 +102,19 @@ If update fails:
 ## Performance Tuning
 
 ### CPU Optimization
+
 - Increase thread pool size for high concurrency
 - Enable parallel processing for batch operations
 - Monitor process-level CPU usage
 
 ### Memory Optimization
+
 - Configure caching strategy (Distributed recommended)
 - Set cache size limits (2-4GB typical)
 - Monitor garbage collection patterns
 
 ### Disk I/O
+
 - Enable compression for cloud sync
 - Configure batch write sizes
 - Monitor disk queue length

@@ -8,7 +8,7 @@ Scope: the C++ rendering path behind the WinUI 3 shell. Today `src/ai/HELIOS.AIH
 Every D3D12/DXGI/PIX/DXC API named here is verified against Microsoft Learn (URLs inline); none of it
 exists in the repo yet — see "Not in the repo (candidates)".
 
-## The rule: GPU work stays in the native spoke, orchestration stays in C#
+## The rule: GPU work stays in the native spoke, orchestration stays in C\#
 
 `helios_aihub_native.h` states the contract: the library "exposes a C ABI that only the C# orchestrator
 calls (via LibraryImport). It never calls back into managed code, never performs I/O, and never talks to

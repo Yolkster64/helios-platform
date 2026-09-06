@@ -35,12 +35,14 @@
 
 ### Performance Baseline
 
-**Hardware:** 
+**Hardware:**
+
 - CPU: 8 cores
 - RAM: 16GB
 - Storage: SSD 100GB
 
 **Peak Performance:**
+
 - Throughput: 12,500 requests/second
 - Average Latency: 245ms
 - P99 Latency: 450ms
@@ -102,6 +104,7 @@ Start-HeliosStressTest -Duration "30minutes" -Increment "10%"
 **Default:** 67% cache hit rate
 
 **Optimize Caching:**
+
 ```powershell
 # Increase cache size
 Set-HeliosCaching -CacheSize "2GB" -DefaultTTL 3600
@@ -116,6 +119,7 @@ Get-HeliosCacheMetrics -Period "Day"
 ```
 
 **Cache Hit Rate Impact:**
+
 - 50% cache hit rate → 30% fewer API calls
 - 67% cache hit rate → 50% fewer API calls
 - 80% cache hit rate → 80% fewer API calls
@@ -123,6 +127,7 @@ Get-HeliosCacheMetrics -Period "Day"
 ### 2. Connection Pooling
 
 **Database Connection Pool:**
+
 ```powershell
 # Increase connection pool size
 Set-HeliosDatabasePool -MinConnections 10 -MaxConnections 100
@@ -141,6 +146,7 @@ Search              15      35    50       30%
 ### 3. Asynchronous Processing
 
 **Convert blocking operations to async:**
+
 ```csharp
 // Before: Blocking
 public DeploymentResult Deploy(Config config)
@@ -210,12 +216,14 @@ Get-HeliosDatabaseIndexStats | Sort-Object UnusedRatio -Descending
 ### Horizontal Scaling (Add Instances)
 
 **When to scale:**
+
 - CPU > 70%
 - Memory > 80%
 - Latency > 300ms
 - Error rate > 0.5%
 
 **Scale up:**
+
 ```powershell
 # Increase replicas for AI service
 Set-HeliosDeployment -Name "prod-1" `
@@ -233,11 +241,13 @@ Set-HeliosAutoScaling -Enabled $true `
 ### Vertical Scaling (Larger Instances)
 
 **When to scale vertically:**
+
 - Single instance hitting resource limits
 - Network bottleneck
 - Storage I/O limit
 
 **Increase instance size:**
+
 ```powershell
 # Change instance type
 Set-HeliosDeployment -Name "prod-1" `
@@ -248,6 +258,7 @@ Set-HeliosDeployment -Name "prod-1" `
 ### Multi-Region Scaling
 
 **For geographic distribution:**
+
 ```powershell
 # Create secondary deployment in different region
 New-HeliosDeployment -Name "prod-1-west" `
@@ -268,6 +279,7 @@ Set-HeliosLoadBalancing -PrimaryRegion "eastus" `
 ### Query Optimization
 
 **Identify slow queries:**
+
 ```powershell
 Get-HeliosDatabaseSlowQueries -TopCount 10 -MinimumDuration 100  # >100ms
 
@@ -280,6 +292,7 @@ Duration  Calls  Query
 ```
 
 **Add indexes:**
+
 ```powershell
 # Create index for common query
 New-HeliosDatabaseIndex -Table "Deployments" `

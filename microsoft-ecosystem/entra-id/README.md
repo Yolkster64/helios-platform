@@ -51,6 +51,7 @@ User Attempts to Access HELIOS
 ### User Profiles
 
 **Admin Profile**:
+
 ```
 User: admin@company.com
 ├── Groups: HELIOS-Admins, Global-Admins
@@ -61,6 +62,7 @@ User: admin@company.com
 ```
 
 **Operator Profile**:
+
 ```
 User: operator@company.com
 ├── Groups: HELIOS-Operators
@@ -71,6 +73,7 @@ User: operator@company.com
 ```
 
 **Developer Profile**:
+
 ```
 User: developer@company.com
 ├── Groups: HELIOS-Developers
@@ -95,6 +98,7 @@ User: developer@company.com
 ### MFA Policy Configuration
 
 **Required for All Users**:
+
 ```
 Users: helios-admins@company.com
 ├── MFA Status: Required
@@ -105,6 +109,7 @@ Users: helios-admins@company.com
 ```
 
 **Recommended for Operators**:
+
 ```
 Users: helios-operators@company.com
 ├── MFA Status: Recommended
@@ -131,6 +136,7 @@ Get-MgUserAuthenticationMethod -UserId $user.Id
 ### Conditional Access Policies
 
 **Policy 1: Require MFA for High-Risk Sign-Ins**
+
 ```
 Conditions:
 ├── Users: All users
@@ -144,6 +150,7 @@ Access Control:
 ```
 
 **Policy 2: Require Compliant Device**
+
 ```
 Conditions:
 ├── Users: HELIOS-Admins
@@ -157,6 +164,7 @@ Access Control:
 ```
 
 **Policy 3: Block Legacy Authentication**
+
 ```
 Conditions:
 ├── Users: All users
@@ -168,6 +176,7 @@ Access Control:
 ```
 
 **Policy 4: Restrict Access by Location**
+
 ```
 Conditions:
 ├── Users: HELIOS-Admins
@@ -199,6 +208,7 @@ Untrusted:
 ### Compliance Requirements
 
 **Windows Devices**:
+
 ```
 Device: LAPTOP-ADMIN-001
 ├── OS: Windows 11 Pro or later
@@ -213,6 +223,7 @@ Device: LAPTOP-ADMIN-001
 ```
 
 **macOS Devices**:
+
 ```
 Device: MacBook-Pro-Dev
 ├── OS: macOS 13 or later
@@ -226,6 +237,7 @@ Device: MacBook-Pro-Dev
 ```
 
 **Mobile Devices (iOS/Android)**:
+
 ```
 Device: iPhone-Admin
 ├── OS: iOS 16 or later
@@ -366,6 +378,7 @@ New-MgOAuth2PermissionGrant `
 If your organization has on-premises Active Directory:
 
 **Synchronization Method**:
+
 ```
 On-Premises AD
         ↓
@@ -377,6 +390,7 @@ HELIOS Platform + Microsoft 365
 ```
 
 **Configuration**:
+
 ```powershell
 # Install Azure AD Connect
 # Download from: https://www.microsoft.com/download/details.aspx?id=47594

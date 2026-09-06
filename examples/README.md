@@ -7,10 +7,12 @@ Working code examples and tutorials to help you get started with HELIOS Platform
 ## 🎯 Learning Resources
 
 ### Quick Start Examples
+
 - **[Quick Start Guide](./quickstart/README.md)** - Get running in 5 minutes
 - **[Basic Deployment](./quickstart/basic-deployment)** - Deploy your first app
 
 ### Advanced Examples
+
 - **[Advanced Deployments](./advanced/README.md)** - Complex scenarios
 - **[Cloud Integration](./advanced/cloud-integration)** - Multi-cloud setups
 - **[Custom Plugins](./advanced/plugins)** - Develop plugins
@@ -51,24 +53,28 @@ Working code examples and tutorials to help you get started with HELIOS Platform
 ## 🚀 Quick Start Path
 
 ### 1. Basic Deployment (5 min)
+
 ```powershell
 cd examples/quickstart/basic-deployment
 ./run.ps1
 ```
 
 ### 2. Explore Configuration (5 min)
+
 ```powershell
 cd examples/quickstart/configuration
 ./run.ps1
 ```
 
 ### 3. Set up Monitoring (5 min)
+
 ```powershell
 cd examples/quickstart/monitoring
 ./run.ps1
 ```
 
 ### 4. Advanced Deployment (15 min)
+
 ```powershell
 cd examples/advanced/multi-component
 ./run.ps1
@@ -160,22 +166,26 @@ examples/
 ## 🎓 Learning Paths
 
 ### Path 1: New User (30 minutes)
+
 1. [Getting Started](../guides/GETTING_STARTED.md)
 2. [Basic Deployment](./quickstart/basic-deployment)
 3. [Configuration](./quickstart/configuration)
 4. [Monitoring](./quickstart/monitoring)
 
 ### Path 2: Developer (1 hour)
+
 1. [API Integration](./advanced/api-integration)
 2. [Custom Plugin](./advanced/plugins)
 3. [Multi-Component](./advanced/multi-component)
 
 ### Path 3: DevOps Engineer (2 hours)
+
 1. [Cloud Integration](./advanced/cloud-integration)
 2. [High Availability](./advanced/high-availability)
 3. [Distributed Setup](./advanced/distributed)
 
 ### Path 4: Architect (3+ hours)
+
 1. [Architecture](../architecture/README.md)
 2. [Distributed System](./advanced/distributed)
 3. [Complete Setup](./advanced/complete-setup)

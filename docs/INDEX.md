@@ -8,11 +8,11 @@
 
 ## 📑 Table of Contents
 
-- [Root Level Documentation](#root-level-documentation)
-- [Category-Level Documentation](#category-level-documentation)
-- [Module-Level Documentation](#module-level-documentation)
-- [Script-Level Documentation](#script-level-documentation)
-- [Build-Level Documentation](#build-level-documentation)
+- [Root Level Documentation](#-root-level-documentation)
+- [Category-Level Documentation](#-category-level-documentation)
+- [Module-Level Documentation](#-module-level-documentation)
+- [Script-Level Documentation](#-script-level-documentation)
+- [Build-Level Documentation](#-build-level-documentation)
 
 ---
 
@@ -122,6 +122,7 @@
 | NOTES.md | Implementation notes |
 
 **Key Functions:**
+
 - {{FUNCTION_1}}: {{FUNCTION_1_DESC}}
 - {{FUNCTION_2}}: {{FUNCTION_2_DESC}}
 - {{FUNCTION_3}}: {{FUNCTION_3_DESC}}
@@ -143,6 +144,7 @@
 **Lines:** {{SCRIPT_1_LINES}}
 
 **Associated Documentation:**
+
 - `{{SCRIPT_1}}.meta.json` - Metadata
 - `{{SCRIPT_1}}.wiki.md` - Extended explanation
 - `{{SCRIPT_1}}.examples.md` - Usage examples
@@ -150,11 +152,13 @@
 - `{{SCRIPT_1}}.snippet-ref.md` - Code snippets
 
 **Parameters:**
+
 - `-Parameter1`: {{PARAM_1_DESC}}
 - `-Parameter2`: {{PARAM_2_DESC}}
 - `-Parameter3`: {{PARAM_3_DESC}}
 
 **Examples:**
+
 ```powershell
 # {{EXAMPLE_1_DESC}}
 {{EXAMPLE_1_CODE}}
@@ -175,6 +179,7 @@
 **Version:** {{BUILD_1_VERSION}}
 
 **Documentation Files:**
+
 - README.md - Build overview
 - MANIFEST.md - Exact contents
 - COMPONENTS_INCLUDED.md - Component list
@@ -185,6 +190,7 @@
 - COMPRESSED_SNIPPETS_USED.md - Code snippets
 
 **Includes:**
+
 - {{MODULE_INCLUDED_1}}
 - {{MODULE_INCLUDED_2}}
 - {{MODULE_INCLUDED_3}}
@@ -218,31 +224,37 @@
 ## 🔍 Quick Reference by Purpose
 
 ### Getting Started
+
 - [README.md](./README.md) - Start here!
 - [QUICK_START.md](./QUICK_START.md) - 5-minute setup
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guide
 
 ### Learning the System
+
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System design
 - [MODULES.md](./MODULES.md) - Module overview
 - [API.md](./API.md) - API reference
 
 ### Using the System
+
 - Category READMEs (./{{category}}/README.md)
 - Module USAGE.md files
 - Script examples in .examples.md files
 
 ### Troubleshooting
+
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues
 - [FAQ.md](./FAQ.md) - Frequently asked questions
 - [GLOSSARY.md](./GLOSSARY.md) - Terminology
 
 ### Development
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute
 - [ROADMAP.md](./ROADMAP.md) - Future plans
 - Category COMPONENT_DETAILS.md files
 
 ### Deployment & Operations
+
 - Build README.md files
 - Build MANIFEST.md files
 - Build CONFIGURATION.md files
@@ -254,6 +266,7 @@
 ### Popular Paths
 
 **For Developers:**
+
 ```
 1. README.md (overview)
    ↓
@@ -267,6 +280,7 @@
 ```
 
 **For Operations:**
+
 ```
 1. README.md (overview)
    ↓
@@ -278,6 +292,7 @@
 ```
 
 **For Contributors:**
+
 ```
 1. CONTRIBUTING.md (guidelines)
    ↓
@@ -293,6 +308,7 @@
 ## 📝 File Format Guide
 
 ### Markdown Files (.md)
+
 - UTF-8 encoding
 - Heading hierarchy 1-3 levels
 - Code blocks with language specification
@@ -300,12 +316,14 @@
 - Links use relative paths
 
 ### JSON Files (.json)
+
 - Pretty-printed (2 space indent)
 - Required fields documented
 - Examples provided
 - Schema validation recommended
 
 ### Metadata Files (.meta.json)
+
 ```json
 {
   "name": "{{SCRIPT_NAME}}",

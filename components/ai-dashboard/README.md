@@ -9,6 +9,7 @@ Professional GUI dashboard for HELIOS Platform system monitoring and management.
 The AI Dashboard is a web-based real-time monitoring interface for the HELIOS Platform. Monitor system performance, view alerts, and manage platform features through an intuitive graphical interface.
 
 **Key Facts:**
+
 - **Phase:** 3 (can be borrowed to earlier phases)
 - **Standalone:** ✅ Yes - Works independently
 - **Dependencies:** .NET Framework 4.8+, Windows Event Log
@@ -216,6 +217,7 @@ docker run -d \
 ### Common Configuration Changes
 
 **Enable Authentication:**
+
 ```json
 {
   "security": {
@@ -226,6 +228,7 @@ docker run -d \
 ```
 
 **Allow Remote Access:**
+
 ```json
 {
   "server": {
@@ -240,6 +243,7 @@ docker run -d \
 ```
 
 **Change Refresh Rate (Slower = Less Load):**
+
 ```json
 {
   "display": {
@@ -249,6 +253,7 @@ docker run -d \
 ```
 
 **Email Alerts:**
+
 ```json
 {
   "notifications": {
@@ -490,6 +495,7 @@ type "C:\Program Files\HELIOS\ai-dashboard\initial-password.txt"
 ### With vault-dynamics
 
 Dashboard shows vault status in:
+
 - Dashboard → Components → Vault Status
 - Encryption statistics
 - Key rotation schedule
@@ -497,6 +503,7 @@ Dashboard shows vault status in:
 ### With analytics-core
 
 Dashboard displays analytics data:
+
 - Dashboard → Analytics
 - Custom reports
 - Data visualization
@@ -504,6 +511,7 @@ Dashboard displays analytics data:
 ### With performance-ai
 
 Dashboard shows AI recommendations:
+
 - Dashboard → Insights → AI Recommendations
 - Performance scores
 - Optimization suggestions
@@ -556,12 +564,14 @@ Certificates (if SSL):
 ### Standalone Mode Risks
 
 When running without security-engine:
+
 - Anyone with network access can view metrics
 - No user authentication
 - No audit logging
 - Recommend for isolated/internal networks only
 
 **Fix:**
+
 ```powershell
 # Install security-engine for authentication
 ..\security-engine\install.ps1

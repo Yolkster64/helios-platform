@@ -7,17 +7,20 @@ Learn how to install and use HELIOS components completely standalone, without ne
 ## Standalone Installation Overview
 
 Any component marked **Fully Standalone** in the COMPONENT_CATALOG.md can be installed without:
+
 - Other phases
 - Other components
 - Full platform
 
 **Fully Standalone Components:**
+
 - ✅ security-engine
 - ✅ vault-dynamics
 - ✅ analytics-core
 - ✅ ai-dashboard
 
 **Partially Standalone** (needs one or more specific components):
+
 - ⚠️ performance-ai (needs security-engine)
 - ⚠️ cloud-bridge (needs security-engine + vault-dynamics)
 
@@ -42,6 +45,7 @@ cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 ### Configuration for Standalone
 
 **Default single-user mode:**
+
 ```json
 {
   "security": {
@@ -344,6 +348,7 @@ $report.ExportToExcel("C:\Reports\metrics.xlsx")
 ### Why Needs security-engine
 
 The performance AI system records all optimization changes for audit and compliance. Even in standalone mode, it needs security-engine for:
+
 - Access control (who can enable/disable optimizations)
 - Change tracking (what was changed and why)
 - Session management (multi-user scenarios)
@@ -464,12 +469,14 @@ For any component you want to install standalone:
 ### For All Components
 
 **Required:**
+
 - Windows Server 2016 or later / Windows 8.1 or later
 - Administrator privileges
 - 500 MB free disk space (varies by component)
 - Internet connectivity (for downloading bundled dependencies)
 
 **Minimum .NET:**
+
 ```
 security-engine:    .NET Core 3.1 or .NET Framework 4.6.1
 vault-dynamics:     .NET Framework 4.6.1
@@ -481,23 +488,28 @@ ai-dashboard:       .NET Framework 4.8
 ### Component-Specific Prerequisites
 
 **ai-dashboard:**
+
 - Windows Event Log (system component)
 - Open port 8080 (configurable)
 
 **vault-dynamics:**
+
 - Windows CNG (built-in crypto)
 - Access to file system for key storage
 
 **analytics-core:**
+
 - SQL Server Express (free) OR embedded database
 - Disk space for collected data
 
 **performance-ai:**
+
 - Requires security-engine (see dependencies)
 - Multi-core processor recommended
 - 4 GB RAM recommended
 
 **security-engine:**
+
 - Windows Event Log
 - SQL Server Express (optional) OR embedded database
 

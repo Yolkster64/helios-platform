@@ -1,4 +1,5 @@
 # HELIOS Platform: Orchestration & Deployment System
+
 ## Complete Index & Reference Guide
 
 ---
@@ -6,6 +7,7 @@
 ## 📋 TABLE OF CONTENTS
 
 ### 1. Orchestration Scripts (6 files)
+
 - **master-orchestrator.ps1** - Central coordination and state management
 - **cross-component-api.ps1** - Unified API for all components  
 - **event-routing.ps1** - Event pub/sub messaging system
@@ -14,6 +16,7 @@
 - **monitoring-dashboard.ps1** - Real-time monitoring and alerting
 
 ### 2. Deployment Scripts (5 files)
+
 - **phase-1-deploy.ps1** - Foundation deployment (Monado, Aegis, USB Auth)
 - **phase-2-deploy.ps1** - Automation deployment (AI Hub, Dev Hub, GUI)
 - **phase-3-deploy.ps1** - Professional deployment (Build Agents, Optimization)
@@ -21,16 +24,19 @@
 - **rollback.ps1** - Safe atomic rollback to any phase
 
 ### 3. Testing Scripts (4 files)
+
 - **integration-tests.ps1** - Cross-component validation
 - **phase-validator.ps1** - Phase readiness verification
 - **security-scanner.ps1** - Security & compliance scanning
 - **performance-baseline.ps1** - Performance baseline establishment
 
 ### 4. Configuration Files (2 files)
+
 - **component-definitions.json** - Component specs and dependencies
 - **deployment-state.json** - Persistent deployment state
 
 ### 5. Documentation (2 files)
+
 - **README.md** - Comprehensive user guide
 - **DEPLOYMENT_SUMMARY.md** - Complete system overview
 
@@ -39,9 +45,11 @@
 ## 🎯 ORCHESTRATION SCRIPTS REFERENCE
 
 ### master-orchestrator.ps1
+
 **Purpose**: Central orchestration hub for 4-phase deployment
 
 **Usage**:
+
 ```powershell
 # Deploy Phase 1
 .\master-orchestrator.ps1 -Phase 1 -Action Deploy
@@ -57,11 +65,13 @@
 ```
 
 **Key Parameters**:
+
 - `-Phase`: Phase number (1, 2, 3, 4, or All)
 - `-Action`: Deploy, Validate, Status, Rollback, PreFlight
 - `-StateFile`: Path to deployment state JSON
 
 **Features**:
+
 - Phase dependency tracking
 - Component synergy detection
 - State persistence
@@ -70,9 +80,11 @@
 ---
 
 ### cross-component-api.ps1
+
 **Purpose**: Unified API gateway for all 7 components
 
 **Usage**:
+
 ```powershell
 # Check system health
 .\cross-component-api.ps1 -Method GET -Route '/system/health'
@@ -90,6 +102,7 @@
 ```
 
 **Available Routes**:
+
 - `/system/health` - System health status
 - `/system/metrics` - System-wide metrics
 - `/system/components` - List all components
@@ -100,6 +113,7 @@
 - `/build-agents/*` - Build agent APIs
 
 **Rate Limits** (per minute):
+
 - `/system/health`: 10,000 req/min
 - `/ai-hub/predict`: 500 req/min
 - `/build-agents/deploy`: 100 req/min
@@ -107,9 +121,11 @@
 ---
 
 ### event-routing.ps1
+
 **Purpose**: Pub/sub messaging system for component events
 
 **Usage**:
+
 ```powershell
 # Publish an event
 .\event-routing.ps1 -Action Publish `
@@ -133,6 +149,7 @@
 ```
 
 **Supported Event Types**:
+
 - Component lifecycle: `component_started`, `component_stopped`, `component_failed`
 - Deployment: `deployment_started`, `deployment_completed`, `deployment_failed`
 - Processing: `training_complete`, `model_ready`, `build_triggered`, `build_completed`
@@ -141,9 +158,11 @@
 ---
 
 ### azure-fabric-bridge.ps1
+
 **Purpose**: Bidirectional Azure/Microsoft Fabric integration
 
 **Usage**:
+
 ```powershell
 # Initialize Azure connection
 .\azure-fabric-bridge.ps1 -Action InitializeConnection
@@ -172,6 +191,7 @@
 ```
 
 **Azure Services Used**:
+
 - Log Analytics - Telemetry ingestion
 - Application Insights - Metrics and diagnostics
 - Event Hub - Event streaming
@@ -180,9 +200,11 @@
 ---
 
 ### decision-engine.ps1
+
 **Purpose**: Interactive deployment wizard for configuration generation
 
 **Usage**:
+
 ```powershell
 # Run interactive wizard
 .\decision-engine.ps1 -Action RunWizard
@@ -202,16 +224,17 @@
 ```
 
 **Deployment Profiles**:
+
 1. **SMB**: Up to 50 users, cost-optimized
    - 1 AI Hub instance
    - 2 build agents
    - Monthly cost: $500-800
-   
+
 2. **Mid-Market**: 50-500 users, balanced
    - 3 AI Hub instances
    - 5 build agents
    - Monthly cost: $2000-3500
-   
+
 3. **Enterprise**: 500+ users, high-performance
    - 5 AI Hub instances
    - 10 build agents
@@ -220,9 +243,11 @@
 ---
 
 ### monitoring-dashboard.ps1
+
 **Purpose**: Real-time system monitoring with 5-second refresh
 
 **Usage**:
+
 ```powershell
 # Start real-time dashboard (auto-refresh every 5 seconds)
 .\monitoring-dashboard.ps1 -Action StartDashboard
@@ -241,11 +266,13 @@
 ```
 
 **Monitored Metrics**:
+
 - Per-component: CPU%, Memory%, Disk%, Requests/sec, Error rate, Latency
 - System-wide: Overall health status, Phase progress, Active alerts
 - Performance: P95/P99 latencies, Throughput, Queue depths
 
 **Health Status**:
+
 - 🟢 Green (Healthy): All components operational, <1% errors
 - 🟡 Yellow (Warning): Minor issues, 1-5% errors
 - 🔴 Red (Critical): Failures, >5% errors or component down
@@ -255,9 +282,11 @@
 ## 📦 DEPLOYMENT SCRIPTS REFERENCE
 
 ### phase-1-deploy.ps1
+
 **Purpose**: Deploy foundation components (~9 hours)
 
 **Usage**:
+
 ```powershell
 # Standard deployment with validation
 .\phase-1-deploy.ps1
@@ -267,6 +296,7 @@
 ```
 
 **Deploys**:
+
 1. Monado - Pattern recognition engine
 2. Aegis - Security policy management
 3. USB Auth - Device authentication
@@ -276,9 +306,11 @@
 ---
 
 ### phase-2-deploy.ps1
+
 **Purpose**: Deploy automation components (~10 hours)
 
 **Usage**:
+
 ```powershell
 # Deploy Phase 2 (requires Phase 1 complete)
 .\phase-2-deploy.ps1
@@ -288,49 +320,59 @@
 ```
 
 **Deploys**:
+
 1. AI Hub - ML model orchestration (5 instances)
 2. Dev Hub - Development environment
 3. GUI Dashboard - Web monitoring interface
 
 **Synergies Enabled**:
+
 - AI Hub + Dev Hub: ML automation (+20% efficiency)
 - GUI Dashboard linked to all components
 
 ---
 
 ### phase-3-deploy.ps1
+
 **Purpose**: Deploy professional features (~30 hours)
 
 **Usage**:
+
 ```powershell
 # Deploy Phase 3 (requires Phase 1 & 2 complete)
 .\phase-3-deploy.ps1
 ```
 
 **Deploys**:
+
 1. Build Agents - CI/CD automation (10 instances)
 2. Advanced Optimization - ML performance tuning
 
 **Synergies Enabled**:
+
 - AI Hub + Build Agents: Intelligent build optimization (+25% efficiency)
 - Advanced Optimization + AI Hub: ML-driven tuning (+30% efficiency)
 
 ---
 
 ### phase-4-deploy.ps1
+
 **Purpose**: Deploy enterprise features (~40 hours)
 
 **Usage**:
+
 ```powershell
 # Deploy Phase 4 - System becomes enterprise-ready
 .\phase-4-deploy.ps1
 ```
 
 **Deploys**:
+
 1. Advanced Security - Enterprise compliance (HIPAA, SOC2, ISO27001, GDPR)
 2. Enterprise Features - Multi-tenancy, SLA management
 
 **Compliance Enabled**:
+
 - ✓ HIPAA - Healthcare data protection
 - ✓ SOC2 - Security audit logging
 - ✓ ISO27001 - Information security
@@ -339,9 +381,11 @@
 ---
 
 ### rollback.ps1
+
 **Purpose**: Safe atomic rollback to any checkpoint
 
 **Usage**:
+
 ```powershell
 # Rollback Phase 2
 .\rollback.ps1 -Phase 2
@@ -360,6 +404,7 @@
 ```
 
 **Rollback Process**:
+
 1. Pre-rollback validation
 2. Stop all services
 3. Restore from snapshot
@@ -372,9 +417,11 @@
 ## 🧪 TESTING SCRIPTS REFERENCE
 
 ### integration-tests.ps1
+
 **Purpose**: Validate cross-component integration
 
 **Usage**:
+
 ```powershell
 # Run all tests
 .\integration-tests.ps1
@@ -393,6 +440,7 @@
 ```
 
 **Test Coverage**:
+
 - 15+ integration tests
 - Component interoperability
 - API contracts
@@ -407,9 +455,11 @@
 ---
 
 ### phase-validator.ps1
+
 **Purpose**: Verify phase readiness before advancement
 
 **Usage**:
+
 ```powershell
 # Validate Phase 1
 .\phase-validator.ps1 -Phase 1
@@ -419,6 +469,7 @@
 ```
 
 **Validations**:
+
 - Component deployment confirmation
 - Dependency completion
 - Configuration correctness
@@ -426,15 +477,18 @@
 - Next phase prerequisites
 
 **Exit Codes**:
+
 - 0 = Phase ready for advancement
 - 1 = Phase not ready, review errors
 
 ---
 
 ### security-scanner.ps1
+
 **Purpose**: Comprehensive security and compliance validation
 
 **Usage**:
+
 ```powershell
 # Scan Phase 1 security
 .\security-scanner.ps1 -Phase 1
@@ -447,12 +501,14 @@
 ```
 
 **Security Checks** (Phase 1):
+
 - SSH key authentication
 - Default credentials removed
 - Firewall rules
 - Logging enabled
 
 **Security Checks** (Phase 4):
+
 - End-to-end encryption
 - HIPAA compliance
 - SOC2 audit logging
@@ -460,15 +516,18 @@
 - GDPR data protection
 
 **Exit Codes**:
+
 - 0 = All security checks passed
 - 1 = Security issues found
 
 ---
 
 ### performance-baseline.ps1
+
 **Purpose**: Establish performance baseline for regression testing
 
 **Usage**:
+
 ```powershell
 # Quick baseline (5 seconds)
 .\performance-baseline.ps1 -LoadProfile 'quick'
@@ -484,12 +543,14 @@
 ```
 
 **Baseline Metrics**:
+
 - API latency: min, max, avg, p50, p95, p99
 - Throughput: requests/second
 - Resource usage: CPU%, memory%, disk%
 - Error rate and queue depths
 
 **Acceptance Criteria**:
+
 - P95 latency < 500ms
 - P99 latency < 1000ms
 - Throughput ≥ 100 RPS
@@ -500,7 +561,9 @@
 ## 🔧 CONFIGURATION REFERENCE
 
 ### component-definitions.json
+
 **Schema**:
+
 ```json
 {
   "components": [
@@ -525,7 +588,9 @@
 ```
 
 ### deployment-state.json
+
 **Schema**:
+
 ```json
 {
   "deployment_id": "helios-YYYYMMDD-HHMMSS",
@@ -575,6 +640,7 @@ Phase 4 (Enterprise):
 ## 🎯 TYPICAL DEPLOYMENT WORKFLOW
 
 ### Day 1: Phase 1 Deployment
+
 ```powershell
 # 1. Check prerequisites
 .\orchestration\master-orchestrator.ps1 -Phase 1 -Action PreFlight
@@ -593,6 +659,7 @@ Phase 4 (Enterprise):
 ```
 
 ### Day 2: Phase 2 Deployment
+
 ```powershell
 # 1. Start monitoring
 .\orchestration\monitoring-dashboard.ps1 -Action StartDashboard
@@ -611,6 +678,7 @@ Phase 4 (Enterprise):
 ```
 
 ### Optional: Phase 3 & 4
+
 ```powershell
 # Phase 3 (professional features)
 .\deployment\phase-3-deploy.ps1
@@ -633,12 +701,14 @@ Phase 4 (Enterprise):
 ### Common Issues
 
 **"Deployment failed - prerequisites not met"**
+
 ```powershell
 # Check prerequisites
 .\orchestration\master-orchestrator.ps1 -Phase 1 -Action PreFlight
 ```
 
 **"Component unhealthy"**
+
 ```powershell
 # Check component metrics
 .\orchestration\monitoring-dashboard.ps1 -Action GetMetrics -Component 'component-name'
@@ -648,6 +718,7 @@ Phase 4 (Enterprise):
 ```
 
 **"Need to rollback Phase 2"**
+
 ```powershell
 # Rollback Phase 2
 .\deployment\rollback.ps1 -Phase 2
@@ -659,21 +730,25 @@ Phase 4 (Enterprise):
 ### Getting Help
 
 1. **Check system status**:
+
    ```powershell
    .\orchestration\monitoring-dashboard.ps1
    ```
 
 2. **Review event history**:
+
    ```powershell
    .\orchestration\event-routing.ps1 -Action GetHistory -Limit 50
    ```
 
 3. **Run full test suite**:
+
    ```powershell
    .\testing\integration-tests.ps1
    ```
 
 4. **Check Azure diagnostics**:
+
    ```powershell
    .\orchestration\azure-fabric-bridge.ps1 -Action GetRecommendations
    ```

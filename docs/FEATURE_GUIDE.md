@@ -50,6 +50,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 0: Pre-flight Validation (5 min)
 
 **Checks performed:**
+
 1. Operating system compatibility (Windows 11 Pro+)
 2. PowerShell version (7.4+)
 3. .NET framework (8.0+)
@@ -62,6 +63,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 10. Administrator privileges
 
 **Configuration:**
+
 ```json
 {
   "preflight": {
@@ -80,6 +82,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 1: Infrastructure Deployment (5 min)
 
 **Deploys:**
+
 - Virtual networks and subnets
 - Load balancers
 - Container registries
@@ -89,6 +92,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 - API gateways
 
 **Configuration:**
+
 ```json
 {
   "infrastructure": {
@@ -107,6 +111,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 2: Agent Fleet Deployment (10 min)
 
 **Agents deployed:**
+
 1. **Storage Agent** - Data management and replication
 2. **Security Agent** - Access control and compliance
 3. **Software Agent** - Package management
@@ -115,6 +120,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 6. **Testing Agent** - Quality assurance
 
 **Configuration per agent:**
+
 ```json
 {
   "agents": {
@@ -139,6 +145,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 3: AI Services Registration (8 min)
 
 **Services configured:**
+
 - Tier 1 (Free): Ollama, Gemini, Copilot
 - Tier 2 (Standard): Azure OpenAI, Claude, Gemini Pro
 - Tier 3 (Specialist): Fabric, NVIDIA, Copilot Studio
@@ -148,6 +155,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 4: Security Framework (4 min)
 
 **Activated:**
+
 1. MFA enrollment
 2. Certificate generation and installation
 3. Vault configuration
@@ -158,6 +166,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 5: Monitoring Setup (2 min)
 
 **Dashboards activated:**
+
 - Cost tracking
 - Performance monitoring
 - Security events
@@ -169,6 +178,7 @@ Phase 6: Verification (1 min) → 42 validation tests
 #### Phase 6: Verification & Go-Live (1 min)
 
 **42 validation tests:**
+
 - Infrastructure connectivity (5 tests)
 - Agent health (6 tests)
 - AI service availability (4 tests)
@@ -220,16 +230,19 @@ HELIOS coordinates 12+ AI models with intelligent routing that selects the optim
 ### Supported Models
 
 **Tier 1 (Free)**
+
 - **Ollama** - Local inference, zero cost
 - **Gemini** - Google's model, limited free tier
 - **Copilot** - Microsoft's model, subscription required
 
 **Tier 2 (Standard)**
+
 - **Azure OpenAI** - GPT-4, GPT-3.5 variants
 - **Claude** - Anthropic's model
 - **Gemini Pro** - Upgraded Google model
 
 **Tier 3 (Specialist)**
+
 - **Fabric** - Microsoft's data analysis specialist
 - **NVIDIA NIM** - Optimized inference platform
 - **Copilot Studio** - Custom model builder
@@ -250,6 +263,7 @@ Selects cheapest model that meets minimum quality threshold.
 ```
 
 **Model Selection Order:**
+
 1. Ollama (local, $0)
 2. Gemini (free tier, $0)
 3. Claude (if budget available, $0.003/query)
@@ -271,6 +285,7 @@ Selects fastest model regardless of cost.
 ```
 
 **Model Selection Order:**
+
 1. Local cache hit (0ms)
 2. Ollama cached (10-50ms)
 3. Azure OpenAI (200-400ms)
@@ -371,12 +386,14 @@ foreach (var metric in metrics)
 **Protection:** USB token + TPM 2.0
 
 **Implementation:**
+
 - Hardware-backed key storage
 - Physical token authentication
 - TPM attestation
 - Secure boot validation
 
 **Configuration:**
+
 ```powershell
 Set-HeliosSecurityConfig -PhysicalSecurity -TpmRequired -UsbTokenRequired
 ```
@@ -386,12 +403,14 @@ Set-HeliosSecurityConfig -PhysicalSecurity -TpmRequired -UsbTokenRequired
 **Protection:** MFA + Entra ID
 
 **Implementation:**
+
 - Multi-factor authentication
 - Azure Entra ID integration
 - Conditional access policies
 - Risk-based authentication
 
 **Configuration:**
+
 ```json
 {
   "authentication": {
@@ -408,12 +427,14 @@ Set-HeliosSecurityConfig -PhysicalSecurity -TpmRequired -UsbTokenRequired
 **Protection:** Dual vault (Azure + local encrypted)
 
 **Implementation:**
+
 - Azure Key Vault for cloud secrets
 - Local encrypted vault for on-premise
 - Automatic key rotation
 - Secret versioning
 
 **Configuration:**
+
 ```powershell
 Set-HeliosSecretVault -Primary "AzureKeyVault" `
                       -Fallback "LocalEncrypted" `
@@ -425,12 +446,14 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 **Protection:** RSA 2048-bit signing
 
 **Implementation:**
+
 - All modules digitally signed
 - Signature verification on load
 - 100% coverage requirement
 - Automated code signing pipeline
 
 **Configuration:**
+
 ```json
 {
   "codeSigning": {
@@ -447,12 +470,14 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 **Protection:** Docker quarantine
 
 **Implementation:**
+
 - Docker container isolation
 - Resource limits per container
 - Network segmentation
 - Capability restrictions
 
 **Configuration:**
+
 ```json
 {
   "execution": {
@@ -470,6 +495,7 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 **Protection:** 7-stage approval workflow
 
 **Stages:**
+
 1. Code commit
 2. Automated scanning (SAST)
 3. Peer review
@@ -479,6 +505,7 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 7. Automated deployment
 
 **Configuration:**
+
 ```json
 {
   "changeControl": {
@@ -496,6 +523,7 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 **Protection:** Immutable WORM storage
 
 **Implementation:**
+
 - Write-Once-Read-Many storage
 - 7-year retention
 - Immutable logs
@@ -503,6 +531,7 @@ Set-HeliosSecretVault -Primary "AzureKeyVault" `
 - Real-time indexing
 
 **Configuration:**
+
 ```powershell
 Set-HeliosAuditLogging -Enabled $true `
                        -Storage "WORM" `
@@ -515,12 +544,14 @@ Set-HeliosAuditLogging -Enabled $true `
 **Protection:** Multi-model consensus
 
 **Implementation:**
+
 - Multiple AI models analyze decisions
 - Consensus requirement (default 80%)
 - Explainability logging
 - Anomaly detection
 
 **Configuration:**
+
 ```json
 {
   "aiVerification": {
@@ -535,6 +566,7 @@ Set-HeliosAuditLogging -Enabled $true `
 ### Compliance Frameworks
 
 **Supported frameworks:**
+
 - SOC2 Type II
 - ISO 27001
 - HIPAA
@@ -542,6 +574,7 @@ Set-HeliosAuditLogging -Enabled $true `
 - FedRAMP (in development)
 
 **Enable compliance:**
+
 ```powershell
 Set-HeliosSecurityPolicy -Policy "SOC2" -Strict $true
 ```
@@ -577,6 +610,7 @@ Test-HeliosCodeSignatures -All
 #### 1. Cost Dashboard
 
 **Metrics:**
+
 - Current monthly spend
 - Daily spend trend
 - Cost forecast
@@ -585,6 +619,7 @@ Test-HeliosCodeSignatures -All
 - Budget alerts
 
 **Configuration:**
+
 ```json
 {
   "cost": {
@@ -597,6 +632,7 @@ Test-HeliosCodeSignatures -All
 ```
 
 **Access:**
+
 ```powershell
 Get-HeliosDashboard -Name "Cost"
 ```
@@ -604,6 +640,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 2. Performance Dashboard
 
 **Metrics:**
+
 - CPU utilization
 - Memory usage
 - Disk I/O
@@ -615,6 +652,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 3. Security Dashboard
 
 **Metrics:**
+
 - Failed login attempts
 - Permission changes
 - Audit log entries
@@ -625,6 +663,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 4. Compliance Dashboard
 
 **Metrics:**
+
 - Compliance score
 - Policy violations
 - Audit status
@@ -634,6 +673,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 5. AI Dashboard
 
 **Metrics:**
+
 - Model utilization
 - Query volume by model
 - Average latency
@@ -644,6 +684,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 6. Agent Dashboard
 
 **Metrics:**
+
 - Agent health status
 - Resource utilization
 - Request processing rate
@@ -653,6 +694,7 @@ Get-HeliosDashboard -Name "Cost"
 #### 7. System Dashboard
 
 **Metrics:**
+
 - Overall health score
 - Uptime percentage
 - SLA compliance
@@ -662,16 +704,19 @@ Get-HeliosDashboard -Name "Cost"
 ### Access Methods
 
 **Web UI:**
+
 ```
 https://localhost:8080/dashboards/{name}
 ```
 
 **CLI:**
+
 ```powershell
 Get-HeliosDashboard -Name "Performance" -Period Week
 ```
 
 **API:**
+
 ```bash
 curl https://api.helios-platform.dev/dashboards/cost
 ```
@@ -679,11 +724,13 @@ curl https://api.helios-platform.dev/dashboards/cost
 ### Alerting
 
 **Alert severity levels:**
+
 - Critical (immediate action required)
 - Warning (action recommended)
 - Info (informational only)
 
 **Configure alerts:**
+
 ```powershell
 Set-HeliosAlert -Name "HighCost" -Metric "DailySpend" `
                 -Threshold 100 -Severity "Warning" `
@@ -842,17 +889,20 @@ RemediationItems: 2
 ### Recovery Procedures
 
 **Backup:**
+
 ```powershell
 Start-HeliosBackup -Full -Destination "azure-storage"
 ```
 
 **Restore:**
+
 ```powershell
 Restore-HeliosDeployment -FromBackup -BackupId "backup-2024-01-15" `
                          -ToRegion "westus"
 ```
 
 **Failover:**
+
 ```powershell
 Invoke-HeliosFailover -SecondaryRegion "westus" -WaitForSync $true
 ```

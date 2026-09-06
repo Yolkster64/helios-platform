@@ -3,11 +3,13 @@
 ## 🚀 Quick Start
 
 ### File Location
+
 ```
 C:\helios-platform\src\HELIOS.Platform\Phase10\BuilderUI\
 ```
 
 ### Core Files
+
 ```
 IBuilderUIService.cs           [Interface & Models]
 BuilderUIHost.cs               [Main WPF Host]
@@ -62,6 +64,7 @@ Deploy
 ## 🏗️ Architecture
 
 ### Layer Structure
+
 ```
 UI Layer (WPF)
     ↓
@@ -73,6 +76,7 @@ Data Layer (Models)
 ```
 
 ### 8 Services
+
 | Service | Purpose | LOC |
 |---------|---------|-----|
 | BuilderUIHost | Main entry point | 300 |
@@ -102,6 +106,7 @@ Pure Black:         #000000 ← Shadow
 ## 📝 Key Models
 
 ### DriveInfo
+
 ```csharp
 DriveId, DriveName, DriveType (USB/Disk)
 TotalCapacity, FreeSpace
@@ -110,6 +115,7 @@ LastHealthCheck, HealthWarnings
 ```
 
 ### Package
+
 ```csharp
 PackageId, Name, Description, Category
 Size, IsSelected
@@ -117,6 +123,7 @@ Dependencies (List<string>), Priority
 ```
 
 ### OptimizationProfile
+
 ```csharp
 ProfileId, Name, Description
 Optimizations, IsRecommended, IsCustom
@@ -124,6 +131,7 @@ IncludedPackages (List<string>)
 ```
 
 ### DeploymentSummary
+
 ```csharp
 TargetDrive, WindowsVersion, SelectedProfile
 SelectedPackages, TotalSize
@@ -136,6 +144,7 @@ CreatedAt (DateTime)
 ## 🧪 Test Coverage
 
 ### Test Categories (45+ tests)
+
 - StepWizardEngine: 8 tests
 - DriveSelector: 6 tests
 - PackageSelector: 8 tests
@@ -145,6 +154,7 @@ CreatedAt (DateTime)
 - Edge Cases: 7 tests
 
 ### Coverage: 95%+
+
 - All services tested
 - Edge cases covered
 - Mock services used
@@ -155,6 +165,7 @@ CreatedAt (DateTime)
 ## 🔗 Integration Points
 
 ### With Phase 10 Services
+
 ```
 Phase 10A → Package Management
 Phase 10B → System Verification
@@ -170,6 +181,7 @@ Phase 10G → Optimization
 ## ⚙️ Configuration
 
 ### Wizard Configuration
+
 ```
 7 Steps (1-7)
 Step 1: Always first (Welcome)
@@ -182,6 +194,7 @@ Step 7: Final confirmation
 ```
 
 ### Deployment Presets
+
 ```
 Minimal:  System packages only
 Standard: System + Dev + Security
@@ -190,6 +203,7 @@ Custom:   User-defined
 ```
 
 ### Profiles Available
+
 ```
 Balanced (Recommended)
 Gaming (High Performance)
@@ -242,6 +256,7 @@ Memory Usage:        < 150MB ✅
 ## 🛠️ Development Setup
 
 ### Requirements
+
 ```
 .NET 8.0+
 Visual Studio 2022+ or VS Code
@@ -250,6 +265,7 @@ Windows 10/11
 ```
 
 ### Project Setup
+
 ```
 1. Open Phase10/BuilderUI folder
 2. Load in Visual Studio
@@ -260,6 +276,7 @@ Windows 10/11
 ```
 
 ### Running Tests
+
 ```powershell
 # Using dotnet CLI
 dotnet test BuilderUITests.cs
@@ -284,6 +301,7 @@ Test → Run All Tests
 ## 🔍 Common Tasks
 
 ### Add New Step
+
 ```csharp
 1. Add step to StepWizardEngine._steps
 2. Create control generator in OptionsPanel
@@ -292,6 +310,7 @@ Test → Run All Tests
 ```
 
 ### Add New Profile
+
 ```csharp
 1. Create OptimizationProfile instance
 2. Add to GetAvailableProfilesAsync()
@@ -300,6 +319,7 @@ Test → Run All Tests
 ```
 
 ### Add New Package
+
 ```csharp
 1. Create Package instance
 2. Add to GetAllPackagesAsync()
@@ -308,6 +328,7 @@ Test → Run All Tests
 ```
 
 ### Add New Test
+
 ```csharp
 1. Create [Fact] method in BuilderUITests
 2. Use Arrange-Act-Assert pattern
@@ -320,17 +341,20 @@ Test → Run All Tests
 ## ⚠️ Important Notes
 
 ### Windows-Only
+
 - WPF requires Windows
 - Admin privileges for deployment
 - 2GB minimum free space
 
 ### Performance
+
 - Progress updates are real-time
 - UI remains responsive during operations
 - Memory is properly managed
 - No blocking operations
 
 ### Security
+
 - Input validation on all steps
 - Drive verification before deployment
 - Terms acceptance required
@@ -341,6 +365,7 @@ Test → Run All Tests
 ## 🆘 Troubleshooting
 
 ### Builder Won't Start
+
 ```
 Check: .NET 8.0+ installed
 Check: Visual Studio up-to-date
@@ -349,6 +374,7 @@ Check: Windows OS version
 ```
 
 ### Tests Failing
+
 ```
 Check: All NuGet packages installed
 Check: Moq version compatible
@@ -357,6 +383,7 @@ Check: Run in Release mode
 ```
 
 ### UI Looks Wrong
+
 ```
 Check: Theme XAML loaded
 Check: Screen resolution >= 1280x720
@@ -365,6 +392,7 @@ Check: GPU acceleration enabled
 ```
 
 ### Progress Not Updating
+
 ```
 Check: Service event handlers connected
 Check: Progress service initialized
@@ -377,12 +405,14 @@ Check: Check deployment started
 ## 📞 Support
 
 ### For Issues
+
 1. Check documentation
 2. Review relevant service code
 3. Check unit tests for examples
 4. Verify integration setup
 
 ### For Enhancements
+
 1. Review roadmap
 2. Create design doc
 3. Add unit tests
@@ -393,24 +423,28 @@ Check: Check deployment started
 ## 🎓 Key Concepts
 
 ### MVVM Pattern
+
 - Separates UI from business logic
 - ViewModel handles state
 - Data binding for updates
 - Two-way binding for inputs
 
 ### Async/Await
+
 - Non-blocking operations
 - Progress monitoring
 - Cancellation support
 - Error handling
 
 ### Dependency Injection
+
 - Services are injected
 - Mock services for testing
 - Loose coupling
 - Easy to extend
 
 ### Unit Testing
+
 - Mock service setup
 - Arrange-Act-Assert pattern
 - 95%+ coverage
@@ -435,6 +469,7 @@ Check: Check deployment started
 ---
 
 For detailed information, see:
+
 - README.md - Full technical documentation
 - IMPLEMENTATION_SUMMARY.md - Project summary
 - DELIVERY_REPORT.md - Final delivery report

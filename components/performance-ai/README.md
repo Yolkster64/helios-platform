@@ -9,6 +9,7 @@ AI-powered performance optimization and system tuning for HELIOS Platform.
 Performance AI uses machine learning to analyze system behavior, predict bottlenecks, and automatically optimize performance. Learns your workload patterns and makes intelligent tuning recommendations.
 
 **Key Facts:**
+
 - **Phase:** 2
 - **Standalone:** ⚠️ Partial (needs security-engine)
 - **Requires:** security-engine (Phase 0), .NET Framework 4.8+, TensorFlow (bundled)

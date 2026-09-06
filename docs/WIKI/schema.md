@@ -5,6 +5,7 @@ All files, metadata, cross-references, and notes tracked in SQLite database.
 ## Database Structure
 
 ### `files` Table
+
 - `id` - Unique identifier
 - `path` - Full file path
 - `category` - Module category (security, gui, tools, etc)
@@ -16,17 +17,20 @@ All files, metadata, cross-references, and notes tracked in SQLite database.
 - `created_date`, `modified_date` - Timestamps
 
 ### `categories` Table
+
 - Hierarchical organization
 - Parent-child relationships
 - Category descriptions
 
 ### `cross_references` Table
+
 - `reference_type` - depends_on, used_by, related_to, coordinates_with
 - `conflict_potential` - 0.0-1.0 AI-assessed conflict risk
 - `ai_coordination_needed` - boolean flag
 - Links source and target files
 
 ### `notes` Table
+
 - Team notes and adaptations at file level
 - `change_type` - adaptation, bug_fix, improvement, note
 - `impact_level` - low, medium, high
@@ -34,11 +38,13 @@ All files, metadata, cross-references, and notes tracked in SQLite database.
 - Date-stamped with author
 
 ### `metadata` Table
+
 - Flexible key-value store
 - Extra data per file
 - Tags, dependencies, etc
 
 ### `dependencies` Table
+
 - Module dependencies
 - External dependencies
 - Version constraints

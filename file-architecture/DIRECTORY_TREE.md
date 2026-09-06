@@ -543,6 +543,7 @@ C:\
 ## Quick Navigation
 
 For specific file locations:
+
 - **Dashboard application**: `C:\Program Files\HELIOS\Dashboard\Dashboard.exe`
 - **AI models**: `C:\ProgramData\HELIOS\Capability\AI-Models\`
 - **User vault**: `C:\Users\[USERNAME]\AppData\Local\HELIOS\Vault\`

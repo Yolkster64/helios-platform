@@ -28,6 +28,7 @@ MonadoBlade.GUI/
 Main dashboard controller managing tab navigation and overall metrics.
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<DashboardTab> Tabs { get; set; }
 DashboardTab SelectedTab { get; set; }
@@ -42,6 +43,7 @@ DateTime LastUpdate { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand SelectTabCommand        // Switch between dashboard tabs
 ICommand RefreshCommand          // Update all metrics
@@ -49,6 +51,7 @@ ICommand SettingsCommand         // Open settings dialog
 ```
 
 **Usage Example:**
+
 ```csharp
 var dashboard = new DeveloperDashboardViewModel();
 
@@ -77,6 +80,7 @@ Provides performance analytics, process management, and system health.
 **Key Classes:**
 
 #### PerformanceMetric
+
 ```csharp
 public class PerformanceMetric
 {
@@ -90,6 +94,7 @@ public class PerformanceMetric
 ```
 
 #### ProcessInfo
+
 ```csharp
 public class ProcessInfo
 {
@@ -104,6 +109,7 @@ public class ProcessInfo
 ```
 
 #### SystemHealthStatus
+
 ```csharp
 public class SystemHealthStatus
 {
@@ -116,6 +122,7 @@ public class SystemHealthStatus
 ```
 
 #### LogEntry
+
 ```csharp
 public class LogEntry
 {
@@ -128,6 +135,7 @@ public class LogEntry
 ```
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<MetricDataPoint> MetricsHistory { get; set; }
 ObservableCollection<ProcessInfo> ProcessList { get; set; }
@@ -140,6 +148,7 @@ double PeakMemory { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand RefreshCommand              // Load latest process list
 ICommand TerminateProcessCommand     // Kill a process
@@ -148,6 +157,7 @@ ICommand FilterLogsCommand           // Filter by level
 ```
 
 **Usage Example:**
+
 ```csharp
 var analytics = new AnalyticsViewModel();
 
@@ -171,6 +181,7 @@ API testing, theme building, and plugin generation tools.
 **Key Classes:**
 
 #### ApiRequest
+
 ```csharp
 public class ApiRequest
 {
@@ -186,6 +197,7 @@ public class ApiRequest
 ```
 
 #### ThemeColor
+
 ```csharp
 public class ThemeColor
 {
@@ -196,6 +208,7 @@ public class ThemeColor
 ```
 
 #### PluginTemplate
+
 ```csharp
 public class PluginTemplate
 {
@@ -207,6 +220,7 @@ public class PluginTemplate
 ```
 
 #### PerformanceProfile
+
 ```csharp
 public class PerformanceProfile
 {
@@ -219,6 +233,7 @@ public class PerformanceProfile
 ```
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<ApiRequest> ApiRequests { get; set; }
 ObservableCollection<ThemeColor> ThemeColors { get; set; }
@@ -231,6 +246,7 @@ bool IsProfiling { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand ExecuteApiCommand          // Execute API request
 ICommand ClearApiCommand            // Clear request history
@@ -242,6 +258,7 @@ ICommand ShowEventViewerCommand     // Open event viewer
 ```
 
 **Usage Example:**
+
 ```csharp
 var tools = new DeveloperToolsViewModel();
 
@@ -270,6 +287,7 @@ Crash analysis, bottleneck detection, and memory profiling.
 **Key Classes:**
 
 #### CrashDump
+
 ```csharp
 public class CrashDump
 {
@@ -284,6 +302,7 @@ public class CrashDump
 ```
 
 #### BottleneckDetection
+
 ```csharp
 public class BottleneckDetection
 {
@@ -297,6 +316,7 @@ public class BottleneckDetection
 ```
 
 #### DependencyNode
+
 ```csharp
 public class DependencyNode
 {
@@ -309,6 +329,7 @@ public class DependencyNode
 ```
 
 #### MemoryAllocation
+
 ```csharp
 public class MemoryAllocation
 {
@@ -321,6 +342,7 @@ public class MemoryAllocation
 ```
 
 #### TraceEvent
+
 ```csharp
 public class TraceEvent
 {
@@ -334,6 +356,7 @@ public class TraceEvent
 ```
 
 **Key Properties:**
+
 ```csharp
 ObservableCollection<CrashDump> CrashDumps { get; set; }
 ObservableCollection<BottleneckDetection> Bottlenecks { get; set; }
@@ -346,6 +369,7 @@ int WarningIssues { get; set; }
 ```
 
 **Key Commands:**
+
 ```csharp
 ICommand AnalyzeCrashCommand           // Scan for crash dumps
 ICommand DetectBottlenecksCommand      // Find performance issues
@@ -358,6 +382,7 @@ ICommand StopTraceCommand              // Stop tracing
 ```
 
 **Usage Example:**
+
 ```csharp
 var advanced = new AdvancedFeaturesViewModel();
 

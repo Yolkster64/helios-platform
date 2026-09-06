@@ -121,46 +121,55 @@ cd C:\Users\ADMIN\helios-platform\scripts\utilities\wiki
 ### Tables
 
 #### `files` (Master Registry)
+
 - Tracks all documented files
 - Fields: path, name, category, type, purpose, complexity, status, version, build_inclusion
 - Primary index: path (UNIQUE)
 
 #### `categories` (Hierarchical)
+
 - 5-level documentation structure
 - Fields: name, parent_id, level, description, icon, order_index
 - Enables breadcrumb navigation
 
 #### `cross_references` (Link Graph)
+
 - File-to-file and file-to-concept references
 - Fields: source_file_id, target_file_id, reference_type, conflict_potential
 - Types: depends_on, used_by, related, extends, implements, conflicts
 
 #### `dependencies` (Dependency Graph)
+
 - Component relationships
 - Fields: source_id, target_id, dependency_type, is_circular, depth
 - Types: hard, soft, optional, conditional
 
 #### `notes` (Annotations)
+
 - Team change history and observations
 - Fields: file_id, note_type, content, author, priority, resolved
 - Types: observation, warning, todo, deprecated, optimization, security, performance
 
 #### `metadata` (Key-Value Store)
+
 - Additional file information
 - Flexible key-value pairs with typing
 
 #### `builds` (Build Registry)
+
 - Build configuration tracking
 - Includes build components junction table
 - Fields: name, environment, framework, include_optional/enterprise
 
 #### `snippets` (Code Registry)
+
 - Reusable code with compression
 - Fields: name, category, language, code, description, tags, usage_count
 
 ### Indexes (15 total)
 
 Optimized for common queries:
+
 - `idx_files_*` - Category, type, status, complexity, build, modified
 - `idx_categories_*` - Parent, level
 - `idx_xref_*` - Source, target, type, conflict
@@ -172,6 +181,7 @@ Optimized for common queries:
 ### Views (5 total)
 
 Pre-built queries for common operations:
+
 - `active_files` - All active, documented files
 - `documented_files` - Sorted by complexity
 - `undocumented_files` - Missing documentation
@@ -183,6 +193,7 @@ Pre-built queries for common operations:
 ### PowerShell Script Headers
 
 Extracts from comment blocks:
+
 ```powershell
 <#
 .SYNOPSIS
@@ -205,6 +216,7 @@ Extracts from comment blocks:
 ### Meta JSON Files
 
 Companion `.meta.json` files for additional metadata:
+
 ```json
 {
   "category": "Scripts/Utilities",
@@ -241,18 +253,21 @@ Companion `.meta.json` files for additional metadata:
 ### Output Formats
 
 #### Markdown (`DEPENDENCY_GRAPH.md`)
+
 - ASCII diagrams
 - Statistics and summaries
 - High-degree components
 - Circular dependency warnings
 
 #### DOT Format (`dependencies.dot`)
+
 - Graph visualization format
 - Can be converted to PNG/PDF with Graphviz
 - Color-coded nodes (root, leaf, middle)
 - Circular dependencies marked
 
 #### JSON (`dependencies.json`)
+
 - Machine-readable graph data
 - Full metadata preserved
 - Import into tools/analyzers
@@ -298,6 +313,7 @@ Companion `.meta.json` files for additional metadata:
 ### With Build System
 
 Connect to build configuration:
+
 ```powershell
 # Register build components in database
 # Then use in build targeting:
@@ -320,6 +336,7 @@ Connect to build configuration:
 ### Scheduled Regeneration
 
 Add to Windows Task Scheduler or build pipeline:
+
 ```powershell
 # Daily regeneration at 2 AM
 Invoke-Expression "C:\...\wiki-orchestrate.ps1 -Action full"
@@ -328,17 +345,20 @@ Invoke-Expression "C:\...\wiki-orchestrate.ps1 -Action full"
 ## 📊 Statistics & Reporting
 
 ### Database Statistics
+
 ```powershell
 .\wiki-search.ps1  # Shows stats at end
 ```
 
 ### Validation Report
+
 ```powershell
 .\check-cross-references.ps1 -GenerateReport
 # Creates: cross-reference-report.md
 ```
 
 ### Dependency Report
+
 ```powershell
 .\map-dependencies.ps1 -OutputFormat all
 # Creates:
@@ -376,6 +396,7 @@ Invoke-Expression "C:\...\wiki-orchestrate.ps1 -Action full"
 ## 🔐 Build Configurations
 
 Track build variations:
+
 ```powershell
 # Database records:
 # - standard build (core components)
@@ -385,6 +406,7 @@ Track build variations:
 ```
 
 Database queries for build selection:
+
 ```powershell
 # Find all files in standard build
 .\wiki-search.ps1 -SearchType sql -Query `
@@ -401,6 +423,7 @@ Database queries for build selection:
 ## 🐛 Troubleshooting
 
 ### Database Locked
+
 ```powershell
 # Reset database
 .\setup-wiki.ps1 -ForceReset
@@ -410,6 +433,7 @@ sqlite3 --version
 ```
 
 ### Broken References Not Found
+
 ```powershell
 # Update validation cache
 .\check-cross-references.ps1 -ValidateFiles
@@ -418,6 +442,7 @@ sqlite3 --version
 ```
 
 ### Circular Dependencies False Positives
+
 ```powershell
 # Review conflict reports
 .\check-cross-references.ps1 -GenerateReport
@@ -429,6 +454,7 @@ sqlite3 --version
 ## 📞 Support
 
 For issues or enhancements:
+
 1. Check database with: `.\wiki-search.ps1 -SearchType sql`
 2. Review reports: `docs/cross-reference-report.md`
 3. Check generated graphs: `docs/DEPENDENCY_GRAPH.md`

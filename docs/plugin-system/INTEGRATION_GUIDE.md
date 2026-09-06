@@ -9,6 +9,7 @@ Copy the entire `src/HELIOS.Platform/Core/Plugins/` directory to your project's 
 ### 2. Add Required References
 
 The plugin system requires only standard .NET libraries:
+
 - System
 - System.Collections.Generic
 - System.IO
@@ -100,6 +101,7 @@ public class PluginServiceBootstrapper
 Create plugin configuration files in `plugin-config/` directory:
 
 **com.example.myplugin.json**:
+
 ```json
 {
   "enabled": true,
@@ -337,6 +339,7 @@ await app.RunAsync();
 **Issue**: Plugins not discovered or loaded
 
 **Solutions**:
+
 1. Check plugin directory path is correct
 2. Verify manifest file names are `plugin.json`
 3. Ensure assembly files exist with correct names
@@ -348,6 +351,7 @@ await app.RunAsync();
 **Issue**: Plugin fails during initialization
 
 **Solutions**:
+
 1. Check plugin configuration file exists and is valid
 2. Verify plugin dependencies are loaded first
 3. Review plugin logs for specific errors
@@ -359,6 +363,7 @@ await app.RunAsync();
 **Issue**: Dependency conflicts or missing dependencies
 
 **Solutions**:
+
 1. Verify version constraints in manifest
 2. Check all dependency plugins are present
 3. Review dependency resolution output
@@ -370,6 +375,7 @@ await app.RunAsync();
 **Issue**: Plugin fails due to security restrictions
 
 **Solutions**:
+
 1. Review security policy configuration
 2. Check if less restrictive policy is needed
 3. Verify plugin doesn't require blocked operations

@@ -22,6 +22,7 @@ Phase 0 establishes the baseline installation framework. All files created in th
 **Purpose**: Contains templates and scripts for creating bootable HELIOS USB media
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\USBCreator\
 ├── Creator.exe                          # USB creation application
@@ -52,6 +53,7 @@ C:\ProgramData\HELIOS\Foundation\USBCreator\
 **Size**: ~2-5 GB (including ISO images)
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\USBCreator\Creator.exe
 C:\ProgramData\HELIOS\Foundation\USBCreator\ISO-Templates\HELIOS-Full.iso
@@ -67,6 +69,7 @@ C:\ProgramData\HELIOS\Foundation\USBCreator\Scripts\CreateUSB.ps1
 **Purpose**: Scripts that orchestrate deployment of all phases
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\InstallScripts\
 ├── Phase0-Foundation.ps1               # Phase 0 main deployment script
@@ -94,6 +97,7 @@ C:\ProgramData\HELIOS\Foundation\InstallScripts\
 **Size**: ~50 MB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\InstallScripts\Phase0-Foundation.ps1
 C:\ProgramData\HELIOS\Foundation\InstallScripts\Validation-Scripts\CheckPrerequisites.ps1
@@ -101,6 +105,7 @@ C:\ProgramData\HELIOS\Foundation\InstallScripts\Logs\Installation.log
 ```
 
 **Key Scripts**:
+
 - **Phase0-Foundation.ps1**: Master orchestration script
   - Validates prerequisites
   - Creates directory structure
@@ -122,6 +127,7 @@ C:\ProgramData\HELIOS\Foundation\InstallScripts\Logs\Installation.log
 **Purpose**: Disk and partition layout templates
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\Baselines\Partitions\
 ├── Standard-GPT.cfg                    # GPT partition layout (modern)
@@ -146,12 +152,14 @@ C:\ProgramData\HELIOS\Foundation\Baselines\Partitions\
 **Size**: <5 MB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\Baselines\Partitions\Standard-GPT.cfg
 C:\ProgramData\HELIOS\Foundation\Baselines\Partitions\Custom-Layouts\DualDrive.cfg
 ```
 
 **File Format Example (Standard-GPT.cfg)**:
+
 ```
 [PARTITION_CONFIG]
 Format=GPT
@@ -175,6 +183,7 @@ Partition2=Windows,Remaining,NTFS
 **Purpose**: Snapshots of baseline system configuration
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\Baselines\
 ├── System-Baseline.snapshot            # Complete system baseline
@@ -196,6 +205,7 @@ C:\ProgramData\HELIOS\Foundation\Baselines\
 **Size**: ~200-500 MB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Foundation\Baselines\System-Baseline.snapshot
 C:\ProgramData\HELIOS\Foundation\Baselines\Registry-Baseline.hiv
@@ -205,6 +215,7 @@ C:\ProgramData\HELIOS\Foundation\Baselines\Timestamps\2024-01-15-08-30.baseline
 **Baseline Contents**:
 
 **System-Baseline.snapshot**:
+
 - Operating system version
 - Installed KB updates
 - System drive configuration
@@ -214,6 +225,7 @@ C:\ProgramData\HELIOS\Foundation\Baselines\Timestamps\2024-01-15-08-30.baseline
 - Hardware device list
 
 **Registry-Baseline.hiv**:
+
 - Export of HKLM:\Software\Microsoft\Windows\
 - Network configuration
 - Security policies (pre-HELIOS)
@@ -221,6 +233,7 @@ C:\ProgramData\HELIOS\Foundation\Baselines\Timestamps\2024-01-15-08-30.baseline
 - Installed software registry entries
 
 **Software-Inventory.json**:
+
 ```json
 {
   "timestamp": "2024-01-15T08:30:00Z",
@@ -252,6 +265,7 @@ C:\ProgramData\HELIOS\Foundation\Baselines\Timestamps\2024-01-15-08-30.baseline
 **Purpose**: Foundation phase configuration keys
 
 **Keys Created**:
+
 ```
 HKLM:\Software\HELIOS\
 ├── Foundation\
@@ -281,6 +295,7 @@ HKLM:\Software\HELIOS\
 **Access**: Admin/SYSTEM required
 
 **Examples**:
+
 ```
 HKLM:\Software\HELIOS\Foundation\InstallDate = "2024-01-15 08:30:15"
 HKLM:\Software\HELIOS\Foundation\Version = "4.1.0"
@@ -297,6 +312,7 @@ HKLM:\Software\HELIOS\Status\Phase0-Complete = 1 (TRUE)
 **Purpose**: Diagnostic and operational logs for Phase 0
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Logs\
 ├── Phase0.log                         # Main Phase 0 log
@@ -313,6 +329,7 @@ C:\ProgramData\HELIOS\Logs\
 **Size**: 10-50 MB for full installation with verbose logging
 
 **Log Format Example**:
+
 ```
 [2024-01-15 08:30:15.234] [INFO] Phase 0 Foundation Installation Started
 [2024-01-15 08:30:16.456] [INFO] Running prerequisite checks...
@@ -449,6 +466,7 @@ Phase0-SystemPrep.ps1
 **Function**: Removes all Phase 0 files and registry entries
 
 **What It Removes**:
+
 1. `C:\ProgramData\HELIOS\Foundation\` directory
 2. `C:\ProgramData\HELIOS\Logs\Phase0.*` files
 3. `HKLM:\Software\HELIOS\Foundation\` registry keys
@@ -456,6 +474,7 @@ Phase0-SystemPrep.ps1
 5. Restores `HKLM:\Software\HELIOS\Status\Phase0-Complete` to 0
 
 **What It Preserves** (for rollback recovery):
+
 - `C:\ProgramData\HELIOS\Foundation\Baselines\` (backed up to timestamped folder)
 - Original baseline snapshots (for reference)
 
@@ -480,6 +499,7 @@ Phase0-SystemPrep.ps1
 ## Next Steps
 
 After Phase 0 completes:
+
 - All foundation files are in place
 - Registry initialized
 - Baselines captured

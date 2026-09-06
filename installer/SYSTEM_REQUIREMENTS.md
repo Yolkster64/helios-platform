@@ -38,18 +38,21 @@
 ### Operating System
 
 **Supported:**
+
 - Windows 11 Pro (Build 22621+)
 - Windows 11 Enterprise (Build 22621+)
 - Windows Server 2022 (may work, not officially supported)
 - Windows Server 2025 (may work, not officially supported)
 
 **Not Supported:**
+
 - ✗ Windows 10
 - ✗ Windows 11 Home Edition
 - ✗ Windows 8.1 or earlier
 - ✗ Non-Windows platforms
 
 **Verification:**
+
 ```powershell
 $os = Get-CimInstance Win32_OperatingSystem
 Write-Host "OS: $($os.Caption)"
@@ -60,6 +63,7 @@ Write-Host "Build: $($os.BuildNumber)"
 ### .NET SDK
 
 **Supported Versions:**
+
 - .NET 8.0 (LTS - Long Term Support until November 2026)
 - .NET 9.0 (STS - Support until May 2025)
 
@@ -71,16 +75,19 @@ Write-Host "Build: $($os.BuildNumber)"
    - Run MSI installer
 
 2. **Windows Package Manager:**
+
    ```powershell
    winget install Microsoft.DotNet.SDK.8
    ```
 
 3. **Chocolatey:**
+
    ```powershell
    choco install dotnet-sdk
    ```
 
 4. **Docker:**
+
    ```dockerfile
    FROM mcr.microsoft.com/windows/servercore:ltsc2022
    RUN powershell -Command Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile C:\dotnet-install.ps1
@@ -88,6 +95,7 @@ Write-Host "Build: $($os.BuildNumber)"
    ```
 
 **Verification:**
+
 ```powershell
 dotnet --version       # SDK version
 dotnet --list-sdks     # All installed SDKs
@@ -97,6 +105,7 @@ dotnet --list-runtimes # All installed runtimes
 ### PowerShell
 
 **Supported Versions:**
+
 - PowerShell 7.0 or later (7.4+ recommended)
 
 **Installation:**
@@ -111,16 +120,19 @@ dotnet --list-runtimes # All installed runtimes
    - Run installer
 
 3. **Windows Package Manager:**
+
    ```powershell
    winget install Microsoft.PowerShell
    ```
 
 4. **Chocolatey:**
+
    ```powershell
    choco install pwsh
    ```
 
 **Verification:**
+
 ```powershell
 pwsh --version              # Modern PowerShell
 $PSVersionTable.PSVersion   # Current PowerShell version
@@ -129,23 +141,27 @@ $PSVersionTable.PSVersion   # Current PowerShell version
 ### Memory (RAM)
 
 **Minimum:** 4 GB
+
 - Core HELIOS Platform
 - Basic monitoring
 - Standard workloads
 
 **Recommended:** 8-16 GB
+
 - Production deployments
 - Multiple concurrent operations
 - Advanced monitoring
 - Data aggregation
 
 **For Enterprise:** 16 GB+
+
 - Large-scale deployments
 - Distributed systems
 - High-frequency monitoring
 - Historical data analysis
 
 **Verification:**
+
 ```powershell
 # Get system RAM
 $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB
@@ -159,22 +175,26 @@ Write-Host "Available RAM: $([math]::Round($available, 0)) MB"
 ### Disk Space
 
 **Minimum Installation:** 2 GB
+
 - HELIOS Platform core
 - Base configuration
 - Minimal logging
 
 **With Standard Logging:** 5 GB
+
 - Application files
 - Configuration data
 - 30 days of logs
 
 **With Full Monitoring:** 20 GB
+
 - All components
 - Extended logging
 - Historical data
 - Performance metrics
 
 **Verification:**
+
 ```powershell
 # Check C: drive space
 $drive = Get-PSDrive C
@@ -188,11 +208,13 @@ Write-Host "Total: $totalGB GB | Used: $usedGB GB | Free: $freeGB GB"
 ### Processor
 
 **Minimum:** 1 GHz single-core processor
+
 - Basic operations
 - Development/testing
 - Single-system deployment
 
 **Recommended:** Multi-core, 3 GHz+
+
 - Production systems
 - Multiple concurrent tasks
 - Distributed deployments
@@ -207,6 +229,7 @@ Write-Host "Total: $totalGB GB | Used: $usedGB GB | Free: $freeGB GB"
 | Ultimate | High-end Xeon / EPYC | 16+ | 3.0+ GHz |
 
 **Verification:**
+
 ```powershell
 # Get CPU information
 $cpu = Get-CimInstance Win32_Processor
@@ -219,10 +242,12 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 ### Network
 
 **Minimum:**
+
 - Internet for installation verification
 - Network for deployment targets
 
 **For Cloud Integration:**
+
 - 100 Mbps for standard operations
 - 1 Gbps recommended for large deployments
 - Low latency (<50ms) for remote monitoring
@@ -230,22 +255,26 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 **Firewall Requirements:**
 
 **Outbound Ports:**
+
 - 443 (HTTPS) - Updates, telemetry
 - 80 (HTTP) - Documentation
 - 8080-8090 - Custom APIs
 
 **Inbound Ports (if service):**
+
 - 8000-8999 - Application services
 - Custom ports for integrations
 
 ### Display
 
 **Minimum:**
+
 - 1024x768 resolution
 - WDDM 1.0 compatible GPU
 - Text mode operation supported
 
 **Recommended:**
+
 - 1920x1080 or higher
 - Modern GPU (Intel HD 630+, NVIDIA GTX 1050+, AMD equivalent)
 - Multi-monitor support
@@ -259,6 +288,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 **Typical Use:** Small to medium enterprise
 
 **Minimum:**
+
 - Windows 11 Pro
 - .NET 8.0
 - 4 GB RAM
@@ -266,6 +296,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 - Single processor
 
 **Recommended:**
+
 - Windows 11 Pro
 - .NET 8.0 LTS
 - 8 GB RAM
@@ -277,6 +308,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 **Typical Use:** Medium to large enterprise
 
 **Minimum:**
+
 - Windows 11 Enterprise or Windows Server 2022
 - .NET 8.0 LTS
 - 8 GB RAM
@@ -284,6 +316,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 - Quad-core processor
 
 **Recommended:**
+
 - Windows Server 2022
 - .NET 8.0 LTS
 - 16 GB RAM
@@ -296,6 +329,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 **Typical Use:** Large-scale distributed systems
 
 **Minimum:**
+
 - Windows Server 2022/2025
 - .NET 8.0 LTS
 - 16 GB RAM
@@ -303,6 +337,7 @@ Write-Host "Max Speed: $($cpu.MaxClockSpeed) MHz"
 - 8-core processor
 
 **Recommended:**
+
 - Windows Server 2025
 - .NET 8.0 LTS or .NET 9.0
 - 32 GB RAM

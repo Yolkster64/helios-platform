@@ -61,23 +61,27 @@ CI/CD Pipeline
 ## Key Workflows
 
 ### 1. Build Workflow (.github/workflows/build.yml)
+
 - Triggers: Push to main, PR creation
 - Duration: 3-5 minutes
 - Actions: Compile, package, store artifacts
 
 ### 2. Test Workflow (.github/workflows/test.yml)
+
 - Triggers: Push to main, PR creation
 - Duration: 10-15 minutes
 - Coverage: 85%+
 - Runs on: Multiple OS versions
 
 ### 3. Deploy Workflow (.github/workflows/deploy.yml)
+
 - Triggers: Release tag created
 - Duration: 5-10 minutes
 - Targets: Staging, then production
 - Safety: Automatic rollback on failure
 
 ### 4. Publish Workflow (.github/workflows/publish.yml)
+
 - Triggers: Version bump detected
 - Duration: 5 minutes
 - Destination: NuGet.org

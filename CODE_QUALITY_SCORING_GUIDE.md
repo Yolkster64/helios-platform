@@ -1,6 +1,7 @@
 # Code Quality Scoring System for Phase 5-6
 
 ## Overview
+
 This document defines a comprehensive code quality scoring system for Phase 5-6 agent code generation. The system measures four key dimensions and combines them into an overall quality score with target ranges.
 
 ---
@@ -20,6 +21,7 @@ This document defines a comprehensive code quality scoring system for Phase 5-6 
 ### Scoring Criteria
 
 **0-20 Points: Critical Issues**
+
 ```csharp
 // ❌ Examples that score 0-20
 var data = context.Orders.ToList();  // Loads everything
@@ -35,6 +37,7 @@ var result = data.Where(x => x.Status == "Open").ToList();  // After loading all
 ```
 
 **21-40 Points: Poor LINQ**
+
 ```csharp
 // ⚠️ Examples that score 21-40
 var orders = context.Orders
@@ -45,6 +48,7 @@ var orders = context.Orders
 ```
 
 **41-60 Points: Good LINQ**
+
 ```csharp
 // ✅ Examples that score 41-60
 var orders = context.Orders
@@ -55,6 +59,7 @@ var orders = context.Orders
 ```
 
 **61-80 Points: Excellent LINQ (TARGET)**
+
 ```csharp
 // ✅✅ Examples that score 61-80 (TARGET)
 var orders = context.Orders
@@ -68,6 +73,7 @@ var orders = context.Orders
 ```
 
 **81-100 Points: Expert LINQ**
+
 ```csharp
 // 🎯 Examples that score 81-100 (EXPERT)
 private static readonly Func<AppContext, string, Task<List<Order>>>
@@ -127,6 +133,7 @@ For each file/method, check these criteria and add points:
 ### Scoring Criteria
 
 **0-20 Points: Legacy Code**
+
 ```csharp
 // ❌ Legacy patterns
 public class UserDto
@@ -153,6 +160,7 @@ public class Services
 ```
 
 **21-40 Points: Some Modern Features**
+
 ```csharp
 // ⚠️ Mixed old and new
 public record UserDto(int Id, string Name);  // Good
@@ -164,6 +172,7 @@ public List<User> GetUsers()  // Still sync
 ```
 
 **41-60 Points: Good Modernization**
+
 ```csharp
 // ✅ Good modern code
 public record UserDto(int Id, string Name);
@@ -185,6 +194,7 @@ public class UserService
 ```
 
 **61-80 Points: Excellent C# 10+ (TARGET)**
+
 ```csharp
 // ✅✅ Target modern code
 namespace MyApp.Services;
@@ -223,6 +233,7 @@ public class UserService
 ```
 
 **81-100 Points: Expert C# 11+**
+
 ```csharp
 // 🎯 Expert patterns
 namespace MyApp.Services;
@@ -343,6 +354,7 @@ public class UserService
 ### Scoring Criteria
 
 **0-20 Points: Bloated**
+
 ```xml
 <!-- Many unused packages -->
 <PackageReference Include="Unused.Package1" Version="1.0" />
@@ -352,6 +364,7 @@ public class UserService
 ```
 
 **21-40 Points: Poor**
+
 ```xml
 <!-- Some cleanup needed -->
 <PackageReference Include="EntityFramework" Version="6.0" />  <!-- Old -->
@@ -360,6 +373,7 @@ public class UserService
 ```
 
 **41-60 Points: Good**
+
 ```xml
 <!-- Mostly clean -->
 <PackageReference Include="EntityFrameworkCore" Version="7.0" />
@@ -369,6 +383,7 @@ public class UserService
 ```
 
 **61-80 Points: Excellent (TARGET)**
+
 ```xml
 <!-- Optimized -->
 <PackageReference Include="EntityFrameworkCore" Version="7.0" />
@@ -378,6 +393,7 @@ public class UserService
 ```
 
 **81-100 Points: Expert**
+
 ```xml
 <!-- Highly optimized with pinned versions -->
 <PackageReference Include="EntityFrameworkCore" Version="7.0.5" />  <!-- Pinned -->
@@ -432,6 +448,7 @@ Overall Score = (LINQ_Score × 0.30)
 ## Phase 5-6 Target Scores
 
 ### Minimum Acceptable (Entry Point)
+
 - LINQ Adherence: 60
 - Modernization: 65
 - Documentation: 70
@@ -439,6 +456,7 @@ Overall Score = (LINQ_Score × 0.30)
 - **Overall: 67**
 
 ### Target (Standard)
+
 - LINQ Adherence: 75
 - Modernization: 78
 - Documentation: 80
@@ -446,6 +464,7 @@ Overall Score = (LINQ_Score × 0.30)
 - **Overall: 77**
 
 ### Excellence (Stretch Goal)
+
 - LINQ Adherence: 85
 - Modernization: 88
 - Documentation: 90
@@ -457,6 +476,7 @@ Overall Score = (LINQ_Score × 0.30)
 ## Scoring Workflow for Phase 5-6 Code
 
 ### 1. Analyze Single Method
+
 ```
 For each method in generated code:
 1. Count LINQ optimization patterns: ___/100
@@ -468,6 +488,7 @@ For each method in generated code:
 ```
 
 ### 2. File-Level Scoring
+
 ```
 For each file:
 1. Average method scores (if multiple)
@@ -477,6 +498,7 @@ For each file:
 ```
 
 ### 3. Project-Level Scoring
+
 ```
 For the entire project:
 1. Average all file scores
@@ -486,6 +508,7 @@ For the entire project:
 ```
 
 ### 4. Feedback Generation
+
 ```
 Score 0-20:  "Critical issues detected. Major refactoring needed."
 Score 21-40: "Poor patterns. Consider complete redesign."
@@ -532,6 +555,7 @@ public async Task<List<Order>> GetActiveOrdersAsync()
 ```
 
 **Score Breakdown:**
+
 - LINQ: 5+5+3+5 = 18 (capped at reasonable amount) = 60-70 range
 - Modernization: async/await = 70+ range
 - Documentation: MISSING = 0
@@ -541,11 +565,13 @@ public async Task<List<Order>> GetActiveOrdersAsync()
 ### Example 2: Project Scoring
 
 **10 files analyzed:**
+
 - 3 files score 85+ (excellent)
 - 5 files score 75-84 (good)
 - 2 files score 60-74 (acceptable)
 
 **Average Scores:**
+
 - LINQ: (90+88+87+78+75+72+71+70+68+65)/10 = 76.4
 - Modernization: (92+90+88+80+76+73+70+68+65+62)/10 = 76.4
 - Documentation: (85+82+80+78+76+75+74+72+70+68)/10 = 76.0
@@ -561,6 +587,7 @@ public async Task<List<Order>> GetActiveOrdersAsync()
 ## Continuous Improvement Tracking
 
 ### Score Trend Analysis
+
 Track scores over time to show improvement:
 
 | Iteration | LINQ | Modern | Docs | Deps | Overall | Improvement |
@@ -571,6 +598,7 @@ Track scores over time to show improvement:
 | Phase 6.0 | 85   | 88     | 88   | 85   | 86.4    | +19.4      |
 
 ### Improvement Focus Areas
+
 Based on lagging metrics, prioritize improvements:
 
 ```
@@ -597,6 +625,7 @@ If Dependencies is lagging:
 ## Tools for Automation
 
 ### Roslyn Analyzer Configuration
+
 ```xml
 <!-- .editorconfig -->
 [*.cs]
@@ -607,6 +636,7 @@ dotnet_diagnostic.CA1815.severity = warning
 ```
 
 ### Code Quality Tools
+
 - **StyleCop Analyzers**: Enforces consistent style
 - **Roslynator**: Syntax/LINQ analysis
 - **Sonarqube**: Comprehensive analysis

@@ -21,12 +21,14 @@ HELIOS Platform is built on a modular, microservices-based architecture designed
 ## 📚 Documentation Index
 
 ### Architecture Fundamentals
+
 - **[System Overview](./SYSTEM_OVERVIEW.md)** - High-level system design
 - **[Components](./COMPONENTS.md)** - Core components and their relationships
 - **[Data Models](./DATA_MODELS.md)** - Data structures and schemas
 - **[Communication](./COMMUNICATION.md)** - Inter-component communication
 
 ### Advanced Topics
+
 - **[Integration Guide](./INTEGRATION.md)** - Integration architecture and APIs
 - **[Security Architecture](./SECURITY.md)** - Security design and models
 - **[Performance Design](./PERFORMANCE.md)** - Performance architecture
@@ -51,6 +53,7 @@ HELIOS Platform is built on a modular, microservices-based architecture designed
 ## 🔗 Architecture Diagrams
 
 ### System Architecture
+
 ```
 ┌─────────────────────────────────────────────────┐
 │         Client Applications                      │
@@ -66,6 +69,7 @@ HELIOS Platform is built on a modular, microservices-based architecture designed
 ```
 
 ### Component Hierarchy
+
 ```
 HELIOS Platform
 ├── Core Engine
@@ -103,18 +107,21 @@ HELIOS Platform
 ## 📖 Guide Categories
 
 ### For Architects
+
 1. [System Overview](./SYSTEM_OVERVIEW.md) - Understand the system design
 2. [Components](./COMPONENTS.md) - Learn about all components
 3. [Data Models](./DATA_MODELS.md) - Understand data structures
 4. [Integration Guide](./INTEGRATION.md) - Integration patterns
 
 ### For Engineers
+
 1. [Communication](./COMMUNICATION.md) - Inter-component communication
 2. [Security Architecture](./SECURITY.md) - Security design
 3. [Performance Design](./PERFORMANCE.md) - Performance optimization
 4. [Deployment Architecture](./DEPLOYMENT.md) - Deployment patterns
 
 ### For Operations
+
 1. [Deployment Architecture](./DEPLOYMENT.md) - Deployment patterns
 2. [Performance Design](./PERFORMANCE.md) - Performance tuning
 3. [Security Architecture](./SECURITY.md) - Security configuration

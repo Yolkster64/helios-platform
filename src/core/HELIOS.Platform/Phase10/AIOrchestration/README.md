@@ -1,4 +1,5 @@
 # AI Orchestration Layer - Phase 10M
+
 ## Master Orchestration System Documentation
 
 ### Overview
@@ -18,9 +19,11 @@ The AI Orchestration Layer is the critical master orchestration system for Phase
 ### Core Components
 
 #### 1. **ToolOrchestratorEngine.cs** - Master Orchestration Service
+
 Main entry point for all tool orchestration operations.
 
 **Key Responsibilities:**
+
 - Initialize all 45 system tools
 - Monitor tool health continuously
 - Detect and prevent inter-tool conflicts
@@ -30,6 +33,7 @@ Main entry point for all tool orchestration operations.
 - Provide system-wide statistics and health status
 
 **Key Methods:**
+
 ```csharp
 // Lifecycle
 Task InitializeAsync()                              // Initialize orchestration
@@ -57,6 +61,7 @@ Task<bool> IsHealthyAsync()                        // System health check
 **Thread Safety:** Uses `SemaphoreSlim(1)` for exclusive access to tool registry.
 
 **Orchestration Loop:**
+
 - Runs every 5 seconds (configurable)
 - Detects tool conflicts
 - Monitors tool health
@@ -66,9 +71,11 @@ Task<bool> IsHealthyAsync()                        // System health check
 ---
 
 #### 2. **ToolOptimizationProfiler.cs** - Tool Optimization Service
+
 Individual tool performance optimization and profiling.
 
 **Key Responsibilities:**
+
 - Profile each tool's performance characteristics
 - Detect performance bottlenecks
 - Generate optimization recommendations
@@ -77,6 +84,7 @@ Individual tool performance optimization and profiling.
 - Allocate resources based on profiles
 
 **Key Methods:**
+
 ```csharp
 Task InitializeAsync()                               // Initialize profiler
 
@@ -97,6 +105,7 @@ Task UpdateResourceAllocationAsync(string toolId, ToolResourceAllocation allocat
 ```
 
 **Performance Metrics Tracked:**
+
 - CPU Usage (avg, peak)
 - Memory Usage (avg, peak)
 - Disk I/O
@@ -106,6 +115,7 @@ Task UpdateResourceAllocationAsync(string toolId, ToolResourceAllocation allocat
 - Latency (P50, P99)
 
 **Optimization Categories:**
+
 - CPU Usage optimization
 - Memory optimization
 - Disk I/O optimization
@@ -118,9 +128,11 @@ Task UpdateResourceAllocationAsync(string toolId, ToolResourceAllocation allocat
 ---
 
 #### 3. **ToolHealthMonitorCoordinator.cs** - Health & Conflict Management
+
 Comprehensive tool health monitoring and inter-tool conflict management.
 
 **Key Responsibilities:**
+
 - Monitor health of all 45 tools
 - Detect tool crashes and hangs
 - Identify inter-tool conflicts
@@ -130,6 +142,7 @@ Comprehensive tool health monitoring and inter-tool conflict management.
 - Log orchestration events
 
 **Key Methods:**
+
 ```csharp
 Task InitializeAsync()                              // Initialize monitor
 Task ShutdownAsync()                                // Shutdown monitor
@@ -158,6 +171,7 @@ Task<List<OrchestrationEvent>> GetRecentEventsAsync(int count = 100)
 ```
 
 **Health Metrics Tracked:**
+
 - Health Score (0-100)
 - Crash Count & Last Crash
 - Hang Count & Last Hang
@@ -166,6 +180,7 @@ Task<List<OrchestrationEvent>> GetRecentEventsAsync(int count = 100)
 - Responsiveness Status
 
 **Conflict Types Detected:**
+
 - Resource Contention
 - Missing Dependencies
 - Version Incompatibility
@@ -178,6 +193,7 @@ Task<List<OrchestrationEvent>> GetRecentEventsAsync(int count = 100)
 ### Supporting Services
 
 #### 4. **AIOptimizationLearner.cs**
+
 AI-based optimization using machine learning patterns.
 
 ```csharp
@@ -189,6 +205,7 @@ Task LoadModelAsync(string toolId)
 ```
 
 #### 5. **ToolCommunicationCoordinator.cs**
+
 Manages inter-tool communication and messaging.
 
 ```csharp
@@ -200,6 +217,7 @@ Task<bool> UnregisterCommunicationAsync(string sourceTool, string targetTool)
 ```
 
 #### 6. **ToolConflictResolver.cs**
+
 Automatic conflict detection and resolution strategies.
 
 ```csharp
@@ -217,6 +235,7 @@ Task<List<string>> GetResolutionStrategiesAsync(ConflictType type)
 Located in: `Profiles/orchestration-profiles.json`
 
 #### Gaming Profile
+
 ```json
 {
   "maxCpuPercent": 80,
@@ -225,12 +244,14 @@ Located in: `Profiles/orchestration-profiles.json`
   "priority": 10
 }
 ```
+
 - High resource allocation for performance
 - GPU acceleration enabled
 - Minimal security overhead
 - Low latency priority
 
 #### Development Profile
+
 ```json
 {
   "maxCpuPercent": 60,
@@ -239,12 +260,14 @@ Located in: `Profiles/orchestration-profiles.json`
   "priority": 7
 }
 ```
+
 - Balanced resource allocation
 - Debug logging enabled
 - Moderate performance
 - Development-friendly
 
 #### Work Profile
+
 ```json
 {
   "maxCpuPercent": 50,
@@ -253,12 +276,14 @@ Located in: `Profiles/orchestration-profiles.json`
   "priority": 5
 }
 ```
+
 - Conservative resources
 - Stability focused
 - Power saving enabled
 - Standard priority
 
 #### Secure Profile
+
 ```json
 {
   "maxCpuPercent": 40,
@@ -267,6 +292,7 @@ Located in: `Profiles/orchestration-profiles.json`
   "priority": 8
 }
 ```
+
 - Minimal resource allocation
 - Security auditing enabled
 - Strict isolation
@@ -277,6 +303,7 @@ Located in: `Profiles/orchestration-profiles.json`
 ## Data Models
 
 ### ToolInfo
+
 Complete tool metadata and state information.
 
 ```csharp
@@ -295,6 +322,7 @@ public class ToolInfo
 ```
 
 ### ToolStatus Enum
+
 - `Initializing` - Tool is starting up
 - `Running` - Tool is operational
 - `Idle` - Tool is running but inactive
@@ -304,6 +332,7 @@ public class ToolInfo
 - `Stopped` - Tool is stopped
 
 ### OptimizationRecommendation
+
 Actionable optimization suggestions.
 
 ```csharp
@@ -322,6 +351,7 @@ public class OptimizationRecommendation
 ```
 
 ### ToolConflict
+
 Inter-tool conflict information.
 
 ```csharp
@@ -481,17 +511,20 @@ dotnet test HELIOS.Platform.Phase10.AIOrchestration.Tests
 ## Performance Characteristics
 
 ### Resource Footprint
+
 - **Memory**: ~50-100MB (varies with tool count)
 - **CPU**: <1% idle, 2-5% during orchestration
 - **Disk I/O**: Minimal (configuration load only)
 
 ### Latency
+
 - **Tool start**: ~100ms
 - **Tool stop**: ~50ms
 - **Profile switch**: ~200ms
 - **Conflict detection**: ~500ms per check
 
 ### Scalability
+
 - Designed for 45+ tools
 - Tested with 100+ tools
 - Linear scaling with tool count
@@ -508,6 +541,7 @@ All Phase 10A-L components depend on this orchestration layer:
 - **Phase 10D-L**: Other system tools
 
 The orchestrator ensures:
+
 - Coordinated startup/shutdown
 - Resource sharing
 - Conflict prevention
@@ -519,12 +553,14 @@ The orchestrator ensures:
 ## Monitoring & Logging
 
 ### Log Levels
+
 - **Debug**: Detailed profiling and optimization info
 - **Information**: Tool lifecycle events, profile switches
 - **Warning**: Health degradation, conflict detection
 - **Error**: Tool failures, restart failures
 
 ### Event Types
+
 - `ToolInitialized`, `ToolStarted`, `ToolStopped`, `ToolFailed`
 - `ToolRestarted`, `HealthCheckFailed`
 - `ConflictDetected`, `ConflictResolved`
@@ -549,16 +585,19 @@ The orchestrator ensures:
 ### Common Issues
 
 **Tools not starting:**
+
 - Check tool dependencies are registered
 - Verify resource allocation isn't exceeded
 - Check configuration is valid
 
 **High latency:**
+
 - Check CPU usage isn't exceeding thresholds
 - Consider switching to Work profile
 - Analyze optimization recommendations
 
 **Frequent conflicts:**
+
 - Review tool dependency graph
 - Adjust resource allocation
 - Consider different profile

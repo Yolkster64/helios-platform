@@ -9,9 +9,11 @@ This suite provides production-ready wiki utilities for the Helios Platform with
 ## 🎯 Components
 
 ### 1. **setup-wiki.ps1** (450+ lines)
+
 Initializes the SQLite database with complete schema.
 
 **Features:**
+
 - 10 tables with relationships
 - 25+ performance indexes
 - Full-text search (FTS5)
@@ -22,6 +24,7 @@ Initializes the SQLite database with complete schema.
 - Foreign key constraints
 
 **Tables:**
+
 1. `files` - File metadata and categorization
 2. `categories` - Hierarchical categories
 3. `modules` - Logical modules
@@ -37,6 +40,7 @@ Initializes the SQLite database with complete schema.
 **Views:** 5 analytical views for reporting
 
 **Usage:**
+
 ```powershell
 # Create new database
 .\setup-wiki.ps1
@@ -52,15 +56,18 @@ Initializes the SQLite database with complete schema.
 ```
 
 **Output:**
+
 - `docs/wiki.db` - SQLite database (production-ready)
 - `docs/wiki-schema-info.txt` - Schema documentation
 
 ---
 
 ### 2. **generate-wiki.ps1** (500+ lines)
+
 Scans files and generates complete wiki at 5 levels.
 
 **Features:**
+
 - Scans all project directories recursively
 - Extracts metadata from .meta.json files
 - Parses PowerShell script headers
@@ -76,6 +83,7 @@ Scans files and generates complete wiki at 5 levels.
 - Updates SQLite database
 
 **Scanned Directories:**
+
 - `scripts/` - PowerShell automation
 - `docs/` - Markdown documentation
 - `configs/` - Configuration files
@@ -83,6 +91,7 @@ Scans files and generates complete wiki at 5 levels.
 - `builds/` - Build artifacts
 
 **Usage:**
+
 ```powershell
 # Generate wiki with defaults
 .\generate-wiki.ps1
@@ -98,6 +107,7 @@ Scans files and generates complete wiki at 5 levels.
 ```
 
 **Output:**
+
 - `docs/WIKI/INDEX.md` - Root index
 - `docs/WIKI/CATEGORIES_INDEX.md` - Category listing
 - `docs/WIKI/categories/` - Category indexes
@@ -110,9 +120,11 @@ Scans files and generates complete wiki at 5 levels.
 ---
 
 ### 3. **wiki-search.ps1** (350+ lines)
+
 Query and search the wiki database with full-text search.
 
 **Features:**
+
 - Keyword search across all metadata
 - Filter by category, tag, complexity, build
 - Find cross-references
@@ -123,6 +135,7 @@ Query and search the wiki database with full-text search.
 - Export to CSV/JSON
 
 **Search Types:**
+
 ```powershell
 # Keyword search
 .\wiki-search.ps1 -Query "optimization"
@@ -150,6 +163,7 @@ Query and search the wiki database with full-text search.
 ```
 
 **Output:**
+
 - Formatted table display
 - Statistics by type/category/complexity
 - CSV/JSON exports
@@ -158,9 +172,11 @@ Query and search the wiki database with full-text search.
 ---
 
 ### 4. **check-cross-references.ps1** (300+ lines)
+
 Validates all links and detects issues.
 
 **Features:**
+
 - Validates cross-references
 - Finds broken references
 - Detects circular dependencies
@@ -171,6 +187,7 @@ Validates all links and detects issues.
 - Multiple output formats
 
 **Validation Checks:**
+
 - Broken references (missing files)
 - Circular dependencies
 - Orphaned files
@@ -179,6 +196,7 @@ Validates all links and detects issues.
 - Database integrity
 
 **Usage:**
+
 ```powershell
 # Run validation
 .\check-cross-references.ps1
@@ -197,12 +215,14 @@ Validates all links and detects issues.
 ```
 
 **Output:**
+
 - Validation summary
 - Issue severity breakdown (Critical/High/Medium/Low)
 - Detailed findings with suggestions
 - Markdown/JSON/CSV reports
 
 **Severity Levels:**
+
 - 🔴 **Critical** - Database corruption or missing files
 - 🔴 **High** - Broken links or circular deps
 - 🟡 **Medium** - Conflicts or orphaned files
@@ -211,9 +231,11 @@ Validates all links and detects issues.
 ---
 
 ### 5. **map-dependencies.ps1** (300+ lines)
+
 Creates dependency graphs and analyzes relationships.
 
 **Features:**
+
 - Complete dependency graph visualization
 - Shows component relationships
 - Detects circular dependencies
@@ -224,12 +246,14 @@ Creates dependency graphs and analyzes relationships.
 - Depth and breadth metrics
 
 **Export Formats:**
+
 - **DOT** - Graphviz compatible format
 - **JSON** - Programmatic access
 - **Markdown** - Human-readable graph
 - **TXT** - ASCII visualization
 
 **Usage:**
+
 ```powershell
 # Generate all formats
 .\map-dependencies.ps1
@@ -251,6 +275,7 @@ Creates dependency graphs and analyzes relationships.
 ```
 
 **Output:**
+
 - `docs/WIKI/graphs/dependency-graph.dot` - DOT format
 - `docs/WIKI/graphs/dependency-graph.json` - JSON format
 - `docs/WIKI/graphs/DEPENDENCY_GRAPH.md` - Markdown
@@ -278,6 +303,7 @@ Creates dependency graphs and analyzes relationships.
 ### Performance Indexes
 
 25+ indexes optimized for:
+
 - Category and module lookups
 - Dependency queries
 - Cross-reference searches
@@ -297,27 +323,32 @@ Creates dependency graphs and analyzes relationships.
 ## 🚀 Quick Start
 
 ### Step 1: Initialize Database
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\utilities\wiki
 .\setup-wiki.ps1 -Verbose
 ```
 
 ### Step 2: Generate Wiki
+
 ```powershell
 .\generate-wiki.ps1 -GenerateHtml -UpdateDatabase -Verbose
 ```
 
 ### Step 3: Validate References
+
 ```powershell
 .\check-cross-references.ps1 -GenerateReport
 ```
 
 ### Step 4: Map Dependencies
+
 ```powershell
 .\map-dependencies.ps1 -Format all -GenerateVisualization
 ```
 
 ### Step 5: Query the Database
+
 ```powershell
 .\wiki-search.ps1 -Query "optimization"
 .\wiki-search.ps1 -ShowOrphaned
@@ -381,6 +412,7 @@ All scripts support standard PowerShell parameters:
 ## ✅ Error Handling
 
 All scripts include:
+
 - Comprehensive error handling
 - Detailed error messages
 - Stack trace logging
@@ -406,32 +438,38 @@ All scripts include:
 ## 📝 Usage Examples
 
 ### Find all security-related files
+
 ```powershell
 .\wiki-search.ps1 -Query "security"
 ```
 
 ### Export scripts from specific build
+
 ```powershell
 .\wiki-search.ps1 -Build "phase-1" -ExportPath "phase1-files.csv"
 ```
 
 ### Check for broken links
+
 ```powershell
 .\check-cross-references.ps1 -GenerateReport
 ```
 
 ### Visualize dependencies in DOT format
+
 ```powershell
 .\map-dependencies.ps1 -Format dot
 # Then use: dot -Tpng dependency-graph.dot -o graph.png
 ```
 
 ### Find highly complex files
+
 ```powershell
 .\wiki-search.ps1 -Complexity "complex"
 ```
 
 ### Identify unused files
+
 ```powershell
 .\wiki-search.ps1 -ShowOrphaned
 ```
@@ -441,19 +479,23 @@ All scripts include:
 ## 🐛 Troubleshooting
 
 **Database not found:**
+
 - Run `setup-wiki.ps1` first
 - Check DatabasePath parameter
 
 **No results found:**
+
 - Verify database is populated with `generate-wiki.ps1`
 - Check search criteria (case-sensitive by default)
 
 **Performance issues:**
+
 - Verify indexes are created: `setup-wiki.ps1`
 - Check disk space availability
 - Monitor CPU/memory usage
 
 **Export fails:**
+
 - Verify output directory exists and is writable
 - Check disk space
 - Ensure no file locks
@@ -488,6 +530,7 @@ All scripts include:
 ## 📞 Support & Documentation
 
 All scripts include:
+
 - `.SYNOPSIS` - Quick description
 - `.DESCRIPTION` - Detailed explanation
 - `.PARAMETER` - Parameter documentation
@@ -495,6 +538,7 @@ All scripts include:
 - Inline comments for complex sections
 
 Access with:
+
 ```powershell
 Get-Help .\setup-wiki.ps1 -Full
 Get-Help .\generate-wiki.ps1 -Examples

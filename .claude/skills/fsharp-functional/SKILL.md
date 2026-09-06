@@ -131,5 +131,5 @@ type ProviderMetrics = { Name: string; LatencyMs: float; SuccessRate: float }
 in `Pricing.fs`, the `Running`/`observe` fold-and-prequential-replay patterns in
 `LearnerFusion.fs`, every C# call site of the interop surface, FsCheck property
 candidates (FsCheck itself is not in the repo), and the E38 growth path (GitHub issue
-#51). The `ktoken` and FsCheck snippets above are teaching sketches — when they disagree
+\#51). The `ktoken` and FsCheck snippets above are teaching sketches — when they disagree
 with the reference file, the reference file mirrors the real code and wins.

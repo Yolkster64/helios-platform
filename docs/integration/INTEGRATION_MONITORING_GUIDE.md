@@ -1,4 +1,5 @@
 # INTEGRATION MONITORING & ALERTING GUIDE
+
 **HELIOS Platform - Real-time System Health & Performance Monitoring**
 
 **Document Version:** 1.0
@@ -11,6 +12,7 @@
 ### 1.1 Core Monitoring Metrics
 
 **Per-Integration Metrics:**
+
 ```
 Latency (ms):
 ├─ p50: median response time
@@ -100,6 +102,7 @@ Aggregated (1-hour interval):
 ### 2.1 Integration-Specific Alert Thresholds
 
 **Monado ↔ Security Integration:**
+
 ```
 Alert Rules:
 
@@ -130,6 +133,7 @@ Alert Rules:
 ```
 
 **Security → AI Orchestrator Integration:**
+
 ```
 Alert Rules:
 
@@ -228,6 +232,7 @@ DEBUG Events:
 ### 3.2 Notification Templates
 
 **Critical Alert (PagerDuty + SMS):**
+
 ```
 CRITICAL ALERT: Monado Engine Unavailable
 
@@ -254,6 +259,7 @@ Alert Time: 2024-01-15 10:30:45 UTC
 ```
 
 **Warning Alert (Slack):**
+
 ```
 ⚠️ WARNING: High Build Latency Detected
 
@@ -377,6 +383,7 @@ Cache Statistics:
 ### 5.1 Automated Health Checks
 
 **Monado Engine Health Check:**
+
 ```bash
 #!/bin/bash
 # Run every 30 seconds
@@ -416,6 +423,7 @@ check_monado_health() {
 ```
 
 **Security System Health Check:**
+
 ```bash
 check_security_health() {
   # 1. Check auth service online
@@ -542,6 +550,7 @@ spec:
 ### 7.1 Automated Reporting
 
 **Daily Report (generated 9 AM):**
+
 ```
 Subject: HELIOS Platform Daily Health Report
 
@@ -570,6 +579,7 @@ Next Review: Tomorrow 9 AM
 ```
 
 **Weekly Report (generated Monday 9 AM):**
+
 ```
 Subject: HELIOS Platform Weekly Health Report
 

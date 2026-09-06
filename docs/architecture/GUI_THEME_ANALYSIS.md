@@ -27,6 +27,7 @@ CommunityToolkit.Mvvm; **no logic in the shell** — every view model binds to
 `HELIOS.AIHub` public APIs (`GetStatus()`, `GetMetrics()`, `RoutingTable`, `CompareAsync`).
 
 **Pages** (v1):
+
 1. **AI Hub dashboard** — the `AIHubWindow` revival: provider table (readiness, model,
    latency, success rate, tokens from `AgentMetrics`), circuit-breaker state badges,
    per-provider enable toggles writing `config/aihub.json`.

@@ -105,6 +105,7 @@ HELIOS Platform
 **Purpose:** Entry point for entire system
 
 **Files:**
+
 - `README.md` - Main overview (what HELIOS is)
 - `ARCHITECTURE.md` - System design and philosophy
 - `QUICK_START.md` - Get running in 5 minutes
@@ -129,6 +130,7 @@ HELIOS Platform
 **Purpose:** Overview for each major category (13 total)
 
 **Files:**
+
 ```
 - README.md ........................ What does this category do?
 - USAGE.md ........................ How to use this category
@@ -166,6 +168,7 @@ HELIOS Platform
 **Purpose:** Self-documenting code with metadata
 
 **Files Per Script:**
+
 - `{script}.ps1` - Script with embedded docs
 - `{script}.wiki.md` - Extended explanation
 - `{script}.meta.json` - Structured metadata
@@ -184,6 +187,7 @@ HELIOS Platform
 **Purpose:** Detailed breakdown of each saved build
 
 **Files Per Build:**
+
 ```
 - README.md ........................ Build overview
 - MANIFEST.md ...................... Exact contents
@@ -206,6 +210,7 @@ HELIOS Platform
 All files tracked in `docs/wiki.db`:
 
 ### Tables
+
 - `files` - Every file catalogued
 - `categories` - Category hierarchy
 - `cross_references` - File relationships
@@ -216,6 +221,7 @@ All files tracked in `docs/wiki.db`:
 - `snippets` - Compressed code registry
 
 ### Query Examples
+
 ```sql
 -- Find all files in security category
 SELECT * FROM files WHERE category = 'security';
@@ -242,12 +248,15 @@ WHERE conflict_potential > 0.5;
 ## Navigation System
 
 ### Breadcrumb Navigation
+
 Every page shows path:
+
 ```
 HELIOS > Scripts > Security > Baseline > AppLocker > setup.ps1
 ```
 
 ### Search Across All Levels
+
 ```powershell
 # Find files by keyword
 .\scripts\utilities\wiki-search.ps1 -Query "applock"
@@ -263,6 +272,7 @@ HELIOS > Scripts > Security > Baseline > AppLocker > setup.ps1
 ```
 
 ### Index Files Auto-Generated
+
 - `docs/INDEX.md` - Root index
 - `docs/MODULES.md` - All modules
 - `scripts/security/INDEX.md` - Security submodules
@@ -274,6 +284,7 @@ HELIOS > Scripts > Security > Baseline > AppLocker > setup.ps1
 ## File Metadata System
 
 ### Meta JSON Structure
+
 ```json
 {
   "name": "setup.ps1",
@@ -313,7 +324,9 @@ HELIOS > Scripts > Security > Baseline > AppLocker > setup.ps1
 ## Teams Notes & Adaptation Tracking
 
 ### NOTES.md at Each Level
+
 Track adaptations and changes with:
+
 - Date stamp
 - What changed
 - Why it changed
@@ -327,6 +340,7 @@ Track adaptations and changes with:
 ## HTML Wiki Generation
 
 Auto-generated from markdown:
+
 - ✅ Full-text search
 - ✅ Advanced filters
 - ✅ Build inspector view
@@ -381,6 +395,7 @@ Auto-generated from markdown:
 ## Quick Navigation
 
 **I want to:**
+
 - 📖 Learn what HELIOS is → Start at `README.md`
 - 🚀 Get running quickly → Go to `QUICK_START.md`
 - 🏗️ Understand architecture → Read `ARCHITECTURE.md`
@@ -391,4 +406,3 @@ Auto-generated from markdown:
 - 🎮 Find a specific command → Use `wiki-search.ps1`
 - 📊 Compare builds → Run `compare-builds.ps1`
 - 🔄 Switch builds → Run `select-build.ps1`
-

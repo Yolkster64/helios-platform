@@ -3,9 +3,11 @@
 ## Services at a Glance
 
 ### 1. IDistributedCacheLayer
+
 **Use For**: High-speed data caching, session storage, counter tracking  
 **Performance**: <2ms  
 **Example**:
+
 ```csharp
 var cache = ServiceContainer.Instance.GetService<IDistributedCacheLayer>();
 await cache.SetAsync("key", "value", TimeSpan.FromHours(1));
@@ -15,9 +17,11 @@ var value = await cache.GetAsync("key");
 ---
 
 ### 2. IQueryPlanAnalyzer
+
 **Use For**: SQL optimization, query analysis, index planning  
 **Performance**: <30ms  
 **Example**:
+
 ```csharp
 var analyzer = ServiceContainer.Instance.GetService<IQueryPlanAnalyzer>();
 var plan = await analyzer.AnalyzeAsync("SELECT * FROM Users");
@@ -27,9 +31,11 @@ await analyzer.CreateIndexAsync("Users", new[] { "UserId", "Status" });
 ---
 
 ### 3. IProductionLoadBalancer
+
 **Use For**: Distributed traffic management, server selection, health monitoring  
 **Performance**: <10ms  
 **Example**:
+
 ```csharp
 var lb = ServiceContainer.Instance.GetService<IProductionLoadBalancer>();
 await lb.RegisterServerAsync("server-1", "http://localhost:8080");
@@ -39,9 +45,11 @@ var server = await lb.GetNextServerAsync(requestId);
 ---
 
 ### 4. IZeroTrustImplementation
+
 **Use For**: Authentication, authorization, access auditing  
 **Performance**: <20ms  
 **Example**:
+
 ```csharp
 var zeroTrust = ServiceContainer.Instance.GetService<IZeroTrustImplementation>();
 var auth = await zeroTrust.AuthenticateAsync("user@example.com", "token");
@@ -52,9 +60,11 @@ await zeroTrust.LogAccessAsync(new AccessLog { UserId = "user", Resource = "/api
 ---
 
 ### 5. IDisasterRecoveryOrchestrator
+
 **Use For**: Backup management, recovery orchestration, RTO/RPO tracking  
 **Performance**: <500ms  
 **Example**:
+
 ```csharp
 var dr = ServiceContainer.Instance.GetService<IDisasterRecoveryOrchestrator>();
 await dr.CreateBackupAsync("daily-backup");
@@ -79,6 +89,7 @@ var status = await dr.GetStatusAsync();
 ## Thread-Safety & Concurrency
 
 ✅ **All services are thread-safe**
+
 - SemaphoreSlim for synchronization
 - Safe for concurrent operations
 - Tested up to 10,000 concurrent operations
@@ -88,6 +99,7 @@ var status = await dr.GetStatusAsync();
 ## Error Handling
 
 ✅ **All services handle errors gracefully**
+
 ```csharp
 try
 {
@@ -108,6 +120,7 @@ catch (Exception ex)
 ## Registration (Already Done)
 
 Services are automatically registered in `Program.cs`:
+
 ```csharp
 ServiceContainer.Instance.RegisterSingleton<IDistributedCacheLayer>(distributedCacheLayer);
 ServiceContainer.Instance.RegisterSingleton<IQueryPlanAnalyzer>(queryPlanAnalyzer);
@@ -121,6 +134,7 @@ ServiceContainer.Instance.RegisterSingleton<IDisasterRecoveryOrchestrator>(disas
 ## Integration with Phase 4
 
 Works seamlessly with Phase 4 optimizations:
+
 - Advanced caching layer complements cache layer
 - Query optimization integrates with analyzer
 - Load balancing compatible with autoscaling
@@ -135,6 +149,7 @@ Works seamlessly with Phase 4 optimizations:
 - **Phase3ProductionBenchmarks.cs**: 10 performance benchmarks
 
 **To Run Tests**:
+
 ```bash
 dotnet test Tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter Phase3
 ```
@@ -144,6 +159,7 @@ dotnet test Tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj --filter Ph
 ## Common Patterns
 
 ### Caching a Database Query Result
+
 ```csharp
 var cache = ServiceContainer.Instance.GetService<IDistributedCacheLayer>();
 var cacheKey = $"user:{userId}";
@@ -156,6 +172,7 @@ return result;
 ```
 
 ### Optimizing a Query Before Execution
+
 ```csharp
 var analyzer = ServiceContainer.Instance.GetService<IQueryPlanAnalyzer>();
 var plan = await analyzer.AnalyzeAsync(query);
@@ -165,6 +182,7 @@ if (plan.EstimatedCost > 1000)
 ```
 
 ### Distributing Requests Across Servers
+
 ```csharp
 var lb = ServiceContainer.Instance.GetService<IProductionLoadBalancer>();
 var server = await lb.GetNextServerAsync(request.Id);
@@ -172,6 +190,7 @@ var response = await httpClient.GetAsync(server + "/api/endpoint");
 ```
 
 ### Enforcing Zero-Trust Access
+
 ```csharp
 var zeroTrust = ServiceContainer.Instance.GetService<IZeroTrustImplementation>();
 var authenticated = await zeroTrust.AuthenticateAsync(user, credential);
@@ -182,6 +201,7 @@ await zeroTrust.LogAccessAsync(new AccessLog { UserId = user, Resource = resourc
 ```
 
 ### Creating and Restoring Backups
+
 ```csharp
 var dr = ServiceContainer.Instance.GetService<IDisasterRecoveryOrchestrator>();
 // Before risky operation
@@ -233,22 +253,27 @@ catch
 ## Troubleshooting
 
 ### Cache Not Working
+
 - **Problem**: Values are not being retrieved
 - **Solution**: Check if TTL has expired, use `ExistsAsync` to verify
 
 ### Slow Queries
+
 - **Problem**: Query performance degrading
 - **Solution**: Use `AnalyzeAsync` to check execution plan, create indexes with `CreateIndexAsync`
 
 ### Uneven Load Distribution
+
 - **Problem**: One server has more load than others
 - **Solution**: Verify server health with `GetServerHealthAsync`, check network connectivity
 
 ### Authentication Failures
+
 - **Problem**: `AuthenticateAsync` returning false
 - **Solution**: Verify credential format, check user exists in system
 
 ### Backup Issues
+
 - **Problem**: `CreateBackupAsync` failing
 - **Solution**: Check disk space, verify backup directory permissions
 

@@ -1,6 +1,7 @@
 # HELIOS Plugin System - Complete Documentation
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Architecture](#architecture)
 3. [Quick Start](#quick-start)
@@ -154,6 +155,7 @@ else
 ### Plugin Structure
 
 A plugin requires:
+
 1. **Plugin Class**: Implement `IPlugin` or extend `PluginBase`
 2. **Manifest File** (`plugin.json`): Define plugin metadata and dependencies
 3. **Assembly**: Compiled DLL with plugin class
@@ -806,6 +808,7 @@ Task ReloadPluginConfigAsync(string pluginId);
 ## Best Practices
 
 ### 1. Error Handling
+
 - Always implement try-catch in lifecycle methods
 - Return meaningful error messages
 - Log errors with context
@@ -827,6 +830,7 @@ public override async Task StartAsync()
 ```
 
 ### 2. Resource Management
+
 - Implement `Dispose()` properly
 - Clean up connections and file handles
 - Cancel background tasks on stop
@@ -842,6 +846,7 @@ public override void Dispose()
 ```
 
 ### 3. Configuration Handling
+
 - Provide sensible defaults
 - Validate configuration values
 - Log configuration issues
@@ -861,6 +866,7 @@ public override async Task InitializeAsync(IPluginContext context)
 ```
 
 ### 4. Performance Optimization
+
 - Use async/await properly
 - Implement caching where appropriate
 - Monitor resource usage
@@ -876,6 +882,7 @@ public override async Task<PluginHealth> GetHealthAsync()
 ```
 
 ### 5. Documentation
+
 - Document all public methods
 - Provide example usage
 - Keep plugin.json updated
@@ -893,6 +900,7 @@ public async Task<PluginCommandResult> ProcessAsync(string data)
 ```
 
 ### 6. Testing
+
 - Write comprehensive tests
 - Test error paths
 - Mock external dependencies
@@ -908,6 +916,7 @@ public async Task TestCommandExecution()
 ```
 
 ### 7. Security
+
 - Request only necessary permissions
 - Validate all inputs
 - Handle sensitive data securely
@@ -925,6 +934,7 @@ LogInfo("API request initiated");
 ## Sample Plugins
 
 See the `samples/plugins` directory for complete working examples:
+
 - **LogPlugin**: Centralized logging
 - **MetricsPlugin**: System monitoring
 - **AlertPlugin**: Alert management

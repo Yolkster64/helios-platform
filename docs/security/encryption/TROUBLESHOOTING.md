@@ -12,6 +12,7 @@
 **Symptom:** {{SYMPTOM_1}}
 
 **Solution:**
+
 ```powershell
 {{SOLUTION_1}}
 ```

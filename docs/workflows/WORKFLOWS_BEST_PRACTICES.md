@@ -28,6 +28,7 @@ This document outlines best practices for developing, maintaining, and optimizin
 ### 1. Secrets Management
 
 ✅ **Always use GitHub Secrets**:
+
 ```yaml
 # ✅ CORRECT
 - name: Publish Package
@@ -41,11 +42,13 @@ This document outlines best practices for developing, maintaining, and optimizin
 ### 2. Secret Masking
 
 GitHub automatically masks:
+
 - Values of secrets in logs
 - Environment variables set to secret values
 - Passwords in error messages
 
 **But ensure**:
+
 - Secrets are logged only when necessary
 - Use `--password-stdin` when possible
 - Avoid printing JSON responses containing secrets
@@ -89,6 +92,7 @@ environments:
 ### 6. Third-Party Actions
 
 ✅ **Pin action versions**:
+
 ```yaml
 # ✅ GOOD: Specific version
 - uses: actions/checkout@v4
@@ -413,6 +417,7 @@ gh api repos/{owner}/{repo}/actions/runs \
 ```
 
 **Enable via**:
+
 ```bash
 gh secret set ACTIONS_STEP_DEBUG --body true
 ```
@@ -634,6 +639,7 @@ gh run list -b workflow-test --watch
 ❌ **Avoid**:
 
 1. **Hardcoding Secrets**
+
    ```yaml
    # NEVER DO THIS
    env:
@@ -641,24 +647,28 @@ gh run list -b workflow-test --watch
    ```
 
 2. **Always Using Latest**
+
    ```yaml
    # RISKY
    - uses: actions/checkout@latest
    ```
 
 3. **Ignoring Failures**
+
    ```yaml
    # Hides errors
    - run: npm test || true
    ```
 
 4. **Excessive Parallelization**
+
    ```yaml
    # May fail or timeout
    max-parallel: 100
    ```
 
 5. **Large Artifacts**
+
    ```yaml
    # Slow uploads
    path: ./  # Everything

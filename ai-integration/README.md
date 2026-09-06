@@ -68,6 +68,7 @@ GitHub Codex generates production-ready code for HELIOS operations:
 ### ChatGPT Pro Setup
 
 1. **Obtain API Key**
+
    ```powershell
    # Set your OpenAI API key
    $env:OPENAI_API_KEY = "sk-your-key-here"
@@ -79,6 +80,7 @@ GitHub Codex generates production-ready code for HELIOS operations:
    - Store sensitive prompts in secure location
 
 3. **Verify API Access**
+
    ```powershell
    .\scripts\ask-chatgpt.ps1 -Prompt "Hello" -Model "gpt-4"
    ```
@@ -95,6 +97,7 @@ GitHub Codex generates production-ready code for HELIOS operations:
    - Set safety checks and validation rules
 
 3. **Enable in IDE**
+
    ```powershell
    # For command-line Codex access
    $env:CODEX_API_KEY = "sk-your-key-here"
@@ -356,6 +359,7 @@ To contribute improvements to the AI integration layer:
 ## Support
 
 For issues or questions:
+
 - File an issue on GitHub
 - Contact the HELIOS team
 - Check the troubleshooting guides in subdirectories

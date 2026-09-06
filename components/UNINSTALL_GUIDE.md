@@ -9,6 +9,7 @@ Learn how to remove HELIOS components cleanly, with options for data preservatio
 Each HELIOS component can be uninstalled independently without affecting others. Uninstall procedures preserve data by default but can clean everything if needed.
 
 **Key Points:**
+
 - ✅ Uninstalling one component doesn't affect others
 - ✅ Configuration preserved by default
 - ✅ Data preserved by default
@@ -364,6 +365,7 @@ C:\Program Files\HELIOS\<component>\
 ### Registry Entries
 
 After uninstall, some registry entries may remain:
+
 ```
 HKEY_LOCAL_MACHINE\SOFTWARE\HELIOS\<component>
 ├── Version: Preserved
@@ -373,6 +375,7 @@ HKEY_LOCAL_MACHINE\SOFTWARE\HELIOS\<component>
 ```
 
 To clean registry:
+
 ```powershell
 # Option 1: Automatic cleanup
 .\uninstall.ps1 -CleanRegistry
@@ -384,6 +387,7 @@ Remove-Item 'HKLM:\SOFTWARE\HELIOS\ai-dashboard' -Force
 ### Windows Services
 
 Uninstall removes services:
+
 ```powershell
 # Check if service exists after uninstall
 Get-Service -Name "HELIOS-ai-dashboard" -ErrorAction SilentlyContinue
@@ -456,6 +460,7 @@ Get-Service "HELIOS-ai-dashboard" -ErrorAction SilentlyContinue
 ### Important Data by Component
 
 **ai-dashboard:**
+
 ```
 PRESERVE: C:\Program Files\HELIOS\ai-dashboard\data\metrics.db
 PRESERVE: C:\Program Files\HELIOS\ai-dashboard\config.json
@@ -463,6 +468,7 @@ PRESERVE: C:\Program Files\HELIOS\ai-dashboard\logs\
 ```
 
 **vault-dynamics:**
+
 ```
 PRESERVE: C:\Program Files\HELIOS\vault-dynamics\keys\master-key.encrypted
 PRESERVE: C:\Program Files\HELIOS\vault-dynamics\keys\key-store.db
@@ -471,18 +477,21 @@ WARNING:  Without keys, cannot decrypt any data!
 ```
 
 **security-engine:**
+
 ```
 PRESERVE: C:\Program Files\HELIOS\security-engine\database\users.db
 PRESERVE: C:\Program Files\HELIOS\security-engine\logs\audit.log
 ```
 
 **analytics-core:**
+
 ```
 PRESERVE: C:\Program Files\HELIOS\analytics-core\data\analytics.db
 PRESERVE: C:\Program Files\HELIOS\analytics-core\logs\
 ```
 
 **performance-ai:**
+
 ```
 PRESERVE: C:\Program Files\HELIOS\performance-ai\data\training-data.db
 PRESERVE: C:\Program Files\HELIOS\performance-ai\ml-models\
@@ -628,28 +637,33 @@ cd C:\Users\ADMIN\helios-platform\components\ai-dashboard
 ## Best Practices for Uninstalling
 
 1. **Always create backup for important components**
+
    ```powershell
    .\uninstall.ps1 -CreateBackup -BackupPath "C:\Backup-$(Get-Date -Format 'yyyy-MM-dd')"
    ```
 
 2. **Preserve data even if uninstalling permanently**
+
    ```powershell
    .\uninstall.ps1 -PreserveAll
    # Later analysis or migration possible
    ```
 
 3. **Stop services gracefully before uninstall**
+
    ```powershell
    Get-Service "HELIOS-*" | Stop-Service -Force
    ```
 
 4. **Export critical data before -CompleteCleanup**
+
    ```powershell
    .\uninstall.ps1 -ExportData -ExportPath "C:\Final-Export"
    # Then safe to complete cleanup
    ```
 
 5. **Test reinstall after uninstall in dev environment**
+
    ```powershell
    # Uninstall on dev first
    # Verify restore works

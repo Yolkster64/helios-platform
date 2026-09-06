@@ -39,6 +39,7 @@ The comprehensive ChatGPT Pro and GitHub Codex integration layer for HELIOS Plat
 ## 🎯 Core Features Implemented
 
 ### ChatGPT Pro Integration
+
 - ✅ Direct API integration with GPT-4 and GPT-3.5-turbo
 - ✅ Response caching for cost optimization (70% savings potential)
 - ✅ 6 pre-built system prompts for HELIOS contexts
@@ -46,6 +47,7 @@ The comprehensive ChatGPT Pro and GitHub Codex integration layer for HELIOS Plat
 - ✅ Automatic logging of all interactions
 
 ### GitHub Codex Integration
+
 - ✅ Code generation for PowerShell, Python, JavaScript
 - ✅ Safety validation and error checking
 - ✅ AI-generated code headers and metadata
@@ -53,6 +55,7 @@ The comprehensive ChatGPT Pro and GitHub Codex integration layer for HELIOS Plat
 - ✅ Test case generation capability
 
 ### AI Coordination
+
 - ✅ Automatic conflict detection between AI services
 - ✅ Conflict resolution with configurable decision matrix
 - ✅ Unified recommendation generation
@@ -60,6 +63,7 @@ The comprehensive ChatGPT Pro and GitHub Codex integration layer for HELIOS Plat
 - ✅ Approval workflow support
 
 ### Security & Compliance
+
 - ✅ Credential leak detection
 - ✅ Dangerous pattern scanning
 - ✅ Security review automation
@@ -68,6 +72,7 @@ The comprehensive ChatGPT Pro and GitHub Codex integration layer for HELIOS Plat
 - ✅ Approval checkpoints
 
 ### Monitoring & Analytics
+
 - ✅ Automatic log creation and rotation
 - ✅ Cost calculation and tracking
 - ✅ Usage statistics collection
@@ -103,17 +108,20 @@ C:\Users\ADMIN\helios-platform\ai-integration\
 ## 🚀 Getting Started
 
 ### Immediate (5 Minutes)
+
 1. Read: `ai-integration/QUICK_START.md`
 2. Set: `$env:OPENAI_API_KEY = "sk-..."`
 3. Test: `. .\scripts\ask-chatgpt.ps1; Invoke-ChatGPT -Prompt "Hello"`
 
 ### Complete Setup (1 Hour)
+
 1. Follow `QUICK_START.md` completely
 2. Read all documentation in subdirectories
 3. Complete `IMPLEMENTATION_CHECKLIST.md`
 4. Test all 3 PowerShell functions
 
 ### Production Deployment (1 Day)
+
 1. Team training and walkthroughs
 2. Enable GitHub Actions workflow
 3. Establish approval workflows
@@ -129,6 +137,7 @@ C:\Users\ADMIN\helios-platform\ai-integration\
 | Codex | Included with API key | Code generation |
 
 **Example Costs:**
+
 - Basic ChatGPT question: ~$0.01-0.05
 - Complex analysis: ~$0.10-0.30
 - Code generation: ~$0.05-0.20
@@ -159,24 +168,28 @@ C:\Users\ADMIN\helios-platform\ai-integration\
 ## 🔗 Key Capabilities
 
 ### Phase 1: ChatGPT Planning
+
 ```
 Question → ChatGPT (gpt-4) → Recommendation
 "Should we consolidate rules?" → "Yes, here's the strategy"
 ```
 
 ### Phase 2: Codex Generation
+
 ```
 Specification → Codex → Production Code
 "Generate validation script" → PowerShell script with error handling
 ```
 
 ### Phase 3: Validation & Review
+
 ```
 Code → ChatGPT Review → Approval/Revision
 "Review this code" → Security issues, performance tips
 ```
 
 ### Phase 4: Coordination
+
 ```
 ChatGPT + Codex → Detect Conflicts → Resolve → Unified Recommendation
 Different suggestions → Automatic analysis → Single recommended path
@@ -185,24 +198,28 @@ Different suggestions → Automatic analysis → Single recommended path
 ## ⚠️ Important Notes
 
 ### API Key Management
+
 - Store API key in `$env:OPENAI_API_KEY`
 - Never commit to version control
 - Rotate keys monthly
 - Use separate keys for prod/dev/test
 
 ### Cost Control
+
 - Response caching is enabled by default (~70% savings)
 - Use GPT-3.5-turbo for simple questions (~40x cheaper)
 - Monitor token usage in logs
 - Set `MaxTokens` to limit response length
 
 ### Security First
+
 - All AI-generated code requires review before production
 - Automatic credential detection enabled
 - Dangerous patterns flagged automatically
 - Complete audit trail maintained
 
 ### Approval Workflow
+
 - ChatGPT → Analysis/Recommendations
 - Codex → Code Generation
 - Validation → Security/Performance Review
@@ -212,16 +229,19 @@ Different suggestions → Automatic analysis → Single recommended path
 ## 📞 Support & Resources
 
 **Documentation:**
+
 - Main: `README.md`
 - Setup: `QUICK_START.md`
 - Reference: `REFERENCE.md`
 - Checklist: `IMPLEMENTATION_CHECKLIST.md`
 
 **API Documentation:**
+
 - OpenAI: https://platform.openai.com/docs
 - GitHub Copilot: https://github.com/features/copilot
 
 **Troubleshooting:**
+
 - Check logs: `$env:LOCALAPPDATA\helios-ai-logs\`
 - Review errors in QUICK_START.md troubleshooting section
 - Verify API key is set and valid

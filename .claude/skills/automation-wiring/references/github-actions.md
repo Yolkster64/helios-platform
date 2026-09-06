@@ -175,6 +175,7 @@ jobs:
     needs: probe
     if: needs.probe.outputs.has-azure == 'true'
 ```
+
 Design rule: **validation runs offline for everyone; deployment gates on secrets.**
 
 ## Self-hosted runners (ARC)

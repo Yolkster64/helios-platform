@@ -1,4 +1,5 @@
 # PHASE 8 STREAM 5: Advanced Profiling & Monitoring
+
 ## Real-Time Performance Diagnostics - Implementation Report
 
 **Status:** ✅ **COMPLETE**  
@@ -13,6 +14,7 @@
 Successfully implemented a comprehensive real-time performance monitoring and diagnostics system for the Monado Blade / HELIOS Platform. The system provides detailed insights into CPU, GPU, memory, thermal, and power metrics with intelligent bottleneck detection and structured logging.
 
 ### Deliverables Summary
+
 - **15 core implementations completed** (15/15)
 - **~1,600+ lines of monitoring infrastructure code**
 - **4 WPF UI components** with real-time visualization
@@ -25,11 +27,14 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ## 🎯 Implemented Features
 
 ### 1. Real-Time FPS Counter ✅
-**Files:** 
+
+**Files:**
+
 - `src/gui/MonadoBlade.GUI/Systems/FpsCounter.xaml` (120 LOC)
 - `src/gui/MonadoBlade.GUI/Systems/FpsCounter.xaml.cs` (150 LOC)
 
 **Features:**
+
 - Frame rate display (60-frame rolling average)
 - Real-time FPS history graph with color coding
   - Green: ≥60 FPS (excellent)
@@ -41,6 +46,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Visual overlay support
 
 **Performance:**
+
 - Overhead: <1% CPU per frame
 - Sampling: Per-frame updates
 - Memory: ~8KB for 60-frame history
@@ -48,11 +54,14 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 2. Memory Profiling Dashboard ✅
+
 **Files:**
+
 - `src/gui/MonadoBlade.GUI/Systems/MemoryProfiler.xaml` (150 LOC)
 - `src/gui/MonadoBlade.GUI/Systems/MemoryProfiler.xaml.cs` (200 LOC)
 
 **Features:**
+
 - Current memory usage display (MB/GB)
 - Managed vs native memory breakdown
 - Memory distribution visualization bar
@@ -63,6 +72,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Color-coded memory zones
 
 **Metrics Tracked:**
+
 - Working Set (total physical memory)
 - Managed Memory (CLR heap)
 - Native Memory (unmanaged allocations)
@@ -72,9 +82,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 3. CPU Utilization Monitor ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/CpuMonitor.cs` (180 LOC)
 
 **Features:**
+
 - Per-core CPU usage monitoring
 - Total CPU usage percentage
 - Thread count tracking
@@ -83,6 +95,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Thread activity analysis
 
 **Capabilities:**
+
 - Supports unlimited CPU cores
 - Real-time per-core metrics
 - Historical data accumulation
@@ -91,9 +104,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 4. GPU Memory Tracking ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/GpuMonitor.cs` (150 LOC)
 
 **Features:**
+
 - GPU VRAM usage tracking
 - GPU utilization percentage
 - GPU temperature monitoring (if available)
@@ -102,6 +117,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - WMI-based hardware detection
 
 **Supported Metrics:**
+
 - Dedicated VRAM (MB)
 - Current VRAM usage
 - GPU utilization %
@@ -110,11 +126,14 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 5. Frame Time Histogram ✅
+
 **Files:**
+
 - `src/gui/MonadoBlade.GUI/Systems/FrameTimeHistogram.xaml` (100 LOC)
 - `src/gui/MonadoBlade.GUI/Systems/FrameTimeHistogram.xaml.cs` (150 LOC)
 
 **Features:**
+
 - Frame time distribution visualization
 - Percentile analysis (P50, P95, P99)
 - Outlier detection and counting
@@ -124,6 +143,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Color-coded distribution zones
 
 **Analysis Capabilities:**
+
 - Standard deviation calculation
 - Outlier threshold detection
 - Frame time consistency analysis
@@ -132,9 +152,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 6. Performance Bottleneck Detection ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/BottleneckDetector.cs` (250 LOC)
 
 **Bottleneck Types Detected:**
+
 1. **CPU-Bound** (High CPU %, low GPU %)
    - Recommendations: Parallelize work, optimize algorithms
 2. **GPU-Bound** (High GPU %, low CPU %)
@@ -147,6 +169,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
    - Recommendations: Continue optimal configuration
 
 **Features:**
+
 - Real-time bottleneck analysis
 - Confidence scoring (0-100%)
 - Multi-bottleneck detection
@@ -156,9 +179,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 7. Thermal Monitoring ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/ThermalMonitor.cs` (150 LOC)
 
 **Features:**
+
 - CPU temperature tracking (Celsius)
 - GPU temperature tracking
 - Thermal throttling detection
@@ -166,12 +191,14 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Thermal alert system
 
 **Alert Levels:**
+
 - **Normal:** <60°C
 - **Warning:** 60-80°C
 - **Critical:** >90°C
 - **Throttling:** Active when >85°C
 
 **WMI Integration:**
+
 - MSAcpi_ThermalZoneTemperature probes
 - Win32_Fan enumeration
 - Temperature threshold alerts
@@ -179,9 +206,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 8. Power Consumption Tracking ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/PowerMonitor.cs` (150 LOC)
 
 **Features:**
+
 - CPU power draw estimation (W)
 - GPU power draw estimation
 - Total system power calculation
@@ -190,11 +219,13 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Runtime estimation on battery
 
 **Estimation Methods:**
+
 - CPU: Base power + frequency scaling
 - GPU: Model-specific typical values
 - Total: Sum of all components
 
 **Battery Metrics:**
+
 - Charge percentage
 - Status (On AC/Discharging/Charging)
 - Estimated runtime (minutes)
@@ -202,9 +233,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 9. Structured Logging ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/StructuredLogger.cs` (180 LOC)
 
 **Features:**
+
 - Structured logging with JSON-like formatting
 - Correlation ID tracking
 - Performance event recording
@@ -214,6 +247,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Real-time log viewing support
 
 **Log Entry Structure:**
+
 - Timestamp (ISO 8601)
 - Correlation ID (8-char unique)
 - Log level (Info/Warning/Error/Debug)
@@ -223,6 +257,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Exception details (if applicable)
 
 **File Management:**
+
 - Auto-rotation when size exceeds limit
 - Automatic backup naming
 - UTF-8 encoding
@@ -231,9 +266,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 10. Performance Aggregator ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/PerformanceAggregator.cs` (200 LOC)
 
 **Features:**
+
 - Unified metrics collection
 - Real-time performance snapshots
 - Health score calculation (0-100)
@@ -241,12 +278,14 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Performance history tracking
 
 **Health Score Components:**
+
 - CPU impact: -5 per 10% over 70%
 - GPU impact: -5 per 10% over 70%
 - Memory impact: -10 per 100MB over 512MB
 - Thermal impact: -10 per 5°C over 60°C
 
 **Reporting:**
+
 - Full ASCII-formatted reports
 - Bottleneck analysis
 - All metrics in single snapshot
@@ -255,9 +294,11 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ---
 
 ### 11. Monitoring Base Infrastructure ✅
+
 **File:** `src/core/HELIOS.Platform/Core/Monitoring/MonitoringBase.cs` (100 LOC)
 
 **Features:**
+
 - Abstract base class for all monitors
 - Common sampling timer management
 - Metric history collection
@@ -266,6 +307,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 - Thread-safe operations
 
 **Base Capabilities:**
+
 - Start/stop monitoring
 - Metric buffering (600 samples)
 - Min/max/average calculations
@@ -276,6 +318,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ## 📈 Technical Specifications
 
 ### Performance Characteristics
+
 | Metric | Target | Achieved |
 |--------|--------|----------|
 | CPU Overhead | <5% | <2% |
@@ -285,6 +328,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 | Data Points Kept | 60+ samples | 300+ samples |
 
 ### System Requirements
+
 - **OS:** Windows 10/11
 - **.NET:** Framework 4.7+ or .NET 6+
 - **Permissions:** User-level access to WMI
@@ -294,6 +338,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
   - WPF for UI components
 
 ### Architecture
+
 ```
 ┌─────────────────────────────────────────┐
 │     PerformanceAggregator (Main)        │
@@ -322,6 +367,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 ## 🧪 Testing Coverage
 
 ### Unit Tests Implemented (16 test cases)
+
 1. ✅ CPU Monitor initialization
 2. ✅ CPU Monitor start/stop
 3. ✅ CPU metric collection
@@ -340,6 +386,7 @@ Successfully implemented a comprehensive real-time performance monitoring and di
 16. ✅ Aggregator snapshot generation
 
 ### Test Results
+
 ```
 Total Tests:     16
 Passed:          16 ✅
@@ -349,6 +396,7 @@ Success Rate:    100%
 ```
 
 ### Performance Testing
+
 - **CPU Overhead:** <2% with all monitors active
 - **Memory Baseline:** ~15MB for full system
 - **Startup Time:** <100ms
@@ -359,6 +407,7 @@ Success Rate:    100%
 ## 📝 Code Metrics
 
 ### Implementation Summary
+
 | Component | Type | LOC | Status |
 |-----------|------|-----|--------|
 | MonitoringBase.cs | Core | 100 | ✅ |
@@ -384,6 +433,7 @@ Success Rate:    100%
 ## 🎨 UI/UX Features
 
 ### Color Scheme
+
 - **Primary:** Dark theme (#2C3E50 background)
 - **Accent Colors:**
   - Green (#2ECC71): Good performance
@@ -392,6 +442,7 @@ Success Rate:    100%
   - Blue (#3498DB): Neutral info
 
 ### Visual Elements
+
 1. **Real-time graphs** with line interpolation
 2. **Color-coded distribution** histograms
 3. **Live percentile indicators**
@@ -404,6 +455,7 @@ Success Rate:    100%
 ## 🔧 Integration Guide
 
 ### Basic Usage Example
+
 ```csharp
 // Initialize and start monitoring
 using var aggregator = new PerformanceAggregator();
@@ -423,6 +475,7 @@ aggregator.Stop();
 ```
 
 ### UI Integration Example
+
 ```xaml
 <local:FpsCounter x:Name="FpsCounter"/>
 <local:MemoryProfiler x:Name="MemoryProfiler"/>
@@ -449,6 +502,7 @@ void RenderLoop()
 ## 📋 Quality Assurance
 
 ### Code Quality Standards
+
 - ✅ **Thread Safety:** Lock-based synchronization for shared state
 - ✅ **Resource Management:** IDisposable pattern throughout
 - ✅ **Error Handling:** Try-catch with graceful degradation
@@ -457,6 +511,7 @@ void RenderLoop()
 - ✅ **Memory Efficiency:** Circular buffers for history
 
 ### Performance Validation
+
 - ✅ CPU overhead <2% with all monitors active
 - ✅ Memory footprint <50MB baseline
 - ✅ No memory leaks detected (tested with 10,000+ iterations)
@@ -468,6 +523,7 @@ void RenderLoop()
 ## 🚀 Future Enhancements
 
 ### Possible Extensions
+
 1. **GPU Benchmark Integration**
    - DirectX 12 query-based profiling
    - NVAPI/AMD API integration
@@ -497,6 +553,7 @@ void RenderLoop()
 ## 📚 Files Delivered
 
 ### Core Infrastructure
+
 - `src/core/HELIOS.Platform/Core/Monitoring/MonitoringBase.cs`
 - `src/core/HELIOS.Platform/Core/Monitoring/CpuMonitor.cs`
 - `src/core/HELIOS.Platform/Core/Monitoring/GpuMonitor.cs`
@@ -508,6 +565,7 @@ void RenderLoop()
 - `src/core/HELIOS.Platform/Core/Monitoring/PerformanceAggregator.cs`
 
 ### UI Components
+
 - `src/gui/MonadoBlade.GUI/Systems/FpsCounter.xaml`
 - `src/gui/MonadoBlade.GUI/Systems/FpsCounter.xaml.cs`
 - `src/gui/MonadoBlade.GUI/Systems/MemoryProfiler.xaml`
@@ -516,9 +574,11 @@ void RenderLoop()
 - `src/gui/MonadoBlade.GUI/Systems/FrameTimeHistogram.xaml.cs`
 
 ### Tests
+
 - `src/tests/HELIOS.Platform.Tests/MonitoringTests.cs`
 
 ### Documentation
+
 - `PHASE8_STREAM5_MONITORING_REPORT.md` (this file)
 
 ---
@@ -539,6 +599,7 @@ void RenderLoop()
 ## 🎓 Learning Outcomes
 
 This implementation demonstrates:
+
 1. **System Monitoring:** Windows Performance Counters and WMI
 2. **Real-time Data Visualization:** WPF graphs and charts
 3. **Statistical Analysis:** Percentile calculation, outlier detection
@@ -553,15 +614,19 @@ This implementation demonstrates:
 ### Common Issues & Solutions
 
 **Q: GPU metrics show 0?**
+
 - A: GPU counters may require specific driver support. Check Windows Performance Monitor.
 
 **Q: High CPU overhead reported?**
+
 - A: Reduce sampling interval or use selective monitoring.
 
 **Q: Memory alerts too frequent?**
+
 - A: Adjust threshold in MemoryProfiler constructor.
 
 **Q: Thermal data unavailable?**
+
 - A: Requires proper WMI temperature sensors. May not work on all systems.
 
 ---
@@ -588,6 +653,7 @@ This implementation demonstrates:
 ## 📝 Commit Information
 
 ### Git Commits
+
 1. **Phase 8 Stream 5: Core monitoring infrastructure** (MonitoringBase, CpuMonitor, GpuMonitor, MemoryProfiler)
 2. **Phase 8 Stream 5: Thermal and power monitoring** (ThermalMonitor, PowerMonitor)
 3. **Phase 8 Stream 5: Analysis and logging** (BottleneckDetector, StructuredLogger, PerformanceAggregator)

@@ -14,6 +14,7 @@
 ### Step 2: Add Project Columns
 
 Create these statuses:
+
 - **Backlog** - All items to do
 - **Structure** - Architecture/folder setup
 - **In Progress** - Active work
@@ -23,6 +24,7 @@ Create these statuses:
 ### Step 3: Add Project Fields
 
 Add custom fields:
+
 - **Phase** (Single select: 0, 1, 2, 3)
 - **Component** (Text: which component)
 - **Priority** (Single select: Low, Medium, High, Critical)
@@ -34,6 +36,7 @@ Add custom fields:
 Create 45+ issues for submodules:
 
 #### Track 1: Foundation (Phase 0)
+
 ```
 Issue: USB Creator Script
 - Phase: 0
@@ -44,6 +47,7 @@ Issue: USB Creator Script
 ```
 
 #### Track 2: Security (Phase 1)
+
 ```
 Issue: AppLocker Baseline Rules
 - Phase: 1
@@ -65,6 +69,7 @@ Issue: Vault Encryption Setup
 ```
 
 #### Track 3: Optimization (Phase 2)
+
 ```
 Issue: Service Optimization Level 1
 - Phase: 2
@@ -80,6 +85,7 @@ Issue: Service Optimization Level 2
 ```
 
 #### Track 4: Capability (Phase 3)
+
 ```
 Issue: AI Dashboard Core
 - Phase: 3
@@ -95,6 +101,7 @@ Issue: Learning Engine Integration
 ```
 
 #### Track 5: Integration
+
 ```
 Issue: ChatGPT Pro Integration
 - Phase: 3
@@ -145,6 +152,7 @@ Issues: All test tasks
 Create `.github/ISSUE_TEMPLATE/` with:
 
 **bug_report.md**
+
 ```markdown
 ---
 name: Bug Report
@@ -179,6 +187,7 @@ assignees: ''
 ```
 
 **feature_request.md**
+
 ```markdown
 ---
 name: Feature Request
@@ -277,9 +286,11 @@ git push origin feature-branch
 ## View Project Status
 
 ### Via GitHub Actions Status Page
+
 - https://github.com/M0nado/helios-platform/actions
 
 ### View Workflow Runs
+
 - All CI/CD validation runs are visible
 - Click run to see logs
 - Status badges can be added to README

@@ -37,11 +37,13 @@ var users = dbContext.Users
 ```
 
 **Performance Impact**:
+
 - Memory reduction: 40-60%
 - CPU reduction: 25-35%
 - Recommended for: All read-only queries
 
 **When to Use**:
+
 - Reading data for display
 - Reporting and analytics
 - API responses (not modifications)
@@ -78,6 +80,7 @@ SELECT * FROM Users WHERE Email = 'user@example.com';  // ~1ms with index (100x 
 ```
 
 **Index Planning**:
+
 ```
 Priority 1 (Critical):
 ├── Primary keys (automatic)
@@ -96,6 +99,7 @@ Priority 3 (Optional):
 ```
 
 **Maintenance**:
+
 ```sql
 -- Monitor index fragmentation
 SELECT 
@@ -146,6 +150,7 @@ var userOrders = dbContext.Users
 ```
 
 **Detection Strategy**:
+
 ```csharp
 // Enable query logging to detect N+1
 var options = new DbContextOptionsBuilder<MyContext>()
@@ -185,6 +190,7 @@ var data = dbContext.Users
 ```
 
 **Performance Comparison**:
+
 ```
 With 1,000 users, 10 orders each, 5 addresses each:
 
@@ -222,6 +228,7 @@ for (int i = 0; i < 1000; i++)
 ```
 
 **Compilation Overhead**:
+
 ```
 First query: 5ms (parsing, translating to SQL)
 Subsequent queries: 0.05ms (cached execution plan)
@@ -240,6 +247,7 @@ Speedup: 91x faster with compiled queries
 ### Strategy 1: Cache-Aside Pattern (Most Common)
 
 **Implementation**:
+
 ```csharp
 public class UserRepository : IUserRepository
 {
@@ -272,6 +280,7 @@ public class UserRepository : IUserRepository
 ```
 
 **Performance Impact**:
+
 - Cache hit: 0.8ms (L1) vs 12ms (database) = 15x faster
 - Throughput improvement: +25-40%
 - Database load reduction: 60-80%
@@ -306,7 +315,8 @@ public class TransactionService
 }
 ```
 
-**Guarantees**: 
+**Guarantees**:
+
 - Strong consistency (cache = database)
 - Slightly higher write latency (write to both)
 - Safety for critical operations
@@ -316,6 +326,7 @@ public class TransactionService
 ### Strategy 3: Multi-Tier Cache Hierarchy
 
 **Architecture**:
+
 ```
 L1 Cache (Process Memory)
 ├── Speed: 0.8ms average
@@ -341,6 +352,7 @@ Database
 ```
 
 **Implementation**:
+
 ```csharp
 public async Task<Product> GetProductAsync(int productId)
 {
@@ -374,6 +386,7 @@ public async Task<Product> GetProductAsync(int productId)
 ```
 
 **Expected Hit Rates**:
+
 ```
 100 requests:
 ├── L1 hits: 85 requests @ 0.8ms = 68ms
@@ -389,6 +402,7 @@ Speedup: 8x faster with tiered cache
 ### Strategy 4: Cache Warming & Prefetching
 
 **Startup Warming**:
+
 ```csharp
 public class CacheWarmupService
 {
@@ -427,12 +441,14 @@ services.AddScoped<ICacheWarmupService, CacheWarmupService>();
 ### Strategy 5: Cache Invalidation Patterns
 
 **Pattern 1: Time-Based Expiration (Simplest)**
+
 ```csharp
 // Set 1-hour TTL, automatically expires
 _cache.Set($"user-{id}", user, TimeSpan.FromHours(1));
 ```
 
 **Pattern 2: Event-Based Invalidation**
+
 ```csharp
 public async Task UpdateUserAsync(User user)
 {
@@ -448,6 +464,7 @@ public async Task UpdateUserAsync(User user)
 ```
 
 **Pattern 3: Pattern-Based Invalidation**
+
 ```csharp
 public async Task DeleteUserAsync(int userId)
 {
@@ -461,6 +478,7 @@ public async Task DeleteUserAsync(int userId)
 ```
 
 **Pattern 4: Distributed Invalidation**
+
 ```csharp
 public async Task UpdateCategoryAsync(Category category)
 {
@@ -560,6 +578,7 @@ var user1 = new User { Status = UserStatus.Active };
 ```
 
 **Memory Impact**:
+
 ```
 Without interning: 1,000,000 users, 3 status values (active, inactive, pending)
 ├── 999,999 duplicate strings
@@ -604,6 +623,7 @@ public async ValueTask<User> GetUserAsync(int id)
 ```
 
 **Guidelines for ValueTask**:
+
 - ✅ Use ValueTask for methods likely to return synchronously (cache hits)
 - ✅ Use ValueTask for high-frequency calls (hot paths)
 - ❌ Don't use ValueTask for exception cases (exceptions allocate)
@@ -654,6 +674,7 @@ var results = dbContext.Orders
 ### Practice 1: Connection Pool Sizing
 
 **Optimal Pool Sizing**:
+
 ```csharp
 services.AddDbContext<MyContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions =>
@@ -691,6 +712,7 @@ await dbContext.SaveChangesAsync();  // 1 roundtrip for all
 ```
 
 **Bulk Operation Library**:
+
 ```csharp
 // Using BulkOperations NuGet package
 await dbContext.BulkInsertAsync(items);      // 100x faster than SaveChanges
@@ -840,6 +862,7 @@ stream.Read(data, 0, 1000000);
 ### Pitfall 4: Premature Optimization
 
 **Start with**:
+
 1. Write correct code first
 2. Measure (profile)
 3. Identify bottlenecks

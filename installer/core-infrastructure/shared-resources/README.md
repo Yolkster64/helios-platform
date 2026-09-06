@@ -43,12 +43,14 @@ The shared infrastructure consists of production-grade utilities and configurati
 Shared utilities for all HELIOS components.
 
 #### Logging Functions
+
 - `Log-Message` - Log with color-coded levels (Info, Warning, Error, Success, Debug)
 - `Log-Error` - Log errors with exception details and stack traces
 - `Log-Success` - Log success messages
 - `Initialize-Logging` - Set up logging to file
 
 **Example:**
+
 ```powershell
 Import-Module "C:\HELIOS\core-infrastructure\shared-resources\common-functions.psm1"
 
@@ -59,11 +61,13 @@ Log-Success -Message "Authentication successful" -Component "Authentication"
 ```
 
 #### Configuration Management
+
 - `Load-Config` - Load JSON config with caching support
 - `Save-Config` - Save config with automatic backup
 - `Get-ConfigValue` - Retrieve config values using dot notation
 
 **Example:**
+
 ```powershell
 $config = Load-Config -ConfigPath "C:\HELIOS\config\azure-config.json" -UseCache $true
 $subscriptionId = Get-ConfigValue -Config $config -Path "azure.subscriptionId"
@@ -74,10 +78,12 @@ Save-Config -ConfigPath "C:\HELIOS\config\azure-config.json" -Config $config -Ba
 ```
 
 #### Validation Functions
+
 - `Validate-Prerequisites` - Check system requirements
 - `Validate-Admin` - Ensure administrator privileges
 
 **Example:**
+
 ```powershell
 $prereqs = Validate-Prerequisites -Requirements @("PowerShell5.1", "DotNet4.7", "Git")
 if (-not $prereqs.AllMet) {
@@ -89,11 +95,13 @@ Validate-Admin  # Throws if not admin
 ```
 
 #### File Operations
+
 - `Safe-Copy` - Copy files with logging and error handling
 - `Safe-Move` - Move files with logging
 - `Safe-Delete` - Delete files with optional backup
 
 **Example:**
+
 ```powershell
 Safe-Copy -Source "C:\source\file.txt" -Destination "C:\dest\file.txt" -Force $true
 Safe-Move -Source "C:\old\config.json" -Destination "C:\new\config.json"
@@ -101,11 +109,13 @@ Safe-Delete -Path "C:\temp\cache.dat" -Backup $true
 ```
 
 #### Database Operations
+
 - `Query-Database` - Execute SELECT queries
 - `Update-Database` - Execute UPDATE statements
 - `Insert-Database` - Execute INSERT statements
 
 **Example:**
+
 ```powershell
 # Query
 $results = Query-Database -ConnectionString $connStr `
@@ -119,11 +129,13 @@ $rowsAffected = Insert-Database -ConnectionString $connStr `
 ```
 
 #### Event Handling
+
 - `Emit-Event` - Send event to all subscribers
 - `Subscribe-Event` - Register for events
 - `Unsubscribe-Event` - Unregister from events
 
 **Example:**
+
 ```powershell
 # Subscribe
 $subId = Subscribe-Event -EventName "DeploymentComplete" `
@@ -139,9 +151,11 @@ Unsubscribe-Event -EventName "DeploymentComplete" -SubscriptionId $subId
 ```
 
 #### Error Handling
+
 - `Try-Catch-Retry` - Execute with automatic retry and exponential backoff
 
 **Example:**
+
 ```powershell
 $result = Try-Catch-Retry -ScriptBlock {
     Invoke-RestMethod -Uri "https://api.example.com/data"
@@ -163,6 +177,7 @@ Unified entry point for cross-component communication.
 - `Get-RequestStatus` - Check async request status
 
 **Example:**
+
 ```powershell
 . "C:\HELIOS\core-infrastructure\shared-resources\api-gateway.ps1"
 
@@ -200,6 +215,7 @@ Write-Host "Capabilities: $($info.Capabilities -join ', ')"
 ```
 
 #### Features
+
 - **Request Caching** - Avoid duplicate work with built-in caching (5-minute TTL)
 - **Async Operations** - Fire-and-forget or wait-for-completion
 - **Request Logging** - Track all requests for monitoring
@@ -221,6 +237,7 @@ Event-driven communication layer for asynchronous component coordination.
 - `Get-EventHistory` - Query past events
 
 **Example:**
+
 ```powershell
 . "C:\HELIOS\core-infrastructure\shared-resources\event-bus.ps1"
 
@@ -271,6 +288,7 @@ Write-Host "Events in last hour: $($history.Count)"
 ```
 
 #### Features
+
 - **Event Registration** - Define event types with schema
 - **Filtering** - Subscribe to events matching specific criteria
 - **Prioritization** - Execute high-priority subscriptions first
@@ -287,6 +305,7 @@ Write-Host "Events in last hour: $($history.Count)"
 Azure cloud platform configuration.
 
 **Key Sections:**
+
 - `azure` - Subscription, resource group, location
 - `copilot` - GitHub Copilot API integration
 - `devops` - Azure DevOps organization and pipelines
@@ -296,6 +315,7 @@ Azure cloud platform configuration.
 - `monitoring` - Log Analytics setup
 
 **Usage:**
+
 ```powershell
 # Copy template and customize
 Copy-Item "azure-config.template.json" "azure-config.json"
@@ -313,6 +333,7 @@ az account set --subscription $subscriptionId
 Security controls and policies configuration.
 
 **Key Sections:**
+
 - `appLocker` - Application whitelisting/blacklisting
 - `windowsDefender` - Real-time protection settings
 - `bitdefender` - Advanced threat defense (optional)
@@ -327,6 +348,7 @@ Security controls and policies configuration.
 Definitions for 12 AI agents used by HELIOS components.
 
 **Agents Include:**
+
 1. **Copilot Core** - Code analysis and suggestions
 2. **Security Agent** - Vulnerability scanning
 3. **DevOps Agent** - Pipeline orchestration
@@ -341,6 +363,7 @@ Definitions for 12 AI agents used by HELIOS components.
 12. **User Support Agent** - User support
 
 Each agent defines:
+
 - Capabilities
 - Supported AI models
 - Concurrency limits
@@ -351,6 +374,7 @@ Each agent defines:
 Registry of 35+ AI models with routing rules.
 
 **Models Include:**
+
 - OpenAI: GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
 - Anthropic: Claude 3 Opus, Sonnet, Haiku
 - Google: Gemini Pro, PaLM 2
@@ -359,6 +383,7 @@ Registry of 35+ AI models with routing rules.
 - Cohere, AI21 Labs
 
 **Per-Model Configuration:**
+
 - Provider and version
 - Capabilities
 - Cost per input/output token
@@ -367,6 +392,7 @@ Registry of 35+ AI models with routing rules.
 - Routing rules and use cases
 
 **Routing Strategy:**
+
 - Weighted round-robin load balancing
 - Fallback order for failures
 - Cost optimization
@@ -377,6 +403,7 @@ Registry of 35+ AI models with routing rules.
 Optimization profiles and resource allocation.
 
 **Profiles:**
+
 1. **Cost-Optimized** - Minimize spending
 2. **Speed-Optimized** - Minimize latency
 3. **Quality-Optimized** - Maximize accuracy
@@ -384,6 +411,7 @@ Optimization profiles and resource allocation.
 5. **Scale-Optimized** - High-volume processing
 
 **Settings Include:**
+
 - Resource allocation (CPU, memory, storage, network)
 - Cost budgets and thresholds
 - Performance targets (latency, throughput, availability)
@@ -396,6 +424,7 @@ Optimization profiles and resource allocation.
 Tracks state and health of all 7 HELIOS components.
 
 **Per-Component Tracking:**
+
 - Status (initializing, running, degraded, offline)
 - Health metrics
 - Endpoint status
@@ -403,6 +432,7 @@ Tracks state and health of all 7 HELIOS components.
 - Response times
 
 **System-Level Tracking:**
+
 - Overall health score
 - Resource utilization
 - Performance metrics
@@ -505,6 +535,7 @@ try {
 4. **Export the function** by adding it to Export-ModuleMember
 
 **Example:**
+
 ```powershell
 <#
 .SYNOPSIS
@@ -561,30 +592,35 @@ Register-Event -EventName "MyNewEvent" `
 ## Best Practices
 
 ### Logging
+
 - Use appropriate log levels (Debug for detailed, Info for standard, Warning for issues, Error for failures)
 - Include component name for easy filtering
 - Log at start and end of operations
 - Include context/details in error messages
 
 ### Configuration
+
 - Always load config at component startup
 - Use dot notation for nested values
 - Validate required config before proceeding
 - Create backups before modifying
 
 ### Events
+
 - Use consistent event naming (PascalCase, descriptive)
 - Define schemas to document event payloads
 - Set appropriate priority levels
 - Filter subscriptions to avoid unnecessary processing
 
 ### API Calls
+
 - Use component names consistently
 - Leverage caching for repeated queries
 - Consider async for long-running operations
 - Monitor request statistics for performance
 
 ### Error Handling
+
 - Always use Try-Catch-Retry for external API calls
 - Provide specific error messages
 - Clean up resources in finally blocks
@@ -601,20 +637,24 @@ Register-Event -EventName "MyNewEvent" `
 ## Troubleshooting
 
 ### Logging not working
+
 - Check log file path is writable
 - Verify logging initialized: `Initialize-Logging -LogPath "..."`
 
 ### Configuration not loading
+
 - Verify file exists and is valid JSON
 - Check path is correct and readable
 - Use `-UseCache $false` to reload fresh
 
 ### Events not firing
+
 - Confirm event is registered
 - Check subscription filter matches
 - Verify callback script block is valid
 
 ### API Gateway timeouts
+
 - Check component handler returns quickly
 - Use async for long operations
 - Increase timeout if needed
@@ -622,6 +662,7 @@ Register-Event -EventName "MyNewEvent" `
 ## Architecture Documentation
 
 ### Component Interactions
+
 ```
 Component A → API Gateway → Component B
               ↓
@@ -633,6 +674,7 @@ Event emitted → Event Bus → All Subscribers
 ```
 
 ### Data Flow
+
 ```
 Configuration File → Load-Config → Cache → Component
                                       ↓
@@ -640,6 +682,7 @@ Configuration File → Load-Config → Cache → Component
 ```
 
 ### Error Recovery
+
 ```
 API Call → Try-Catch-Retry → Exponential Backoff → Circuit Breaker
             ↓ Retry Attempt
@@ -657,12 +700,14 @@ API Call → Try-Catch-Retry → Exponential Backoff → Circuit Breaker
 ## Support & Maintenance
 
 ### File Locations
+
 - **Shared Infrastructure**: `C:\HELIOS\core-infrastructure\shared-resources\`
 - **Config Templates**: `C:\HELIOS\core-infrastructure\shared-resources\config-templates\`
 - **Logs**: `C:\HELIOS\logs\`
 - **Config Files**: `C:\HELIOS\config\`
 
 ### Update Process
+
 1. Update relevant .psm1 or .ps1 file
 2. Test changes with dependent components
 3. Update this README if behavior changes

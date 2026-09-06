@@ -5,6 +5,7 @@ Best practices for creating, triaging, labeling, and managing issues in GitHub.
 ---
 
 ## Table of Contents
+
 1. [Issue Types](#issue-types)
 2. [Issue Template Usage](#issue-template-usage)
 3. [Labeling Strategy](#labeling-strategy)
@@ -19,6 +20,7 @@ Best practices for creating, triaging, labeling, and managing issues in GitHub.
 ## Issue Types
 
 ### Feature Request
+
 **When:** New functionality needed
 
 ```markdown
@@ -44,6 +46,7 @@ Assignee: None (open for volunteers)
 ```
 
 ### Bug Report
+
 **When:** Something isn't working correctly
 
 ```markdown
@@ -75,6 +78,7 @@ Assignee: None (needs investigation)
 ```
 
 ### Technical Debt
+
 **When:** Code quality improvement needed
 
 ```markdown
@@ -107,6 +111,7 @@ Priority: Medium
 ```
 
 ### Documentation
+
 **When:** Documentation is missing or outdated
 
 ```markdown
@@ -127,6 +132,7 @@ Assignee: Documentation Team
 ```
 
 ### Spike/Investigation
+
 **When:** Research or exploration needed
 
 ```markdown
@@ -160,6 +166,7 @@ Time Estimate: 8 hours
 Place in `.github/ISSUE_TEMPLATE/`:
 
 **bug-report.md:**
+
 ```markdown
 ---
 name: Bug Report
@@ -197,6 +204,7 @@ Any other context
 ```
 
 **feature-request.md:**
+
 ```markdown
 ---
 name: Feature Request
@@ -338,6 +346,7 @@ Experience:
 ### Priority Definitions
 
 **Critical (P0)**
+
 - Production is down or severely impaired
 - Security vulnerability
 - Data loss risk
@@ -353,6 +362,7 @@ Example:
 ```
 
 **High (P1)**
+
 - Important feature broken
 - Major functionality impaired
 - Affects multiple users
@@ -367,6 +377,7 @@ Example:
 ```
 
 **Medium (P2)**
+
 - Normal functionality degraded
 - Affects some users
 - Workaround exists
@@ -381,6 +392,7 @@ Example:
 ```
 
 **Low (P3)**
+
 - Nice to have
 - Doesn't affect core functionality
 - No workaround needed
@@ -513,12 +525,14 @@ When this PR is merged, issues #234 will auto-close.
 Configure in repository Settings → Automation
 
 **Auto-Close on PR Merge:**
+
 ```markdown
 When issue is linked in PR with "Fixes #123"
 → Issue auto-closes when PR merges
 ```
 
 **Auto-Add Labels:**
+
 ```markdown
 When issue created without labels
 → Optionally add "needs-triage" label
@@ -528,6 +542,7 @@ When issue has no assignee after 1 day
 ```
 
 **Status Updates:**
+
 ```markdown
 When issue moved to "In Progress"
 → Change status label automatically
@@ -651,6 +666,7 @@ jobs:
 ### Closing Issue Steps
 
 1. **Add closing comment** with summary:
+
 ```markdown
 Fixed in PR #456. Changes:
 - Implemented JWT validation

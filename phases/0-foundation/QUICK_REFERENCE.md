@@ -97,6 +97,7 @@ Test-Path "D:\Users\"
 ## Important Warnings
 
 ⚠️ **These actions DELETE data permanently:**
+
 - USB Creator erases entire USB drive
 - Partition Manager reshuffles drives
 - Windows Installation erases system drive
@@ -199,16 +200,19 @@ Data Drive (D:)
 ## Performance Notes
 
 **SSD (Fastest)**
+
 - USB creation: 10-15 min
 - Windows install: 20-25 min
 - Total: ~45-55 min
 
 **HDD (Slower)**
+
 - USB creation: 15-20 min
 - Windows install: 30-35 min
 - Total: ~65-85 min
 
 **Tips to Speed Up:**
+
 - Use USB 3.0 port (not 2.0)
 - Install on SSD (not HDD)
 - Use newer USB drive

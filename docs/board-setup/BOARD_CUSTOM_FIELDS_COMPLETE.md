@@ -50,6 +50,7 @@ The HELIOS Platform board implements a 5-tier custom field architecture:
 ### Field 1: Priority
 
 **Field Details:**
+
 ```yaml
 Field Name: Priority
 Type: Single Select
@@ -61,6 +62,7 @@ Options: [Critical, High, Medium, Low]
 ```
 
 **Purpose:**
+
 - Enable issue prioritization across backlog
 - Determine work order and sprint inclusion
 - Identify urgent vs. strategic work
@@ -75,12 +77,14 @@ Options: [Critical, High, Medium, Low]
 | Low | Enhancement, nice-to-have | Documentation update, minor UI tweak | 1 week |
 
 **Automation Integration:**
+
 - Used by Rule 4 to auto-assign tier (Critical → Enterprise minimum)
 - Triggers in Priority-based board view sorting
 - Influences sprint planning algorithms
 - Used in notifications for escalation
 
 **Best Practices:**
+
 - Review priority weekly for accuracy
 - Escalate if critical issues accumulate (>5 concurrent)
 - Avoid overusing critical designation
@@ -91,6 +95,7 @@ Options: [Critical, High, Medium, Low]
 ### Field 2: Component
 
 **Field Details:**
+
 ```yaml
 Field Name: Component
 Type: Single Select
@@ -102,6 +107,7 @@ Options: [Monado, Security, AI, GUI, Agents, Hub, Stack, Infrastructure, DevOps,
 ```
 
 **Purpose:**
+
 - Categorize issues by technical component
 - Route work to appropriate team
 - Enable component-based metrics and views
@@ -123,6 +129,7 @@ Options: [Monado, Security, AI, GUI, Agents, Hub, Stack, Infrastructure, DevOps,
 | **Documentation** | Docs Team | Technical docs, user guides, API docs | All Phases |
 
 **Automation Integration:**
+
 - Rule 1: Auto-assigns phase based on component
 - Rule 4: Auto-assigns tier classification based on component
 - Component checkbox fields auto-checked when this field set
@@ -144,6 +151,7 @@ Updating Existing Issue:
 ```
 
 **Best Practices:**
+
 - One issue = one component (split if multi)
 - Document component selection rationale
 - Escalate cross-component blockers to coordinator
@@ -154,6 +162,7 @@ Updating Existing Issue:
 ### Field 3: Effort Estimate
 
 **Field Details:**
+
 ```yaml
 Field Name: Effort Estimate
 Type: Single Select
@@ -166,6 +175,7 @@ Scale: Modified Fibonacci (powers of phi: 1, 2, 3, 5, 8, 13)
 ```
 
 **Purpose:**
+
 - Estimate work effort using story points
 - Enable capacity planning and sprint planning
 - Calculate team velocity
@@ -195,6 +205,7 @@ Step 7: Finalize with consensus
 ```
 
 **Automation Integration:**
+
 - Used in velocity calculations
 - Rule 4: Issues with Effort >= 5 get Professional tier minimum
 - Impacts capacity and sprint planning
@@ -217,6 +228,7 @@ Estimate: 13 points (2-4 weeks)
 ```
 
 **Best Practices:**
+
 - Estimate in team planning sessions
 - Use reference issues as anchors
 - Avoid cognitive bias (planning fallacy)
@@ -228,6 +240,7 @@ Estimate: 13 points (2-4 weeks)
 ### Field 4: Status Phase
 
 **Field Details:**
+
 ```yaml
 Field Name: Status Phase
 Type: Single Select
@@ -240,6 +253,7 @@ Immutable After Set: No (can change if needed)
 ```
 
 **Purpose:**
+
 - Track which implementation phase the issue belongs to
 - Enable phase-based planning and deployment
 - Support staged rollout strategy
@@ -259,6 +273,7 @@ Immutable After Set: No (can change if needed)
 | **7** | Specialized | Industry-specific deployment | 8-12 weeks |
 
 **Automation Integration:**
+
 - Rule 1: Auto-assigns based on component and labels
 - Phase checkbox fields auto-checked based on this field
 - Phase-based board view column positioning
@@ -282,6 +297,7 @@ Issue Progresses:
 ```
 
 **Best Practices:**
+
 - Ensure phase alignment with component team
 - Document phase assignment rationale
 - Review phase progression monthly
@@ -292,6 +308,7 @@ Issue Progresses:
 ### Field 5: Assigned Team Member
 
 **Field Details:**
+
 ```yaml
 Field Name: Assigned Team Member
 Type: User Select (Multiple)
@@ -304,6 +321,7 @@ Can Add External Users: Yes
 ```
 
 **Purpose:**
+
 - Track issue ownership and accountability
 - Enable personal task views
 - Support workload distribution
@@ -331,6 +349,7 @@ Step 6: Update as circumstances change
 ```
 
 **Automation Integration:**
+
 - Triggers personal task notifications
 - Populates "My Work" board view
 - Used in individual velocity calculations
@@ -354,6 +373,7 @@ Scenario 3: Mentoring
 ```
 
 **Best Practices:**
+
 - Verify capacity before assigning
 - Limit to 3 maximum assignees
 - Clear primary responsibility
@@ -386,6 +406,7 @@ Display: Show in component-specific views
 **Purpose:** Mark if issue affects display server functionality
 
 **Auto-Checked When:**
+
 ```
 Component field = "Monado" OR
 Labels include "component-monado" OR
@@ -393,12 +414,14 @@ Scope includes display rendering
 ```
 
 **Related Work:**
+
 - Rendering pipeline
 - Display management
 - Output handling
 - Graphics optimization
 
 **When to Check Manually:**
+
 ```
 Issue crosses into display concerns even if
 primary component is different.
@@ -418,6 +441,7 @@ Example: "Optimize AI model for display performance"
 **Purpose:** Mark if issue affects security infrastructure
 
 **Auto-Checked When:**
+
 ```
 Component field = "Security" OR
 Labels include "component-security" OR
@@ -425,6 +449,7 @@ Issue involves auth, encryption, audit
 ```
 
 **Related Work:**
+
 - Authentication & authorization
 - Encryption (at-rest, in-transit, end-to-end)
 - Access control lists
@@ -433,6 +458,7 @@ Issue involves auth, encryption, audit
 - Vulnerability management
 
 **When to Check Manually:**
+
 ```
 Any security implications regardless of
 primary component.
@@ -452,6 +478,7 @@ Example: "Add rate limiting to API"
 **Purpose:** Mark if issue affects AI/ML functionality
 
 **Auto-Checked When:**
+
 ```
 Component field = "AI" OR
 Labels include "component-ai" OR
@@ -459,6 +486,7 @@ Involves ML models, predictions, intelligence
 ```
 
 **Related Work:**
+
 - ML model development & training
 - Model inference optimization
 - Recommendation engine
@@ -467,6 +495,7 @@ Involves ML models, predictions, intelligence
 - Computer vision
 
 **When to Check Manually:**
+
 ```
 ML concerns in non-AI components.
 
@@ -485,6 +514,7 @@ Example: "Add ML-based anomaly detection to monitoring"
 **Purpose:** Mark if issue affects GUI/UI components
 
 **Auto-Checked When:**
+
 ```
 Component field = "GUI" OR
 Labels include "component-gui" OR
@@ -492,6 +522,7 @@ Involves user interface changes
 ```
 
 **Related Work:**
+
 - UI component development
 - User experience improvements
 - Accessibility enhancements
@@ -500,6 +531,7 @@ Involves user interface changes
 - User interaction flows
 
 **When to Check Manually:**
+
 ```
 UI implications in backend work.
 
@@ -518,6 +550,7 @@ Example: "Add new data export format"
 **Purpose:** Mark if issue affects Agent/autonomous systems
 
 **Auto-Checked When:**
+
 ```
 Component field = "Agents" OR
 Labels include "component-agents" OR
@@ -525,6 +558,7 @@ Involves autonomous or background services
 ```
 
 **Related Work:**
+
 - Background service development
 - Autonomous agent implementation
 - Worker process optimization
@@ -533,6 +567,7 @@ Involves autonomous or background services
 - Event-driven architecture
 
 **When to Check Manually:**
+
 ```
 Agent involvement in cross-component work.
 
@@ -551,6 +586,7 @@ Example: "Implement background retry mechanism"
 **Purpose:** Mark if issue affects Hub/coordination layer
 
 **Auto-Checked When:**
+
 ```
 Component field = "Hub" OR
 Labels include "component-hub" OR
@@ -558,6 +594,7 @@ Involves central coordination or orchestration
 ```
 
 **Related Work:**
+
 - Central coordination logic
 - Service mesh/communication
 - Data routing and flow
@@ -566,6 +603,7 @@ Involves central coordination or orchestration
 - State management
 
 **When to Check Manually:**
+
 ```
 Coordination concerns across components.
 
@@ -584,6 +622,7 @@ Example: "Implement distributed transaction coordination"
 **Purpose:** Mark if issue affects technology stack
 
 **Auto-Checked When:**
+
 ```
 Component field = "Stack" OR
 Labels include "component-stack" OR
@@ -591,6 +630,7 @@ Involves dependencies, frameworks, or infrastructure code
 ```
 
 **Related Work:**
+
 - Dependency management
 - Framework upgrades
 - Library integration
@@ -599,6 +639,7 @@ Involves dependencies, frameworks, or infrastructure code
 - Package management
 
 **When to Check Manually:**
+
 ```
 Stack implications in feature work.
 
@@ -617,6 +658,7 @@ Example: "Upgrade to new Node.js LTS"
 **Purpose:** Mark if issue affects infrastructure/DevOps
 
 **Auto-Checked When:**
+
 ```
 Component field = "Infrastructure" OR
 Labels include "component-infrastructure" OR
@@ -624,6 +666,7 @@ Involves servers, networking, storage, deployment
 ```
 
 **Related Work:**
+
 - Server provisioning
 - Network configuration
 - Storage management
@@ -633,6 +676,7 @@ Involves servers, networking, storage, deployment
 - Disaster recovery
 
 **When to Check Manually:**
+
 ```
 Infrastructure needs in any work.
 
@@ -658,11 +702,13 @@ These six fields enable phase-based filtering, reporting, and dependency trackin
 **Purpose:** Mark pre-installation phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 0"
 ```
 
 **Typical Work:**
+
 - Requirements gathering
 - Architecture design
 - Resource planning
@@ -671,6 +717,7 @@ Status Phase field = "Phase 0"
 - Success criteria definition
 
 **Usage:**
+
 ```
 View: "View all Phase 0 work"
 Filter: Show only Phase 0 items
@@ -685,11 +732,13 @@ Metrics: Phase 0 velocity and cycle time
 **Purpose:** Mark fresh installation phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 1"
 ```
 
 **Typical Work:**
+
 - System installation
 - Base configuration
 - Initial testing
@@ -698,6 +747,7 @@ Status Phase field = "Phase 1"
 - Baseline establishment
 
 **Phase Dependencies:**
+
 ```
 Must complete Phase 0 before Phase 1 work
 Cannot deploy Phase 1 until Phase 0 complete
@@ -711,11 +761,13 @@ Blockers in Phase 0 block Phase 1 start
 **Purpose:** Mark enhanced configuration phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 2"
 ```
 
 **Typical Work:**
+
 - Feature enablement
 - Performance tuning
 - Security hardening
@@ -730,11 +782,13 @@ Status Phase field = "Phase 2"
 **Purpose:** Mark advanced deployment phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 3"
 ```
 
 **Typical Work:**
+
 - High availability setup
 - Disaster recovery configuration
 - Multi-tenant support
@@ -749,11 +803,13 @@ Status Phase field = "Phase 3"
 **Purpose:** Mark professional tier phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 4"
 ```
 
 **Typical Work:**
+
 - Professional features
 - Advanced analytics
 - Custom workflows
@@ -768,11 +824,13 @@ Status Phase field = "Phase 4"
 **Purpose:** Mark enterprise tier phase work
 
 **Auto-Checked When:**
+
 ```
 Status Phase field = "Phase 5"
 ```
 
 **Typical Work:**
+
 - Enterprise licensing
 - Enterprise integrations
 - Advanced governance
@@ -787,6 +845,7 @@ Status Phase field = "Phase 5"
 ### Field 20: Estimated Days
 
 **Field Details:**
+
 ```yaml
 Field Name: Estimated Days
 Type: Number
@@ -798,12 +857,14 @@ Unit: Calendar days (not business days)
 ```
 
 **Purpose:**
+
 - Estimate calendar duration for task
 - Enable resource scheduling
 - Plan team capacity across days
 - Communicate timeline expectations
 
 **Relationship to Effort Estimate:**
+
 ```
 Effort Estimate (Story Points):
   - Measure of work complexity
@@ -851,6 +912,7 @@ Step 7: Finalize estimate
 ```
 
 **Automation Integration:**
+
 - Used for timeline and Gantt chart views
 - Combined with start date for deadline calculation
 - Influences resource allocation
@@ -858,6 +920,7 @@ Step 7: Finalize estimate
 - Impacts sprint scheduling
 
 **Best Practices:**
+
 - Keep between estimated days and actual effort consistent
 - Review and update as work progresses
 - Use historical data for calibration
@@ -869,6 +932,7 @@ Step 7: Finalize estimate
 ### Field 21: Start Date
 
 **Field Details:**
+
 ```yaml
 Field Name: Start Date
 Type: Date
@@ -881,6 +945,7 @@ Nullable: Yes (can be cleared)
 ```
 
 **Purpose:**
+
 - Set planned work start date
 - Enable timeline and schedule views
 - Trigger "time to start" notifications
@@ -898,6 +963,7 @@ Nullable: Yes (can be cleared)
 | Already started | [Past] | Retroactive | Set to actual start |
 
 **Timeline Example:**
+
 ```
 Issue: "Implement authentication"
 Effort: 5 points
@@ -913,6 +979,7 @@ Timeline View:
 ```
 
 **Automation Integration:**
+
 - Triggers start notifications when date arrives
 - Used in personal task views and reminders
 - Influences sprint planning
@@ -920,6 +987,7 @@ Timeline View:
 - Used in workload distribution
 
 **Best Practices:**
+
 - Set start date during sprint planning
 - Use future dates for planned work
 - Update if plans change
@@ -931,6 +999,7 @@ Timeline View:
 ### Field 22: Target Completion Date
 
 **Field Details:**
+
 ```yaml
 Field Name: Target Completion Date
 Type: Date
@@ -943,6 +1012,7 @@ Nullable: Yes
 ```
 
 **Purpose:**
+
 - Set target completion deadline
 - Enable due date tracking
 - Trigger deadline notifications
@@ -986,6 +1056,7 @@ Example 4: Strategic deadline
 | Overdue | Critical | Report daily |
 
 **Automation Integration:**
+
 - Notifications when deadline approaches
 - Escalation when overdue
 - Red highlighting in board view
@@ -994,6 +1065,7 @@ Example 4: Strategic deadline
 - Blocks vacation approvals if overdue
 
 **Best Practices:**
+
 - Set realistic deadlines considering dependencies
 - Add buffer for unknowns
 - Communicate deadlines clearly
@@ -1007,6 +1079,7 @@ Example 4: Strategic deadline
 ### Field 23: Tier Classification
 
 **Field Details:**
+
 ```yaml
 Field Name: Tier Classification
 Type: Single Select
@@ -1018,6 +1091,7 @@ Automation Level: Rule 4 (Auto-assign based on component)
 ```
 
 **Purpose:**
+
 - Classify feature tier for rollout planning
 - Enable tier-specific filtering and reporting
 - Support tier-based prioritization
@@ -1083,6 +1157,7 @@ Tier-Based Planning:
 ```
 
 **Automation Integration:**
+
 - Triggers tier-specific notifications
 - Used in tier-based board views
 - Influences customer-facing roadmap
@@ -1094,6 +1169,7 @@ Tier-Based Planning:
 ### Field 24: Automation Status
 
 **Field Details:**
+
 ```yaml
 Field Name: Automation Status
 Type: Single Select
@@ -1105,6 +1181,7 @@ Auto-Updated: Yes (by automation rules)
 ```
 
 **Purpose:**
+
 - Track automation level for each issue
 - Enable automation efficiency metrics
 - Identify opportunities for increased automation
@@ -1164,6 +1241,7 @@ Goal: Increase Full-Automation to 40%+
 ```
 
 **Automation Integration:**
+
 - Updated automatically when rules trigger
 - Used in automation efficiency dashboard
 - Identifies process optimization opportunities
@@ -1171,6 +1249,7 @@ Goal: Increase Full-Automation to 40%+
 - Supports continuous improvement
 
 **Best Practices:**
+
 - Apply labels to enable auto-tracking
 - Link PRs to enable auto-updates
 - Write clear issue descriptions for automation
@@ -1182,6 +1261,7 @@ Goal: Increase Full-Automation to 40%+
 ### Field 25: Integration Reference
 
 **Field Details:**
+
 ```yaml
 Field Name: Integration Reference
 Type: Text (Single line)
@@ -1194,6 +1274,7 @@ Example: JIRA:PROJ-1234
 ```
 
 **Purpose:**
+
 - Cross-reference external system issues
 - Enable bi-directional tracking
 - Support system migrations
@@ -1242,6 +1323,7 @@ Step 6: Link bidirectionally if possible
 ```
 
 **Automation Integration:**
+
 - Used for cross-system reporting
 - Enables integration data sync
 - Supports system migration tracking
@@ -1249,6 +1331,7 @@ Step 6: Link bidirectionally if possible
 - Enables historical reference
 
 **Best Practices:**
+
 - Use consistent format conventions
 - Include external URL in description
 - Keep reference current during status changes
@@ -1286,6 +1369,7 @@ Step 6: Link bidirectionally if possible
 #### Step 3: Field Configuration Example
 
 **Priority Field:**
+
 ```
 1. Click "+ Add field"
 2. Name: "Priority"
@@ -1300,6 +1384,7 @@ Step 6: Link bidirectionally if possible
 ```
 
 **Effort Estimate Field:**
+
 ```
 1. Click "+ Add field"
 2. Name: "Effort Estimate"
@@ -1346,6 +1431,7 @@ Step 6: Link bidirectionally if possible
 ### Field Selection & Usage
 
 **DO:**
+
 - ✓ Use all 5 tiers for comprehensive tracking
 - ✓ Set required fields (Priority, Component, Status Phase) for every issue
 - ✓ Update fields as issue progresses
@@ -1353,6 +1439,7 @@ Step 6: Link bidirectionally if possible
 - ✓ Review field usage monthly
 
 **DON'T:**
+
 - ✗ Leave required fields empty
 - ✗ Use custom fields inconsistently
 - ✗ Create duplicate fields (consolidate instead)
@@ -1362,11 +1449,13 @@ Step 6: Link bidirectionally if possible
 ### Field Maintenance
 
 **Weekly:**
+
 - Review blocked items and update component fields
 - Verify effort estimates accuracy
 - Check deadlines for upcoming items
 
 **Monthly:**
+
 - Analyze field usage patterns
 - Identify underutilized fields
 - Plan field optimization
@@ -1384,6 +1473,7 @@ Step 6: Link bidirectionally if possible
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Field Count: 25

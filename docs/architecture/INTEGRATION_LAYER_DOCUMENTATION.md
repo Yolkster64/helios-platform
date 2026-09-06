@@ -44,9 +44,11 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 ## Modules Delivered (45 KB)
 
 ### 1. Event Bus System (10 KB)
+
 **File:** `src/core/event-bus.js`
 
 **Components:**
+
 - **EventEmitter**: Pub/sub architecture with topic-based routing
 - **EventValidator**: Schema validation for all 6 event types
 - **EventPersistence**: Store events for async processing + replay
@@ -55,6 +57,7 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - **SubscriberManagement**: Register/unregister handlers with cleanup
 
 **Supported Events:**
+
 - `ai:suggestion` - AI recommendations with confidence scores
 - `analytics:recorded` - Event tracking and metrics
 - `sync:conflict` - Synchronization conflicts detected
@@ -63,9 +66,11 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - `error:occurred` - Error logging and recovery
 
 ### 2. Data Adapters (12 KB)
+
 **File:** `src/adapters/index.js`
 
 **Adapters:**
+
 - **AIAdapter**: Backend ↔ AI format (semantic search, suggestions)
 - **AnalyticsAdapter**: Backend ↔ Analytics format (events, metrics)
 - **SyncAdapter**: Backend ↔ Sync format (timestamps, versions, devices)
@@ -74,15 +79,18 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - **Transformers**: Utility functions for data normalization
 
 **Features:**
+
 - Bidirectional transformation
 - Format validation
 - Automatic sanitization
 - Hash computation for sync
 
 ### 3. API Gateway (8 KB)
+
 **File:** `src/gateway/api-gateway.js`
 
 **Components:**
+
 - **ServiceRouter**: Route requests to correct service with wildcard patterns
 - **AuthenticationEnforcer**: JWT and API key validation
 - **RateLimitEnforcer**: Tier-based rate limiting (free/pro/enterprise)
@@ -91,6 +99,7 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - **CachingHeaders**: Set Cache-Control headers with ETags
 
 **Response Format:**
+
 ```json
 {
   "success": true,
@@ -105,9 +114,11 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 ```
 
 ### 4. Request Correlation (7 KB)
+
 **File:** `src/core/correlation.js`
 
 **Components:**
+
 - **CorrelationIDGenerator**: Generate unique request IDs
 - **TraceIDPropagation**: Multi-service trace context
 - **RequestLifecycleTracker**: Track request through 5 stages
@@ -115,6 +126,7 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - **LogCorrelation**: Automatic log correlation
 
 **Lifecycle Stages:**
+
 1. `received` - Request received
 2. `validated` - Schema validation complete
 3. `processing` - Service processing
@@ -122,9 +134,11 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 5. `delivered` - Client received response
 
 ### 5. State Manager (5 KB)
+
 **File:** `src/core/state-manager.js`
 
 **State Managers:**
+
 - **AppState**: Global application state with history
 - **SyncState**: Multi-device sync with conflict tracking
 - **CacheState**: Redis-like cache with TTL and eviction
@@ -133,9 +147,11 @@ This is the **Integration & Communication Layer** for HELIOS v4.0, providing uni
 - **StateObserver**: Watch state paths for changes
 
 ### 6. Sync Orchestrator (3 KB)
+
 **File:** `src/core/sync-orchestrator.js`
 
 **Components:**
+
 - **ConflictDetector**: Three-way merge conflict detection
 - **ResolutionOrchestrator**: 5 resolution strategies (LWW, local, remote, merge, manual)
 - **SyncAuditTrail**: Complete audit log of all sync operations
@@ -303,6 +319,7 @@ npm test -- --coverage
 ## Integration Points
 
 ### Event Bus Routes
+
 - `ai:suggestion` → AI Service
 - `analytics:recorded` → Analytics Dashboard
 - `sync:conflict` → Sync Engine
@@ -311,6 +328,7 @@ npm test -- --coverage
 - `error:occurred` → Error Handler
 
 ### Adapter Chains
+
 ```
 Backend ↔ AI Service
 Backend ↔ Analytics Dashboard
@@ -320,6 +338,7 @@ Backend ↔ PWA Frontend
 ```
 
 ### Gateway Flow
+
 ```
 Client → API Gateway (auth + rate-limit)
         → ServiceRouter

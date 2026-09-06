@@ -5,6 +5,7 @@ Step-by-step workflows for common development scenarios, troubleshooting, and ad
 ---
 
 ## Table of Contents
+
 1. [Initial Setup](#initial-setup)
 2. [Feature Development Workflow](#feature-development-workflow)
 3. [Code Review and Merge](#code-review-and-merge)
@@ -621,6 +622,7 @@ git push origin main
 ## Best Practices Checklist
 
 ### Before Pushing
+
 ```markdown
 □ All tests pass locally: npm test
 □ Code builds without errors: npm run build
@@ -632,6 +634,7 @@ git push origin main
 ```
 
 ### Before Creating PR
+
 ```markdown
 □ Branch is up-to-date: git rebase origin/develop
 □ PR title is clear and follows format
@@ -644,6 +647,7 @@ git push origin main
 ```
 
 ### During Code Review
+
 ```markdown
 □ Respond to feedback within 12 hours
 □ Ask for clarification if feedback unclear
@@ -654,6 +658,7 @@ git push origin main
 ```
 
 ### After Merge
+
 ```markdown
 □ Verify changes in develop/main
 □ Delete local and remote feature branch

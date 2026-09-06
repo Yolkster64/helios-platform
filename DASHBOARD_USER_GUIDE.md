@@ -22,12 +22,14 @@ The Developer Dashboard is a comprehensive tool for monitoring, analyzing, and o
 The Overview tab provides a quick snapshot of system health and key metrics.
 
 **Features:**
+
 - Real-time CPU, Memory, Disk, and Network metrics
 - Health status summary
 - Quick access to common operations
 - Auto-refreshing indicators
 
 **How to Use:**
+
 1. Open the Dashboard
 2. The Overview tab is selected by default
 3. View current system metrics in the upper section
@@ -39,12 +41,14 @@ The Overview tab provides a quick snapshot of system health and key metrics.
 Detailed performance metrics with historical trends and visualization.
 
 **Features:**
+
 - CPU and Memory usage graphs (60-minute history)
 - Peak usage tracking
 - Trend analysis with color indicators
 - Comparative analysis tools
 
 **How to Use:**
+
 1. Navigate to the Performance tab
 2. View the metric timeline graph
 3. Hover over graph points to see exact values
@@ -56,6 +60,7 @@ Detailed performance metrics with historical trends and visualization.
 Monitor and manage system processes with detailed metrics.
 
 **Features:**
+
 - List of top 20 processes by memory usage
 - CPU percentage per process
 - Thread count tracking
@@ -63,6 +68,7 @@ Monitor and manage system processes with detailed metrics.
 - Terminate process capability
 
 **How to Use:**
+
 1. Go to the Processes tab
 2. View the process list sorted by memory usage
 3. Click "Refresh" to update the list
@@ -76,6 +82,7 @@ Monitor and manage system processes with detailed metrics.
 View and filter system logs and events with search capability.
 
 **Features:**
+
 - Real-time log entries with timestamps
 - Severity filtering (ERROR, WARNING, INFO)
 - Full-text search capability
@@ -84,6 +91,7 @@ View and filter system logs and events with search capability.
 - Auto-scroll to latest entry
 
 **How to Use:**
+
 1. Navigate to Logs & Events tab
 2. Use the Filter dropdown to select log level
 3. Use the Search box for keyword search
@@ -99,6 +107,7 @@ Suite of tools for API testing, theme customization, and plugin development.
 Interactive REST/GraphQL API testing tool.
 
 **Features:**
+
 - Request builder (GET, POST, PUT, DELETE, PATCH)
 - JSON payload editor with syntax highlighting
 - Response viewer with formatting
@@ -110,6 +119,7 @@ Interactive REST/GraphQL API testing tool.
 Visual theme customization and export.
 
 **Features:**
+
 - Live color picker for theme colors
 - Real-time preview of color changes
 - Pre-built theme templates
@@ -121,6 +131,7 @@ Visual theme customization and export.
 Scaffolding tool for new plugin development.
 
 **Features:**
+
 - Multiple plugin templates (Basic, UI Widget, Service)
 - Automatic file generation
 - Dependency resolution
@@ -131,6 +142,7 @@ Scaffolding tool for new plugin development.
 Built-in performance profiling for optimization.
 
 **Features:**
+
 - Function call timing
 - Memory allocation tracking
 - Hot spot detection
@@ -217,6 +229,7 @@ System event and execution trace analysis.
 ## Version History
 
 ### v3.6.0 (Current)
+
 - Initial release
 - 6 main tabs with 15+ sub-features
 - 35+ test coverage

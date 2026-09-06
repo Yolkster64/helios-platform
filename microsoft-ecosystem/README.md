@@ -9,6 +9,7 @@ The Microsoft Ecosystem Integration provides comprehensive connectivity between 
 ## What's Available
 
 ### 1. **Azure (Cloud Infrastructure)**
+
 - **Virtual Machines**: Host HELIOS platform components with autoscaling
 - **App Services**: Deploy web interfaces and APIs serverlessly
 - **SQL Database**: Enterprise-grade relational data storage
@@ -22,6 +23,7 @@ The Microsoft Ecosystem Integration provides comprehensive connectivity between 
 **Resource Group**: `helios-platform-prod` (Primary Production)
 
 ### 2. **Microsoft 365 (Productivity Suite)**
+
 - **Teams**: Communication, collaboration, and chat integration
 - **OneDrive**: Cloud storage for HELIOS configurations and data
 - **SharePoint**: Document management and knowledge base
@@ -31,6 +33,7 @@ The Microsoft Ecosystem Integration provides comprehensive connectivity between 
 **Tenant Configuration**: enterprise.onmicrosoft.com
 
 ### 3. **Entra ID (Identity & Access)**
+
 - **User Authentication**: SSO for HELIOS platform access
 - **Multi-Factor Authentication**: Enforce 2FA/MFA policies
 - **Conditional Access**: Risk-based access policies
@@ -40,18 +43,21 @@ The Microsoft Ecosystem Integration provides comprehensive connectivity between 
 **Tenant ID**: Located in `$env:HELIOS_AZURE_TENANT_ID`
 
 ### 4. **Microsoft Copilot**
+
 - **AI-Powered Assistance**: Generate HELIOS optimization recommendations
 - **Code Generation**: Automate script and automation creation
 - **System Analysis**: Review configurations and identify issues
 - **Documentation**: Auto-generate operational guides
 
 ### 5. **Microsoft Purview (Data Governance)**
+
 - **Data Classification**: Automatically classify HELIOS data
 - **Compliance Monitoring**: Track regulatory compliance (GDPR, HIPAA, SOC2)
 - **Risk Management**: Identify and mitigate data risks
 - **Data Lineage**: Track data flow through HELIOS ecosystem
 
 ### 6. **Power Platform (Custom Applications)**
+
 - **Power Apps**: Build low-code applications for HELIOS management
 - **Power BI**: Create dashboards and analytical reports
 - **Power Automate**: Orchestrate complex workflows
@@ -128,26 +134,31 @@ $env:HELIOS_ENVIRONMENT = "production"
 ### Benefits
 
 ✅ **Enterprise-Grade Security**
+
 - Zero-trust architecture with Entra ID
 - Multi-factor authentication enforcement
 - End-to-end encryption with Key Vault
 
 ✅ **Global Scalability**
+
 - Auto-scaling infrastructure across Azure regions
 - CDN for global content delivery
 - Distributed database replication
 
 ✅ **Operational Excellence**
+
 - Automated deployment pipelines (Azure DevOps)
 - Real-time monitoring (Application Insights)
 - Predictive analytics (Fabric)
 
 ✅ **Compliance & Governance**
+
 - GDPR, HIPAA, SOC2 compliance automation
 - Audit trail integration (Purview)
 - Data classification and protection (DLP)
 
 ✅ **Cost Optimization**
+
 - Reserved instances and savings plans
 - Auto-shutdown for non-production resources
 - Automatic scaling based on demand
@@ -155,7 +166,9 @@ $env:HELIOS_ENVIRONMENT = "production"
 ### Use Cases
 
 #### 1. **Enterprise Deployment**
+
 A Fortune 500 company deploys HELIOS across 50 office locations:
+
 - **Azure**: Host regional VMs with failover
 - **365**: Teams for global coordination
 - **Entra**: Centralized authentication with Conditional Access
@@ -163,7 +176,9 @@ A Fortune 500 company deploys HELIOS across 50 office locations:
 - **Fabric**: Executive dashboards with real-time data
 
 #### 2. **Managed Service Provider (MSP)**
+
 An MSP manages HELIOS for 100+ clients:
+
 - **Azure**: Separate resource groups per customer
 - **Power Apps**: Multi-tenant admin portal
 - **365**: Shared infrastructure with tenant isolation
@@ -171,7 +186,9 @@ An MSP manages HELIOS for 100+ clients:
 - **Power Automate**: Client onboarding workflows
 
 #### 3. **Healthcare Organization**
+
 Deploy HELIOS with HIPAA compliance:
+
 - **Entra**: Role-based access control (RBAC)
 - **Azure Key Vault**: Encryption key management
 - **Purview**: Data classification and privacy controls
@@ -179,7 +196,9 @@ Deploy HELIOS with HIPAA compliance:
 - **Power BI**: HIPAA-compliant reporting
 
 #### 4. **DevOps Transformation**
+
 Implement HELIOS as part of CI/CD pipeline:
+
 - **Azure DevOps**: Source control and pipelines
 - **Functions**: Serverless automation
 - **Container Registry**: Docker image management
@@ -189,6 +208,7 @@ Implement HELIOS as part of CI/CD pipeline:
 ## Quick Start
 
 ### 1. **Azure Setup** (5-10 minutes)
+
 ```powershell
 # Connect to Azure
 Connect-AzAccount -Tenant $env:HELIOS_AZURE_TENANT_ID
@@ -200,6 +220,7 @@ New-AzResourceGroup -Name "helios-platform-prod" -Location "eastus2"
 ```
 
 ### 2. **Entra ID Configuration** (10-15 minutes)
+
 ```powershell
 # Install Microsoft Graph module
 Install-Module Microsoft.Graph -Force
@@ -211,6 +232,7 @@ $app = New-MgApplication -DisplayName "HELIOS Platform"
 ```
 
 ### 3. **Microsoft 365 Setup** (15-20 minutes)
+
 ```powershell
 # Connect to Microsoft 365
 Connect-MgGraph -Scopes "User.ReadWrite.All"
@@ -220,6 +242,7 @@ Connect-MgGraph -Scopes "User.ReadWrite.All"
 ```
 
 ### 4. **Deploy to Azure** (20-30 minutes)
+
 ```powershell
 # Run deployment script
 .\scripts\deploy-to-azure.ps1 -Environment "production" -Phases All

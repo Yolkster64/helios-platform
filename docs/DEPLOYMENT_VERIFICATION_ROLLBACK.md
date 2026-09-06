@@ -5,6 +5,7 @@
 ### Pre-Deployment Verification Checklist
 
 #### Code Quality
+
 ```powershell
 # Run code analysis
 dotnet build /p:EnforceCodeStyleInBuild=true
@@ -17,18 +18,21 @@ dotnet reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage
 ```
 
 **Verification Steps**:
+
 - [ ] All tests passing (100% pass rate)
 - [ ] Code coverage > 80%
 - [ ] No critical code analysis issues
 - [ ] No security vulnerabilities
 
 #### Distribution Files
+
 ```powershell
 # Verify all files present
 .\scripts\deployment\verify-distribution.ps1 -Version "1.0.0"
 ```
 
 **Verification Steps**:
+
 - [ ] ✓ PASS - All directory structures
 - [ ] ✓ PASS - Executables present
 - [ ] ✓ PASS - NuGet package valid
@@ -37,6 +41,7 @@ dotnet reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage
 - [ ] ✓ PASS - Checksums generated
 
 #### Installation Testing
+
 ```powershell
 # Test installation methods
 # 1. Installer
@@ -53,6 +58,7 @@ choco install helios-platform -c -f
 ```
 
 **Verification Steps**:
+
 - [ ] Installer completes without errors
 - [ ] Application launches successfully
 - [ ] Version check shows 1.0.0
@@ -60,6 +66,7 @@ choco install helios-platform -c -f
 - [ ] Uninstaller works cleanly
 
 #### Package Integrity
+
 ```powershell
 # Verify checksums
 $file = "HELIOS-Setup.exe"
@@ -69,6 +76,7 @@ Write-Host "Hash match: $($hash -eq $expected)"
 ```
 
 **Verification Steps**:
+
 - [ ] All file hashes match CHECKSUMS.txt
 - [ ] MD5 verified
 - [ ] SHA256 verified
@@ -77,6 +85,7 @@ Write-Host "Hash match: $($hash -eq $expected)"
 ### Post-Deployment Verification
 
 #### NuGet.org Publishing
+
 ```powershell
 # Verify package published
 nuget search HELIOS.Platform
@@ -86,6 +95,7 @@ https://www.nuget.org/packages/HELIOS.Platform/1.0.0
 ```
 
 **Verification Steps**:
+
 - [ ] Package visible on NuGet.org
 - [ ] Correct version: 1.0.0
 - [ ] Correct metadata
@@ -93,6 +103,7 @@ https://www.nuget.org/packages/HELIOS.Platform/1.0.0
 - [ ] Can install: `nuget install HELIOS.Platform -Version 1.0.0`
 
 #### GitHub Release Verification
+
 ```powershell
 # Check release created
 git ls-remote --tags origin | grep v1.0.0
@@ -102,6 +113,7 @@ git ls-remote --tags origin | grep v1.0.0
 ```
 
 **Verification Steps**:
+
 - [ ] Release tag v1.0.0 exists
 - [ ] GitHub Release created
 - [ ] All artifacts uploaded
@@ -109,6 +121,7 @@ git ls-remote --tags origin | grep v1.0.0
 - [ ] Downloads accessible
 
 #### Package Manager Verification
+
 ```powershell
 # Chocolatey
 choco search helios-platform
@@ -122,6 +135,7 @@ winget install HELIOS.Platform --version 1.0.0
 ```
 
 **Verification Steps**:
+
 - [ ] Chocolatey package listed
 - [ ] Winget package listed
 - [ ] Installs successfully from each
@@ -135,6 +149,7 @@ winget install HELIOS.Platform --version 1.0.0
 ### When to Rollback
 
 **Immediate Rollback Triggers**:
+
 1. ❌ Security vulnerability discovered
 2. ❌ Data corruption issues
 3. ❌ Installation failure rate > 5%
@@ -143,6 +158,7 @@ winget install HELIOS.Platform --version 1.0.0
 6. ❌ Performance regression > 50%
 
 **Delayed Rollback Triggers**:
+
 1. ⚠️ Minor bugs discovered in first 24 hours
 2. ⚠️ Documentation errors
 3. ⚠️ UI/UX issues
@@ -160,6 +176,7 @@ winget install HELIOS.Platform --version 1.0.0
 ### Rollback Procedure
 
 #### Step 1: Declare Rollback
+
 ```powershell
 # Notify all stakeholders
 Write-Host "ROLLBACK DECLARED: v1.0.0"
@@ -169,6 +186,7 @@ Write-Host "Timeline: Immediate to 1 hour"
 ```
 
 **Actions**:
+
 - [ ] Notify engineering team
 - [ ] Notify support team
 - [ ] Notify product management
@@ -193,6 +211,7 @@ nuget delete HELIOS.Platform 1.0.0 -Source https://api.nuget.org/v3/index.json -
 ```
 
 **Verification Steps**:
+
 - [ ] NuGet package unlisted
 - [ ] GitHub Release marked retracted
 - [ ] Chocolatey package flagged/removed
@@ -223,6 +242,7 @@ be released within 24 hours.
 ```
 
 **Notification Channels**:
+
 - [ ] GitHub Release - Create rollback notice
 - [ ] Email to all downloaders (if available)
 - [ ] Social media announcement
@@ -247,6 +267,7 @@ Remove-Item $distPath -Recurse -Force
 ```
 
 **Verification Steps**:
+
 - [ ] Files archived safely
 - [ ] Distribution path cleaned
 - [ ] Backup confirmed
@@ -270,6 +291,7 @@ git log --oneline -20
 ```
 
 **Documentation**:
+
 - [ ] Create incident report
 - [ ] Root cause analysis completed
 - [ ] Document all affected users
@@ -298,6 +320,7 @@ git push origin v1.0.1
 ```
 
 **Verification Steps**:
+
 - [ ] All tests passing
 - [ ] Issue reproduction steps pass
 - [ ] No new issues introduced
@@ -315,6 +338,7 @@ git push origin v1.0.1
 ```
 
 **Verification Steps**:
+
 - [ ] v1.0.1 published to NuGet.org
 - [ ] GitHub Release created
 - [ ] Package manager updates triggered
@@ -344,6 +368,7 @@ We apologize for the disruption and thank you for your patience.
 ```
 
 **Final Actions**:
+
 - [ ] Update incident ticket as "Resolved"
 - [ ] Send final notification to users
 - [ ] Update website with incident summary
@@ -364,6 +389,7 @@ We apologize for the disruption and thank you for your patience.
 ### Rollback Success Criteria
 
 ✅ **Rollback Considered Successful When**:
+
 - NuGet.org shows package unlisted
 - GitHub Release marked as retracted
 - Download links inactive
@@ -376,6 +402,7 @@ We apologize for the disruption and thank you for your patience.
 ### Prevention & Continuous Improvement
 
 #### Prevent Future Rollbacks
+
 1. **Enhanced Testing**
    - [ ] Increase test coverage to 90%+
    - [ ] Add integration tests

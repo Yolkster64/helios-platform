@@ -23,6 +23,7 @@
 ### System Requirements
 
 **Minimum:**
+
 - Windows 11 Pro or Windows Server 2022
 - PowerShell 7.4+
 - 8 GB RAM
@@ -30,6 +31,7 @@
 - .NET 8.0 runtime
 
 **Recommended:**
+
 - Windows 11 Enterprise
 - PowerShell 7.4+
 - 16 GB RAM
@@ -106,6 +108,7 @@ Get-Content START_HERE.md
 ```
 
 **Expected Output:**
+
 ```
 ✅ Phase 0 Complete: System validation passed (10/10 checks)
 ✅ Phase 1 Complete: Infrastructure deployed to Azure
@@ -185,12 +188,14 @@ Once deployment completes, access monitoring dashboards:
 The HELIOS GUI features a modern, responsive design organized into 5 main sections:
 
 **1. Top Navigation Bar**
+
 - Project selector dropdown
 - User profile menu
 - Notifications badge
 - Help icon
 
 **2. Left Sidebar**
+
 - Dashboard (home icon)
 - Deployments
 - Agents
@@ -200,16 +205,19 @@ The HELIOS GUI features a modern, responsive design organized into 5 main sectio
 - Documentation
 
 **3. Main Content Area**
+
 - Context-specific widgets
 - Real-time status indicators
 - Action buttons
 
 **4. Right Panel**
+
 - Quick actions
 - System status
 - Recent events
 
 **5. Bottom Status Bar**
+
 - Connection status
 - Deployment progress
 - System health score
@@ -253,6 +261,7 @@ The HELIOS GUI features a modern, responsive design organized into 5 main sectio
 **Overview:** HELIOS automates enterprise infrastructure deployment in 6 coordinated phases.
 
 **What it does:**
+
 - Infrastructure provisioning (Azure, AWS, or on-premise)
 - Agent fleet orchestration
 - AI service registration
@@ -261,11 +270,13 @@ The HELIOS GUI features a modern, responsive design organized into 5 main sectio
 - Verification and go-live
 
 **How to use:**
+
 - Phase-by-phase deployment via CLI or GUI
 - Rollback support at any phase
 - Detailed logging for troubleshooting
 
 **Benefits:**
+
 - 30-minute deployment vs. 3-5 days manual
 - Guaranteed consistency
 - Audit trail of all changes
@@ -277,6 +288,7 @@ The HELIOS GUI features a modern, responsive design organized into 5 main sectio
 **Overview:** HELIOS coordinates 12+ AI models with intelligent routing.
 
 **Available Models:**
+
 - Tier 1 (Free): Ollama, Gemini, Copilot
 - Tier 2 (Standard): Azure OpenAI, Claude, Gemini Pro
 - Tier 3 (Specialist): Fabric, NVIDIA, Copilot Studio
@@ -297,6 +309,7 @@ Console.WriteLine($"Latency: {result.LatencyMs}ms");
 ```
 
 **Features:**
+
 - Automatic model selection based on cost/performance
 - Request caching (67% hit rate)
 - Fallback routing
@@ -309,6 +322,7 @@ Console.WriteLine($"Latency: {result.LatencyMs}ms");
 **Overview:** Military-grade security protecting every layer of the system.
 
 **Layers:**
+
 1. **Physical:** USB token + TPM 2.0
 2. **Authentication:** MFA + Entra ID
 3. **Secrets:** Dual vault (Azure + local encrypted)
@@ -319,6 +333,7 @@ Console.WriteLine($"Latency: {result.LatencyMs}ms");
 8. **AI:** Multi-model consensus
 
 **How to enable:**
+
 ```powershell
 # Security is enabled by default
 # Configure MFA
@@ -335,6 +350,7 @@ Get-HeliosSecurityStatus
 **Overview:** Comprehensive observability across all system dimensions.
 
 **Dashboards:**
+
 1. **Cost:** Real-time spend, forecasting, anomalies
 2. **Performance:** Latency, throughput, resource usage
 3. **Security:** Events, threats, compliance status
@@ -344,6 +360,7 @@ Get-HeliosSecurityStatus
 7. **System:** Uptime, SLAs, health score
 
 **How to access:**
+
 - Web UI: `https://localhost:8080`
 - CLI: `Get-HeliosDashboard -Name "Cost"`
 - API: `GET /api/dashboards/{name}`
@@ -355,6 +372,7 @@ Get-HeliosSecurityStatus
 **Overview:** Intelligent optimization reduces cloud costs by 85%.
 
 **Optimizations:**
+
 - AI model routing (select cheapest suitable model)
 - Request caching (67% hit rate)
 - Batch processing
@@ -362,6 +380,7 @@ Get-HeliosSecurityStatus
 - Resource pooling
 
 **How to enable:**
+
 ```powershell
 # Enable cost optimization
 Set-HeliosCostOptimization -Enabled $true
@@ -374,6 +393,7 @@ Get-HeliosCostAnalysis -Period Month
 ```
 
 **Results:**
+
 - Monthly cost: $150 vs. $1,000+ (manual)
 - Monthly savings: $850+
 - Annual ROI: 243x
@@ -457,6 +477,7 @@ Get-HeliosCostAnalysis -Period Month
 **Error:** `Agent startup timeout after 5 minutes`
 
 **Solution:**
+
 1. Check Docker status: `docker ps`
 2. Verify network connectivity: `Test-NetConnection api.helios-platform.dev`
 3. Review agent logs: `Get-HeliosAgentLogs -Phase 2`
@@ -467,6 +488,7 @@ Get-HeliosCostAnalysis -Period Month
 **Error:** `Average query latency: 2500ms`
 
 **Solution:**
+
 1. Check AI service status: `Get-HeliosAIStatus`
 2. Enable request caching: `Set-HeliosCaching -Enabled $true`
 3. Switch to local model: `Set-HeliosAIModel -Model "ollama-local"`
@@ -477,6 +499,7 @@ Get-HeliosCostAnalysis -Period Month
 **Error:** `42 verification tests failed`
 
 **Solution:**
+
 1. Review audit log: `Get-HeliosAuditLog -Last 100`
 2. Check MFA setup: `Get-HeliosSecurityStatus`
 3. Verify certificates: `Get-HeliosCertificate -All`
@@ -487,6 +510,7 @@ Get-HeliosCostAnalysis -Period Month
 **Error:** `Connection refused to localhost:8080`
 
 **Solution:**
+
 1. Check dashboard service: `Get-Service -Name "HeliosDashboard"`
 2. Start service if needed: `Start-Service -Name "HeliosDashboard"`
 3. Verify port availability: `netstat -ano | findstr :8080`
@@ -576,6 +600,7 @@ A: SOC2 Type II, ISO 27001, HIPAA, PCI-DSS, FedRAMP (in development).
 
 **Q: How do I get help?**  
 A: Contact support via:
+
 - GitHub Issues: https://github.com/M0nado/helios-platform/issues
 - Email: support@helios-platform.dev
 - Discussions: https://github.com/M0nado/helios-platform/discussions

@@ -42,27 +42,34 @@ gh workflow run status-dashboard.yml -f include_metrics=true
 ## Output Artifacts
 
 ### multi-repo-sync.yml
+
 - `sync-artifacts/` → Submodule and version data
 
 ### component-version-check.yml
+
 - `compatibility-reports/` → Validation and dependency data
 
 ### build-all-modules.yml
+
 - `*-build/` → Module builds
 - `test-results-*/` → Test reports
 - `build-metrics-*/` → Performance data
 
 ### build-variant-test.yml
+
 - `variant-*-build/` → Variant builds
 - `variant-reports/` → Test results
 
 ### code-registry-update.yml
+
 - `compression-data/` → Registry and analysis
 
 ### wiki-generator.yml
+
 - `wiki-html/` → Complete HTML wiki
 
 ### status-dashboard.yml
+
 - `status-dashboard/` → Reports and dashboard
 
 ## Performance Characteristics
@@ -80,6 +87,7 @@ gh workflow run status-dashboard.yml -f include_metrics=true
 ## Monitoring Workflows
 
 ### View Workflow Status
+
 ```bash
 # List recent runs
 gh workflow view multi-repo-sync.yml --json updatedAt,status
@@ -92,6 +100,7 @@ gh run view <RUN_ID> --log
 ```
 
 ### Check for Failures
+
 ```bash
 # Get failed runs
 gh run list --status failure --limit 10
@@ -103,20 +112,24 @@ gh run view <FAILED_RUN_ID> --log-failed
 ## Common Issues
 
 **"Push rejected"**
+
 - Use `git pull` before manual changes
 - Workflows use `force-with-lease` for safety
 
 **"Artifact not found"**
+
 - Check retention period (default 30 days)
 - Verify workflow completed successfully
 - Check artifact name in workflow step
 
 **"Build failed"**
+
 - Review build logs in workflow run
 - Check dependencies are installed
 - Verify all required tools available
 
 **"Incompatible versions detected"**
+
 - Review `COMPATIBILITY_REPORT.md`
 - Check `breaking_changes.json`
 - May need manual intervention
@@ -124,6 +137,7 @@ gh run view <FAILED_RUN_ID> --log-failed
 ## Repository Setup
 
 ### Required Branch Protection Rules
+
 ```
 Branch: main
 - Require status checks to pass before merging
@@ -133,10 +147,13 @@ Branch: main
 ```
 
 ### Recommended Secrets
+
 None required (uses GITHUB_TOKEN)
 
 ### File Permissions
+
 Workflows need write access to:
+
 - Root README.md
 - COMPONENT_MATRIX.md
 - BUILD_VARIANTS.md
@@ -145,6 +162,7 @@ Workflows need write access to:
 ## GitHub Actions Permissions
 
 All workflows use minimal required permissions:
+
 ```yaml
 permissions:
   contents: write          # For commits/PRs
@@ -163,6 +181,7 @@ Staggered to avoid concurrent heavy operations.
 ## Artifact Access
 
 ### Via GitHub UI
+
 1. Click "Actions" tab
 2. Select workflow
 3. Click run
@@ -170,37 +189,44 @@ Staggered to avoid concurrent heavy operations.
 5. Download desired artifact
 
 ### Via GitHub CLI
+
 ```bash
 gh run download <RUN_ID> -n artifact-name
 ```
 
 ### Via Download Button
+
 All artifacts automatically download with run completion.
 
 ## Cost Considerations
 
 GitHub Actions provides:
+
 - **Public repos:** Unlimited minutes
 - **Private repos:** 2,000 minutes/month free
 
 Estimated monthly usage for Helios:
+
 - ~1,500 build minutes
 - Cost: $0 (within free tier)
 
 ## Troubleshooting
 
 ### Enable Debug Logging
+
 ```bash
 # Set repository secrets
 gh secret set ACTIONS_STEP_DEBUG --body true
 ```
 
 ### Manual Retry
+
 ```bash
 gh run rerun <RUN_ID>
 ```
 
 ### Force Workflow
+
 ```bash
 # Push empty commit to trigger
 git commit --allow-empty -m "trigger workflows"
@@ -210,12 +236,14 @@ git push
 ## Best Practices
 
 ✅ **DO:**
+
 - Run in dry-run mode first for major changes
 - Review artifacts before committing
 - Monitor workflow status regularly
 - Keep workflows updated with code changes
 
 ❌ **DON'T:**
+
 - Manually edit generated files (they'll be overwritten)
 - Disable workflows without reason
 - Ignore workflow failures

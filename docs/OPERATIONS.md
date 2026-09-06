@@ -38,6 +38,7 @@ Get-HeliosHealth
 ```
 
 **If NOT healthy:**
+
 ```powershell
 # Get detailed status
 Get-HeliosHealth -Verbose
@@ -93,6 +94,7 @@ Get-HeliosAlert -Severity Critical
 ### Real-Time Monitoring
 
 **Access monitoring portal:**
+
 ```
 https://localhost:8080
 ```
@@ -181,12 +183,14 @@ Set-HeliosAlert -Name "BudgetWarning" -Metric "DailySpend" `
 ### Backup Strategy
 
 **Backup Frequency:**
+
 - **Continuous:** Database replication
 - **Hourly:** Incremental backup
 - **Daily:** Full backup
 - **Weekly:** Verification backup
 
 **Backup Locations:**
+
 - Primary: Azure Backup (or AWS, on-premise)
 - Secondary: Geographic redundancy
 - Tertiary: Offline archive (monthly)
@@ -206,6 +210,7 @@ Location: https://backups.helios.dev/backup-2024-01-15-101530
 ```
 
 **Verify backup:**
+
 ```powershell
 Get-HeliosBackup -Id "backup-2024-01-15-101530"
 
@@ -221,6 +226,7 @@ RetentionUntil  : 2024-02-15
 ### Disaster Recovery Procedures
 
 **Regional Failover:**
+
 ```powershell
 # Automatic failover to secondary region
 Invoke-HeliosFailover -SecondaryRegion "westus" -WaitForSync $true
@@ -230,6 +236,7 @@ Invoke-HeliosFailover -SecondaryRegion "westus" -WaitForSync $true
 ```
 
 **Restoring from Backup:**
+
 ```powershell
 # List available backups
 Get-HeliosBackup | Sort-Object Created -Descending | Select -First 5
@@ -243,6 +250,7 @@ Restore-HeliosDeployment -BackupId "backup-2024-01-15-101530" `
 ```
 
 **Point-in-Time Recovery:**
+
 ```powershell
 # Restore to specific point in time
 Restore-HeliosDeployment -ToDateTime (Get-Date).AddHours(-2) `
@@ -258,6 +266,7 @@ Restore-HeliosDeployment -ToDateTime (Get-Date).AddHours(-2) `
 ### Planned Maintenance
 
 **Schedule:**
+
 - Monthly: First Saturday of each month
 - Window: 2:00 AM - 4:00 AM UTC
 - Duration: ~1-2 hours
@@ -319,6 +328,7 @@ Set-HeliosEmergencyMode -Enabled $true `
 **Symptoms:** Cannot access deployment, 503 errors
 
 **Diagnosis:**
+
 ```powershell
 Get-HeliosDeploymentStatus -Name "prod-1"
 Get-HeliosAgent  # Check if agents running
@@ -326,6 +336,7 @@ Get-HeliosAlert -Severity Critical
 ```
 
 **Resolution:**
+
 ```powershell
 # Option 1: Restart deployment
 Restart-HeliosDeployment -Name "prod-1" -Wait
@@ -342,6 +353,7 @@ Restore-HeliosDeployment -BackupId "backup-2024-01-15-101530"
 **Symptoms:** API responses slow, users complaining
 
 **Diagnosis:**
+
 ```powershell
 Get-HeliosMetrics -Metric "Latency" -Period "Hour"
 Get-HeliosMetrics -Metric "CPU"
@@ -349,6 +361,7 @@ Get-HeliosMetrics -Metric "Memory"
 ```
 
 **Resolution:**
+
 ```powershell
 # Option 1: Clear cache
 Clear-HeliosCache
@@ -365,12 +378,14 @@ Set-HeliosAIModel -RoutingStrategy "PerformanceOptimized" -EnableCaching $true
 **Symptoms:** Spending exceeds budget
 
 **Diagnosis:**
+
 ```powershell
 Get-HeliosCostAnalysis -Period "Month"
 Get-HeliosAIMetrics | Sort-Object Cost -Descending
 ```
 
 **Resolution:**
+
 ```powershell
 # Option 1: Switch AI routing to cost-optimized
 Set-HeliosAIModel -RoutingStrategy "CostOptimized"
@@ -387,12 +402,14 @@ Set-HeliosCaching -Enabled $true -CacheExpiration 7200 -CacheThreshold 0.9
 **Symptoms:** Multiple failed login attempts or suspicious access
 
 **Diagnosis:**
+
 ```powershell
 Get-HeliosAuditLog -Filter "Failed" -Last 100
 Get-HeliosAuditLog -Filter "Unauthorized" -Last 50
 ```
 
 **Resolution:**
+
 ```powershell
 # Option 1: Block IP address
 Add-HeliosBlacklistEntry -IpAddress "10.0.0.1"
@@ -428,6 +445,7 @@ Set-HeliosEmergencyMode -Enabled $true -Reason "Possible breach"
 ### Performance Tuning
 
 **Optimize AI Queries:**
+
 ```powershell
 # Enable caching
 Set-HeliosCaching -Enabled $true -CacheExpiration 3600
@@ -440,6 +458,7 @@ Get-HeliosAIMetrics -Period "Day"
 ```
 
 **Optimize Database:**
+
 ```powershell
 # Rebuild indexes
 Invoke-HeliosDatabaseMaintenance -Type "RebuildIndexes"
@@ -452,6 +471,7 @@ Remove-HeliosOldLogs -OlderThan "30days"
 ```
 
 **Optimize Infrastructure:**
+
 ```powershell
 # Enable auto-scaling
 Set-HeliosDeployment -Name "prod-1" `
@@ -470,16 +490,19 @@ Set-HeliosScalingPolicy -MetricName "CPU" `
 ### Daily Security Tasks
 
 1. **Monitor Audit Logs**
+
    ```powershell
    Get-HeliosAuditLog -Last 100 | Where-Object Action -in @("Failed", "Denied", "Error")
    ```
 
 2. **Check Failed Logins**
+
    ```powershell
    Get-HeliosAuditLog -Filter "Failed" -Last 50
    ```
 
 3. **Verify MFA Compliance**
+
    ```powershell
    Get-HeliosUser | Where-Object MfaEnabled -ne $true
    ```
@@ -487,6 +510,7 @@ Set-HeliosScalingPolicy -MetricName "CPU" `
 ### Security Incidents
 
 **Report Security Issue:**
+
 ```powershell
 Report-HeliosSecurityIncident -Severity "High" `
                               -Description "Suspicious API access detected"

@@ -39,17 +39,21 @@ In your new project, add these custom fields:
 Create different views for different purposes:
 
 **View 1: By Phase**
+
 - Group by: Phase
 - Sort by: Priority (desc)
 
 **View 2: By Work Track**
+
 - Group by: Work Track
 - Sort by: Priority (desc)
 
 **View 3: By Owner**
+
 - Filter by: Owner = [specific person]
 
 **View 4: By Priority**
+
 - Group by: Priority
 - Filter by: Status ≠ Done
 
@@ -64,6 +68,7 @@ All workflows are already configured! ✅
 **Location**: `.github/workflows/`
 
 **Existing workflows**:
+
 1. ✅ `ci-validation.yml` - Runs on push/PR
 2. ✅ `phase-build.yml` - Manual trigger
 3. ✅ `documentation-update.yml` - Runs on doc changes
@@ -93,6 +98,7 @@ Update your `README.md` with badges:
 ### Launch Codespaces
 
 **Option 1: Via Web** (Easiest)
+
 1. Go to: https://github.com/M0nado/helios-platform
 2. Click green **Code** button
 3. Click **Codespaces** tab
@@ -101,6 +107,7 @@ Update your `README.md` with badges:
 6. VS Code opens in browser - ready to code!
 
 **Option 2: Via Local VS Code**
+
 1. Install "GitHub Copilot" extension
 2. Install "Remote - Codespaces" extension
 3. Press Ctrl+Shift+P
@@ -108,6 +115,7 @@ Update your `README.md` with badges:
 5. Select repository and branch
 
 **Option 3: Via GitHub CLI**
+
 ```bash
 # List existing codespaces
 gh codespace list
@@ -134,6 +142,7 @@ Already configured! ✅
 **File**: `.devcontainer/devcontainer.json`
 
 **Includes**:
+
 - ✅ PowerShell 7.x
 - ✅ GitHub CLI
 - ✅ Docker-in-Docker
@@ -153,6 +162,7 @@ Already created! ✅
 **Location**: `.github/ISSUE_TEMPLATE/`
 
 **Available templates**:
+
 - `bug_report.md` - Report bugs
 - `feature_request.md` - Request features
 
@@ -293,6 +303,7 @@ A workflow already does this! ✅
 **Workflow**: `documentation-update.yml`
 
 **What it does**:
+
 - Monitors `.md` files in main repo
 - Auto-syncs to GitHub Wiki
 - Updates wiki indexes
@@ -344,12 +355,14 @@ No action needed - it's automatic!
 ## 📋 GitHub Setup Checklist
 
 ### Before Launch
+
 - [ ] Repository created
 - [ ] README.md exists
 - [ ] Initial commit pushed
 - [ ] Documentation files in place
 
 ### Project Board
+
 - [ ] Project board created
 - [ ] Custom fields added
 - [ ] Views configured
@@ -357,30 +370,35 @@ No action needed - it's automatic!
 - [ ] Issues assigned to project
 
 ### GitHub Actions
+
 - [ ] Workflows exist in `.github/workflows/`
 - [ ] Status badges added to README
 - [ ] Workflows triggered successfully
 - [ ] No failed checks
 
 ### Codespaces
+
 - [ ] `.devcontainer/` configured
 - [ ] Codespace created and tested
 - [ ] Extensions installed
 - [ ] PowerShell working
 
 ### Collaborators
+
 - [ ] Team members invited
 - [ ] Appropriate roles assigned
 - [ ] Branch protection rules set
 - [ ] Merge requirements configured
 
 ### Documentation
+
 - [ ] Wiki enabled
 - [ ] Auto-sync workflow running
 - [ ] Pages appear in wiki
 - [ ] Links validated
 
 ### Discussions
+
 - [ ] Discussions enabled
 - [ ] Categories created
 - [ ] Community guidelines posted
@@ -450,18 +468,21 @@ git branch -d feature/my-feature
 ## 🚀 First Day Workflow
 
 ### Morning: Setup (30 min)
+
 1. [ ] Create GitHub Project board
 2. [ ] Create first batch of issues (10)
 3. [ ] Setup Codespaces
 4. [ ] Test a workflow run
 
 ### Midday: Configure Team (20 min)
+
 1. [ ] Invite first team members
 2. [ ] Set branch protection rules
 3. [ ] Create team roles
 4. [ ] Setup wiki
 
 ### Afternoon: Start Development (30 min)
+
 1. [ ] Create first feature branch
 2. [ ] Make sample change
 3. [ ] Submit first PR
@@ -469,6 +490,7 @@ git branch -d feature/my-feature
 5. [ ] Merge PR
 
 ### End of Day: Verify
+
 1. [ ] All systems working
 2. [ ] Team can access everything
 3. [ ] Workflows running
@@ -479,24 +501,28 @@ git branch -d feature/my-feature
 ## 📚 Reference Links
 
 ### Project Management
+
 - **Project Board**: https://github.com/M0nado/helios-platform/projects
 - **Issues**: https://github.com/M0nado/helios-platform/issues
 - **Pull Requests**: https://github.com/M0nado/helios-platform/pulls
 - **Milestones**: https://github.com/M0nado/helios-platform/milestones
 
 ### Development
+
 - **Code**: https://github.com/M0nado/helios-platform
 - **Actions**: https://github.com/M0nado/helios-platform/actions
 - **Codespaces**: https://github.com/codespaces
 - **Wiki**: https://github.com/M0nado/helios-platform/wiki
 
 ### Configuration
+
 - **Settings**: https://github.com/M0nado/helios-platform/settings
 - **Branches**: https://github.com/M0nado/helios-platform/settings/branches
 - **Secrets**: https://github.com/M0nado/helios-platform/settings/secrets/actions
 - **Access**: https://github.com/M0nado/helios-platform/settings/access
 
 ### Community
+
 - **Discussions**: https://github.com/M0nado/helios-platform/discussions
 - **Insights**: https://github.com/M0nado/helios-platform/insights
 - **Pulse**: https://github.com/M0nado/helios-platform/pulse
@@ -506,6 +532,7 @@ git branch -d feature/my-feature
 ## ✅ Everything is Ready!
 
 GitHub infrastructure is fully set up:
+
 - ✅ Project board configured
 - ✅ Actions workflows deployed
 - ✅ Codespaces ready

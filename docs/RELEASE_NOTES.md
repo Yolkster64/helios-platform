@@ -8,11 +8,11 @@
 
 ## 📋 Quick Navigation
 
-- [Latest Release](#latest-release)
-- [Version History](#version-history)
-- [Migration Guides](#migration-guides)
-- [Deprecations](#deprecations)
-- [Known Issues](#known-issues)
+- [Latest Release](#-latest-release)
+- [Version History](#-version-history)
+- [Migration Guides](#-migration-guides)
+- [Deprecations](#-deprecations)
+- [Known Issues](#-known-issues)
 
 ---
 
@@ -100,7 +100,7 @@
 {{NEW_CODE_EXAMPLE}}
 ```
 
-**Migration Guide:** [See below](#migration-guide-v{{OLD_VERSION}}-to-v{{LATEST_VERSION}})
+**Migration Guide:** [See below](#-migration-guides)
 
 ---
 
@@ -138,11 +138,13 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 #### 📥 Installation / Upgrade
 
 **For new installations:**
+
 ```powershell
 {{INSTALL_CMD}}
 ```
 
 **For upgrades from previous version:**
+
 ```powershell
 # Backup current version
 {{BACKUP_CURRENT_CMD}}
@@ -154,7 +156,7 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 {{VERIFY_UPGRADE_CMD}}
 ```
 
-**See:** [Upgrade Guide](#migration-guide-v{{PREV_VERSION}}-to-v{{LATEST_VERSION}})
+**See:** [Upgrade Guide](#migration-guide-vprev_version-to-vlatest_version)
 
 ---
 
@@ -175,11 +177,13 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 **Status:** {{VERSION_2_STATUS}}
 
 **Key Changes:**
+
 - {{CHANGE_2_1}}
 - {{CHANGE_2_2}}
 - {{CHANGE_2_3}}
 
 **Download:**
+
 - [GitHub Release]({{GITHUB_RELEASE_2}})
 - [NPM Package]({{NPM_RELEASE_2}})
 - [Docker Image]({{DOCKER_RELEASE_2}})
@@ -193,6 +197,7 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 **Status:** {{VERSION_3_STATUS}}
 
 **Key Changes:**
+
 - {{CHANGE_3_1}}
 - {{CHANGE_3_2}}
 
@@ -243,6 +248,7 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 ##### Step 2: Update Configuration
 
 **Old configuration (v{{PREV_VERSION}}):**
+
 ```json
 {
   "{{OLD_SETTING_1}}": "{{OLD_VALUE_1}}",
@@ -251,6 +257,7 @@ This release was made possible by {{CONTRIBUTOR_COUNT}} contributors:
 ```
 
 **New configuration (v{{LATEST_VERSION}}):**
+
 ```json
 {
   "{{NEW_SETTING_1}}": "{{NEW_VALUE_1}}",
@@ -280,7 +287,7 @@ $result = Invoke-{{OLD_FUNCTION}} -Parameter $value
 $result = Invoke-{{NEW_FUNCTION}} -Parameter $value -NewParameter $newValue
 ```
 
-[See breaking changes](#breaking-changes) for complete list.
+[See breaking changes](#-breaking-changes) for complete list.
 
 ##### Step 5: Run Migration Scripts
 
@@ -352,6 +359,7 @@ Items deprecated in this release will be removed in {{DEPRECATION_REMOVAL_VERSIO
 - **Replacement:** `{{NEW_API_1}}`
 
 **Migration example:**
+
 ```powershell
 # Old (deprecated)
 {{OLD_DEPRECATED_CODE_1}}
@@ -448,7 +456,7 @@ v{{VERSION_3}} ██████ {{COMMITS_3}} commits
 
 - **GitHub Releases:** {{GITHUB_RELEASES_URL}}
 - **Changelog:** {{CHANGELOG_URL}}
-- **Upgrade Guide:** [See above](#migration-guides)
+- **Upgrade Guide:** [See above](#-migration-guides)
 - **Support:** {{SUPPORT_EMAIL}}
 
 ---

@@ -15,15 +15,15 @@
 
 | Document | Purpose | Size | Read Time |
 |----------|---------|------|-----------|
-| [WORKFLOW_ARCHITECTURE.md](#workflow-architecture) | System design & overview | 15 KB | 10 min |
-| [WORKFLOW_LINT.md](#workflow-lint) | Code quality checks | 14 KB | 10 min |
-| [WORKFLOW_BUILD.md](#workflow-build) | Multi-module builds | 15 KB | 10 min |
-| [WORKFLOW_NUGET.md](#workflow-nuget) | NuGet packaging & publishing | 12 KB | 8 min |
-| [WORKFLOW_DEPLOY.md](#workflow-deploy) | Azure deployments | 13 KB | 10 min |
-| [WORKFLOWS_INTEGRATION.md](#workflows-integration) | Workflow interactions | 14 KB | 10 min |
-| [WORKFLOWS_BEST_PRACTICES.md](#workflows-best-practices) | Security & optimization | 14 KB | 12 min |
-| [WORKFLOWS_TROUBLESHOOTING.md](#workflows-troubleshooting) | Issues & solutions | 12 KB | 10 min |
-| [WORKFLOW_CUSTOMIZATION.md](#workflow-customization) | Modification guide | 13 KB | 12 min |
+| [WORKFLOW_ARCHITECTURE.md](#workflow_architecture) | System design & overview | 15 KB | 10 min |
+| [WORKFLOW_LINT.md](#workflow_lint) | Code quality checks | 14 KB | 10 min |
+| [WORKFLOW_BUILD.md](#workflow_build) | Multi-module builds | 15 KB | 10 min |
+| [WORKFLOW_NUGET.md](#workflow_nuget) | NuGet packaging & publishing | 12 KB | 8 min |
+| [WORKFLOW_DEPLOY.md](#workflow_deploy) | Azure deployments | 13 KB | 10 min |
+| [WORKFLOWS_INTEGRATION.md](#workflows_integration) | Workflow interactions | 14 KB | 10 min |
+| [WORKFLOWS_BEST_PRACTICES.md](#workflows_best_practices) | Security & optimization | 14 KB | 12 min |
+| [WORKFLOWS_TROUBLESHOOTING.md](#workflows_troubleshooting) | Issues & solutions | 12 KB | 10 min |
+| [WORKFLOW_CUSTOMIZATION.md](#workflow_customization) | Modification guide | 13 KB | 12 min |
 
 ---
 
@@ -519,20 +519,24 @@ Tables: 40+
 ### By Role
 
 **Developers**:
+
 - WORKFLOW_ARCHITECTURE.md
 - WORKFLOW_LINT.md
 - WORKFLOWS_TROUBLESHOOTING.md
 
 **DevOps Engineers**:
+
 - All documents (comprehensive reference)
 - Focus: WORKFLOW_DEPLOY.md, WORKFLOWS_BEST_PRACTICES.md
 
 **Release Managers**:
+
 - WORKFLOW_NUGET.md
 - WORKFLOW_DEPLOY.md
 - WORKFLOWS_TROUBLESHOOTING.md
 
 **Team Leads**:
+
 - WORKFLOWS_INTEGRATION.md
 - WORKFLOWS_BEST_PRACTICES.md
 - WORKFLOW_CUSTOMIZATION.md

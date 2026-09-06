@@ -6,6 +6,7 @@ workflows), `HELIOS.sln` baseline, `src/ai/HELIOS.AIHub` (+31 tests), `helios-ai
 this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fixed).
 
 ## PR2 — Core wiring & cleanup
+
 - Wire the `ai` command into `Core/CLI/CliCommandExecutor.cs` (blocked in PR1: core does
   not compile — 323 errors; the seam fix in `IRouter.cs` was applied, the rest remains).
 - Begin core repair: resolve duplicate-interface ambiguities (`Core/Intelligence` vs
@@ -18,6 +19,7 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 - Extend `.editorconfig` with a `[*.cs]` section (4-space, Allman) so analyzers have rules.
 
 ## PR3 — Foundry depth & retrieval
+
 - Foundry agent tools: AI Search connection (restore the legacy `aiSearchName` surface as
   a module), file search, and connected Azure data sources; project capability-host
   configuration where BYO storage is needed.
@@ -29,17 +31,20 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
   remains a separate operational decision.
 
 ## PR4 — Connectors
+
 - Slack + SharePoint via the Hermes gateway reuse; Linear via `src/connectors/
   HELIOS.Connectors` or a Hermes plugin (spike decides). Same Key Vault credential flow.
 - Gateway webhook wiring for GitHub-event-driven fleet dispatch (untrusted-input rules).
 
 ## PR5 — GitHub ecosystem & fleet execution
+
 - ARC deployment (scale set values in GITHUB_ECOSYSTEM_DESIGN.md), org Project board,
   epic issues automation, repo templates.
 - Hermes fleet + Xcore-9s live bring-up per HERMES_FLEET_AND_XCORE.md runbook.
 - WindowsDeveloperConfig `cross-llm-shell` workload (az/gh/copilot/claude/codex/ollama).
 
 ## PR6 — Platform upgrades
+
 - ✅ net8.0 → **net10.0** across all projects + workflows — done (net8.0 EOL
   2026-11-10). Allowed-to-fail `net11-preview` lane added to `dotnet-build.yml`;
   `src/gui` stays `net8.0-windows…` until the pinned Windows App SDK documents net10
@@ -48,6 +53,7 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
   gate active.
 
 ## Known-red workflow inventory (pre-existing, not touched by PR1)
+
 | Workflow | Problem | Disposition |
 |---|---|---|
 | `deploy.yml` | All-echo fake deployment incl. fake "AI initialized" lines | **Deleted this tranche** (client-secret fake deploy); real deploys stay in `helios-deploy.yml` (OIDC) |
@@ -60,7 +66,7 @@ this doc set, and CI repairs (dotnet-build/ci-validation/quality rewritten or fi
 | `publish-to-packagemanagers.yml` | **Invalid YAML** — embedded PowerShell here-string (`@'`) starts at column 0 (line 62), de-indenting out of the `run: |` block scalar. Workflow cannot parse, so it has never run | Re-indent the here-string body inside the block scalar, or move the script to a `.ps1` file and call it (preferred) — PR2 |
 | `documentation-update.yml` | **Invalid YAML** — block mapping broken at line 33 (same embedded-script class of defect) | Same fix as above — PR2 |
 | `build-all-modules.yml`, `multi-repo-sync.yml`, others | Reference phase/module structures that don't exist | Audit in PR2; delete what cannot go green |
-| `ci-validation.yml` markdownlint step | `.markdownlint.json` missing | Add config or drop step (PR2) |
+| `ci-validation.yml` / `quality.yml` Markdown checks | The missing-config issue is resolved: both use the committed `.markdownlint.json` and `markdownlint-cli@0.33.0` | Keep the existing rules; formatting and section-link corrections do not certify product readiness. Hosted results still require an executed workflow run |
 | 54 legacy `.ps1` files | Genuine parse errors (broken `foreach`, unterminated here-strings, invalid class code) — masked for years because the old syntax checks used the shallow tokenizer or never gated | Baselined in `.github/ps1-parse-baseline.txt`; the ci-validation gate fails any NON-baseline parse error and reports repaired files. Repair scripts area-by-area in PR2+, deleting baseline lines as they fix |
 | `.gitmodules` | ~~Declared 7 nonexistent `modules/` submodules (zero gitlinks — pure manifest debris); `.gitignore` also ignored `.gitmodules` and `.dockerignore`~~ | **Retired in PR1**: manifest deleted, ignore-rule traps removed. Real submodule governance (upstream PR #215's fail-closed pinned-approval gate) is an absorption-pipeline candidate |
 | `azure-pipelines.yml` | "Hello world" starter, git-ignored | Delete in PR2 |

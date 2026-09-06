@@ -5,6 +5,7 @@
 This guide provides comprehensive information about configuring HELIOS Platform for different environments and use cases.
 
 ## Table of Contents
+
 1. [Configuration Files](#configuration-files)
 2. [Environment Settings](#environment-settings)
 3. [API Configuration](#api-configuration)
@@ -554,11 +555,13 @@ helios config list
 ## Security Best Practices
 
 1. **Use Environment Variables**: Never hardcode secrets in config files
+
    ```yaml
    password: "${DB_PASSWORD}"  # Use environment variables
    ```
 
 2. **Restrict File Permissions**: Config files contain sensitive data
+
    ```bash
    chmod 600 config.yaml
    ```
@@ -572,4 +575,3 @@ helios config list
 6. **Enable Audit Logging**: Log all configuration changes
 
 7. **Backup Configuration**: Keep backups of production configurations
-

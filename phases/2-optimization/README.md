@@ -1,7 +1,9 @@
 # HELIOS Phase 2: Optimization
+
 ## Performance Tuning & Resource Management
 
 ### Overview
+
 Phase 2 focuses on making Windows run faster and use less system resources. This phase contains scripts and configurations that disable unnecessary services, remove startup clutter, optimize memory usage, and tune visual effects.
 
 Think of it as a cleanup and performance boost for your operating system. After Phase 2, your computer will start faster, applications will launch quicker, and you'll have more available resources for programs you actually use.
@@ -9,41 +11,48 @@ Think of it as a cleanup and performance boost for your operating system. After 
 ### What Gets Optimized
 
 #### 1. **Service Disabling**
+
 - Removes background services that most users don't need
 - Services like telemetry, cloud sync, and unused drivers
 - **Example**: Disables Windows Update notifications, OneDrive sync checks, Cortana background listening
 
 #### 2. **Startup Optimization**
+
 - Removes unnecessary programs from startup
 - Cleans the startup folder
 - Reduces items in Task Scheduler startup tasks
 - **Impact**: Boot time reduced by 30-40%
 
 #### 3. **Resource Tuning**
+
 - Adjusts memory allocation for optimal performance
 - Configures CPU priority for key processes
 - Sets up page file optimization
 - **Impact**: More RAM available for your applications
 
 #### 4. **Background Process Control**
+
 - Manages Windows processes that consume resources
 - Disables visual effects that drain battery
 - Reduces network activity from background apps
 - **Impact**: Smoother performance, longer battery life
 
 #### 5. **Visual Effects Tuning**
+
 - Balances animations and transparency effects with performance
 - Disables GPU-intensive effects
 - Optimizes font rendering
 - **Impact**: Visual responsiveness improves; you choose speed vs. beauty
 
 #### 6. **Network Optimization**
+
 - Adjusts TCP/IP settings for faster connections
 - Enables packet prioritization
 - Optimizes DNS resolution
 - **Impact**: Internet feels snappier, downloads faster
 
 #### 7. **Storage Optimization**
+
 - Defragments hard drives (if SSD, skipped automatically)
 - Cleans temporary files and caches
 - Compresses old files to free space
@@ -52,11 +61,13 @@ Think of it as a cleanup and performance boost for your operating system. After 
 ### Prerequisites
 
 ✅ **Phase 1 must be completed first**
+
 - Baseline security settings must be in place
 - Registry backup must exist
 - Snapshot point should be created
 
 ⚠️ **You should:**
+
 - Have administrator access
 - Understand the service names your system uses
 - Have created a system restore point before starting
@@ -85,6 +96,7 @@ Think of it as a cleanup and performance boost for your operating system. After 
 - **Long-term**: More stable performance, better resource availability
 
 ### Risk Level: **MEDIUM** ✓
+
 - All changes are reversible
 - No system files are deleted
 - No permanent modifications

@@ -3,13 +3,16 @@
 ## 📋 Available Workflows
 
 ### 1. **CI - Code Validation & Testing** ✅
+
 **File**: `.github/workflows/ci-validation.yml`
 
 **Runs on**:
+
 - Every push to `main` or `develop`
 - Every pull request
 
 **What it does**:
+
 - ✅ PowerShell syntax validation
 - ✅ Markdown validation
 - ✅ Documentation completeness check
@@ -22,11 +25,13 @@
 ---
 
 ### 2. **Phase Build & Validation**
+
 **File**: `.github/workflows/phase-build.yml`
 
 **Runs on**: Manual trigger (workflow_dispatch)
 
 **How to trigger**:
+
 1. Go to: https://github.com/M0nado/helios-platform/actions
 2. Click **"Phase Build & Validation"**
 3. Click **"Run workflow"**
@@ -36,6 +41,7 @@
 5. Click **"Run workflow"**
 
 **What it does**:
+
 - ✅ Validates phase directory exists
 - ✅ Runs phase build script
 - ✅ Executes phase tests
@@ -46,13 +52,16 @@
 ---
 
 ### 3. **Documentation Update & Wiki Generation**
+
 **File**: `.github/workflows/documentation-update.yml`
 
 **Runs on**:
+
 - Every push to `main` with `.md` files changed
 - Manual trigger
 
 **What it does**:
+
 - ✅ Generate documentation indexes
 - ✅ Validate markdown links
 - ✅ Generate wiki pages
@@ -64,6 +73,7 @@
 ---
 
 ### 4. **Deploy to Azure**
+
 **File**: `.github/workflows/deploy.yml`
 
 **Runs on**: Manual trigger (workflow_dispatch)
@@ -71,6 +81,7 @@
 **Requires**: Azure credentials in GitHub Secrets
 
 **How to trigger**:
+
 1. Go to: https://github.com/M0nado/helios-platform/actions
 2. Click **"Deploy to Azure"**
 3. Click **"Run workflow"**
@@ -80,6 +91,7 @@
 5. Click **"Run workflow"**
 
 **What it does**:
+
 - ✅ Azure CLI login
 - ✅ Prepare deployment package
 - ✅ Validate configuration
@@ -104,6 +116,7 @@ For workflows to work fully, add these secrets to your repo:
    - No setup needed
 
 2. **AZURE_CREDENTIALS** (optional - for Azure deployment)
+
    ```json
    {
      "clientId": "00000000-0000-0000-0000-000000000000",
@@ -122,12 +135,14 @@ For workflows to work fully, add these secrets to your repo:
 ## 📊 View Workflow Runs
 
 ### Method 1: Via Web Interface
+
 1. Go to: https://github.com/M0nado/helios-platform/actions
 2. See all workflow runs
 3. Click any run to see details
 4. Click job to see logs
 
 ### Method 2: Via GitHub CLI
+
 ```bash
 # List all workflow runs
 gh run list --repo M0nado/helios-platform
@@ -162,6 +177,7 @@ These show real-time status of each workflow.
    - Path: `.github/workflows/{workflow-name}.yml`
 
 2. Edit YAML syntax:
+
    ```yaml
    on:
      push:
@@ -177,6 +193,7 @@ These show real-time status of each workflow.
 ### Common Customizations:
 
 **Run on different branches**:
+
 ```yaml
 on:
   push:
@@ -184,6 +201,7 @@ on:
 ```
 
 **Run on schedule (cron)**:
+
 ```yaml
 on:
   schedule:
@@ -191,6 +209,7 @@ on:
 ```
 
 **Skip workflow for certain commits**:
+
 ```
 git commit -m "Fix typo [skip ci]"
 ```
@@ -207,12 +226,14 @@ git commit -m "Fix typo [skip ci]"
 ## 💡 Tips & Best Practices
 
 ### 1. Monitor Builds
+
 ```bash
 # Watch workflow progress live
 gh run watch <run-id> --repo M0nado/helios-platform
 ```
 
 ### 2. Debug Failed Workflows
+
 1. Go to Actions tab
 2. Click failed run
 3. Click failed job
@@ -221,7 +242,9 @@ gh run watch <run-id> --repo M0nado/helios-platform
 6. Push fix (triggers workflow again)
 
 ### 3. Use Concurrency
+
 Prevent multiple runs of same workflow:
+
 ```yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -229,7 +252,9 @@ concurrency:
 ```
 
 ### 4. Cache Dependencies
+
 Speed up builds by caching:
+
 ```yaml
 - uses: actions/cache@v3
   with:
@@ -240,21 +265,25 @@ Speed up builds by caching:
 ## 📞 Troubleshooting
 
 ### Workflow not triggering
+
 - Check branch name matches trigger
 - Check file paths match filters
 - Verify commits aren't marked `[skip ci]`
 
 ### Workflow fails immediately
+
 - Check syntax with `yamllint`
 - Verify secrets are set correctly
 - Check job dependencies
 
 ### Long build times
+
 - Add caching
 - Run jobs in parallel
 - Split into multiple workflows
 
 ### Tests failing in CI but passing locally
+
 - Different OS (Linux vs Windows)
 - Missing dependencies
 - Environment variable differences

@@ -1,6 +1,7 @@
 # HELIOS Platform Installation Guide
 
 ## Table of Contents
+
 1. [System Requirements](#system-requirements)
 2. [Installation Methods](#installation-methods)
 3. [Verification](#verification)
@@ -10,6 +11,7 @@
 ## System Requirements
 
 ### Minimum Requirements
+
 - **OS**: Windows 7 SP1, Windows 8.1, Windows 10, Windows 11
 - **.NET Framework**: 4.7.2 or .NET 6.0+
 - **RAM**: 512 MB minimum
@@ -17,6 +19,7 @@
 - **Internet**: Required for online installation methods
 
 ### Recommended Requirements
+
 - **OS**: Windows 10 or Windows 11 (latest version)
 - **.NET**: .NET 6.0 or .NET 8.0
 - **RAM**: 2 GB or more
@@ -24,6 +27,7 @@
 - **Internet**: Broadband connection for updates
 
 ### Hardware Support
+
 - **Processor**: 64-bit Intel or AMD
 - **Graphics**: Any DirectX 12 compatible GPU (optional)
 - **Storage**: SSD recommended for better performance
@@ -35,11 +39,13 @@
 The easiest method for end-users. Downloads from any distribution channel.
 
 #### Steps:
+
 1. **Download** HELIOS-Setup.exe from:
    - GitHub Releases: https://github.com/HELIOS-Platform/helios-platform/releases
    - Direct Download: https://downloads.helios-platform.org/
 
 2. **Run Installer**
+
    ```
    Double-click HELIOS-Setup.exe
    ```
@@ -76,6 +82,7 @@ The easiest method for end-users. Downloads from any distribution channel.
    - Click "Finish"
 
 #### Unattended Installation:
+
 ```powershell
 HELIOS-Setup.exe /S /D=C:\Program Files\HELIOS.Platform
 ```
@@ -85,10 +92,12 @@ HELIOS-Setup.exe /S /D=C:\Program Files\HELIOS.Platform
 Best for .NET developers and CI/CD pipelines.
 
 #### Prerequisites:
+
 - NuGet CLI installed
 - .NET Framework 4.7.2 or higher
 
 #### Installation:
+
 ```powershell
 # Basic installation
 nuget install HELIOS.Platform
@@ -104,6 +113,7 @@ nuget install HELIOS.Platform -OutputDirectory "C:\Packages"
 ```
 
 #### In Project File (.csproj):
+
 ```xml
 <ItemGroup>
   <PackageReference Include="HELIOS.Platform" Version="1.0.0" />
@@ -115,10 +125,12 @@ nuget install HELIOS.Platform -OutputDirectory "C:\Packages"
 For systems with Chocolatey installed. Recommended for system administrators.
 
 #### Prerequisites:
+
 - Chocolatey installed: https://chocolatey.org/install
 - Administrator privileges
 
 #### Installation:
+
 ```powershell
 # Install latest version
 choco install helios-platform
@@ -134,6 +146,7 @@ choco install helios-platform -y
 ```
 
 #### Verification:
+
 ```powershell
 choco list --local-only | grep helios-platform
 ```
@@ -143,10 +156,12 @@ choco list --local-only | grep helios-platform
 Modern package manager for Windows 10/11.
 
 #### Prerequisites:
+
 - Windows 10 Build 1809 or later
 - App Installer from Microsoft Store
 
 #### Installation:
+
 ```powershell
 # Install latest version
 winget install HELIOS.Platform
@@ -184,6 +199,7 @@ HELIOS-Setup.exe /S /NoRestart
 No installation required. Extracted folder can be used directly.
 
 #### Steps:
+
 1. Download `HELIOS.Platform-Portable.zip`
 2. Extract to desired location
 3. Run `HELIOS.Platform.exe`
@@ -192,6 +208,7 @@ No installation required. Extracted folder can be used directly.
 ## Post-Installation Setup
 
 ### First Launch
+
 ```powershell
 # Run from Start Menu or:
 C:\Program Files\HELIOS.Platform\HELIOS.Platform.exe
@@ -201,6 +218,7 @@ HELIOS.Platform --launch
 ```
 
 ### Try Demo Applications
+
 ```powershell
 # Games demo
 demo-games.exe
@@ -213,12 +231,15 @@ demo-security.exe
 ```
 
 ### Configure Settings
+
 Launch Settings from:
+
 - Start Menu → HELIOS Platform → Settings
 - Or: File → Settings menu
 - Or: Run `HELIOS.Platform --settings`
 
 ### Register License (if required)
+
 ```powershell
 HELIOS.Platform.exe --license-key YOUR_LICENSE_KEY
 ```
@@ -226,6 +247,7 @@ HELIOS.Platform.exe --license-key YOUR_LICENSE_KEY
 ## Verification
 
 ### Check Installation
+
 ```powershell
 # Display version
 HELIOS.Platform --version
@@ -241,6 +263,7 @@ HELIOS.Platform --diagnostics
 ```
 
 ### Verify File Integrity
+
 ```powershell
 # Check file signatures
 HELIOS.Platform --verify-integrity
@@ -250,6 +273,7 @@ Get-FileHash 'C:\Program Files\HELIOS.Platform\HELIOS.Platform.exe' -Algorithm S
 ```
 
 ### Test Connectivity
+
 ```powershell
 HELIOS.Platform --test-connection
 
@@ -262,16 +286,19 @@ HELIOS.Platform --check-updates
 ### Installation Issues
 
 #### "Administrator privileges required"
+
 ```powershell
 # Run installer as administrator
 Start-Process HELIOS-Setup.exe -Verb RunAs
 ```
 
 #### "Insufficient disk space"
+
 - Free at least 200 MB on target drive
 - Install to different drive with more space
 
 #### ".NET Framework not found"
+
 ```powershell
 # Check installed .NET versions
 dotnet --info
@@ -281,6 +308,7 @@ dotnet --info
 ```
 
 #### "File is locked" error
+
 - Close any running HELIOS processes
 - Restart Windows in Safe Mode
 - Try installation again
@@ -288,6 +316,7 @@ dotnet --info
 ### Runtime Issues
 
 #### Application won't start
+
 ```powershell
 # Try compatibility mode:
 # 1. Right-click executable
@@ -300,6 +329,7 @@ HELIOS.Platform.exe --safe-mode
 ```
 
 #### Permission denied errors
+
 ```powershell
 # Run as administrator
 Start-Process HELIOS.Platform.exe -Verb RunAs
@@ -309,6 +339,7 @@ icacls 'C:\Program Files\HELIOS.Platform'
 ```
 
 #### High CPU or memory usage
+
 ```powershell
 # Disable auto-update
 HELIOS.Platform.exe --disable-auto-update
@@ -323,6 +354,7 @@ HELIOS.Platform.exe --reset-config
 ### Network Issues
 
 #### Can't access online features
+
 - Check internet connection
 - Verify firewall allows HELIOS
 - Check proxy settings
@@ -336,6 +368,7 @@ HELIOS.Platform.exe --no-proxy
 ```
 
 #### Update check fails
+
 ```powershell
 # Manual update check
 HELIOS.Platform.exe --update-force
@@ -347,6 +380,7 @@ HELIOS.Platform.exe --no-check-updates
 ## Uninstallation
 
 ### Via Control Panel
+
 1. Open **Control Panel**
 2. Go to **Programs** → **Programs and Features**
 3. Find **HELIOS Platform**
@@ -354,6 +388,7 @@ HELIOS.Platform.exe --no-check-updates
 5. Confirm removal
 
 ### Via Command Line
+
 ```powershell
 # Using Add/Remove Programs
 appwiz.cpl
@@ -366,16 +401,19 @@ HELIOS-Setup.exe /uninstall
 ```
 
 ### Chocolatey Uninstall
+
 ```powershell
 choco uninstall helios-platform
 ```
 
 ### Winget Uninstall
+
 ```powershell
 winget uninstall HELIOS.Platform
 ```
 
 ### Manual Uninstall
+
 ```powershell
 # Stop running processes
 Stop-Process -Name HELIOS.Platform -Force -ErrorAction SilentlyContinue
@@ -391,6 +429,7 @@ Remove-Item 'HKLM:\Software\HELIOS.Platform' -Force -ErrorAction SilentlyContinu
 ```
 
 ### Remove User Data
+
 ```powershell
 # Remove application data
 Remove-Item "$env:APPDATA\HELIOS.Platform" -Recurse -Force
@@ -418,21 +457,25 @@ HELIOS-Setup.exe /S
 ## Update Management
 
 ### Check for Updates
+
 ```powershell
 HELIOS.Platform --check-updates
 ```
 
 ### Install Updates
+
 - Automatic (default): Updates install on exit
 - Manual: HELIOS → Help → Check for Updates
 - Command: `HELIOS.Platform --update`
 
 ### Disable Updates
+
 ```powershell
 HELIOS.Platform --disable-auto-update
 ```
 
 ### Rollback to Previous Version
+
 ```powershell
 # Via Add/Remove Programs (if update reverted system restore)
 # Or reinstall previous version manually

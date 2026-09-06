@@ -7,9 +7,11 @@
 ## What Are You Trying To Do?
 
 ### 🚀 "I'm just starting - what is Phase 0?"
+
 → Read **[README.md](README.md)** (5 min read)
 
 **You'll learn:**
+
 - What Phase 0 includes
 - Time estimate (45-75 minutes)
 - Prerequisites needed
@@ -18,9 +20,11 @@
 ---
 
 ### 📖 "Explain each script in plain English"
+
 → Read **[PLAIN_ENGLISH_GUIDE.md](PLAIN_ENGLISH_GUIDE.md)** (20 min read)
 
 **You'll learn:**
+
 - What USB Creator does (and why you need it)
 - How Windows Installation works
 - Partition Manager explained simply
@@ -29,6 +33,7 @@
 - How to undo each step
 
 **Best for:**
+
 - First-time users
 - Non-technical people
 - Understanding the "why" behind each step
@@ -36,9 +41,11 @@
 ---
 
 ### 🗂️ "Where do files go in the system?"
+
 → Read **[FILE_ARCHITECTURE.md](FILE_ARCHITECTURE.md)** (10 min read)
 
 **You'll learn:**
+
 - C: drive structure (system drive)
 - D: drive structure (data drive)
 - Exact paths for all files
@@ -48,6 +55,7 @@
 - What gets backed up and where
 
 **Best for:**
+
 - Advanced users
 - System administrators
 - Understanding file organization
@@ -55,9 +63,11 @@
 ---
 
 ### 📋 "What scripts are available?"
+
 → Read **[SCRIPTS_INDEX.md](SCRIPTS_INDEX.md)** (15 min read)
 
 **You'll learn:**
+
 - All 5 Phase 0 scripts listed
 - One-line description of each
 - How to run each script
@@ -67,6 +77,7 @@
 - Execution order required
 
 **Best for:**
+
 - Script developers
 - Automation engineers
 - Understanding technical details
@@ -74,9 +85,11 @@
 ---
 
 ### ✅ "How do I know Phase 0 is complete?"
+
 → Read **[TESTING_GUIDE.md](TESTING_GUIDE.md)** (10 min read, or run tests in 15 min)
 
 **You'll learn:**
+
 - 9 detailed test procedures
 - How to verify each component
 - Quick verification checklist (2 minutes)
@@ -85,6 +98,7 @@
 - How to automate testing
 
 **Best for:**
+
 - After running scripts
 - Verifying everything worked
 - Troubleshooting problems
@@ -94,18 +108,21 @@
 ## Reading Order (Recommended)
 
 ### For First-Time Users:
+
 1. **README.md** - Get overview
 2. **PLAIN_ENGLISH_GUIDE.md** - Understand each step
 3. **SCRIPTS_INDEX.md** - See what scripts you'll run
 4. **TESTING_GUIDE.md** - After completion, verify success
 
 ### For Experienced Users:
+
 1. **README.md** - Quick overview
 2. **FILE_ARCHITECTURE.md** - Understand system layout
 3. **SCRIPTS_INDEX.md** - See technical details
 4. **TESTING_GUIDE.md** - Verify success
 
 ### For System Administrators:
+
 1. **FILE_ARCHITECTURE.md** - Full system layout
 2. **SCRIPTS_INDEX.md** - Technical script details
 3. **PLAIN_ENGLISH_GUIDE.md** - User-facing explanations
@@ -130,29 +147,34 @@
 **Looking for something specific?**
 
 ### USB & Installation
+
 - USB Creator explanation → PLAIN_ENGLISH_GUIDE.md
 - Windows Installation → PLAIN_ENGLISH_GUIDE.md
 - How to boot from USB → PLAIN_ENGLISH_GUIDE.md
 
 ### Partitions & Storage
+
 - Partition Manager → PLAIN_ENGLISH_GUIDE.md
 - File locations → FILE_ARCHITECTURE.md
 - Storage Setup → PLAIN_ENGLISH_GUIDE.md
 - Where files go → FILE_ARCHITECTURE.md
 
 ### Scripts & Technical
+
 - All scripts listed → SCRIPTS_INDEX.md
 - Script details → SCRIPTS_INDEX.md
 - Exit codes → SCRIPTS_INDEX.md
 - Registry changes → FILE_ARCHITECTURE.md
 
 ### Testing & Troubleshooting
+
 - How to test Phase 0 → TESTING_GUIDE.md
 - Verify success → TESTING_GUIDE.md
 - Fix problems → TESTING_GUIDE.md
 - Testing automation → TESTING_GUIDE.md
 
 ### Time Estimates
+
 - Total time → README.md
 - Per-script time → SCRIPTS_INDEX.md
 - Per-test time → TESTING_GUIDE.md
@@ -162,6 +184,7 @@
 ## Document Features
 
 ### README.md
+
 ✓ Overview of Phase 0  
 ✓ Time estimates  
 ✓ Prerequisites  
@@ -171,6 +194,7 @@
 ✓ Troubleshooting table  
 
 ### PLAIN_ENGLISH_GUIDE.md
+
 ✓ 5 scripts explained simply  
 ✓ What each does  
 ✓ Why you need it  
@@ -181,6 +205,7 @@
 ✓ Tips & tricks  
 
 ### FILE_ARCHITECTURE.md
+
 ✓ Complete system layout  
 ✓ C: drive structure  
 ✓ D: drive structure  
@@ -191,6 +216,7 @@
 ✓ Path reference tables  
 
 ### SCRIPTS_INDEX.md
+
 ✓ All 5 Phase 0 scripts  
 ✓ Purpose of each  
 ✓ Dependencies  
@@ -201,6 +227,7 @@
 ✓ Performance notes  
 
 ### TESTING_GUIDE.md
+
 ✓ Quick checklist (2 min)  
 ✓ 9 detailed test procedures  
 ✓ Test results table  
@@ -260,16 +287,19 @@ TOTAL                   71.5 KB  (60 min comprehensive)
 ## How to Use These Docs
 
 ### While Planning Phase 0
+
 - Start with README.md
 - Then read PLAIN_ENGLISH_GUIDE.md
 - Print out TESTING_GUIDE.md checklist
 
 ### While Executing Phase 0
+
 - Keep SCRIPTS_INDEX.md open
 - Reference FILE_ARCHITECTURE.md as needed
 - Check PLAIN_ENGLISH_GUIDE.md for "How To Undo"
 
 ### After Phase 0 Complete
+
 - Use TESTING_GUIDE.md to verify
 - Reference FILE_ARCHITECTURE.md to find files
 - Keep all docs for future reference
@@ -298,6 +328,7 @@ All documents include:
 **Status:** Complete  
 
 **Changes Are Documented In:**
+
 - Git commit history
 - Change log (if maintained)
 - Document headers

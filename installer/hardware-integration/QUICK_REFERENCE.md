@@ -52,6 +52,7 @@ $razer.Initialize()
 ## Component Quick Start
 
 ### CUDA
+
 ```powershell
 # Get GPU info
 $devices = $cuda.GetAllDevicesInfo()
@@ -64,6 +65,7 @@ $stream = $cuda.CreateStream($true)
 ```
 
 ### Drivers
+
 ```powershell
 # Check for updates
 $driveMgr.CheckForUpdates()
@@ -76,6 +78,7 @@ $report = $driveMgr.GetSystemDeviceReport()
 ```
 
 ### WSL2
+
 ```powershell
 # Create agents
 $agent = $wsl2.CreateAgent("proc", "processing", @{})
@@ -88,6 +91,7 @@ $result = $wsl2.ExecuteLinuxTask("processing", @{})
 ```
 
 ### Razer
+
 ```powershell
 # Set color (RGB)
 $razer.SetChromaColor(@(255, 0, 0))
@@ -184,6 +188,7 @@ hardware-integration/
 ## API Quick Reference
 
 ### CUDA
+
 - `Initialize(Logger)` - Initialize runtime
 - `DetectDevices()` - Scan GPUs
 - `SelectDevice(int)` - Choose GPU
@@ -191,6 +196,7 @@ hardware-integration/
 - `CreateStream(bool)` - Create async stream
 
 ### Drivers
+
 - `ScanSystem()` - Scan hardware
 - `CheckForUpdates()` - Check versions
 - `DownloadDriver(id)` - Download driver
@@ -198,6 +204,7 @@ hardware-integration/
 - `InstallAllAvailableUpdates()` - Batch install
 
 ### WSL2
+
 - `Initialize()` - Init WSL2
 - `InstallDistribution(name)` - Install distro
 - `CreateAgent(name, type, config)` - Create agent
@@ -205,6 +212,7 @@ hardware-integration/
 - `ExecuteLinuxTask(type, params)` - Run task
 
 ### Razer
+
 - `Initialize()` - Init Razer
 - `ScanDevices()` - Find devices
 - `SetChromaColor(rgb)` - Set color
@@ -216,12 +224,14 @@ hardware-integration/
 ## Environment Requirements
 
 **Minimum**:
+
 - Windows 10/11 (21H1+)
 - PowerShell 5.1+
 - 2GB free RAM
 - 500MB free disk
 
 **For Full Features**:
+
 - NVIDIA GPU (CC 5.0+) + CUDA 11.0+
 - WSL2 with distribution
 - Razer Synapse 3.0+

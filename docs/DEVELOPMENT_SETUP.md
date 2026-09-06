@@ -24,12 +24,14 @@
 ### System Requirements
 
 **Operating System:**
+
 - Windows 11 Pro or Enterprise
 - Windows Server 2022+
 - macOS 12.0+ (limited support)
 - Ubuntu 20.04+ (limited support)
 
 **Hardware:**
+
 - CPU: 4 cores minimum (8 recommended)
 - RAM: 8GB minimum (16GB recommended)
 - Disk: 100GB SSD (50GB for base, 50GB for development)
@@ -37,6 +39,7 @@
 ### Required Software
 
 **1. PowerShell 7.4+**
+
 ```powershell
 # Check version
 $PSVersionTable.PSVersion
@@ -46,6 +49,7 @@ $PSVersionTable.PSVersion
 ```
 
 **2. .NET 8.0 SDK**
+
 ```powershell
 # Download and install
 # https://dotnet.microsoft.com/download/dotnet/8.0
@@ -55,6 +59,7 @@ dotnet --version
 ```
 
 **3. Git**
+
 ```powershell
 # Install from https://git-scm.com/download/win
 # Verify
@@ -62,6 +67,7 @@ git --version
 ```
 
 **4. Docker Desktop**
+
 ```powershell
 # Install from https://www.docker.com/products/docker-desktop
 # Enable WSL 2 backend
@@ -71,6 +77,7 @@ docker run hello-world
 ```
 
 **5. Azure CLI**
+
 ```powershell
 # Install from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows
 # Verify
@@ -78,6 +85,7 @@ az --version
 ```
 
 **6. Code Editor** (choose one)
+
 ```powershell
 # Visual Studio Code
 # Download from https://code.visualstudio.com/
@@ -389,6 +397,7 @@ Start-Process "./coverage/index.html"
 ### Visual Studio Code
 
 **Debug Configuration** (.vscode/launch.json):
+
 ```json
 {
   "version": "0.2.0",
@@ -413,6 +422,7 @@ Start-Process "./coverage/index.html"
 ```
 
 **Start Debugging:**
+
 1. Press F5
 2. Set breakpoints (click left margin)
 3. Inspect variables in debug panel
@@ -433,6 +443,7 @@ dotnet test --configuration Debug --diagnostics
 ### Logging
 
 **Configure logging level:**
+
 ```json
 {
   "Logging": {
@@ -446,6 +457,7 @@ dotnet test --configuration Debug --diagnostics
 ```
 
 **View logs:**
+
 ```powershell
 # Real-time log streaming
 Get-HeliosLogStream -Follow
@@ -477,11 +489,13 @@ git push origin feature/my-feature
 ### 2. Code Style
 
 **HELIOS uses:**
+
 - C# Coding Conventions
 - StyleCop analyzers
 - EditorConfig rules
 
 **Format code:**
+
 ```powershell
 # Auto-format all files
 dotnet format
@@ -498,6 +512,7 @@ dotnet format --verify-no-changes
 **Format:** `<type>(<scope>): <description>`
 
 **Types:**
+
 - `feat` - New feature
 - `fix` - Bug fix
 - `docs` - Documentation
@@ -507,6 +522,7 @@ dotnet format --verify-no-changes
 - `chore` - Build/tooling
 
 **Examples:**
+
 ```
 feat(ai): Add Claude model routing
 fix(security): Fix MFA token validation
@@ -530,6 +546,7 @@ test(deployment): Add phase 2 tests
 ### Build Issues
 
 **Error:** "Project file not found"
+
 ```powershell
 # Solution: Verify solution path
 ls helios-platform.sln
@@ -537,6 +554,7 @@ dotnet sln list
 ```
 
 **Error:** ".NET 8.0 not found"
+
 ```powershell
 # Solution: Install .NET 8.0 SDK
 dotnet --list-sdks
@@ -546,6 +564,7 @@ dotnet --list-sdks
 ### Database Issues
 
 **Error:** "Connection timeout"
+
 ```powershell
 # Solution: Verify database running
 docker ps | Select-String sql
@@ -561,6 +580,7 @@ docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Password123!" `
 ### Docker Issues
 
 **Error:** "Docker daemon not running"
+
 ```powershell
 # Solution: Start Docker Desktop
 Start-Service Docker
@@ -569,6 +589,7 @@ Start-Service Docker
 ```
 
 **Error:** "Port already in use"
+
 ```powershell
 # Find process using port
 netstat -ano | findstr :8080
@@ -580,6 +601,7 @@ Stop-Process -Id <PID> -Force
 ### Test Issues
 
 **Error:** "Tests fail locally but pass in CI"
+
 ```powershell
 # Solution: Ensure same environment
 docker ps  # Check if services running

@@ -21,12 +21,14 @@
 ### Hardware Requirements
 
 **Minimum**:
+
 - CPU: 4 cores
 - RAM: 16 GB
 - Storage: 100 GB SSD (recommended)
 - Network: 1 Gbps connection
 
 **Recommended for Production**:
+
 - CPU: 8+ cores
 - RAM: 32 GB or more
 - Storage: 500 GB SSD
@@ -36,12 +38,14 @@
 ### Software Requirements
 
 **Supported Operating Systems**:
+
 - Windows Server 2019 or newer
 - Windows Server 2022
 - Linux (Ubuntu 20.04 LTS or newer)
 - RHEL 8.0 or newer
 
 **Required Software**:
+
 - .NET 8.0 Runtime or later
 - Docker (optional, for containerized deployment)
 - Azure CLI (for Azure integration)
@@ -57,6 +61,7 @@
 ### Credentials Required
 
 Before starting, gather:
+
 - **Azure Subscription ID**
 - **Azure Service Principal credentials** (or use managed identity)
 - **Admin username and password** for initial setup
@@ -71,6 +76,7 @@ Before starting, gather:
 **What happens**: Format and prepare a USB drive for installation media.
 
 **On Windows**:
+
 ```powershell
 # 1. Insert USB drive (8GB minimum)
 # 2. Open PowerShell as Administrator
@@ -83,6 +89,7 @@ Format-Volume -DriveLetter G -FileSystem NTFS -NewFileSystemLabel "HELIOS-Instal
 ```
 
 **On Linux**:
+
 ```bash
 # 1. Insert USB drive
 # 2. Identify the device
@@ -100,6 +107,7 @@ sudo mkfs.ntfs -L HELIOS-Install /dev/sdX
 **What happens**: Download and copy HELIOS Platform installation files to the USB drive.
 
 **File Structure to Create**:
+
 ```
 USB Drive:/
 ├── HELIOS-Platform/
@@ -115,6 +123,7 @@ USB Drive:/
 ```
 
 **Download Installation Files**:
+
 ```powershell
 # Windows
 # Option 1: From GitHub Release
@@ -133,6 +142,7 @@ Expand-Archive -Path "G:\HELIOS-Installer.zip" -DestinationPath "G:\HELIOS-Platf
 **What happens**: System boots from USB instead of internal drive.
 
 **On Physical Server**:
+
 1. Insert USB drive
 2. Power on the system
 3. Press boot menu key during startup (usually F12, ESC, or DEL - check your server manual)
@@ -140,6 +150,7 @@ Expand-Archive -Path "G:\HELIOS-Installer.zip" -DestinationPath "G:\HELIOS-Platf
 5. System boots into HELIOS Pre-Installation Environment
 
 **What you'll see**:
+
 ```
 ╔════════════════════════════════════════════╗
 ║  HELIOS Platform Installation Environment  ║
@@ -162,6 +173,7 @@ Press ENTER to continue...
 **Steps**:
 
 #### 4a. Pre-Flight Checks
+
 The installer verifies your system meets requirements:
 
 ```
@@ -177,6 +189,7 @@ All checks passed! Proceeding...
 ```
 
 #### 4b. User Input
+
 You'll be prompted for:
 
 ```
@@ -215,7 +228,9 @@ Ready to install? [Y/N]: Y
 ```
 
 #### 4c. Installation Progress
+
 The system will:
+
 1. **Extract Files** (2-3 min)
 2. **Install Dependencies** (5-10 min)
 3. **Configure Services** (3-5 min)
@@ -224,6 +239,7 @@ The system will:
 6. **Deploy Components** (5-10 min)
 
 **What you'll see**:
+
 ```
 Installation Progress...
 
@@ -318,6 +334,7 @@ tail -f /var/log/helios-installation.log
 After the installer completes, the following is automatically configured:
 
 **1. Services Registered**
+
 ```
 Windows:
 ✓ HELIOS Platform Service (started)
@@ -331,6 +348,7 @@ Linux:
 ```
 
 **2. Database Initialized**
+
 ```
 ✓ SQL Server or PostgreSQL database created
 ✓ Schema tables populated
@@ -339,6 +357,7 @@ Linux:
 ```
 
 **3. Security Configured**
+
 ```
 ✓ SSL/TLS certificates installed
 ✓ Firewall rules applied
@@ -347,6 +366,7 @@ Linux:
 ```
 
 **4. Network Services Started**
+
 ```
 ✓ HTTP server listening on port 8080
 ✓ HTTPS server listening on port 443
@@ -587,6 +607,7 @@ curl -k -X POST https://localhost/api/resources \
 #### Issue 1: Installation Fails at "Setting Up Database"
 
 **Symptoms**:
+
 ```
 [████████░░] 50% Setting up Database
 ERROR: Connection failed to database server
@@ -594,7 +615,9 @@ Installation aborted.
 ```
 
 **Solutions**:
+
 1. **Check SQL Server is running**:
+
    ```powershell
    # Windows
    Get-Service MSSQLSERVER | Start-Service
@@ -604,11 +627,13 @@ Installation aborted.
    ```
 
 2. **Verify network connectivity**:
+
    ```powershell
    Test-NetConnection -ComputerName localhost -Port 5432
    ```
 
 3. **Check firewall**:
+
    ```powershell
    Get-NetFirewallRule -DisplayName "*SQL*"
    ```
@@ -616,13 +641,16 @@ Installation aborted.
 #### Issue 2: Azure Configuration Fails
 
 **Symptoms**:
+
 ```
 Authentication failed to Azure subscription
 Error: Invalid credentials
 ```
 
 **Solutions**:
+
 1. **Verify credentials**:
+
    ```powershell
    az login --service-principal `
      -u $CLIENT_ID `
@@ -641,12 +669,14 @@ Error: Invalid credentials
 #### Issue 3: Services Won't Start After Reboot
 
 **Symptoms**:
+
 ```
 HELIOS Platform service failed to start
 Error: "The service did not respond to the start or control request in a timely fashion"
 ```
 
 **Solutions**:
+
 ```powershell
 # 1. Check service status
 Get-Service HELIOS*
@@ -667,13 +697,16 @@ Remove-Item -Path "C:\HELIOS\temp\*" -Recurse -Force
 #### Issue 4: High Memory Usage After Installation
 
 **Symptoms**:
+
 ```
 Memory usage: 95% (30.4 GB / 32 GB)
 System is slow
 ```
 
 **Solutions**:
+
 1. **Adjust memory limits** (Settings → Performance):
+
    ```
    Max Memory for Services:    24 GB
    Cache Size:                 4 GB
@@ -681,11 +714,13 @@ System is slow
    ```
 
 2. **Enable memory compression**:
+
    ```powershell
    Enable-MMAgent -OperationAPI
    ```
 
 3. **Clear application cache**:
+
    ```powershell
    Remove-Item -Path "C:\HELIOS\cache\*" -Recurse -Force
    ```

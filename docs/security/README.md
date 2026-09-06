@@ -64,11 +64,13 @@ Navigate category documentation:
 **Status:** {{MODULE_1_STATUS}}
 
 **Quick Stats:**
+
 - Functions: {{MODULE_1_FUNCTIONS}}
 - Dependencies: {{MODULE_1_DEPS}}
 - Lines of Code: {{MODULE_1_LOC}}
 
 **Key Capabilities:**
+
 - {{CAPABILITY_1A}}
 - {{CAPABILITY_1B}}
 - {{CAPABILITY_1C}}
@@ -84,6 +86,7 @@ Navigate category documentation:
 **Status:** {{MODULE_2_STATUS}}
 
 **Key Capabilities:**
+
 - {{CAPABILITY_2A}}
 - {{CAPABILITY_2B}}
 
@@ -116,11 +119,13 @@ Import-Module {{MODULE_1_SLUG}}
 ### Common Tasks
 
 1. **{{TASK_1}}**: {{TASK_1_DESC}}
+
    ```powershell
    {{TASK_1_CODE}}
    ```
 
 2. **{{TASK_2}}**: {{TASK_2_DESC}}
+
    ```powershell
    {{TASK_2_CODE}}
    ```
@@ -168,12 +173,14 @@ See [DEPENDENCIES.md](./DEPENDENCIES.md) for complete information.
 **Purpose:** {{FUNCTION_1_PURPOSE}}
 
 **Parameters:**
+
 - `{{PARAM_1}}`: {{PARAM_1_DESC}}
 - `{{PARAM_2}}`: {{PARAM_2_DESC}}
 
 **Returns:** {{FUNCTION_1_RETURNS}}
 
 **Example:**
+
 ```powershell
 {{FUNCTION_1_EXAMPLE}}
 ```
@@ -207,6 +214,7 @@ See [API.md](./API.md) for {{FUNCTION_3}} and all functions.
 ```
 
 **Output:**
+
 ```
 {{EXAMPLE_1_OUTPUT}}
 ```
@@ -251,16 +259,19 @@ See [EXAMPLES.md](./EXAMPLES.md) for more examples.
 **Steps:**
 
 1. {{STEP_1}}: {{STEP_1_DESC}}
+
    ```powershell
    {{STEP_1_CODE}}
    ```
 
 2. {{STEP_2}}: {{STEP_2_DESC}}
+
    ```powershell
    {{STEP_2_CODE}}
    ```
 
 3. {{STEP_3}}: {{STEP_3_DESC}}
+
    ```powershell
    {{STEP_3_CODE}}
    ```
@@ -290,6 +301,7 @@ Set-{{CATEGORY_NAME}}Config @{
 ### Dependencies on Other Categories
 
 {{CATEGORY_NAME}} depends on:
+
 - **{{DEPENDENCY_CATEGORY_1}}**: For {{DEPENDENCY_PURPOSE_1}}
 - **{{DEPENDENCY_CATEGORY_2}}**: For {{DEPENDENCY_PURPOSE_2}}
 
@@ -368,6 +380,7 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for more.
 Contributions welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
 **Category-specific contribution areas:**
+
 - {{CONTRIB_AREA_1}}: {{CONTRIB_AREA_1_NEEDS}}
 - {{CONTRIB_AREA_2}}: {{CONTRIB_AREA_2_NEEDS}}
 

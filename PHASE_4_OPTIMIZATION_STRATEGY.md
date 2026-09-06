@@ -1,6 +1,7 @@
 # Phase 4 Optimization Strategy & Implementation
 
 ## Current Baseline Metrics
+
 - **Build Time**: 3.88 seconds (Release)
 - **Warnings**: 14,198 (mostly pre-existing StyleCop)
 - **Errors**: 0 (clean)
@@ -12,6 +13,7 @@
 ### 1. Code-Level Optimizations
 
 #### 1.1 String & Memory Allocations
+
 ```csharp
 // BEFORE: String concatenation (allocates new string each time)
 _logger.LogDebug($"Processing {itemCount} items");
@@ -23,6 +25,7 @@ _logger.LogDebug("Processing {ItemCount} items", itemCount);
 **Impact**: Reduce GC pressure by 15-20%
 
 #### 1.2 LINQ Query Optimization
+
 ```csharp
 // BEFORE: Multiple enumerations
 var items = collection.Where(x => x.Active).ToList();
@@ -38,6 +41,7 @@ var first = items.First();
 **Impact**: Reduce allocations, faster queries
 
 #### 1.3 Collection Initialization
+
 ```csharp
 // BEFORE: Unknown size
 var list = new List<T>();
@@ -53,6 +57,7 @@ for (int i = 0; i < count; i++)
 **Impact**: Reduce reallocation overhead by 50%
 
 #### 1.4 Async Overhead Reduction
+
 ```csharp
 // BEFORE: Unnecessary async
 public async Task<T> GetValueAsync() => await Task.FromResult(GetValue());
@@ -67,6 +72,7 @@ public Task<T> GetValueAsync() => Task.FromResult(GetValue());
 ### 2. Database Optimizations
 
 #### 2.1 Connection Pooling
+
 ```csharp
 // Enable connection pooling in DbContext
 services.AddDbContext<HeliosDatabaseContext>(options =>
@@ -77,6 +83,7 @@ services.AddDbContext<HeliosDatabaseContext>(options =>
 **Impact**: Reduce connection overhead by 80%
 
 #### 2.2 Query Optimization
+
 ```csharp
 // Add indexes for frequently queried columns
 modelBuilder.Entity<Service>()
@@ -91,6 +98,7 @@ modelBuilder.Entity<Metrics>()
 **Impact**: Reduce query time by 60-80%
 
 #### 2.3 Eager Loading
+
 ```csharp
 // BEFORE: N+1 queries
 var services = await context.Services.ToListAsync();
@@ -108,6 +116,7 @@ var services = await context.Services
 ### 3. Caching Strategy
 
 #### 3.1 L1 Cache (In-Memory)
+
 ```csharp
 private static readonly ConcurrentDictionary<string, CacheEntry> L1Cache = new();
 
@@ -126,6 +135,7 @@ public T GetCached<T>(string key, Func<T> factory, TimeSpan ttl)
 **Impact**: 90% hit rate for frequently accessed data
 
 #### 3.2 Cache-Aside Pattern
+
 ```csharp
 public async Task<T> GetWithCacheAsync<T>(string key, Func<Task<T>> asyncFactory)
 {
@@ -145,6 +155,7 @@ public async Task<T> GetWithCacheAsync<T>(string key, Func<Task<T>> asyncFactory
 ### 4. Memory Management
 
 #### 4.1 Object Pooling
+
 ```csharp
 private static readonly ObjectPool<StringBuilder> StringBuilderPool = 
     new DefaultObjectPoolProvider().CreateStringBuilderPool();
@@ -167,6 +178,7 @@ public string BuildString(Action<StringBuilder> builder)
 **Impact**: Reduce GC by 40-50%
 
 #### 4.2 Value Types for Small Objects
+
 ```csharp
 // Use struct for small, immutable data
 public readonly struct ServiceId
@@ -181,6 +193,7 @@ public readonly struct ServiceId
 ### 5. Build Optimizations
 
 #### 5.1 Tiered Compilation
+
 ```xml
 <PropertyGroup>
     <TieredCompilation>true</TieredCompilation>
@@ -192,6 +205,7 @@ public readonly struct ServiceId
 **Impact**: Faster startup, optimized runtime
 
 #### 5.2 Ready-to-Run
+
 ```xml
 <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
@@ -204,16 +218,19 @@ public readonly struct ServiceId
 ## Implementation Priority
 
 ### Priority 1 (Start Today)
+
 1. **String allocation reduction** - Quick wins, high impact
 2. **Connection pooling setup** - Simple, major benefit
 3. **L1 cache implementation** - Foundational for other optimizations
 
 ### Priority 2 (This Week)
+
 1. **LINQ query optimization** - Requires analysis
 2. **Database indexes** - Needs profiling
 3. **Object pooling** - For hot paths
 
 ### Priority 3 (This Week)
+
 1. **Build optimizations** - Low risk
 2. **Memory profiling** - Data-driven optimization
 3. **Query analysis** - Detailed investigation
@@ -231,6 +248,7 @@ public readonly struct ServiceId
 ## Testing Strategy
 
 Each optimization should be:
+
 1. **Measured**: Baseline metric captured
 2. **Implemented**: Change applied
 3. **Verified**: Improvement confirmed
@@ -240,16 +258,19 @@ Each optimization should be:
 ## Files to Optimize (Priority Order)
 
 ### Tier 1: High-Impact Services
+
 - `Program.cs` - Startup sequence
 - `ServiceContainer.cs` - DI container
 - `Core/ML/Services/*` - ML pipeline performance
 
 ### Tier 2: Database Layer
+
 - `Data/Database/HeliosDatabaseContext.cs`
 - All repository implementations
 - Query builders
 
 ### Tier 3: API/Web Services
+
 - `Core/API/Services/APIGateway.cs`
 - `Core/Observability/Services/PrometheusExporter.cs`
 - `Core/Production/Services/DistributedCacheLayer.cs`

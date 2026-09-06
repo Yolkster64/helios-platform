@@ -3,6 +3,7 @@
 ## CRITICAL: Computer Safety Guarantees
 
 ### Principle: ZERO RISK TO SYSTEM INTEGRITY
+
 **"No breaking changes. No system bricks. Fully reversible."**
 
 ---
@@ -10,6 +11,7 @@
 ## Section 1: Pre-Installation Safety Checks
 
 ### 1.1: System Requirements Verification
+
 ```
 BEFORE ANYTHING TOUCHES THE SYSTEM:
 
@@ -27,6 +29,7 @@ BEFORE ANYTHING TOUCHES THE SYSTEM:
 ```
 
 ### 1.2: Conflict Detection
+
 ```
 ✓ Port availability scan (check if ports 5000-6000 free)
 ✓ Process scanning for port conflicts
@@ -38,6 +41,7 @@ BEFORE ANYTHING TOUCHES THE SYSTEM:
 ```
 
 ### 1.3: Pre-Flight Diagnostic Report
+
 ```
 Generate comprehensive diagnostic before installation:
 - System specs (CPU, RAM, GPU, SSD/HDD, Network)
@@ -55,6 +59,7 @@ Generate comprehensive diagnostic before installation:
 ## Section 2: Completely Isolated Installation
 
 ### 2.1: Installation Directory Isolation
+
 ```
 Installation paths (ZERO overlap with system):
   C:\Program Files\HELIOS\          (isolated, not system-critical)
@@ -75,6 +80,7 @@ All paths:
 ```
 
 ### 2.2: Clean Uninstall Verification
+
 ```
 Uninstall will:
 ✓ Remove ALL HELIOS files and directories
@@ -97,6 +103,7 @@ Verification:
 ## Section 3: Complete Rollback & Recovery
 
 ### 3.1: Automatic Pre-Installation Backup
+
 ```
 BEFORE installation begins:
 
@@ -119,6 +126,7 @@ BEFORE installation begins:
 ```
 
 ### 3.2: One-Click Rollback
+
 ```
 If ANY problems detected:
 
@@ -136,6 +144,7 @@ Zero user intervention needed beyond clicking one button.
 ```
 
 ### 3.3: Windows System Restore Integration
+
 ```
 Installation creates System Restore Point:
 - Before installation begins
@@ -150,6 +159,7 @@ Installation creates System Restore Point:
 ## Section 4: Strict File System Safety
 
 ### 4.1: Write Permission Verification
+
 ```
 For EVERY file write operation:
 ✓ Verify target directory exists and is writable
@@ -162,6 +172,7 @@ For EVERY file write operation:
 ```
 
 ### 4.2: File Deletion Safety
+
 ```
 NEVER delete files without:
 ✓ Moving to recycle bin (NOT permanent delete)
@@ -173,6 +184,7 @@ NEVER delete files without:
 ```
 
 ### 4.3: Registry Safety
+
 ```
 Registry modifications:
 ✓ Only in HKEY_LOCAL_MACHINE\SOFTWARE\HELIOS
@@ -188,6 +200,7 @@ Registry modifications:
 ## Section 5: Runtime Safety & Monitoring
 
 ### 5.1: Service Isolation & Containment
+
 ```
 Each HELIOS service runs:
 ✓ Under dedicated user account (helios_svc)
@@ -199,6 +212,7 @@ Each HELIOS service runs:
 ```
 
 ### 5.2: Resource Limits & Protection
+
 ```
 Memory protection:
 - Each service: <100MB limit (configurable)
@@ -220,6 +234,7 @@ Disk I/O protection:
 ```
 
 ### 5.3: Crash Detection & Recovery
+
 ```
 Automatic monitoring:
 ✓ Service crash detection (<1s latency)
@@ -242,6 +257,7 @@ User actions:
 ## Section 6: Network & Port Safety
 
 ### 6.1: Network Isolation
+
 ```
 All network operations:
 ✓ Localhost-only by default (127.0.0.1)
@@ -253,6 +269,7 @@ All network operations:
 ```
 
 ### 6.2: Port Conflict Detection
+
 ```
 BEFORE binding to any port:
 ✓ Scan port for existing listeners
@@ -269,6 +286,7 @@ BEFORE binding to any port:
 ## Section 7: Installation Verification & Testing
 
 ### 7.1: Post-Installation Verification
+
 ```
 Immediately after installation:
 
@@ -310,6 +328,7 @@ Report: installation_verification_TIMESTAMP.log
 ```
 
 ### 7.2: Automated Health Check
+
 ```
 Continuous monitoring during installation:
 ✓ Real-time system metrics
@@ -326,6 +345,7 @@ Continuous monitoring during installation:
 ## Section 8: User Safety Features
 
 ### 8.1: Clear Communication
+
 ```
 Installation UI will clearly state:
 ✓ "This installation will NOT modify Windows system files"
@@ -339,6 +359,7 @@ Installation UI will clearly state:
 ```
 
 ### 8.2: Troubleshooting Tools
+
 ```
 Built into installation:
 ✓ System Diagnostic Tool
@@ -352,6 +373,7 @@ Built into installation:
 ```
 
 ### 8.3: Safe Mode Operation
+
 ```
 If anything goes wrong:
 ✓ Run with minimal services (core only)
@@ -367,6 +389,7 @@ If anything goes wrong:
 ## Section 9: Testing Protocol (MANDATORY BEFORE RELEASE)
 
 ### 9.1: Pre-Release Testing Matrix
+
 ```
 Must test on:
 ✓ Windows 7 (32-bit and 64-bit)
@@ -389,6 +412,7 @@ Must test on:
 ```
 
 ### 9.2: Destructive Testing (In VM Only)
+
 ```
 Automated VM tests:
 ✓ Kill HELIOS process randomly
@@ -405,6 +429,7 @@ Automated VM tests:
 ```
 
 ### 9.3: Longevity Testing
+
 ```
 48-hour continuous runs:
 ✓ Run on clean system for 48 hours
@@ -460,6 +485,7 @@ Automated VM tests:
 ## Section 11: Emergency Procedures
 
 ### 11.1: If Installation Fails
+
 ```
 Automatic recovery:
 1. Installation wizard detects failure
@@ -472,6 +498,7 @@ Automatic recovery:
 ```
 
 ### 11.2: If Installation Succeeds But System Unstable
+
 ```
 User-initiated recovery:
 1. Open HELIOS Control Panel
@@ -483,6 +510,7 @@ User-initiated recovery:
 ```
 
 ### 11.3: If Cannot Boot After Installation
+
 ```
 GUARANTEED NOT TO HAPPEN because:
 ✓ HELIOS not in boot path
@@ -503,11 +531,13 @@ BUT if Windows bootloader corrupted (unrelated):
 ## IMPLEMENTATION CHECKLIST
 
 ### Before Writing ANY Installer Code
+
 - [ ] All 11 sections above reviewed and approved
 - [ ] Safety review by security team
 - [ ] Approval from user for all safety mechanisms
 
 ### During Installer Development
+
 - [ ] Implement EVERY safety check from Section 1
 - [ ] Implement EVERY isolation mechanism from Section 2
 - [ ] Implement COMPLETE rollback system (Section 3)
@@ -517,6 +547,7 @@ BUT if Windows bootloader corrupted (unrelated):
 - [ ] Run FULL test matrix before ANY release (Section 9)
 
 ### Before Release
+
 - [ ] ✓ All safety guarantees verified
 - [ ] ✓ 48-hour longevity test passed
 - [ ] ✓ VM destructive testing completed

@@ -9,6 +9,7 @@
 **Trigger**: When user is added to security group
 
 **Steps**:
+
 ```
 1. Trigger: User added to HELIOS-Team group
 2. Get User Details:
@@ -39,6 +40,7 @@
 **Schedule**: Daily at 11 PM UTC
 
 **Steps**:
+
 ```
 1. Query Azure SQL Database:
    - SELECT * FROM helios_configurations
@@ -71,6 +73,7 @@
 **Schedule**: Daily at 7 AM UTC (before executives arrive)
 
 **Steps**:
+
 ```
 1. Get Report Data:
    - Query data warehouse
@@ -104,6 +107,7 @@
 **Trigger**: Security event from Azure Security Center
 
 **Steps**:
+
 ```
 1. Receive Alert:
    - Alert type (high/medium/low)
@@ -145,6 +149,7 @@
 **Schedule**: Daily at 3 AM UTC
 
 **Steps**:
+
 ```
 1. Check GDPR Controls:
    - Verify data retention policies enforced
@@ -189,6 +194,7 @@
 **Schedule**: Daily at 6 PM UTC (end of business)
 
 **Steps**:
+
 ```
 1. Get List of VMs:
    - Query all VMs with tag: Environment=Dev or Staging
@@ -229,6 +235,7 @@
 **Schedule**: Daily at 2 AM UTC
 
 **Steps**:
+
 ```
 1. Get Backup Jobs:
    - Query Azure Backup vault
@@ -268,6 +275,7 @@
 **Schedule**: Monthly (on 1st of month)
 
 **Steps**:
+
 ```
 1. Get All Users:
    - Query Entra ID
@@ -312,6 +320,7 @@
 **Trigger**: Daily cost comparison
 
 **Steps**:
+
 ```
 1. Get Current Month Costs:
    - Query Azure Cost Management API

@@ -9,6 +9,7 @@ This document shows what changes when you implement Phase 3. Compare your curren
 ### BEFORE Phase 3 (Phase 2: Managed)
 
 #### System Health Monitoring
+
 ```
 Manual Process:
 ├─ You run: "Get-HeliosMetrics" manually
@@ -29,6 +30,7 @@ Typical Timeline:
 ```
 
 #### Problem Resolution
+
 ```
 When Database Crashes:
 ├─ No automatic detection (wait for user complaint)
@@ -48,6 +50,7 @@ When Disk Gets Full:
 ```
 
 #### Performance Optimization
+
 ```
 Current Approach (Guesswork):
 ├─ Administrator estimates traffic patterns
@@ -65,6 +68,7 @@ Cache Tuning Example:
 ```
 
 #### Reporting
+
 ```
 Current Process:
 ├─ Thursday afternoon: Manager asks "How's the system?"
@@ -85,6 +89,7 @@ Report Contains:
 ### AFTER Phase 3 (Capability: Intelligent)
 
 #### System Health Monitoring
+
 ```
 Automatic Process:
 ├─ Dashboard updates every 2 seconds
@@ -103,6 +108,7 @@ Typical Timeline:
 ```
 
 #### Problem Resolution (Auto-Healing)
+
 ```
 When Database Would Crash:
 ├─ AI detects connection pool approaching limit
@@ -121,6 +127,7 @@ When Disk Gets Full (Predicted):
 ```
 
 #### Performance Optimization (AI-Driven)
+
 ```
 Data-Driven Approach (AI):
 ├─ AI analyzes 7 days of production data
@@ -142,6 +149,7 @@ Cache Tuning Example (AI):
 ```
 
 #### Reporting
+
 ```
 Automated Process:
 ├─ Friday 8 AM: Report automatically generated and emailed
@@ -187,6 +195,7 @@ Automated Process:
 ### Annual Cost Comparison
 
 #### BEFORE Phase 3
+
 ```
 Operational Costs:
 ├─ On-call engineer salary: $120,000 × 1.5 (on-call premium) = $180,000
@@ -208,6 +217,7 @@ Typical Incident:
 ```
 
 #### AFTER Phase 3
+
 ```
 Operational Costs:
 ├─ Same on-call engineer salary: $120,000
@@ -232,6 +242,7 @@ Annual Incident Cost:
 ```
 
 ### ROI Analysis
+
 ```
 Year 1 ROI:
 ├─ Phase 3 License: $30,000
@@ -253,6 +264,7 @@ Payback Period: 2-3 weeks
 ### Dashboard & Visibility
 
 #### BEFORE Phase 2
+
 ```
 Monitoring:
 ├─ Text-based metrics output
@@ -269,6 +281,7 @@ Uptime: 45 days
 ```
 
 #### AFTER Phase 3
+
 ```
 Monitoring:
 ├─ Real-time interactive dashboard
@@ -288,6 +301,7 @@ Visual Dashboard Shows:
 ### Intelligence Addition
 
 #### BEFORE Phase 2: System Responses
+
 ```
 When CPU is 85%:
 ├─ Alert generated: "CPU high"
@@ -304,6 +318,7 @@ When Traffic Exceeds Capacity:
 ```
 
 #### AFTER Phase 3: Intelligent Responses
+
 ```
 When CPU is 85%:
 ├─ AI analyzes: "Backup job started 5 min ago"
@@ -323,6 +338,7 @@ When Traffic Exceeds Capacity:
 ### Automation Addition
 
 #### BEFORE Phase 2: Manual Workflows
+
 ```
 Daily Backup Procedure:
 ├─ You set reminder for 2 AM
@@ -344,6 +360,7 @@ Monthly Maintenance:
 ```
 
 #### AFTER Phase 3: Automated Workflows
+
 ```
 Daily Backup Procedure:
 ├─ Scheduled automatically at 2 AM
@@ -457,6 +474,7 @@ Improvement: 20x faster resolution
 ### On-Call Load
 
 #### BEFORE Phase 3
+
 ```
 Weekly Schedule:
 ├─ Monday: 1-2 incidents (slow day)
@@ -475,6 +493,7 @@ On-Call Experience:
 ```
 
 #### AFTER Phase 3
+
 ```
 Weekly Schedule:
 ├─ Monday-Friday: 0-1 incidents per week (auto-healed)
@@ -492,6 +511,7 @@ On-Call Experience:
 ### Engineering Workload
 
 #### BEFORE Phase 3
+
 ```
 Weekly Tasks:
 ├─ Monitoring / Alerting: 10 hours
@@ -509,6 +529,7 @@ Engineer Satisfaction:
 ```
 
 #### AFTER Phase 3
+
 ```
 Weekly Tasks:
 ├─ Monitoring / Alerting: 2 hours (mostly dashboard reviews)

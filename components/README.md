@@ -7,18 +7,21 @@ The HELIOS Platform is built on a modular component system that allows flexibili
 ## Quick Start
 
 ### Install All Components (Recommended for Full Platform)
+
 ```bash
 cd components
 ./install-all.ps1
 ```
 
 ### Install Single Component (Independent Use)
+
 ```bash
 cd components/ai-dashboard
 ./install.ps1
 ```
 
 ### Borrow Component from Another Phase
+
 ```bash
 # Use Phase 3 AI Dashboard in Phase 2
 ./borrow-component.ps1 -ComponentName "ai-dashboard" -FromPhase 3 -ToPhase 2
@@ -38,11 +41,13 @@ cd components/ai-dashboard
 ## Core Concepts
 
 ### Independent Installation
+
 Each component can be installed standalone without requiring its full phase. Components are designed to work with reasonable defaults and only pull in essential dependencies.
 
 **Example:** You can install just the AI Dashboard without installing Phase 3, Phase 2, Phase 1, or Phase 0.
 
 ### Phase-Based Installation
+
 Traditional installation follows phases 0→1→2→3, but this is now optional.
 
 ```
@@ -53,6 +58,7 @@ Phase 3: Integration → ai-dashboard, cloud-bridge
 ```
 
 ### Component Borrowing
+
 "Borrow" a component from a later phase and use it in an earlier phase. The borrowing system handles dependencies automatically.
 
 ```
@@ -72,12 +78,15 @@ Phase 3: Integration → ai-dashboard, cloud-bridge
 ### Component Dependencies
 
 **Hard Dependencies** (must be installed for component to work):
+
 - `security-engine` ← Required by: performance-ai, cloud-bridge, vault-dynamics
 
 **Soft Dependencies** (optional, enhance functionality):
+
 - `vault-dynamics` ← Optional for: security-engine, analytics-core
 
 **No Dependencies**:
+
 - `ai-dashboard` (works standalone with defaults)
 - `analytics-core` (only needs SQL Server)
 
@@ -86,12 +95,14 @@ See [COMPONENT_DEPENDENCIES.md](./COMPONENT_DEPENDENCIES.md) for complete depend
 ## Usage Patterns
 
 ### Pattern 1: Core Security Only
+
 ```powershell
 # Just the security engine - lightweight foundation
 ./components/security-engine/install.ps1
 ```
 
 ### Pattern 2: Security + Vault (Two-Phase Combo)
+
 ```powershell
 # Install Phase 0 and Phase 1 components independently
 ./components/security-engine/install.ps1
@@ -99,6 +110,7 @@ See [COMPONENT_DEPENDENCIES.md](./COMPONENT_DEPENDENCIES.md) for complete depend
 ```
 
 ### Pattern 3: Everything Except Dashboard
+
 ```powershell
 # All components except Phase 3
 ./components/security-engine/install.ps1
@@ -108,12 +120,14 @@ See [COMPONENT_DEPENDENCIES.md](./COMPONENT_DEPENDENCIES.md) for complete depend
 ```
 
 ### Pattern 4: Dashboard Only (Borrowed)
+
 ```powershell
 # Just the dashboard from Phase 3, with only essential dependencies
 ./borrow-component.ps1 -ComponentName "ai-dashboard" -MinimalDeps
 ```
 
 ### Pattern 5: Custom Combination
+
 ```powershell
 # My specific use case: AI Dashboard + Vault + Security
 ./components/security-engine/install.ps1
@@ -124,24 +138,28 @@ See [COMPONENT_DEPENDENCIES.md](./COMPONENT_DEPENDENCIES.md) for complete depend
 ## Installation Methods
 
 ### Method 1: PowerShell (Windows Native)
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\components\<component-name>
 .\install.ps1
 ```
 
 ### Method 2: Package Manager
+
 ```powershell
 # Using built-in package system
 Install-HeliosComponent -Name "ai-dashboard"
 ```
 
 ### Method 3: Manual Installation
+
 1. Download component from `./releases/`
 2. Extract to `C:\Program Files\HELIOS\components\<name>\`
 3. Run configuration wizard
 4. Test installation with `test-component.ps1`
 
 ### Method 4: Docker (If Available)
+
 ```bash
 docker pull helios/ai-dashboard:latest
 docker run -d -p 8080:8080 helios/ai-dashboard:latest
@@ -215,27 +233,32 @@ Get-ComponentDependencies -Name "ai-dashboard" -Recursive
 ## Common Tasks
 
 ### Check Installation Status
+
 ```powershell
 ./components/ai-dashboard/test-component.ps1
 # Output: ai-dashboard is installed (v2.1.0)
 ```
 
 ### Verify Component Health
+
 ```powershell
 Get-HeliosComponent -Name "vault-dynamics" -Verbose
 ```
 
 ### Remove Single Component (Keep Others)
+
 ```powershell
 ./components/ai-dashboard/uninstall.ps1 -KeepDependencies
 ```
 
 ### Upgrade Single Component
+
 ```powershell
 ./components/ai-dashboard/install.ps1 -Upgrade -NoRestart
 ```
 
 ### List All Available Components
+
 ```powershell
 Get-HeliosComponentCatalog
 ```
@@ -243,19 +266,23 @@ Get-HeliosComponentCatalog
 ## Troubleshooting
 
 ### Component Won't Install
+
 1. Check prerequisites: See component's README.md
 2. Verify disk space: Need ~2 GB free
 3. Run as Administrator
 4. Check component logs: `$HELIOS\logs\component-install.log`
 
 ### Borrowed Component Has Issues
+
 1. Verify all dependencies are installed: `Get-ComponentDependencies -Name "component-name"`
 2. Check compatibility: See COMPONENT_COMPATIBILITY_MATRIX.md
 3. Reinstall component: `./install.ps1 -Reinstall`
 4. See troubleshooting section in component's specific README
 
 ### Dependency Conflicts
+
 If borrowing causes conflicts:
+
 1. Review COMPONENT_DEPENDENCIES.md
 2. Check ADVANCED_BORROWING_SCENARIOS.md for your use case
 3. Consider using Minimal Dependencies mode: `./install.ps1 -MinimalDeps`

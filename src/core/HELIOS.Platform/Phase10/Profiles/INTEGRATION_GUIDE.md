@@ -249,6 +249,7 @@ dotnet test --filter "FullyQualifiedName~HELIOS.Platform.Phase10.Profiles.Tests"
 ### 7. Configuration
 
 Store profile configurations in AppData:
+
 ```
 %AppData%\HELIOS\Profiles\
 ├── Gaming.json
@@ -258,6 +259,7 @@ Store profile configurations in AppData:
 ```
 
 Load custom profiles:
+
 ```csharp
 var manager = new ProfileManager();
 var customSettings = await manager.ReadProfileAsync("Gaming");
@@ -266,6 +268,7 @@ var customSettings = await manager.ReadProfileAsync("Gaming");
 ## API Reference
 
 ### Profile Switching
+
 ```csharp
 // Switch to profile
 await profileSwitcher.SwitchProfileAsync("Gaming");
@@ -278,6 +281,7 @@ await profileSwitcher.UndoProfileSwitchAsync();
 ```
 
 ### Profile Management
+
 ```csharp
 // Create profile
 await manager.CreateProfileAsync("MyProfile", settings);
@@ -302,6 +306,7 @@ await manager.ImportProfileAsync("MyProfile", json);
 ```
 
 ### Performance Analysis
+
 ```csharp
 // Analyze performance
 var metrics = await analyzer.AnalyzePerformanceAsync("Gaming", TimeSpan.FromMinutes(10));
@@ -314,6 +319,7 @@ var recommendations = await analyzer.RecommendTuningAsync("Gaming");
 ```
 
 ### Auto-Detection
+
 ```csharp
 // Detect optimal profile
 var optimal = await detector.DetectOptimalProfileAsync();
@@ -352,6 +358,7 @@ catch (Exception ex)
 ## Best Practices
 
 1. **Always validate before switching**
+
    ```csharp
    if (await profile.ValidateAsync())
    {
@@ -360,6 +367,7 @@ catch (Exception ex)
    ```
 
 2. **Use try-catch for all operations**
+
    ```csharp
    try
    {
@@ -372,12 +380,14 @@ catch (Exception ex)
    ```
 
 3. **Cache profile list**
+
    ```csharp
    var profiles = await manager.ListProfilesAsync();
    // Use cached list instead of calling repeatedly
    ```
 
 4. **Measure performance regularly**
+
    ```csharp
    // Periodic performance analysis
    var timer = new Timer(async _ =>
@@ -389,6 +399,7 @@ catch (Exception ex)
    ```
 
 5. **Provide undo capability**
+
    ```csharp
    // Always allow users to revert
    if (userWantsToRevert)
@@ -400,18 +411,21 @@ catch (Exception ex)
 ## Troubleshooting
 
 ### Profile Switch Fails
+
 - Check Windows permissions
 - Verify profile exists
 - Check network connection (for remote ops)
 - Review event log for details
 
 ### Performance Metrics Unavailable
+
 - Verify performance counters are enabled
 - Check administrator privileges
 - Review system event log
 - Ensure sufficient disk space
 
 ### AI Commands Not Recognized
+
 - Check command spelling
 - Verify services are injected
 - Review error logs
@@ -420,6 +434,7 @@ catch (Exception ex)
 ## Support
 
 For issues or questions about the Profile Engine:
+
 1. Check the PROFILE_ENGINE_DOCUMENTATION.md
 2. Review test cases for usage examples
 3. Check system event log for errors

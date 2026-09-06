@@ -30,6 +30,7 @@ The `deploy.yml` workflow manages phase-based deployments to Azure environments.
 ## Workflow Purpose
 
 **Goals**:
+
 - ✅ Deploy phases to target environments
 - ✅ Validate deployment configuration
 - ✅ Execute post-deployment tests
@@ -145,6 +146,7 @@ phases/0-foundation/build.ps1
 ```
 
 **Manifest** (`MANIFEST.json`):
+
 ```json
 {
   "phase": "0-foundation",
@@ -271,6 +273,7 @@ jobs:
 ```
 
 **Tests**:
+
 - Verify resources created
 - Check resource health
 - Validate connectivity
@@ -533,6 +536,7 @@ az deployment group create \
 ## Best Practices
 
 ✅ **Do**:
+
 - Test in development first
 - Use staging for pre-prod validation
 - Document all deployments
@@ -542,6 +546,7 @@ az deployment group create \
 - Use approval gates
 
 ❌ **Don't**:
+
 - Deploy directly to production without testing
 - Skip validation steps
 - Hardcode environment-specific values

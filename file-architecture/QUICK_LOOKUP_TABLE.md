@@ -129,7 +129,7 @@ Quick reference table to find where any HELIOS component is located.
 | Analysis Engine | C:\Program Files\HELIOS\Analyzer\HELIOSAnalyzer.exe | 3 |
 | USB Creator | C:\ProgramData\HELIOS\Foundation\USBCreator\Creator.exe | 0 |
 
-### Database Files (*.db, *.sqlite)
+### Database Files (*.db,*.sqlite)
 
 | Component | Location | Phase | Grows |
 |-----------|----------|-------|-------|
@@ -142,7 +142,7 @@ Quick reference table to find where any HELIOS component is located.
 | Threat Definitions | C:\ProgramData\HELIOS\Capability\AI-Models\Data-Files\threat-definitions.db | 3 | No |
 | Vault Database | C:\Users\[USERNAME]\AppData\Local\HELIOS\Vault\Vault.db | 1 | Yes |
 
-### Configuration Files (*.config, *.cfg, *.json, *.xml)
+### Configuration Files (*.config,*.cfg, *.json,*.xml)
 
 | Component | Location | Phase |
 |-----------|----------|-------|
@@ -184,6 +184,7 @@ Quick reference table to find where any HELIOS component is located.
 See **PHASE_0_FILE_LOCATIONS.md** for complete list
 
 Main directories:
+
 - `C:\ProgramData\HELIOS\Foundation\` (~2.5-5.5 GB)
 - `C:\ProgramData\HELIOS\Logs\Phase0.log`
 
@@ -192,6 +193,7 @@ Main directories:
 See **PHASE_1_FILE_LOCATIONS.md** for complete list
 
 Main directories:
+
 - `C:\ProgramData\HELIOS\Security\` (~200-1 GB)
 - `C:\Users\[USERNAME]\AppData\Local\HELIOS\Vault\` (~50-200 MB)
 - `HKLM:\Software\Policies\Microsoft\Windows\SrpV2\`
@@ -201,6 +203,7 @@ Main directories:
 See **PHASE_2_FILE_LOCATIONS.md** for complete list
 
 Main directories:
+
 - `C:\ProgramData\HELIOS\Optimization\` (~200-500 MB)
 - `C:\Windows\System32\Tasks\HELIOS\`
 - `HKLM:\SYSTEM\CurrentControlSet\Services\HELIOS*`
@@ -210,6 +213,7 @@ Main directories:
 See **PHASE_3_FILE_LOCATIONS.md** for complete list
 
 Main directories:
+
 - `C:\Program Files\HELIOS\Dashboard\` (~200-300 MB)
 - `C:\ProgramData\HELIOS\Capability\` (~2-4 GB)
 - `C:\ProgramData\HELIOS\Database\` (~100-500 MB)
@@ -232,4 +236,3 @@ Main directories:
 - "What files does Phase 2 use?" → See Index by Phase (Phase 2) or PHASE_2_FILE_LOCATIONS.md
 - "Find all log files" → See Index by File Type (Log Files)
 - "Where are AI models?" → Search "Model ()" in table or see PHASE_3_FILE_LOCATIONS.md
-

@@ -11,6 +11,7 @@ The Security Validation Framework provides **executable, real-time security chec
 ### Core Components
 
 #### 1. **ValidationResult** (ValidationResult.cs)
+
 Represents a single security check result.
 
 ```csharp
@@ -26,6 +27,7 @@ public class ValidationResult
 ```
 
 #### 2. **SecurityAuditChecklist** (SecurityAuditChecklist.cs)
+
 Defines and executes the 10-item security audit checklist:
 
 1. **Secure Boot Enabled** - UEFI firmware secure boot verification
@@ -40,6 +42,7 @@ Defines and executes the 10-item security audit checklist:
 10. **4-Tier Firmware Validation** - BIOS/VTL0/Kernel/Runtime signatures
 
 #### 3. **SecurityValidator** (SecurityValidator.cs)
+
 Main validation engine with executable methods:
 
 - `ValidateBootkitSignatures()` - Validates bootkit stage signatures
@@ -48,6 +51,7 @@ Main validation engine with executable methods:
 - `RunFullAudit()` - Executes all 13 validations (10 checklist + 3 supplementary)
 
 #### 4. **AuditResults** (ValidationResult.cs)
+
 Aggregates audit execution results with metrics:
 
 ```csharp
@@ -127,6 +131,7 @@ dotnet test tests/SecurityValidationTests.cs
 ```
 
 **Test Coverage**:
+
 - ✓ ValidationResult initialization and formatting
 - ✓ AuditResults metrics calculation
 - ✓ All 10 checklist items execute successfully
@@ -144,6 +149,7 @@ dotnet build src/Security/
 ```
 
 **Success Output**:
+
 ```
 Build succeeded.
     0 Warning(s)
@@ -205,6 +211,7 @@ Failed: 2/16
 ```
 
 **Interpretation**:
+
 - System is **highly secure** (87.5%)
 - 2 controls need immediate remediation
 - Estimated security posture: **STRONG**
@@ -212,22 +219,27 @@ Failed: 2/16
 ## Results Categories
 
 ### Firmware (Secure Boot, TPM, Firmware Validation)
+
 - **Passed**: System boot integrity is protected
 - **Failed**: CRITICAL - System vulnerable to malicious boot code
 
 ### Encryption (BitLocker, AES-256)
+
 - **Passed**: Data at rest is cryptographically protected
 - **Failed**: HIGH RISK - Unencrypted sensitive data
 
 ### Network Security (Firewall, HTTPS, Network Lockdown)
+
 - **Passed**: Network perimeter and communications hardened
 - **Failed**: System exposed to network-based attacks
 
 ### Authentication (Local-Only Auth, TPM Sealing)
+
 - **Passed**: Boot process restricted to authorized users
 - **Failed**: MEDIUM RISK - Boot authentication may be bypassed
 
 ### Endpoint Protection (Malwarebytes)
+
 - **Passed**: Real-time malware detection active
 - **Failed**: HIGH RISK - No active threat detection
 
@@ -387,11 +399,13 @@ dotnet add package xunit.runner.visualstudio --version 2.4.5
 ### Audit Shows "Cannot Verify" for Registry Checks
 
 **Causes**:
+
 - Registry key doesn't exist (expected on some systems)
 - Permission denied to read registry
 - Windows component not installed
 
-**Solution**: 
+**Solution**:
+
 - Check that Windows feature is installed
 - Run with elevated privileges
 - Review detailed error message in `result.Details`
@@ -410,16 +424,19 @@ dotnet tool update -g dotnet-tools
 ## References
 
 ### Microsoft Security Documentation
+
 - [Secure Boot](https://docs.microsoft.com/en-us/windows/security/operating-system-security/system-security/secure-boot/)
 - [BitLocker](https://docs.microsoft.com/en-us/windows/security/information-protection/bitlocker/bitlocker-overview)
 - [Windows Firewall](https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-firewall/)
 - [TPM 2.0](https://docs.microsoft.com/en-us/windows/security/hardware-security/tpm/trusted-platform-module-overview)
 
 ### NIST Standards
+
 - [NIST SP 800-53](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final) - Security and Privacy Controls
 - [NIST SP 800-171](https://csrc.nist.gov/publications/detail/sp/800-171/rev-2/final) - Protecting CUI
 
 ### Monado Blade v2.5.1 Documentation
+
 - Security Architecture: `/docs/SECURITY_ARCHITECTURE.md`
 - Bootkit Design: `/docs/BOOTKIT_DESIGN.md`
 - Deployment Guide: `/docs/DEPLOYMENT_GUIDE.md`

@@ -104,12 +104,14 @@ TOTAL:                  (35 min) ✅ Production Ready
 ### Option 1: GitHub Codespace (Recommended for First-Time)
 
 **Advantages:**
+
 - No local setup required
 - Pre-configured environment
 - Browser-based access
 - Easy to share with team
 
 **Steps:**
+
 1. Navigate to https://github.com/codespaces/new?repo=M0nado/helios-platform
 2. Click "Create codespace on main"
 3. Wait for environment setup (3-5 minutes)
@@ -121,12 +123,14 @@ TOTAL:                  (35 min) ✅ Production Ready
 ### Option 2: Local Installation (Windows)
 
 **Advantages:**
+
 - Full control
 - Works offline
 - Customizable
 - Good for testing
 
 **Requirements:**
+
 - Windows 11 Pro or Server 2022+
 - PowerShell 7.4+
 - .NET 8.0 SDK
@@ -158,12 +162,14 @@ notepad .env
 ### Option 3: Hybrid Cloud Deployment
 
 **Advantages:**
+
 - Mix of on-premise and cloud
 - Gradual migration capability
 - Maintain existing systems
 - Flexible architecture
 
 **Configuration:**
+
 ```json
 {
   "deployment": {
@@ -185,6 +191,7 @@ notepad .env
 **Purpose:** Verify system readiness
 
 **What It Checks:**
+
 1. Operating System - Windows 11 Pro+
 2. PowerShell - 7.4+
 3. .NET Framework - 8.0+
@@ -197,6 +204,7 @@ notepad .env
 10. Admin Rights - Running as admin
 
 **Run Manually:**
+
 ```powershell
 .\scripts\phase-0-preflight.ps1
 
@@ -219,6 +227,7 @@ Ready to proceed to Phase 1
 **Success Criteria:** All 10 checks pass
 
 **Troubleshooting:**
+
 ```powershell
 # If PowerShell check fails
 # Install: https://github.com/PowerShell/PowerShell/releases
@@ -239,6 +248,7 @@ az login
 **Purpose:** Provision cloud resources
 
 **Deployed Resources:**
+
 - Virtual Network with subnets
 - Load Balancer
 - Container Registry
@@ -249,6 +259,7 @@ az login
 - Managed Identity
 
 **Run:**
+
 ```powershell
 .\scripts\phase-1-infrastructure.ps1 -Region "eastus" -Tier "Enterprise"
 
@@ -263,6 +274,7 @@ az login
 ```
 
 **Validation:**
+
 ```powershell
 # Verify resources in Azure
 az resource list --resource-group "helios-prod" --output table
@@ -277,6 +289,7 @@ az resource list --resource-group "helios-prod" --output table
 **Purpose:** Launch 6 build agents
 
 **Agents Deployed:**
+
 1. Storage Agent (2 instances)
 2. Security Agent (3 instances)
 3. Software Agent (2 instances)
@@ -285,6 +298,7 @@ az resource list --resource-group "helios-prod" --output table
 6. Testing Agent (1 instance)
 
 **Run:**
+
 ```powershell
 .\scripts\phase-2-agents.ps1
 
@@ -298,6 +312,7 @@ az resource list --resource-group "helios-prod" --output table
 ```
 
 **Health Check:**
+
 ```powershell
 Get-HeliosAgent
 
@@ -317,11 +332,13 @@ Security-01       Security       Running   7s        8%     198MB
 **Purpose:** Register and configure AI models
 
 **Services Configured:**
+
 - **Tier 1 (Free):** Ollama, Gemini, Copilot
 - **Tier 2 (Standard):** Azure OpenAI, Claude, Gemini Pro
 - **Tier 3 (Specialist):** Fabric, NVIDIA, Copilot Studio
 
 **Run:**
+
 ```powershell
 .\scripts\phase-3-ai-services.ps1
 
@@ -335,6 +352,7 @@ Security-01       Security       Running   7s        8%     198MB
 ```
 
 **Verify:**
+
 ```powershell
 Get-HeliosAIService
 
@@ -354,6 +372,7 @@ claude          Active  Tier2-Standard    0         N/A
 **Purpose:** Enable 8-layer security architecture
 
 **Security Activated:**
+
 - MFA enrollment
 - Certificate generation
 - Vault configuration
@@ -364,6 +383,7 @@ claude          Active  Tier2-Standard    0         N/A
 - AI verification
 
 **Run:**
+
 ```powershell
 .\scripts\phase-4-security.ps1
 
@@ -377,6 +397,7 @@ claude          Active  Tier2-Standard    0         N/A
 ```
 
 **Verify:**
+
 ```powershell
 Get-HeliosSecurityStatus
 
@@ -399,6 +420,7 @@ ComplianceScore : 98%
 **Purpose:** Activate real-time dashboards
 
 **Dashboards Activated:**
+
 1. Cost Dashboard
 2. Performance Dashboard
 3. Security Dashboard
@@ -408,6 +430,7 @@ ComplianceScore : 98%
 7. System Dashboard
 
 **Run:**
+
 ```powershell
 .\scripts\phase-5-monitoring.ps1
 
@@ -421,6 +444,7 @@ ComplianceScore : 98%
 ```
 
 **Access Dashboards:**
+
 ```
 https://localhost:8080/dashboards/cost
 https://localhost:8080/dashboards/performance
@@ -438,6 +462,7 @@ https://localhost:8080/dashboards/system
 **Purpose:** Run 42 validation tests
 
 **Test Categories:**
+
 - Infrastructure tests (5 tests)
 - Agent health tests (6 tests)
 - AI service tests (4 tests)
@@ -447,6 +472,7 @@ https://localhost:8080/dashboards/system
 - Integration tests (5 tests)
 
 **Run:**
+
 ```powershell
 .\scripts\phase-6-verification.ps1
 
@@ -463,6 +489,7 @@ Running 42 verification tests...
 ```
 
 **Report:**
+
 ```powershell
 Export-HeliosVerificationReport -OutputPath ./verification-report.html
 

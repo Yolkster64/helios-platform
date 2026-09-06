@@ -14,6 +14,7 @@
 ```
 
 **Output:**
+
 ```
 {{EXAMPLE_1_OUTPUT}}
 ```

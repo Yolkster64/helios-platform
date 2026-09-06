@@ -38,21 +38,25 @@ Before running Phase 0, you need:
 ## Quick Start
 
 ### Step 1: Create USB Installer
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\phases\0-foundation
 .\usb-creator.ps1
 ```
 
 ### Step 2: Boot from USB
+
 1. Insert USB drive
 2. Restart computer
 3. Press appropriate boot menu key (F12, F2, ESC, DEL - varies by computer)
 4. Select USB drive to boot
 
 ### Step 3: Install Windows
+
 The Windows installation wizard will guide you through setup.
 
 ### Step 4: Run System Setup Scripts
+
 ```powershell
 # After Windows is installed
 .\partition-manager.ps1
@@ -108,6 +112,7 @@ Once Phase 0 completes successfully, you have:
 ✓ Ready for Phase 1: Customization  
 
 You'll then move to **Phase 1** which adds:
+
 - Application installations
 - User customizations
 - System tweaks and optimizations
@@ -132,6 +137,7 @@ You'll then move to **Phase 1** which adds:
 ## Support
 
 For detailed information on each component, see:
+
 - **Individual script explanations**: `PLAIN_ENGLISH_GUIDE.md`
 - **System file locations**: `FILE_ARCHITECTURE.md`
 - **Verification procedures**: `TESTING_GUIDE.md`

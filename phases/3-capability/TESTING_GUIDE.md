@@ -42,11 +42,13 @@ cd C:\helios\scripts
 ## 1. Dashboard Responsiveness Testing
 
 ### Objective
+
 Verify the web dashboard loads, updates correctly, and displays real-time data.
 
 ### Manual Tests
 
 **Test 1.1: Dashboard Accessibility**
+
 ```powershell
 # Verify dashboard service is running
 Get-Service -Name "HELIOS-Dashboard" | Select-Object Status
@@ -59,6 +61,7 @@ Get-Service -Name "HELIOS-Dashboard" | Select-Object Status
 ```
 
 **Test 1.2: Real-Time Metric Updates**
+
 ```powershell
 # Check dashboard is updating metrics every 2 seconds
 # Look at dashboard metrics charts
@@ -70,6 +73,7 @@ Get-Service -Name "HELIOS-Dashboard" | Select-Object Status
 ```
 
 **Test 1.3: WebSocket Connection**
+
 ```powershell
 # Check WebSocket is connected
 # Dashboard browser console (F12 → Console):
@@ -79,6 +83,7 @@ console.log(window.websocket.readyState);
 ```
 
 **Test 1.4: Theme Switching**
+
 ```powershell
 # On dashboard, switch theme (light ↔ dark)
 # Expected: Theme changes immediately
@@ -86,6 +91,7 @@ console.log(window.websocket.readyState);
 ```
 
 **Test 1.5: Data Accuracy**
+
 ```powershell
 # Compare dashboard metrics with system metrics
 .\get-dashboard-status.ps1
@@ -96,6 +102,7 @@ console.log(window.websocket.readyState);
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-dashboard.ps1
 Tests: 5 total
@@ -122,11 +129,13 @@ Expected: All pass ✅
 ## 2. AI Learning Engine Testing
 
 ### Objective
+
 Verify AI is learning patterns, making predictions, and improving accuracy over time.
 
 ### Manual Tests
 
 **Test 2.1: AI Service Running**
+
 ```powershell
 Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 
@@ -134,6 +143,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 **Test 2.2: Models Loaded**
+
 ```powershell
 .\get-ai-status.ps1
 
@@ -153,6 +163,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 **Test 2.3: Predictions Available**
+
 ```powershell
 .\get-ai-predictions.ps1 -Hours 24
 
@@ -174,6 +185,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 **Test 2.4: Confidence Levels**
+
 ```powershell
 .\get-ai-confidence.ps1
 
@@ -188,6 +200,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 **Test 2.5: Prediction Accuracy Verification**
+
 ```powershell
 # Check past predictions vs actual results
 .\get-ai-predictions.ps1 -Days 7 -Historical
@@ -197,6 +210,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 **Test 2.6: Learning Progress**
+
 ```powershell
 .\monitor-ai-learning.ps1 -Verbose
 
@@ -209,6 +223,7 @@ Get-Service -Name "HELIOS-AI-Learning" | Select-Object Status
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-ai-engine.ps1
 Tests: 8 total
@@ -260,11 +275,13 @@ If not progressing as expected:
 ## 3. Auto-Healing System Testing
 
 ### Objective
+
 Verify auto-healing detects problems and applies fixes automatically.
 
 ### Manual Tests
 
 **Test 3.1: Healing Service Running**
+
 ```powershell
 Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 
@@ -272,6 +289,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 **Test 3.2: Healing Rules Loaded**
+
 ```powershell
 .\get-auto-heal-rules.ps1
 
@@ -287,6 +305,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 **Test 3.3: Safe Trigger Test**
+
 ```powershell
 # Manually trigger a test healing rule (safe, won't break anything)
 .\test-auto-healing.ps1 -Rule "MemoryCleanup"
@@ -300,6 +319,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 **Test 3.4: Healing History**
+
 ```powershell
 .\get-auto-heal-history.ps1 -Last 7d
 
@@ -314,6 +334,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 **Test 3.5: Auto-Created Tickets**
+
 ```powershell
 .\get-auto-heal-tickets.ps1
 
@@ -326,6 +347,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 **Test 3.6: Monitoring After Heal**
+
 ```powershell
 # Verify system continues monitoring after a heal
 # Run 5 minute continuous monitoring
@@ -336,6 +358,7 @@ Get-Service -Name "HELIOS-AutoHealing" | Select-Object Status
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-auto-healing.ps1
 Tests: 7 total
@@ -352,6 +375,7 @@ Expected: All pass ✅
 ### Auto-Healing Verification Scenarios
 
 **Scenario 1: Connection Pool Expansion**
+
 ```
 Trigger: Connection pool at 95% usage
 Expected: Pool expanded by 20-30 connections
@@ -361,6 +385,7 @@ Time: <10 seconds from detection to fix
 ```
 
 **Scenario 2: Cache Flush**
+
 ```
 Trigger: Cache hit rate below 60%
 Expected: Cache flushed and reloaded
@@ -370,6 +395,7 @@ Time: <5 seconds
 ```
 
 **Scenario 3: Disk Space Management**
+
 ```
 Trigger: Disk at 85% capacity
 Expected: Old logs archived, cache optimized
@@ -383,11 +409,13 @@ Time: <2 minutes
 ## 4. Profile Management Testing
 
 ### Objective
+
 Verify profiles load, switch correctly, and change system behavior.
 
 ### Manual Tests
 
 **Test 4.1: Profiles Load**
+
 ```powershell
 .\get-profiles.ps1
 
@@ -402,6 +430,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 **Test 4.2: Active Profile Check**
+
 ```powershell
 .\get-active-profile.ps1
 
@@ -411,6 +440,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 **Test 4.3: Profile Switching**
+
 ```powershell
 # Switch to HighTraffic profile
 .\activate-profile.ps1 -Name "HighTraffic"
@@ -426,6 +456,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 **Test 4.4: System Behavior Change**
+
 ```powershell
 # While in HighTraffic profile, observe:
 # - Cache behavior: Should cache more
@@ -442,6 +473,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 **Test 4.5: Profile Scheduled Switching**
+
 ```powershell
 # If business hours profile scheduled:
 .\get-profile-schedule.ps1
@@ -454,6 +486,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 **Test 4.6: Custom Profile**
+
 ```powershell
 # Create custom profile
 .\create-custom-profile.ps1 `
@@ -477,6 +510,7 @@ Verify profiles load, switch correctly, and change system behavior.
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-profiles.ps1
 Tests: 4 total
@@ -492,11 +526,13 @@ Expected: All pass ✅
 ## 5. Workflow Execution Testing
 
 ### Objective
+
 Verify workflows execute on schedule and complete successfully.
 
 ### Manual Tests
 
 **Test 5.1: Workflows Load**
+
 ```powershell
 .\get-workflows.ps1 | Select-Object Name, Status, Enabled
 
@@ -509,6 +545,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 **Test 5.2: Manual Workflow Execution**
+
 ```powershell
 # Run a test workflow (safe one)
 .\run-workflow.ps1 -Name "HealthCheck"
@@ -519,6 +556,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 **Test 5.3: Workflow Execution Monitoring**
+
 ```powershell
 # Check workflow execution progress
 .\get-workflow-run.ps1 -RunID "WF-2024-02-15-001"
@@ -534,6 +572,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 **Test 5.4: Workflow Completion**
+
 ```powershell
 # Wait for workflow to complete
 # Then check results
@@ -547,6 +586,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 **Test 5.5: Enable/Disable Workflow**
+
 ```powershell
 # Disable a workflow
 .\disable-workflow.ps1 -Name "DailyBackup"
@@ -563,6 +603,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 **Test 5.6: Workflow Scheduling**
+
 ```powershell
 # Get DailyBackup schedule
 .\get-workflow.ps1 -Name "DailyBackup"
@@ -574,6 +615,7 @@ Verify workflows execute on schedule and complete successfully.
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-workflows.ps1
 Tests: 6 total
@@ -602,11 +644,13 @@ Expected: All pass ✅
 ## 6. Performance Optimization Testing
 
 ### Objective
+
 Verify AI is generating optimization recommendations and applies them correctly.
 
 ### Manual Tests
 
 **Test 6.1: Optimization Engine Running**
+
 ```powershell
 .\get-performance-ai-status.ps1
 
@@ -618,6 +662,7 @@ Verify AI is generating optimization recommendations and applies them correctly.
 ```
 
 **Test 6.2: Recommendations Generated**
+
 ```powershell
 .\get-performance-recommendations.ps1 -Next 48h
 
@@ -636,6 +681,7 @@ Verify AI is generating optimization recommendations and applies them correctly.
 ```
 
 **Test 6.3: Recommendation Application**
+
 ```powershell
 # Get high-confidence recommendation
 .\get-performance-recommendations.ps1 -HighImpactOnly | Select-Object -First 1
@@ -647,6 +693,7 @@ Verify AI is generating optimization recommendations and applies them correctly.
 ```
 
 **Test 6.4: Before/After Metrics**
+
 ```powershell
 # Get optimization results
 .\get-optimization-history.ps1 -Last 7d
@@ -661,6 +708,7 @@ Verify AI is generating optimization recommendations and applies them correctly.
 ```
 
 **Test 6.5: Deep Performance Analysis**
+
 ```powershell
 # Run database analysis
 .\analyze-database-performance.ps1
@@ -681,6 +729,7 @@ Verify AI is generating optimization recommendations and applies them correctly.
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-performance-ai.ps1
 Tests: 4 total
@@ -696,11 +745,13 @@ Expected: All pass ✅
 ## 7. Reporting System Testing
 
 ### Objective
+
 Verify reports generate correctly and contain accurate information.
 
 ### Manual Tests
 
 **Test 7.1: Report Generation**
+
 ```powershell
 # Generate a daily report
 .\generate-daily-report.ps1
@@ -710,6 +761,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 **Test 7.2: Report Contents**
+
 ```powershell
 # Open generated report in browser
 .\get-last-report.ps1 -Type Daily -Open
@@ -725,6 +777,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 **Test 7.3: Report Accuracy**
+
 ```powershell
 # Compare report data with actual metrics
 .\get-dashboard-status.ps1  (actual)
@@ -737,6 +790,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 **Test 7.4: Scheduled Reports**
+
 ```powershell
 # Check report schedule
 .\get-report-schedule.ps1
@@ -753,6 +807,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 **Test 7.5: Report Formats**
+
 ```powershell
 # Verify HTML format
 .\get-last-report.ps1 -Type Daily -Format HTML
@@ -766,6 +821,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 **Test 7.6: Email Delivery**
+
 ```powershell
 # Check if scheduled report was emailed
 # Check inbox for reports
@@ -777,6 +833,7 @@ Verify reports generate correctly and contain accurate information.
 ```
 
 ### Automated Tests
+
 ```powershell
 Script: test-reporting.ps1
 Tests: 3 total
@@ -842,6 +899,7 @@ Expected: All pass ✅
 Use this checklist to confirm Phase 3 is ready for production:
 
 ### Dashboard
+
 - [ ] Accessible at http://localhost:9000
 - [ ] Service running and auto-restart on reboot
 - [ ] Real-time metrics updating
@@ -850,6 +908,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Data accuracy ±3%
 
 ### AI Engine
+
 - [ ] Service running
 - [ ] All 6 models loaded
 - [ ] Predictions generated for 24 hours ahead
@@ -858,6 +917,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Last training time recent
 
 ### Auto-Healing
+
 - [ ] Service running
 - [ ] 10+ healing rules loaded and enabled
 - [ ] Test trigger successfully completes
@@ -866,6 +926,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Monitoring continues after heal
 
 ### Profiles
+
 - [ ] 7+ built-in profiles available
 - [ ] Can switch between profiles
 - [ ] Settings apply when switching
@@ -873,6 +934,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Profile history tracked
 
 ### Workflows
+
 - [ ] 250+ workflows loaded
 - [ ] Manual workflow execution succeeds
 - [ ] Workflow execution tracked in history
@@ -880,6 +942,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Scheduled workflows have next run time
 
 ### Performance AI
+
 - [ ] Service running
 - [ ] Recommendations generated
 - [ ] Recommendations applied successfully
@@ -887,6 +950,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Analysis accurate
 
 ### Reporting
+
 - [ ] Reports generate successfully
 - [ ] Content accurate and complete
 - [ ] Multiple formats supported (HTML, PDF)
@@ -894,6 +958,7 @@ Use this checklist to confirm Phase 3 is ready for production:
 - [ ] Professional formatting
 
 ### Overall
+
 - [ ] All 42 tests pass
 - [ ] No critical errors
 - [ ] All services healthy

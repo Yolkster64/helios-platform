@@ -540,6 +540,7 @@ MIT
 ## Author
 
 My Company
+
 ```
 
 ## Building Your Plugin

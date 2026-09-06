@@ -7,6 +7,7 @@ The HELIOS Platform is a comprehensive Windows workstation optimization, securit
 The system is designed around a service-oriented architecture that decouples concerns into specialized components. Each service has a clear responsibility and communicates through well-defined interfaces. The platform supports both local operation and distributed cloud deployment scenarios.
 
 **Key Characteristics**:
+
 - **Modular Design**: Each feature area is organized as a separate service module
 - **Event-Driven**: Asynchronous event bus enables loose coupling between services
 - **Plugin Architecture**: Dynamic plugin marketplace enables third-party extensions
@@ -43,51 +44,61 @@ The HELIOS Platform consists of four primary component layers:
 ## Core Services (10 Services)
 
 ### 1. API Gateway Service
+
 - Routes, authenticates, and transforms API requests
 - Applies rate limiting and quotas
 - Handles GraphQL and REST APIs
 
 ### 2. Event Bus Service
+
 - Publish/subscribe domain events
 - Event sourcing and replay
 - Asynchronous inter-service communication
 
 ### 3. Plugin Marketplace Service
+
 - Plugin discovery and installation
 - Dependency management
 - Plugin versioning and marketplace
 
 ### 4. Integration Hub Service
+
 - Third-party service coordination
 - Cloud provider integrations
 - Connector lifecycle management
 
 ### 5. WebSocket Broker Service
+
 - Real-time bidirectional communication
 - Message routing and broadcasting
 - Connection lifecycle management
 
 ### 6. Session Manager Service
+
 - User session management
 - Authentication and authorization
 - Activity tracking
 
 ### 7. Global Load Balancer Service
+
 - Multi-region traffic routing
 - Region health monitoring
 - Capacity planning
 
 ### 8. Global Metrics Aggregator Service
+
 - Telemetry collection
 - Metrics analysis and reporting
 - Anomaly detection
 
 ### 9. Cost Optimizer Service
+
 - Infrastructure cost analysis
 - Optimization recommendations
 - Forecasting
 
 ### 10. Notification Service
+
 - Multi-channel notifications (email, push, SMS)
 - Webhook delivery
 - Preference management

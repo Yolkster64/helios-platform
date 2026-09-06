@@ -75,6 +75,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ```
 
 This script verifies:
+
 - ✓ Windows version (11+)
 - ✓ Administrator privileges
 - ✓ .NET 8 SDK installation
@@ -101,6 +102,7 @@ If the pre-installation check reports errors:
 ### Method 1: GUI Installation (Recommended)
 
 1. **Run Installer**
+
    ```
    Double-click HELIOS-Platform-Setup.exe
    ```
@@ -179,6 +181,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ```
 
 This checks:
+
 - ✓ Installation path and files
 - ✓ Registry entries
 - ✓ System PATH registration
@@ -249,11 +252,13 @@ LogLevel=Information
 ### Registry Configuration
 
 **User Settings (Current User):**
+
 ```
 HKEY_CURRENT_USER\Software\HELIOS Platform
 ```
 
 **System Settings (All Users):**
+
 ```
 HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\HELIOS Platform
 ```
@@ -280,6 +285,7 @@ $env:HELIOS_CONFIG = "$env:HELIOS_HOME\config"
 ### Professional Tier
 
 **For:** Standard enterprise deployments
+
 - Core HELIOS Platform components
 - Basic automation and deployment
 - Standard monitoring
@@ -291,6 +297,7 @@ $env:HELIOS_CONFIG = "$env:HELIOS_HOME\config"
 ### Enterprise Tier
 
 **For:** Advanced enterprise environments
+
 - All Professional features
 - Advanced automation workflows
 - Enhanced monitoring and analytics
@@ -302,6 +309,7 @@ $env:HELIOS_CONFIG = "$env:HELIOS_HOME\config"
 ### Ultimate Tier
 
 **For:** Large-scale distributed systems
+
 - All Enterprise features
 - Complete component suite
 - Distributed deployment support
@@ -320,9 +328,11 @@ $env:HELIOS_CONFIG = "$env:HELIOS_HOME\config"
 To enable automatic startup on system boot:
 
 **Method 1: During Installation**
+
 - Check "Enable Auto-Start on Boot" in options
 
 **Method 2: After Installation**
+
 ```powershell
 # Add to startup registry
 $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
@@ -373,6 +383,7 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 
 **Cause:** Insufficient permissions
 **Solution:**
+
 1. Right-click installer
 2. Select "Run as Administrator"
 3. Click "Yes" in UAC prompt
@@ -381,6 +392,7 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 ### Pre-Installation Check Shows "Administrator Privileges Required"
 
 **Solution:**
+
 ```powershell
 # Run PowerShell as Administrator
 # Right-click PowerShell → Run as Administrator
@@ -392,6 +404,7 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 ### ".NET 8 SDK not found" Error
 
 **Solution:**
+
 1. Download .NET 8 SDK: https://dotnet.microsoft.com/download
 2. Run the installer
 3. Restart your computer
@@ -400,6 +413,7 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 ### "Insufficient Disk Space" Error
 
 **Solution:**
+
 1. Free up at least 2 GB of disk space
 2. Run Disk Cleanup: `cleanmgr.exe`
 3. Remove temporary files
@@ -408,6 +422,7 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 ### Installation Appears to Hang
 
 **Solution:**
+
 1. Wait 5 minutes (initial setup can be slow)
 2. If still unresponsive, press Ctrl+C to cancel
 3. Uninstall: `Control Panel` → `Programs` → `Uninstall a Program`
@@ -417,11 +432,13 @@ C:\HELIOS-Portable\HELIOS.Platform.exe
 ### Post-Installation Verification Fails
 
 **Repair Installation:**
+
 ```powershell
 .\Post-Install-Verify.ps1 -Repair
 ```
 
 This automatically restores:
+
 - Registry entries
 - Start Menu shortcuts
 - Configuration files
@@ -430,6 +447,7 @@ This automatically restores:
 ### Application Won't Start
 
 **Troubleshooting:**
+
 ```powershell
 # Check if installed correctly
 Test-Path "C:\Program Files\HELIOS Platform\HELIOS.Platform.exe"
@@ -502,17 +520,20 @@ Remove-Item -Path "$env:APPDATA\HELIOS" -Recurse -Force -ErrorAction SilentlyCon
 ## Support & Resources
 
 ### Documentation
+
 - **Official Docs:** https://docs.helios.solutions
 - **GitHub Repository:** https://github.com/helios-solutions/platform
 - **NuGet Package:** https://www.nuget.org/packages/HELIOS.Platform/
 
 ### Support Channels
+
 - **Email:** support@helios.solutions
 - **Community Forum:** https://community.helios.solutions
 - **GitHub Issues:** https://github.com/helios-solutions/platform/issues
 - **Professional Support:** https://helios.solutions/support
 
 ### Getting Help
+
 1. Check the troubleshooting guide
 2. Review installation logs
 3. Search community forum

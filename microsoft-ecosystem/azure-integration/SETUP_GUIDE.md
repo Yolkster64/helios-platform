@@ -19,6 +19,7 @@
 ## Prerequisites
 
 ### Required Software
+
 ```powershell
 # Check PowerShell version (must be 7.0+)
 $PSVersionTable.PSVersion
@@ -56,6 +57,7 @@ Contact Information:
 ### 1.1 Sign Up for Azure
 
 **Option A: New Account**
+
 1. Visit https://azure.microsoft.com/en-us/free/
 2. Click "Start Free"
 3. Sign in with Microsoft account or create new one
@@ -63,6 +65,7 @@ Contact Information:
 5. Receive $200 free credits (valid 30 days)
 
 **Option B: Enterprise Agreement**
+
 1. Contact Microsoft Enterprise Sales
 2. Set up agreement terms
 3. Create accounts for team members
@@ -668,22 +671,26 @@ $alertRule = New-AzMetricAlertRuleV2 `
 Before completing setup, verify all components:
 
 ### Azure Subscription
+
 - [ ] Subscription created and active
 - [ ] Payment method verified
 - [ ] Subscription ID saved: ___________________
 
 ### Service Principal
+
 - [ ] Service principal created
 - [ ] Credentials saved securely
 - [ ] Tested successful authentication
 
 ### Resource Groups
+
 - [ ] Production RG created: `helios-platform-prod`
 - [ ] Staging RG created: `helios-platform-staging`
 - [ ] Development RG created: `helios-platform-dev`
 - [ ] Shared RG created: `helios-platform-shared`
 
 ### Networking
+
 - [ ] VNet created: `helios-vnet-prod` (10.0.0.0/16)
 - [ ] Frontend subnet created: 10.0.1.0/24
 - [ ] Backend subnet created: 10.0.2.0/24
@@ -691,24 +698,28 @@ Before completing setup, verify all components:
 - [ ] NSGs created and associated
 
 ### Storage & Secrets
+
 - [ ] Storage account created
 - [ ] Key Vault created
 - [ ] Secrets stored in Key Vault
 - [ ] Access policies configured
 
 ### Database
+
 - [ ] SQL Server created
 - [ ] SQL Database created
 - [ ] Firewall rules configured
 - [ ] Backup configured
 
 ### Monitoring
+
 - [ ] Application Insights created
 - [ ] Action group created
 - [ ] Alert rules created
 - [ ] Recovery Services Vault created
 
 ### IAM & Security
+
 - [ ] Service principal assigned Contributor role
 - [ ] Custom roles created
 - [ ] Role assignments documented
@@ -726,20 +737,24 @@ Before completing setup, verify all components:
 ## Troubleshooting
 
 ### Issue: "Insufficient privileges to complete operation"
+
 - Verify service principal has Contributor role
 - Check role assignment: `Get-AzRoleAssignment -ObjectId $sp.ObjectId`
 
 ### Issue: "Firewall rule blocks database connection"
+
 - Add your IP address to SQL Server firewall
 - Or add specific VNet service endpoints
 
 ### Issue: "Key Vault access denied"
+
 - Verify access policy is set: `Get-AzKeyVaultAccessPolicy -VaultName "helios-vault-prod"`
 - Re-run: `Set-AzKeyVaultAccessPolicy` command
 
 ## Support
 
 For issues, contact:
+
 - **Azure Support**: https://azure.microsoft.com/support
 - **HELIOS Platform Team**: See parent directory README
 

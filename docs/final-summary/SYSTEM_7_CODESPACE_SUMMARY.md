@@ -66,12 +66,14 @@ Codespaces Environment
 ## Key Features
 
 ### 1. Pre-configured Environment
+
 - All development tools pre-installed
 - No local setup required
 - Same environment for entire team
 - Reproducible across all developers
 
 ### 2. Quick Start (12-16 minutes)
+
 ```
 1. Open in Codespaces (2 min)
 2. Container builds (8-12 min)
@@ -82,24 +84,28 @@ Codespaces Environment
 ### 3. Integrated Tools
 
 **Languages & Runtimes:**
+
 - .NET 6.0, 7.0, 8.0
 - PowerShell 7+
 - Python 3.11+
 - Node.js 18+
 
 **Development Tools:**
+
 - Visual Studio Code (web)
 - Git & GitHub CLI
 - Docker Desktop
 - Docker Compose
 
 **Databases:**
+
 - SQL Server 2022
 - PostgreSQL 15
 - MongoDB
 - SQLite
 
 **Testing & Debugging:**
+
 - xUnit/NUnit test runners
 - Debugger for .NET
 - Code coverage tools
@@ -108,30 +114,35 @@ Codespaces Environment
 ### 4. VS Code Extensions (28 total)
 
 **Essential Development:**
+
 - C# Dev Kit
 - PowerShell
 - GitHub Copilot
 - IntelliCode
 
 **Testing & Debugging:**
+
 - Test Explorer
 - .NET Core Debugger
 - Coverage Gutters
 - Better Comments
 
 **Code Quality:**
+
 - SonarLint
 - ESLint
 - Prettier
 - StyleCop
 
 **Version Control:**
+
 - GitHub Pull Requests
 - GitLens
 - Git Graph
 - Merge Conflict Handler
 
 **Productivity:**
+
 - REST Client
 - Markdown Preview
 - Draw.io
@@ -191,6 +202,7 @@ Codespaces Environment
 ## Configuration Files
 
 **devcontainer.json** (Main configuration)
+
 ```json
 {
   "name": "HELIOS Development",
@@ -231,16 +243,19 @@ Codespaces Environment
 ## Troubleshooting
 
 **Slow Build Time**
+
 - First build slower (8-12 min) - normal
 - Subsequent builds cache (5-8 min)
 - Clear cache if stuck
 
 **Port Not Accessible**
+
 - Check port forwarding settings
 - Verify service running in container
 - Check firewall rules
 
 **Extensions Not Loading**
+
 - Wait for build to complete
 - Check GitHub Secrets configured
 - Restart Codespace if needed

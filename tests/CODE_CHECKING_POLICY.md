@@ -13,6 +13,7 @@ All code committed to HELIOS Platform v2 must pass automated checks before mergi
 **Trigger:** Every `.ps1` file commit
 
 **Check Implementation:**
+
 ```powershell
 # Basic syntax check
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,7 @@ Get-Content -Path $ScriptPath | Invoke-Expression -ErrorAction Stop
 ```
 
 **What It Checks:**
+
 - ✓ Valid PowerShell syntax
 - ✓ Balanced brackets and parentheses
 - ✓ Valid variable names
@@ -27,6 +29,7 @@ Get-Content -Path $ScriptPath | Invoke-Expression -ErrorAction Stop
 - ✗ Logic errors (caught by unit tests)
 
 **Example Violations:**
+
 ```powershell
 # ✗ FAIL: Missing closing bracket
 if ($condition {
@@ -40,6 +43,7 @@ if ($condition) {
 ```
 
 **Command:**
+
 ```powershell
 .\Check-PowerShellSyntax.ps1 -ScriptPath $FilePath
 ```
@@ -63,6 +67,7 @@ if ($condition) {
 | `ConvertFrom-SecureString` without key | Unencrypted credential | Use machine key or KMS |
 
 **Example Violations:**
+
 ```powershell
 # ✗ FAIL: Hardcoded password
 $Password = "MySecurePassword123"
@@ -80,11 +85,13 @@ $ApiKey = $env:API_KEY
 ```
 
 **Command:**
+
 ```powershell
 .\Check-SecurityPatterns.ps1 -ScriptPath $FilePath
 ```
 
 **Exceptions:**
+
 - Test files can use dummy credentials (prefixed with `test_`, `demo_`, `sandbox_`)
 - Example/documentation files must be marked with `# EXAMPLE CODE`
 
@@ -107,6 +114,7 @@ $ApiKey = $env:API_KEY
 | Correct type | REG_SZ, REG_DWORD, REG_BINARY verified | Data integrity |
 
 **Example - Correct Registry Change:**
+
 ```powershell
 # Registry: Disable unnecessary service for performance
 # This change improves startup time by preventing auto-start of diagnostic service
@@ -123,6 +131,7 @@ Set-ItemProperty -Path $RegistryPath -Name Start -Value 4 -Type DWord
 ```
 
 **Example - Invalid Registry Change (Will Fail):**
+
 ```powershell
 # ✗ FAIL: No documentation
 Set-ItemProperty -Path 'HKLM:\Software\Test' -Name Value -Value 1
@@ -132,6 +141,7 @@ Set-ItemProperty -Path 'HKEY_LOCAL_MACHINE:\Software\Test' -Name Value -Value 1
 ```
 
 **Command:**
+
 ```powershell
 .\Check-RegistryModifications.ps1 -ScriptPath $FilePath
 ```
@@ -155,6 +165,7 @@ Set-ItemProperty -Path 'HKEY_LOCAL_MACHINE:\Software\Test' -Name Value -Value 1
 | Expandable | Environment variables are valid | Dynamic paths |
 
 **Example - Correct Path Usage:**
+
 ```powershell
 # ✓ PASS: Use $PSScriptRoot for relative paths
 $ConfigPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
@@ -176,6 +187,7 @@ $LogPath = 'C:\Logs\<invalid>\log.txt'
 ```
 
 **Command:**
+
 ```powershell
 .\Check-FilePaths.ps1 -ScriptPath $FilePath
 ```
@@ -199,6 +211,7 @@ $LogPath = 'C:\Logs\<invalid>\log.txt'
 | Complex logic | Inline comments | Why, not what |
 
 **Required File Header:**
+
 ```powershell
 <#
 .SYNOPSIS
@@ -223,6 +236,7 @@ $LogPath = 'C:\Logs\<invalid>\log.txt'
 ```
 
 **Required Function Documentation:**
+
 ```powershell
 function Optimize-StartupServices {
     <#
@@ -248,6 +262,7 @@ function Optimize-StartupServices {
 ```
 
 **Command:**
+
 ```powershell
 .\Check-Documentation.ps1 -ScriptPath $FilePath
 ```
@@ -270,11 +285,13 @@ function Optimize-StartupServices {
 | Assertions pass | All tests must pass | Can't merge code |
 
 **Coverage Calculation:**
+
 ```
 Coverage % = (Lines executed in tests / Total non-comment lines) * 100
 ```
 
 **Example - Acceptable Coverage:**
+
 ```
 Phase-0-Optimize.ps1: 1,245 lines
 - Comments/blanks: 245 lines
@@ -285,6 +302,7 @@ Coverage = (820 / 1000) * 100 = 82% ✓ PASS
 ```
 
 **Example - Insufficient Coverage:**
+
 ```
 Phase-1-Security.ps1: 2,150 lines
 - Comments/blanks: 150 lines
@@ -295,6 +313,7 @@ Coverage = (1200 / 2000) * 100 = 60% ✗ FAIL (< 80%)
 ```
 
 **Command:**
+
 ```powershell
 .\Check-TestCoverage.ps1 -ScriptPath $FilePath -MinimumCoverage 80
 ```
@@ -397,6 +416,7 @@ OR
 Limited exemptions are available for specific cases:
 
 ### Test Code Exemption
+
 ```powershell
 # TEST CODE EXEMPTION
 # This file contains dummy credentials for testing only
@@ -406,6 +426,7 @@ $TestPassword = "TestPassword123"  # Exempted for unit testing
 ```
 
 ### Legacy Code Exemption
+
 ```powershell
 <#
 .LEGACY_CODE_EXEMPTION
@@ -421,6 +442,7 @@ Request exemptions by commenting in pull request with justification.
 ## Troubleshooting Failed Checks
 
 ### Syntax Validation Failed
+
 ```
 ERROR: Unexpected token '[' in type name.
 
@@ -428,6 +450,7 @@ Fix: Check for mismatched brackets
 ```
 
 ### Security Scan Failed
+
 ```
 ERROR: Hardcoded password detected at line 42
 Pattern: password = "..."
@@ -436,6 +459,7 @@ Fix: Use secure parameters or environment variables
 ```
 
 ### Registry Validation Failed
+
 ```
 ERROR: Registry modification not documented at line 55
 Required: Add comment explaining the change
@@ -444,6 +468,7 @@ Fix: Add # Registry: [description] comment
 ```
 
 ### Path Validation Failed
+
 ```
 ERROR: Path contains invalid characters at line 12
 Path: C:\Invalid<Path>\file.txt
@@ -452,6 +477,7 @@ Fix: Remove or escape invalid characters
 ```
 
 ### Documentation Failed
+
 ```
 ERROR: Function missing <#.SYNOPSIS#> block at line 25
 Function: Get-SystemMetrics
@@ -460,6 +486,7 @@ Fix: Add documentation block above function
 ```
 
 ### Coverage Failed
+
 ```
 ERROR: Test coverage 65% below minimum 80%
 Scripts tested: 650 / 1000 lines

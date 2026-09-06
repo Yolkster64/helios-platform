@@ -1,4 +1,5 @@
 # COMPONENT-TO-COMPONENT INTEGRATION GUIDE
+
 **HELIOS Platform - Inter-Component Data Flows & Dependencies**
 
 **Document Version:** 1.0
@@ -16,6 +17,7 @@ This document details the seven primary component-to-component integration flows
 ## INTEGRATION 1: MONADO ENGINE → SECURITY SYSTEM
 
 ### 1.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Continuous (per system operation)
 - **Data Volume:** 2-5MB per hour
@@ -52,6 +54,7 @@ Monado Engine                    Security System
 ### 1.3 Request/Response Structure
 
 **Device Access Request:**
+
 ```json
 {
   "requestId": "req-2024-001-a1b2",
@@ -74,6 +77,7 @@ Monado Engine                    Security System
 ```
 
 **Security Response:**
+
 ```json
 {
   "requestId": "req-2024-001-a1b2",
@@ -108,6 +112,7 @@ Monado Engine                    Security System
 ### 1.5 Error Handling
 
 **Error Scenario 1: Access Denied**
+
 ```
 Monado Request → Security Denial (reasons):
 - Insufficient permissions
@@ -126,6 +131,7 @@ Response Time: 1ms
 ```
 
 **Error Scenario 2: Timeout**
+
 ```
 Security System not responding (> 2 seconds):
 
@@ -141,6 +147,7 @@ Fallback Security Level: CONSERVATIVE
 ```
 
 **Error Scenario 3: Policy Contradiction**
+
 ```
 Conflicting policies detected:
 
@@ -175,6 +182,7 @@ Integration Health Score:                                 97/100
 ## INTEGRATION 2: SECURITY SYSTEM → AI ORCHESTRATOR
 
 ### 2.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per request (event-driven)
 - **Data Volume:** 1-3MB per hour
@@ -212,6 +220,7 @@ Security System              AI Orchestrator
 ### 2.3 Request/Response Structure
 
 **Token Request (AI needs security context):**
+
 ```json
 {
   "requestId": "sec-ai-001",
@@ -232,6 +241,7 @@ Security System              AI Orchestrator
 ```
 
 **Token Response:**
+
 ```json
 {
   "requestId": "sec-ai-001",
@@ -269,6 +279,7 @@ Security System              AI Orchestrator
 ### 2.5 Error Handling
 
 **Error Scenario 1: Expired Token**
+
 ```
 AI Orchestrator detects expired token:
 
@@ -285,6 +296,7 @@ Delay Between Retries: 100ms
 ```
 
 **Error Scenario 2: Permission Denied**
+
 ```
 User lacks required scope for operation:
 
@@ -301,6 +313,7 @@ Resolution SLA: 4 hours
 ```
 
 **Error Scenario 3: Token Validation Failure**
+
 ```
 Token signature invalid or tampered:
 
@@ -337,6 +350,7 @@ Integration Health Score:                                 94/100
 ## INTEGRATION 3: AI ORCHESTRATOR → GUI DASHBOARD
 
 ### 3.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per user action (event-driven)
 - **Data Volume:** 5-10MB per hour
@@ -375,6 +389,7 @@ GUI Dashboard           AI Orchestrator           Display
 ### 3.3 Request/Response Structure
 
 **User Action Request:**
+
 ```json
 {
   "requestId": "gui-ai-req-001",
@@ -402,6 +417,7 @@ GUI Dashboard           AI Orchestrator           Display
 ```
 
 **AI Response (Streamed):**
+
 ```json
 {
   "requestId": "gui-ai-req-001",
@@ -509,6 +525,7 @@ Cache Hit Metrics:
 ### 3.6 Error Handling
 
 **Error Scenario 1: Request Timeout**
+
 ```
 AI Orchestrator not responding within timeout:
 
@@ -525,6 +542,7 @@ Timeout Grace Period: 1 second additional
 ```
 
 **Error Scenario 2: Network Disconnection**
+
 ```
 Connection lost during streaming response:
 
@@ -542,6 +560,7 @@ Queue Retention: 5 minutes
 ```
 
 **Error Scenario 3: Invalid Response**
+
 ```
 AI response doesn't match schema:
 
@@ -578,6 +597,7 @@ Integration Health Score:                                 93/100
 ## INTEGRATION 4: GUI DASHBOARD → BUILD AGENTS
 
 ### 4.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per build operation (event-driven)
 - **Data Volume:** 10-50MB per hour
@@ -618,6 +638,7 @@ GUI Dashboard              Build Agents           Build Output
 ### 4.3 Request/Response Structure
 
 **Build Trigger Request:**
+
 ```json
 {
   "requestId": "build-req-001",
@@ -645,6 +666,7 @@ GUI Dashboard              Build Agents           Build Output
 ```
 
 **Build Status Update (Streamed):**
+
 ```json
 {
   "requestId": "build-req-001",
@@ -675,6 +697,7 @@ GUI Dashboard              Build Agents           Build Output
 ```
 
 **Build Completion Response:**
+
 ```json
 {
   "requestId": "build-req-001",
@@ -754,6 +777,7 @@ Cacheable Stages: Setup, Compilation (80% cache hit on rebuild)
 ### 4.5 Error Handling
 
 **Error Scenario 1: Compilation Failure**
+
 ```
 Source code has syntax or semantic errors:
 
@@ -778,6 +802,7 @@ Recovery Options:
 ```
 
 **Error Scenario 2: Test Failure**
+
 ```
 Unit tests fail during testing phase:
 
@@ -802,6 +827,7 @@ Options:
 ```
 
 **Error Scenario 3: Disk Full**
+
 ```
 Insufficient disk space for artifacts:
 
@@ -845,6 +871,7 @@ Integration Health Score:                                 92/100
 ## INTEGRATION 5: BUILD AGENTS → DEV AI HUB
 
 ### 5.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per build operation (event-driven)
 - **Data Volume:** 2-5MB per build
@@ -885,6 +912,7 @@ Build Agents           Dev AI Hub            Optimization
 ### 5.3 Request/Response Structure
 
 **Analysis Request:**
+
 ```json
 {
   "requestId": "analysis-req-001",
@@ -918,6 +946,7 @@ Build Agents           Dev AI Hub            Optimization
 ```
 
 **Analysis Response:**
+
 ```json
 {
   "requestId": "analysis-req-001",
@@ -1008,6 +1037,7 @@ Tracking:
 ### 5.5 Error Handling
 
 **Error Scenario 1: Analysis Timeout**
+
 ```
 AI Hub analysis takes too long:
 
@@ -1024,6 +1054,7 @@ Extended Timeout: 15 seconds
 ```
 
 **Error Scenario 2: Invalid Build Data**
+
 ```
 Build data format doesn't match expected schema:
 
@@ -1045,6 +1076,7 @@ Resolution: Auto-resolved on next build
 ## INTEGRATION 6: DEV AI HUB → SOFTWARE STACK
 
 ### 6.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per analysis (event-driven)
 - **Data Volume:** 1-3MB per analysis
@@ -1080,6 +1112,7 @@ Dev AI Hub              Software Stack       Libraries
 ### 6.3 Request/Response Structure
 
 **Library Analysis Request:**
+
 ```json
 {
   "requestId": "lib-analysis-001",
@@ -1103,6 +1136,7 @@ Dev AI Hub              Software Stack       Libraries
 ```
 
 **Library Analysis Response:**
+
 ```json
 {
   "requestId": "lib-analysis-001",
@@ -1144,6 +1178,7 @@ Integration Health Score:                                 92/100
 ## INTEGRATION 7: SOFTWARE STACK → MONADO ENGINE
 
 ### 7.1 Purpose & Scope
+
 - **Direction:** Bi-directional
 - **Frequency:** Per library load (continuous)
 - **Data Volume:** 5-10MB per hour
@@ -1178,6 +1213,7 @@ Software Stack         Monado Engine       Hardware Resources
 ### 7.3 Request/Response Structure
 
 **Library Load Request:**
+
 ```json
 {
   "requestId": "load-req-001",
@@ -1198,6 +1234,7 @@ Software Stack         Monado Engine       Hardware Resources
 ```
 
 **Load Completion Response:**
+
 ```json
 {
   "requestId": "load-req-001",

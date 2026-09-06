@@ -9,6 +9,7 @@ Foundation security system providing authentication, authorization, and access c
 Security Engine provides the core security foundation for HELIOS. Implements user authentication, role-based access control, intrusion detection, and audit logging. All other HELIOS components build on this foundation.
 
 **Key Facts:**
+
 - **Phase:** 0 (Foundation)
 - **Standalone:** ✅ Yes - Fully independent
 - **Requires:** .NET Core 3.1+, Windows Event Log

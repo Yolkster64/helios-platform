@@ -75,6 +75,7 @@ Phase 4: Business Approval
 **Process**:
 
 1. **Pre-Deployment**
+
    ```bash
    # Verify current state
    kubectl get pods -n production
@@ -85,6 +86,7 @@ Phase 4: Business Approval
    ```
 
 2. **Deploy New Version**
+
    ```bash
    # Deploy new version (Green)
    kubectl set image deployment/helios-api \
@@ -99,6 +101,7 @@ Phase 4: Business Approval
    ```
 
 3. **Canary Testing (10% traffic)**
+
    ```bash
    # Route 10% to Green, 90% to Blue
    kubectl patch service helios-api -p \
@@ -111,6 +114,7 @@ Phase 4: Business Approval
    ```
 
 4. **Gradual Traffic Shift**
+
    ```
    Time    Blue    Green   Status
    0:00    100%    0%      Deployment started
@@ -122,6 +126,7 @@ Phase 4: Business Approval
    ```
 
 5. **Validation**
+
    ```bash
    # Smoke tests
    curl https://api.example.com/health
@@ -134,6 +139,7 @@ Phase 4: Business Approval
    ```
 
 6. **Rollback (if needed)**
+
    ```bash
    # Immediate rollback
    kubectl rollout undo deployment/helios-api -n production

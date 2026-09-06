@@ -347,6 +347,7 @@ public async Task OneDrive_UploadAndDownload_Succeeds()
 **Problem:** "AADSTS65001: User or admin has not consented to use the application"
 
 **Solution:**
+
 ```csharp
 // Use interactive browser for first-time authentication
 var app = PublicClientApplicationBuilder.Create(clientId)
@@ -361,6 +362,7 @@ var result = await app.AcquireTokenInteractive(scopes)
 **Problem:** "401 Unauthorized"
 
 **Solution:** Token may be expired. Refresh it:
+
 ```csharp
 var result = await app.AcquireTokenSilent(scopes, account)
     .ExecuteAsync();
@@ -377,6 +379,7 @@ if (!string.IsNullOrEmpty(result.RefreshToken))
 **Problem:** "StorageException: The specified container does not exist"
 
 **Solution:**
+
 ```csharp
 // Ensure container is created
 await containerClient.CreateIfNotExistsAsync();
@@ -385,6 +388,7 @@ await containerClient.CreateIfNotExistsAsync();
 **Problem:** "AuthenticationFailedException: Invalid storage account key"
 
 **Solution:** Verify:
+
 1. Storage account name matches exactly
 2. Account key is correct (not truncated)
 3. Endpoint suffix is correct (usually `core.windows.net`)
@@ -396,11 +400,13 @@ await containerClient.CreateIfNotExistsAsync();
 Ensure data is encrypted in transit and at rest:
 
 **OneDrive:**
+
 - Uses HTTPS (TLS 1.2+)
 - Files encrypted in OneDrive with AES-256
 - In-transit encryption with TLS
 
 **Azure Storage:**
+
 - Enable TLS 1.2 minimum
 - Storage Service Encryption (SSE) by default
 - Optional client-side encryption

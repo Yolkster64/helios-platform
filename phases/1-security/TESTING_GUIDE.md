@@ -21,31 +21,35 @@ Before running tests, ensure:
 
 ### Test 1.1: Verify AppLocker is Enabled
 
-`powershell
+```powershell
 Get-AppLockerPolicy -Effective | Format-List
-`
+```
 
 **Expected Result**: Shows RuleCollections with Executable rules defined
 **Pass/Fail**: PASS if rules exist, FAIL if no policy set
 
 ### Test 1.2: Whitelisted Programs Run
 
-`powershell
+```powershell
 Start-Process notepad.exe
+
 # Wait 5 seconds, verify opens
+
 Start-Process calc.exe
+
 # Wait 5 seconds, verify opens
-`
+
+```
 
 **Expected Result**: Both programs launch without errors
 **Pass/Fail**: PASS if both open, FAIL if blocked
 
 ### Test 1.3: Event Logs Recorded
 
-`powershell
-Get-WinEvent -LogName Application -MaxEvents 50 | 
+```powershell
+Get-WinEvent -LogName Application -MaxEvents 50 |
     Where-Object { \.Message -like '*AppLocker*' }
-`
+```
 
 **Expected Result**: Recent AppLocker events shown
 **Pass/Fail**: PASS if events exist, FAIL if none found
@@ -56,28 +60,28 @@ Get-WinEvent -LogName Application -MaxEvents 50 |
 
 ### Test 2.1: Firewall Enabled
 
-`powershell
+```powershell
 Get-NetFirewallProfile -All | Format-Table Name, Enabled
-`
+```
 
 **Expected Result**: All profiles show Enabled: True
 **Pass/Fail**: PASS if all enabled, FAIL if any disabled
 
 ### Test 2.2: Dangerous Ports Blocked
 
-`powershell
-Get-NetFirewallRule -Direction Inbound -Action Block | 
+```powershell
+Get-NetFirewallRule -Direction Inbound -Action Block |
     Format-Table DisplayName -AutoSize
-`
+```
 
 **Expected Result**: Rules for ports 3389, 445, 135 shown
 **Pass/Fail**: PASS if dangerous ports blocked, FAIL if open
 
 ### Test 2.3: DNS Resolution Works
 
-`powershell
+```powershell
 Resolve-DnsName -Name google.com
-`
+```
 
 **Expected Result**: Returns valid IP addresses
 **Pass/Fail**: PASS if resolves, FAIL if blocked
@@ -88,36 +92,36 @@ Resolve-DnsName -Name google.com
 
 ### Test 3.1: Vault Directory Exists
 
-`powershell
+```powershell
 Test-Path C:\Users\ADMIN\Vault
-`
+```
 
 **Expected Result**: Returns True
 **Pass/Fail**: PASS if exists, FAIL if missing
 
 ### Test 3.2: Vault is Encrypted
 
-`powershell
+```powershell
 (Get-Item C:\Users\ADMIN\Vault -Force).Attributes
-`
+```
 
 **Expected Result**: Shows Encrypted in attributes
 **Pass/Fail**: PASS if encrypted, FAIL if plaintext
 
 ### Test 3.3: Recovery Key Present
 
-`powershell
+```powershell
 Test-Path C:\Users\ADMIN\Vault\Recovery-Key.txt
-`
+```
 
 **Expected Result**: Returns True (file exists)
 **Pass/Fail**: PASS if file present, FAIL if missing
 
 ### Test 3.4: Subdirectories Exist
 
-`powershell
+```powershell
 Get-ChildItem C:\Users\ADMIN\Vault -Directory | Select-Object Name
-`
+```
 
 **Expected Result**: Shows Passwords, Certificates, Financial, Quarantine, Sensitive
 **Pass/Fail**: PASS if all created, FAIL if any missing
@@ -128,27 +132,27 @@ Get-ChildItem C:\Users\ADMIN\Vault -Directory | Select-Object Name
 
 ### Test 4.1: Quarantine Directory Exists
 
-`powershell
+```powershell
 Test-Path C:\Vault\Quarantine
-`
+```
 
 **Expected Result**: Returns True
 **Pass/Fail**: PASS if exists, FAIL if missing
 
 ### Test 4.2: Quarantine Structure Complete
 
-`powershell
+```powershell
 Get-ChildItem C:\Vault\Quarantine -Directory | Select-Object Name
-`
+```
 
 **Expected Result**: Shows Active, Archive, Recovery, Metadata directories
 **Pass/Fail**: PASS if all directories present, FAIL if any missing
 
 ### Test 4.3: Quarantine Logging
 
-`powershell
+```powershell
 Test-Path C:\Vault\Quarantine\Log.txt
-`
+```
 
 **Expected Result**: Returns True
 **Pass/Fail**: PASS if log file exists, FAIL if missing
@@ -159,18 +163,18 @@ Test-Path C:\Vault\Quarantine\Log.txt
 
 ### Test 5.1: All Accounts Exist
 
-`powershell
+```powershell
 Get-LocalUser | Format-Table Name, Enabled
-`
+```
 
 **Expected Result**: Shows ADMIN-Master, Standard-User, Restricted-Guest
 **Pass/Fail**: PASS if all three present, FAIL if any missing
 
 ### Test 5.2: Admin Group Configured
 
-`powershell
+```powershell
 Get-LocalGroupMember -Group Administrators | Select-Object Name
-`
+```
 
 **Expected Result**: Shows ADMIN-Master
 **Pass/Fail**: PASS if correct user in group, FAIL if wrong membership
@@ -178,6 +182,7 @@ Get-LocalGroupMember -Group Administrators | Select-Object Name
 ### Test 5.3: Login as Each Account
 
 Manually test:
+
 - Login as ADMIN-Master (admin only)
 - Login as Standard-User (everyday use)
 - Login as Restricted-Guest (limited)
@@ -191,36 +196,36 @@ Manually test:
 
 ### Test 6.1: Windows Defender Enabled
 
-`powershell
+```powershell
 Get-MpPreference | Select-Object DisableRealtimeMonitoring
-`
+```
 
 **Expected Result**: DisableRealtimeMonitoring = False
 **Pass/Fail**: PASS if enabled, FAIL if disabled
 
 ### Test 6.2: Defender Service Running
 
-`powershell
+```powershell
 Get-Service -Name WinDefend | Select-Object Status
-`
+```
 
 **Expected Result**: Status = Running
 **Pass/Fail**: PASS if running, FAIL if stopped
 
 ### Test 6.3: Threat Definitions Recent
 
-`powershell
+```powershell
 Get-MpComputerStatus | Select-Object AntivirusSignatureVersion
-`
+```
 
 **Expected Result**: Recent version number (within days)
 **Pass/Fail**: PASS if recent, FAIL if outdated
 
 ### Test 6.4: Real-Time Protection Active
 
-`powershell
+```powershell
 Get-MpPreference | Select-Object RealtimeMonitoringEnabled
-`
+```
 
 **Expected Result**: RealtimeMonitoringEnabled = True
 **Pass/Fail**: PASS if enabled, FAIL if disabled
@@ -232,6 +237,7 @@ Get-MpPreference | Select-Object RealtimeMonitoringEnabled
 ### Test P.1: System Startup Time
 
 **Procedure**:
+
 1. Restart computer and note time
 2. Wait until fully booted and responsive
 3. Calculate elapsed time
@@ -243,18 +249,19 @@ Get-MpPreference | Select-Object RealtimeMonitoringEnabled
 ### Test P.2: Program Launch Time
 
 **Procedure**: Time launch of Firefox, Word, Chrome
-`powershell
+
+```powershell
 Measure-Command { Start-Process firefox }
-`
+```
 
 **Expected Result**: +1-3 seconds acceptable for first run
 **Pass/Fail**: PASS if acceptable, FAIL if excessive delays
 
 ### Test P.3: Memory Usage
 
-`powershell
+```powershell
 Get-Process | Measure-Object -Property WorkingSet -Sum
-`
+```
 
 **Expected Result**: +200-300 MB overhead acceptable
 **Pass/Fail**: PASS if reasonable, FAIL if excessive
@@ -297,31 +304,31 @@ From Restricted account, try to install software or modify system
 
 ### Test R.1: AppLocker Rollback Works
 
-`powershell
+```powershell
 .\01-applocker-rollback.ps1
 Get-AppLockerPolicy -Effective
-`
+```
 
 **Expected Result**: No rules defined after rollback
 **Pass/Fail**: PASS if rules removed, FAIL if rules remain
 
 ### Test R.2: Firewall Rollback Works
 
-`powershell
+```powershell
 .\02-firewall-rollback.ps1
-Get-NetFirewallProfile -Name StandardProfile | 
+Get-NetFirewallProfile -Name StandardProfile |
     Select-Object DefaultInboundAction, DefaultOutboundAction
-`
+```
 
 **Expected Result**: Returns to default (Allow) policies
 **Pass/Fail**: PASS if reset, FAIL if still restrictive
 
 ### Test R.3: Vault Rollback Works
 
-`powershell
+```powershell
 .\03-vault-decryption.ps1
 (Get-Item C:\Users\ADMIN\Vault).Attributes
-`
+```
 
 **Expected Result**: Encrypted attribute removed
 **Pass/Fail**: PASS if decrypted, FAIL if still encrypted
@@ -331,6 +338,7 @@ Get-NetFirewallProfile -Name StandardProfile |
 ## Known Issues and Workarounds
 
 ### AppLocker Issues
+
 - **Program blocked unexpectedly**:
   Run: .\01-applocker-add-exception.ps1 \"C:\Path\To\Program.exe\"
 
@@ -340,6 +348,7 @@ Get-NetFirewallProfile -Name StandardProfile |
   3. Try again
 
 ### Firewall Issues
+
 - **Network broken after hardening**:
   Run: .\02-firewall-rollback.ps1
   Then reapply more carefully
@@ -348,6 +357,7 @@ Get-NetFirewallProfile -Name StandardProfile |
   Add outbound rule: New-NetFirewallRule -Direction Out -Action Allow -Program \"C:\Program.exe\"
 
 ### Vault Issues
+
 - **Can't open Vault**:
   1. Restart PC (key cached in memory)
   2. Try again
@@ -356,6 +366,7 @@ Get-NetFirewallProfile -Name StandardProfile |
   Use Recovery Key: manage-bde -recovery -status
 
 ### Quarantine Issues
+
 - **Quarantine full**:
   Delete old archives: Remove-Item C:\Vault\Quarantine\Archive\* -Recurse
   Or increase size: .\04-quarantine-system-init.ps1 -QuarantineSize 10GB

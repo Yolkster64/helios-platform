@@ -52,6 +52,7 @@ Phase 10 implements a comprehensive sandbox environment for safely analyzing sus
 Initializes and configures the sandbox environment.
 
 **Responsibilities:**
+
 - Detect Windows Sandbox or Hyper-V availability
 - Setup sandbox partition (H:)
 - Configure shared folders
@@ -60,6 +61,7 @@ Initializes and configures the sandbox environment.
 - Create snapshot capability
 
 **Key Methods:**
+
 ```csharp
 Task<bool> InitializeAsync()
 Task<bool> IsAvailableAsync()
@@ -73,6 +75,7 @@ Task<SandboxEnvironmentInfo> GetEnvironmentInfoAsync()
 ```
 
 **Usage:**
+
 ```csharp
 var setup = new SandboxEnvironmentSetup();
 await setup.InitializeAsync();
@@ -84,6 +87,7 @@ var config = await setup.GetCurrentConfigurationAsync();
 Manages sandbox instance lifecycle and execution.
 
 **Responsibilities:**
+
 - Launch sandbox instances
 - Mount shared folders
 - Pass files for testing
@@ -93,6 +97,7 @@ Manages sandbox instance lifecycle and execution.
 - Terminate sandboxes
 
 **Key Methods:**
+
 ```csharp
 Task<SandboxInstance> LaunchSandboxAsync(SandboxLaunchOptions options)
 Task<bool> MountSharedFolderAsync(SandboxInstance sandbox, string hostPath, string sandboxPath)
@@ -104,6 +109,7 @@ Task<bool> TerminateSandboxAsync(SandboxInstance sandbox)
 ```
 
 **Usage:**
+
 ```csharp
 var launcher = new SandboxLauncher();
 var options = new SandboxLaunchOptions { SandboxName = "Analysis_001" };
@@ -116,6 +122,7 @@ await launcher.TerminateSandboxAsync(sandbox);
 Manages file operations and activity monitoring within sandbox.
 
 **Responsibilities:**
+
 - Transfer files to/from sandbox
 - Monitor file activity
 - Capture all sandbox activity
@@ -124,6 +131,7 @@ Manages file operations and activity monitoring within sandbox.
 - Archive analysis results
 
 **Key Methods:**
+
 ```csharp
 Task<bool> TransferFileToSandboxAsync(SandboxInstance sandbox, string source, string dest)
 Task<bool> TransferFileFromSandboxAsync(SandboxInstance sandbox, string sandboxPath, string dest)
@@ -135,6 +143,7 @@ Task<bool> ArchiveAnalysisResultsAsync(SandboxInstance sandbox, string archivePa
 ```
 
 **Usage:**
+
 ```csharp
 var fileTransfer = new SandboxFileTransfer();
 await fileTransfer.TransferFileToSandboxAsync(sandbox, "C:\\file.exe", "C:\\Analysis\\file.exe");
@@ -146,6 +155,7 @@ var activity = await fileTransfer.CaptureActivityAsync(sandbox);
 Monitors sandbox activity and detects threats.
 
 **Responsibilities:**
+
 - Monitor file operations
 - Track registry access
 - Monitor network access
@@ -155,6 +165,7 @@ Monitors sandbox activity and detects threats.
 - Auto-terminate on critical threats
 
 **Key Methods:**
+
 ```csharp
 Task StartMonitoringAsync(SandboxInstance sandbox)
 Task<IEnumerable<FileOperation>> GetFileOperationsAsync(SandboxInstance sandbox)
@@ -168,6 +179,7 @@ Task StopMonitoringAsync(SandboxInstance sandbox)
 ```
 
 **Usage:**
+
 ```csharp
 var monitor = new SandboxMonitor();
 await monitor.StartMonitoringAsync(sandbox);
@@ -180,6 +192,7 @@ if (threatResult.ThreatDetected) { /* handle threat */ }
 Manages sandbox snapshots for rapid recovery.
 
 **Responsibilities:**
+
 - Create snapshots
 - Restore from snapshots
 - Manage multiple snapshots
@@ -189,6 +202,7 @@ Manages sandbox snapshots for rapid recovery.
 - Manage snapshot storage
 
 **Key Methods:**
+
 ```csharp
 Task<SandboxSnapshot> CreateSnapshotAsync(SandboxInstance sandbox, string name)
 Task<bool> RestoreFromSnapshotAsync(SandboxInstance sandbox, SandboxSnapshot snapshot)
@@ -201,6 +215,7 @@ Task<SnapshotManagementReport> GetManagementReportAsync(SandboxInstance sandbox)
 ```
 
 **Usage:**
+
 ```csharp
 var snapshotManager = new SandboxSnapshotManager();
 var snapshot = await snapshotManager.CreateSnapshotAsync(sandbox, "clean");
@@ -210,6 +225,7 @@ await snapshotManager.RestoreFromSnapshotAsync(sandbox, snapshot);
 ## Data Models
 
 ### SandboxInstance
+
 Represents an active sandbox environment.
 
 ```csharp
@@ -234,6 +250,7 @@ public enum SandboxStatus
 ```
 
 ### SandboxConfiguration
+
 Stores sandbox configuration settings.
 
 ```csharp
@@ -251,6 +268,7 @@ public class SandboxConfiguration
 ```
 
 ### ResourceLimits
+
 Defines resource constraints.
 
 ```csharp
@@ -264,6 +282,7 @@ public class SandboxResourceLimits
 ```
 
 ### ActivityReport
+
 Aggregates monitoring data.
 
 ```csharp
@@ -279,6 +298,7 @@ public class ActivityReport
 ```
 
 ### ThreatDetectionResult
+
 Reports threat analysis findings.
 
 ```csharp
@@ -319,24 +339,28 @@ public class ThreatDetectionResult
 ### Detection Mechanisms
 
 **Network Analysis:**
+
 - Known C2 address detection
 - DNS exfiltration attempts
 - Unusual port usage
 - Protocol anomalies
 
 **Registry Analysis:**
+
 - Run key modifications
 - Service installation
 - Driver loading
 - Configuration changes
 
 **File Operations:**
+
 - System file modifications
 - Temp file creation patterns
 - Startup folder access
 - DLL injection targets
 
 **Process Activity:**
+
 - Process creation patterns
 - Privilege escalation attempts
 - Code injection detection
@@ -347,6 +371,7 @@ public class ThreatDetectionResult
 ### Unit Tests (25+)
 
 **SandboxEnvironmentSetup (9 tests)**
+
 - Initialization
 - Availability detection
 - Configuration retrieval
@@ -358,6 +383,7 @@ public class ThreatDetectionResult
 - Snapshot capability
 
 **SandboxLauncher (7 tests)**
+
 - Initialization
 - Sandbox launch
 - Shared folder mounting
@@ -367,6 +393,7 @@ public class ThreatDetectionResult
 - Sandbox termination
 
 **SandboxFileTransfer (8 tests)**
+
 - File transfer to sandbox
 - File transfer from sandbox
 - File activity monitoring
@@ -377,6 +404,7 @@ public class ThreatDetectionResult
 - Shutdown
 
 **SandboxMonitor (8 tests)**
+
 - Monitoring initialization
 - Monitoring start/stop
 - File operations tracking
@@ -387,6 +415,7 @@ public class ThreatDetectionResult
 - Threat detection
 
 **SandboxSnapshotManager (8 tests)**
+
 - Snapshot creation
 - Snapshot retrieval
 - Snapshot restoration
@@ -397,6 +426,7 @@ public class ThreatDetectionResult
 - Management reporting
 
 **SandboxOrchestrator (3 tests)**
+
 - Initialization
 - Environment info retrieval
 - Shutdown
@@ -448,16 +478,19 @@ await orchestrator.ShutdownAsync();
 ## Performance Characteristics
 
 ### Startup Time
+
 - Environment setup: ~500ms
 - Sandbox launch: 2-5 seconds
 - Initial snapshot: 3-10 seconds
 
 ### Analysis Time
+
 - Small files (< 1MB): 10-30 seconds
 - Medium files (1-10MB): 30-60 seconds
 - Large files (> 10MB): 60-300 seconds
 
 ### Resource Usage
+
 - Base memory: ~100MB
 - Per sandbox: 2-4GB RAM
 - Snapshot storage: 1-5GB per snapshot
@@ -465,18 +498,21 @@ await orchestrator.ShutdownAsync();
 ## Security Considerations
 
 ### Isolation Guarantees
+
 - Complete file system isolation
 - Registry isolation
 - Network isolation (configurable)
 - Process isolation
 
 ### Contamination Prevention
+
 - Verification of clean state
 - Host file integrity checking
 - Registry protection
 - Network monitoring
 
 ### Monitoring
+
 - Comprehensive activity tracking
 - Real-time threat detection
 - Automated threat response
@@ -496,14 +532,17 @@ Task<SandboxAnalysisResult> AnalyzeSuspiciousFileAsync(
 ```
 
 **Parameters:**
+
 - `filePath`: Path to the file to analyze
 - `options`: Analysis options
 - `cancellationToken`: Cancellation token
 
 **Returns:**
+
 - `SandboxAnalysisResult` containing analysis findings
 
 **Exceptions:**
+
 - `ArgumentNullException`: If filePath is null
 - `FileNotFoundException`: If file doesn't exist
 - `InvalidOperationException`: If not initialized
@@ -520,11 +559,13 @@ Task<SandboxAnalysisResult> AnalyzeSuspiciousFilesAsync(
 ```
 
 **Parameters:**
+
 - `filePaths`: Collection of file paths to analyze
 - `options`: Analysis options
 - `cancellationToken`: Cancellation token
 
 **Returns:**
+
 - Aggregate `SandboxAnalysisResult` for all files
 
 ## Troubleshooting
@@ -532,24 +573,29 @@ Task<SandboxAnalysisResult> AnalyzeSuspiciousFilesAsync(
 ### Common Issues
 
 **Issue: Windows Sandbox not found**
+
 - Solution: Enable Windows Sandbox optional feature
 - Command: `Enable-WindowsOptionalFeature -FeatureName "Containers-DisposableClientVM" -All`
 
 **Issue: Insufficient disk space**
+
 - Solution: Increase partition or clean old snapshots
 - Check: `Get-Volume -DriveLetter H | Select-Object SizeRemaining`
 
 **Issue: GPU pass-through failing**
+
 - Solution: Verify GPU driver support
 - Check: `Get-PnpDevice -Class Display`
 
 **Issue: Network isolation blocking legitimate traffic**
+
 - Solution: Adjust isolation policy or add allow rules
 - Policy: Change to `NetworkIsolationPolicy.Restricted`
 
 ## Future Enhancements
 
 ### Planned Features
+
 - Machine learning-based threat detection
 - Behavioral analysis improvements
 - Performance optimization
@@ -558,6 +604,7 @@ Task<SandboxAnalysisResult> AnalyzeSuspiciousFilesAsync(
 - Integration with threat intelligence feeds
 
 ### Extensibility Points
+
 - Custom threat detectors
 - Custom analysis engines
 - Custom monitoring providers
@@ -570,6 +617,7 @@ HELIOS Phase 10 Sandbox Environment is part of the HELIOS Platform.
 ## Support
 
 For support and issues:
+
 - Email: support@helios.example.com
 - Documentation: https://docs.helios.example.com/phase10
 - Issue Tracker: https://github.com/helios/issues
@@ -577,6 +625,7 @@ For support and issues:
 ## Changelog
 
 ### Version 1.0.0 (Initial Release)
+
 - 5 production-ready services
 - 25+ comprehensive unit tests
 - Complete configuration guide

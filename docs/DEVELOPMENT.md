@@ -7,6 +7,7 @@
 ## 🚀 Getting Started as a Developer
 
 ### Prerequisites
+
 - .NET 10.0 SDK or later (`global.json` pins 10.0.400)
 - Visual Studio 2022, VS Code, or JetBrains Rider
 - Git
@@ -14,6 +15,7 @@
 - Basic knowledge of Azure services (optional but helpful)
 
 ### Quick Setup
+
 ```bash
 # Clone the repository
 git clone https://github.com/M0nado/helios-platform.git
@@ -31,6 +33,7 @@ dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj
 ## 📚 Understanding the Codebase
 
 ### Start Here
+
 1. **Read First**: [docs/ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)
    - Understand the 6 deployment phases
    - Learn about the 6 core components
@@ -47,6 +50,7 @@ dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj
    - Demonstrates the 6-phase deployment
 
 ### Project Structure
+
 ```
 src/HELIOS.Platform/
 ├── BackendServices/          # Core service implementations
@@ -75,6 +79,7 @@ tests/
 ## 🔧 Key Classes & Components
 
 ### HeliosDeployment.cs
+
 **Main orchestrator for the entire deployment process**
 
 ```csharp
@@ -104,51 +109,61 @@ public class HeliosDeployment
 **What it does**: Coordinates all deployment phases, initializes components, manages the deployment lifecycle.
 
 ### ApiGateway.cs
+
 **Handles request routing, rate limiting, and circuit breaking**
 
 Located: `src/HELIOS.Platform/BackendServices/ApiGateway/`
 
 Key methods:
+
 - `RouteRequestAsync()` - Route incoming requests
 - `GetLimitStatusAsync()` - Check rate limits
 - `HandleCircuitBreakerAsync()` - Manage failures
 
 ### AuthService.cs
+
 **JWT token management and authentication**
 
 Located: `src/HELIOS.Platform/BackendServices/AuthService/`
 
 Key methods:
+
 - `GenerateTokenAsync()` - Create JWT tokens
 - `ValidateTokenAsync()` - Verify token validity
 - `RefreshTokenAsync()` - Issue new tokens
 
 ### AnalyticsService.cs
+
 **Performance metrics and monitoring**
 
 Located: `src/HELIOS.Platform/BackendServices/Analytics/`
 
 Key methods:
+
 - `TrackMetricAsync()` - Record performance data
 - `GetPerformanceStatsAsync()` - Retrieve analytics
 - `QueryMetricsAsync()` - Advanced metric queries
 
 ### AIIntegration.cs
+
 **Multi-service AI management and routing**
 
 Located: `src/HELIOS.Platform/BackendServices/AIIntegration/`
 
 Key methods:
+
 - `RouteToOptimalServiceAsync()` - Intelligent routing
 - `ExecuteAITaskAsync()` - Run AI operations
 - `GetServiceStatusAsync()` - Service health
 
 ### TaskOrchestrator.cs
+
 **Workflow automation and task management**
 
 Located: `src/HELIOS.Platform/BackendServices/TaskOrchestrator/`
 
 Key methods:
+
 - `OrchestrationAsync()` - Coordinate workflows
 - `ScheduleWorkflowAsync()` - Schedule tasks
 - `MonitorExecutionAsync()` - Track execution
@@ -160,6 +175,7 @@ Key methods:
 ### Adding a New Feature
 
 1. **Create a new service class** in `BackendServices/`
+
    ```csharp
    public class MyNewService
    {
@@ -182,6 +198,7 @@ Key methods:
    ```
 
 2. **Register it in HeliosDeployment.cs**
+
    ```csharp
    public class HeliosDeployment
    {
@@ -195,6 +212,7 @@ Key methods:
    ```
 
 3. **Use it in the deployment flow**
+
    ```csharp
    public async Task<DeploymentResult> DeployAsync()
    {
@@ -208,6 +226,7 @@ Key methods:
 ### Adding a New Component Type
 
 1. Add interface to `ComponentClasses.cs`:
+
    ```csharp
    public interface IMyComponent
    {
@@ -225,6 +244,7 @@ Key methods:
 ## 🧪 Testing
 
 ### Running Tests
+
 ```bash
 # Run all tests
 dotnet test tests/HELIOS.Platform.Tests/HELIOS.Platform.Tests.csproj
@@ -237,6 +257,7 @@ dotnet test --verbosity=detailed
 ```
 
 ### Writing Tests
+
 ```csharp
 public class MyServiceTests
 {
@@ -265,6 +286,7 @@ public class MyServiceTests
 ```
 
 ### Test Patterns to Use
+
 - **Arrange-Act-Assert (AAA)** for structure
 - **Xunit** for test framework
 - **InlineData** for theory-based tests
@@ -275,19 +297,23 @@ public class MyServiceTests
 ## 🔐 Security Considerations
 
 ### Authentication & Authorization
+
 - All API endpoints require JWT tokens
 - Tokens include role-based claims
 - Token lifetime: 15 minutes (default)
 - Refresh token for extended sessions
 
 ### Data Protection
+
 - Secrets stored in Azure Key Vault
 - Configuration from secure sources only
 - Sensitive data encrypted in transit (HTTPS)
 - Database connections use Managed Identity
 
 ### Dependency Updates
+
 Keep dependencies current:
+
 ```bash
 dotnet list package --outdated
 dotnet package update                    # Update all packages
@@ -298,6 +324,7 @@ dotnet package update                    # Update all packages
 ## 🐛 Debugging Tips
 
 ### Enable Detailed Logging
+
 ```csharp
 var builder = new LoggerConfiguration()
     .MinimumLevel.Debug()
@@ -315,7 +342,9 @@ var builder = new LoggerConfiguration()
 | Service not found | Initialization failed | Check component registration in `HeliosDeployment` |
 
 ### Debug Breakpoints
+
 Key places to set breakpoints:
+
 - `HeliosDeployment.DeployAsync()` - Phase transitions
 - `ApiGateway.RouteRequestAsync()` - Request routing
 - `AIIntegration.RouteToOptimalServiceAsync()` - Service selection
@@ -325,16 +354,19 @@ Key places to set breakpoints:
 ## 📝 Code Standards
 
 ### Naming Conventions
+
 - **Classes**: PascalCase (`MyService`, `ApiGateway`)
 - **Methods**: PascalCase (`GetAsync()`, `ValidateToken()`)
 - **Variables**: camelCase (`_logger`, `result`)
 - **Constants**: UPPER_CASE (`MAX_TIMEOUT`)
 
 ### Async/Await
+
 - Always use `async Task` or `async Task<T>` for async operations
 - Avoid `Task.Result` or `Task.Wait()`
 - Use `await` to call async methods
 - Example:
+
   ```csharp
   public async Task<Result> MyAsync()
   {
@@ -344,10 +376,12 @@ Key places to set breakpoints:
   ```
 
 ### Comments & Documentation
+
 - Use XML doc comments for public methods
 - Explain the **why**, not just the **what**
 - Keep comments up-to-date
 - Example:
+
   ```csharp
   /// <summary>
   /// Processes incoming requests and routes them to appropriate services.
@@ -366,12 +400,14 @@ Key places to set breakpoints:
 ## 🚀 Performance Optimization
 
 ### Key Areas to Optimize
+
 1. **Caching**: Use `CacheService` for frequently accessed data
 2. **Async Operations**: All I/O should be async (not blocking)
 3. **Rate Limiting**: Circuit breaker prevents cascading failures
 4. **Metrics**: `AnalyticsService` tracks performance
 
 ### Profile Your Code
+
 ```bash
 # Build in Release configuration for accurate measurements
 dotnet build -c Release
@@ -385,11 +421,13 @@ dotnet build -c Release /p:EnableAotAnalyzer=true
 ## 📖 Additional Resources
 
 ### Within This Repository
+
 - [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md) - System design
 - [COMPONENTS_EXPLAINED.md](../src/HELIOS.Platform/COMPONENTS_EXPLAINED.md) - Component details
 - [NAVIGATION.md](NAVIGATION.md) - Documentation index
 
 ### External Resources
+
 - [.NET Documentation](https://docs.microsoft.com/en-us/dotnet/)
 - [Azure Services](https://docs.microsoft.com/en-us/azure/)
 - [JWT Authentication](https://jwt.io/)
@@ -400,12 +438,14 @@ dotnet build -c Release /p:EnableAotAnalyzer=true
 ## ❓ Getting Help
 
 ### Questions About:
+
 - **Architecture**: See [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)
 - **Components**: See [COMPONENTS_EXPLAINED.md](../src/HELIOS.Platform/COMPONENTS_EXPLAINED.md)
 - **Deployment**: See docs/DEPLOYMENT_PLAYBOOK.md (if exists)
 - **Troubleshooting**: See docs/TROUBLESHOOTING.md (if exists)
 
 ### Contributing
+
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
@@ -417,6 +457,7 @@ dotnet build -c Release /p:EnableAotAnalyzer=true
 ## 🎯 Development Workflow
 
 ### Local Development
+
 ```bash
 # 1. Build the project
 dotnet build src/HELIOS.Platform/HELIOS.Platform.csproj
@@ -439,6 +480,7 @@ git push origin feature-branch
 ```
 
 ### Before Submitting PR
+
 - ✅ Code builds successfully
 - ✅ All tests pass
 - ✅ No compiler warnings (or justified)
@@ -450,6 +492,7 @@ git push origin feature-branch
 ## 📞 Contact & Support
 
 For questions or issues:
+
 1. Check [NAVIGATION.md](NAVIGATION.md) for documentation
 2. Review existing [GitHub Issues](https://github.com/M0nado/helios-platform/issues)
 3. Create a new issue with clear description

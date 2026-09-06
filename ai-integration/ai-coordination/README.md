@@ -5,6 +5,7 @@ Coordinating ChatGPT and GitHub Codex for maximum effectiveness in HELIOS develo
 ## Overview
 
 AI coordination enables:
+
 - Using ChatGPT for planning, Codex for code generation
 - Detecting conflicting AI suggestions
 - Unified recommendation generation

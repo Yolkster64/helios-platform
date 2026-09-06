@@ -169,6 +169,7 @@ dotnet test .\VaultSystemTests.cs
 ```
 
 Test coverage includes:
+
 - ✅ Initialization (8 tests)
 - ✅ Encryption (7 tests)
 - ✅ Authentication (9 tests)
@@ -179,6 +180,7 @@ Test coverage includes:
 ## 🔧 Configuration
 
 Edit `vault-config.json` to customize:
+
 - Partition size and encryption method
 - Locker definitions and size limits
 - Authentication policy
@@ -238,16 +240,19 @@ Edit `vault-config.json` to customize:
 ## 🆘 Troubleshooting
 
 **Vault won't initialize:**
+
 - Check E: partition exists and accessible
 - Verify minimum 30 GB free space
 - Check write permissions on E:
 
 **Authentication failing:**
+
 - Verify username/password
 - Check session timeout (30 minutes)
 - Review audit log for failed attempts
 
 **Backup failed:**
+
 - Verify J: partition accessible
 - Check disk space on J:
 - Review backup logs

@@ -1,11 +1,13 @@
 # HELIOS Update System Documentation
 
 ## Overview
+
 The Update System provides comprehensive automatic update functionality for HELIOS Platform including version checking, background downloading, staged rollout support, delta updates, and automatic rollback capabilities.
 
 ## Features Implemented
 
 ### 1. Built-in Update Checker
+
 - **Functionality**: Checks remote server for new versions
 - **Implementation**: `UpdateChecker.CheckForUpdatesAsync()`
 - **Features**:
@@ -15,6 +17,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Compatibility checking
 
 ### 2. Automatic Update Downloader
+
 - **Functionality**: Downloads updates in background without interrupting work
 - **Implementation**: `UpdateChecker.DownloadUpdateAsync()`
 - **Features**:
@@ -24,6 +27,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Retry on failure
 
 ### 3. Staged Rollout Support
+
 - **Functionality**: Gradual rollout of updates to user segments
 - **Implementation**: `UpdateInfo.SupportsStaged` property
 - **Features**:
@@ -33,6 +37,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Rollback capability per stage
 
 ### 4. Delta Updates (Only Changed Files)
+
 - **Functionality**: Download only modified files for faster updates
 - **Implementation**: `UpdateChecker.PerformDeltaUpdateAsync()`
 - **Features**:
@@ -42,6 +47,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Signature verification
 
 ### 5. Update Scheduling Options
+
 - **Functionality**: Schedule updates for optimal times
 - **Implementation**: `UpdateChecker.ScheduleUpdateAsync()`
 - **Features**:
@@ -51,6 +57,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - User notifications
 
 ### 6. Auto-Update in Background
+
 - **Functionality**: Download and prepare updates without user interaction
 - **Implementation**: Background task integration
 - **Features**:
@@ -60,6 +67,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Status tracking
 
 ### 7. Restart Prompts and Scheduling
+
 - **Functionality**: Intelligent restart prompts
 - **Implementation**: `UpdatePhase` state machine
 - **Features**:
@@ -69,6 +77,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Unsaved work detection
 
 ### 8. Rollback on Failed Update
+
 - **Functionality**: Automatic rollback to previous version
 - **Implementation**: `UpdateChecker.RollbackAsync()`
 - **Features**:
@@ -78,6 +87,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Data integrity preservation
 
 ### 9. Update History and Logs
+
 - **Functionality**: Track all updates with detailed logs
 - **Implementation**: `UpdateChecker.GetUpdateHistoryAsync()`, `UpdateRecord` class
 - **Features**:
@@ -87,6 +97,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Duration tracking
 
 ### 10. Offline Update Support
+
 - **Functionality**: Install updates from local media
 - **Implementation**: `UpdateChecker.CheckOfflineUpdateAsync()`
 - **Features**:
@@ -96,6 +107,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Manual installation
 
 ### 11. Update Notifications
+
 - **Functionality**: Notify users about available updates
 - **Implementation**: `UpdateStatus` with messaging
 - **Features**:
@@ -105,6 +117,7 @@ The Update System provides comprehensive automatic update functionality for HELI
   - Error notifications
 
 ### 12. Version Compatibility Checking
+
 - **Functionality**: Verify update compatibility with system
 - **Implementation**: `UpdateChecker.CheckCompatibilityAsync()`
 - **Features**:
@@ -151,6 +164,7 @@ if (updateInfo.IsAvailable)
 ## Configuration
 
 Update system behavior can be configured through:
+
 - Check interval (daily, weekly, manual)
 - Auto-download preference
 - Update type (stable, beta, alpha)
@@ -160,6 +174,7 @@ Update system behavior can be configured through:
 ## Testing
 
 Comprehensive unit tests cover:
+
 - Update checking
 - Download process
 - Installation

@@ -11,12 +11,12 @@
 
 Click to jump to the section you need:
 
-- [📖 What You Have](#what-you-have)
-- [🎓 How to Use](#how-to-use)  
-- [📊 Template Structure](#template-structure)
-- [🔍 Finding Templates](#finding-templates)
-- [✏️ Customization Guide](#customization-guide)
-- [🚀 Getting Started](#getting-started)
+- [📖 What You Have](#-what-you-have)
+- [🎓 How to Use](#-how-to-use)
+- [📊 Template Structure](#-template-structure)
+- [🔍 Finding Templates](#-finding-templates)
+- [✏️ Customization Guide](#%EF%B8%8F-customization-guide)
+- [🚀 Getting Started](#-getting-started)
 
 ---
 
@@ -414,6 +414,7 @@ Use CI/CD to regenerate docs when code changes:
 ## 📂 Complete File Listing
 
 ### Level 1 (12 files)
+
 ```
 README.md               API.md                  ARCHITECTURE.md
 CONTRIBUTING.md        FAQ.md                  GLOSSARY.md
@@ -422,6 +423,7 @@ RELEASE_NOTES.md       ROADMAP.md              TROUBLESHOOTING.md
 ```
 
 ### Level 2 Sample: security/
+
 ```
 README.md              USAGE.md                INDEX.md
 API.md                 EXAMPLES.md             DEPENDENCIES.md
@@ -430,6 +432,7 @@ COMPONENT_DETAILS.md   COMPRESSED_SNIPPETS.md
 ```
 
 ### Level 3 Sample: security/encryption/
+
 ```
 README.md              USAGE.md                API.md
 EXAMPLES.md            DEPENDENCIES.md         TROUBLESHOOTING.md
@@ -437,6 +440,7 @@ NOTES.md
 ```
 
 ### Level 4 Templates (6)
+
 ```
 script-header-template.ps1.template     script.meta.json.template
 script.wiki.md.template                 script.examples.md.template
@@ -444,6 +448,7 @@ script.build-usage.md.template          script.snippet-ref.md.template
 ```
 
 ### Level 5 Sample: builds/build-complete/
+
 ```
 README.md                       MANIFEST.md
 COMPONENTS_INCLUDED.md          CONFIGURATION.md
@@ -456,6 +461,7 @@ BUILD_INTEGRITY_REPORT.md       MODIFICATION_HISTORY.md
 ## ✅ You're All Set!
 
 You now have:
+
 - ✅ 70 production-ready template files
 - ✅ Complete 5-level documentation system
 - ✅ Auto-fillable placeholders
@@ -468,6 +474,7 @@ You now have:
 ---
 
 **Quick Links:**
+
 - [Templates Summary](./TEMPLATES_SUMMARY.md) - Detailed breakdown
 - [Main README](./README.md) - Project overview
 - [Security Example](./security/README.md) - See a Level 2 example

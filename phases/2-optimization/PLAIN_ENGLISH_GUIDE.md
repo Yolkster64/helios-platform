@@ -1,10 +1,13 @@
 # HELIOS Phase 2: Plain English Guide
+
 ## Understanding Each Optimization (Simple Language)
 
 ---
 
 ## 1. SERVICE DISABLING
+
 ### What Services Do
+
 Services are background programs that run all the time on Windows. Some are essential (like the network driver), but many do things you never asked for (like checking for updates, syncing to the cloud, listening for voice commands).
 
 **Think of it like apps running in the background on your phone** — you have WhatsApp, Gmail, etc. running even when you're not using them. On Windows, it's the same idea but with 50+ services by default.
@@ -51,6 +54,7 @@ Win + R → services.msc
 ```
 
 When run programmatically:
+
 ```powershell
 Stop-Service -Name "DiagTrack" -Force
 Set-Service -Name "DiagTrack" -StartupType Disabled
@@ -59,6 +63,7 @@ Set-Service -Name "DiagTrack" -StartupType Disabled
 ### What It Changes
 
 **Registry Changes:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\DiagTrack
   StartType: 2 (Automatic) → 4 (Disabled)
@@ -68,6 +73,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\OneSyncSvc
 ```
 
 **Immediate Effects:**
+
 - Those services no longer run
 - They no longer appear in Task Manager's Background Tasks
 - They no longer use CPU/memory/disk I/O
@@ -76,6 +82,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\OneSyncSvc
 ### How To Undo It
 
 **Option 1: Disable Individual Service**
+
 ```powershell
 # Re-enable a specific service
 Set-Service -Name "DiagTrack" -StartupType Automatic
@@ -83,6 +90,7 @@ Start-Service -Name "DiagTrack"
 ```
 
 **Option 2: Restore All at Once**
+
 ```powershell
 # Restore from registry backup (made in Phase 1)
 REG RESTORE HKLM\SYSTEM c:\backups\services-backup.reg
@@ -90,6 +98,7 @@ REG RESTORE HKLM\SYSTEM c:\backups\services-backup.reg
 ```
 
 **Option 3: Manual via GUI**
+
 - Services.msc → find service → Right-click → Properties
 - Set Startup Type back to "Automatic" or "Manual"
 - Click Start button
@@ -107,9 +116,11 @@ REG RESTORE HKLM\SYSTEM c:\backups\services-backup.reg
 ---
 
 ## 2. STARTUP OPTIMIZATION
+
 ### What It Does
 
 Startup clutter is programs and tasks that automatically run when Windows boots. Your system might have:
+
 - Old software from years ago that you forgot about
 - Leftover installers that auto-launch
 - Cloud apps syncing at boot
@@ -135,17 +146,17 @@ Startup clutter is programs and tasks that automatically run when Windows boots.
 
 1. **Startup Folder** (`C:\Users\YourName\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`)
    - Shortcuts here auto-launch at login
-   
+
 2. **Registry Run Key** (`HKLM:\Software\Microsoft\Windows\CurrentVersion\Run`)
    - Programs configured to run here start automatically
-   
+
 3. **Task Scheduler** (`%windir%\System32\Tasks\...`)
    - Scheduled tasks that run at startup
-   
+
 4. **Services** (overlaps with Service Disabling)
    - Some services auto-start; disabling them removes startup entries
 
-### What It Does
+### Startup Cleanup Actions
 
 ```
 1. Scans Startup folder and removes unneeded shortcuts
@@ -179,10 +190,12 @@ Win + R → msconfig → Startup tab
 ### What It Changes
 
 **Folder Changes:**
+
 - Shortcuts removed from: `C:\Users\ADMIN\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`
 - Example: OneDrive.lnk deleted
 
 **Registry Changes:**
+
 ```
 HKLM:\Software\Microsoft\Windows\CurrentVersion\Run
   OneDrive: (entry removed)
@@ -192,12 +205,14 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ```
 
 **Task Scheduler Changes:**
+
 - Startup tasks disabled
 - User logon triggers removed
 
 ### How To Undo It
 
 **Option 1: Restore Individual Program**
+
 ```powershell
 # Manually add back to startup
 # Option A: Copy shortcut to Startup folder
@@ -209,9 +224,11 @@ New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" `
 ```
 
 **Option 2: Restore All**
+
 - Restore from Phase 1 registry backup: `REG RESTORE HKCU\Software c:\backups\startup-backup.reg`
 
 **Option 3: Manual Recovery**
+
 - msconfig → Startup tab → Search for program → Enable it
 - Or Task Scheduler: Re-enable the task, set to run at startup
 
@@ -228,6 +245,7 @@ New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" `
 ---
 
 ## 3. RESOURCE TUNING
+
 ### What It Does
 
 Resource tuning adjusts how Windows allocates RAM, CPU time, and disk cache to match typical use cases. Default Windows settings assume your PC might need to do anything, so they're neutral. Tuning optimizes for the 95% case.
@@ -239,6 +257,7 @@ Resource tuning adjusts how Windows allocates RAM, CPU time, and disk cache to m
 #### A. Memory (RAM) Optimization
 
 **What It Does:**
+
 ```
 1. Disables unnecessary RAM caches
 2. Reduces hibernation file size
@@ -247,12 +266,14 @@ Resource tuning adjusts how Windows allocates RAM, CPU time, and disk cache to m
 ```
 
 **Example Changes:**
+
 ```
 Before: 8 GB RAM installed, only 4 GB available to programs
 After:  8 GB RAM installed, 6.5 GB available to programs
 ```
 
 **Why:**
+
 - Default Windows keeps 30-50% of RAM reserved for caching
 - You want RAM available for your apps, not for "just in case" caches
 - Cache can be rebuilt when needed; usable RAM cannot be reclaimed
@@ -260,11 +281,13 @@ After:  8 GB RAM installed, 6.5 GB available to programs
 #### B. CPU Priority Tuning
 
 **What It Does:**
+
 - Sets Explorer and critical processes to "High" priority
 - Sets update checks to "Low" priority
 - Ensures your apps get CPU time before background tasks
 
 **Example:**
+
 ```
 Without tuning:
   Windows Update check gets 30% of CPU time
@@ -280,11 +303,13 @@ With tuning:
 #### C. Page File Optimization
 
 **What It Does:**
+
 - Page file = "pretend RAM" on your hard drive (much slower)
 - Optimally configured for your RAM size
 - Prevents excessive disk thrashing
 
 **Sizing:**
+
 ```
 System RAM 4GB:   Page File = 4 GB to 8 GB
 System RAM 8GB:   Page File = 2 GB to 4 GB (you rarely need it)
@@ -292,6 +317,7 @@ System RAM 16GB+: Page File = 1 GB to 2 GB (you almost never need it)
 ```
 
 **Why:**
+
 - Badly configured page file can make system feel slow
 - Too small = crashes when you run too many programs
 - Too large = wastes disk space for something you rarely use
@@ -318,6 +344,7 @@ Win + Pause → Advanced system settings → Performance → Settings
 ### What It Changes
 
 **Memory Settings:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
   DisablePagingExecutive: 0 → 1 (Don't page system code to disk)
@@ -325,6 +352,7 @@ HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
 ```
 
 **Page File:**
+
 ```
 Before: C: 8GB to 16GB
 After:  C: 2GB to 4GB (depends on your RAM)
@@ -333,12 +361,14 @@ Located: C:\pagefile.sys (hidden file)
 ```
 
 **CPU Process Priority:**
+
 - Explorer (file manager): Normal → High
 - System background tasks: Normal → Below Normal
 
 ### How To Undo It
 
 **Option 1: Reset to Default**
+
 ```powershell
 # Restore memory settings
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" `
@@ -346,11 +376,13 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\M
 ```
 
 **Option 2: Manual Reset**
+
 - System Properties → Advanced → Performance → Settings → Advanced
 - Virtual Memory → Change
 - Set page file back to "System Managed"
 
 **Option 3: Restore from Backup**
+
 - Registry backup from Phase 1
 
 ### Performance Impact
@@ -366,9 +398,11 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\M
 ---
 
 ## 4. BACKGROUND PROCESS CONTROL
+
 ### What It Does
 
 Not all background processes are services. Some are regular programs that start and run without you noticing:
+
 - Apps refreshing content
 - Notifications checking
 - Indexing operations
@@ -390,7 +424,7 @@ Not all background processes are services. Some are regular programs that start 
 | **Cortana** | Voice assistant | Consumes CPU; disable if not used |
 | **MRT.exe** | Windows Malware Removal Tool | Can consume disk during scan; schedule for maintenance |
 
-### What It Does
+### Background Process Actions
 
 ```
 1. Limits SearchIndexer to specific times (e.g., off-hours only)
@@ -422,6 +456,7 @@ schtasks /change /tn "Microsoft\Windows\Shell\IndexerService" /disable
 ### What It Changes
 
 **Process Throttling:**
+
 ```
 SearchIndexer before: Can use 100% of disk at any time
 SearchIndexer after:  Can only use disk during off-hours (e.g., 2 AM to 5 AM)
@@ -431,6 +466,7 @@ OneDrive after:  Syncs only when idle, rate-limited to 50% of upload bandwidth
 ```
 
 **Visual Effects Reduction:**
+
 ```
 Before: All animations enabled, transparency effects on, shadows on
 After:  Only necessary animations, transparency off, shadows off
@@ -438,6 +474,7 @@ After:  Only necessary animations, transparency off, shadows off
 ```
 
 **Scheduled Tasks Changed:**
+
 ```
 %windir%\System32\Tasks\Microsoft\Windows\Application Experience\ProgramDataUpdater
   Status: Enabled → Disabled
@@ -449,6 +486,7 @@ After:  Only necessary animations, transparency off, shadows off
 ### How To Undo It
 
 **Option 1: Re-enable Individual Process Control**
+
 ```powershell
 # Re-enable indexing
 schtasks /change /tn "Microsoft\Windows\Shell\IndexerService" /enable
@@ -460,12 +498,14 @@ Start-Service -Name "SysMain"
 ```
 
 **Option 2: Restore All Settings**
+
 ```powershell
 # Restore from registry backup
 REG RESTORE HKLM\SYSTEM c:\backups\processes-backup.reg
 ```
 
 **Option 3: Re-enable Visual Effects**
+
 ```
 System Properties → Advanced → Performance Settings
   Check all boxes (Animations, Transparency, Shadows, etc.)
@@ -484,9 +524,11 @@ System Properties → Advanced → Performance Settings
 ---
 
 ## 5. VISUAL EFFECTS TUNING
+
 ### What It Does
 
 Visual effects are fancy visuals that make Windows look nice:
+
 - Smooth animations when opening windows
 - Transparent glass-like effects on taskbar and windows
 - Drop shadows on windows
@@ -510,6 +552,7 @@ Visual effects are fancy visuals that make Windows look nice:
 ### What Gets Optimized
 
 **Before Optimization:**
+
 ```
 ✓ All animations enabled
 ✓ Transparency effects ON
@@ -523,6 +566,7 @@ Visual effects are fancy visuals that make Windows look nice:
 ```
 
 **After Optimization:**
+
 ```
 ✓ Window animations reduced to essentials only
 ✓ Transparency OFF (performance gain, very visible change)
@@ -562,6 +606,7 @@ Win + Pause → Advanced system settings → Performance → Settings
 ### What It Changes
 
 **Registry Changes:**
+
 ```
 HKCU:\Control Panel\Desktop
   UserPreferencesMask: (bit field controlling 19 effects)
@@ -574,6 +619,7 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
 ```
 
 **Visual Result:**
+
 - Taskbar is now solid color instead of transparent
 - Windows open instantly instead of zooming/fading
 - Scrolling stops immediately instead of easing out
@@ -582,6 +628,7 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
 ### How To Undo It
 
 **Option 1: Restore Maximum Visual Effects**
+
 ```powershell
 # Manual method
 Win + Pause → Advanced system settings → Performance Settings
@@ -590,11 +637,13 @@ Win + Pause → Advanced system settings → Performance Settings
 ```
 
 **Option 2: Restore from Registry**
+
 ```powershell
 REG RESTORE HKCU\Control Panel c:\backups\visualeffects-backup.reg
 ```
 
 **Option 3: Individual Effect Toggle**
+
 ```powershell
 # Re-enable transparency
 Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" `
@@ -626,6 +675,7 @@ Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" `
 ---
 
 ## 6. NETWORK OPTIMIZATION
+
 ### What It Does
 
 Network optimization adjusts Windows TCP/IP settings to send and receive data faster over the internet and local network.
@@ -644,7 +694,7 @@ Network optimization adjusts Windows TCP/IP settings to send and receive data fa
 | **DNS Cache Size** | Limited | Expanded | Common websites load from cache instead of DNS lookup |
 | **MTU Size** | May be suboptimal | Auto-detect optimal | Reduces fragmentation and retransmission |
 
-### What It Does
+### Network Tuning Actions
 
 ```
 1. Enables TCP Window Scaling (larger packets)
@@ -669,6 +719,7 @@ Network optimization adjusts Windows TCP/IP settings to send and receive data fa
 ### Real-World Examples
 
 **Example 1: Downloading a 1 GB file**
+
 ```
 Before: 2 minutes 30 seconds
 After:  1 minute 15 seconds (50% faster!)
@@ -680,6 +731,7 @@ With enabled TCP Window Scaling:
 ```
 
 **Example 2: Web Browsing to Far-Away Server (e.g., Tokyo from USA)**
+
 ```
 Before: 150 ms latency, takes 3 retransmissions to download CSS file
 After:  150 ms latency, takes 1 transmission with smarter buffering
@@ -707,6 +759,7 @@ netsh int tcp set global rsc=enabled
 ### What It Changes
 
 **Registry Changes:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
   TcpWindowSize: 65535 (was 8192)
@@ -720,6 +773,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{...}
 ```
 
 **Windows Settings Changes:**
+
 ```
 Network card driver: Offload settings enabled
   - TCP/IP Checksum Offload
@@ -730,6 +784,7 @@ Network card driver: Offload settings enabled
 ### How To Undo It
 
 **Option 1: Reset to Windows Default**
+
 ```powershell
 # Disable TCP Window Scaling
 netsh int tcp set global autotuninglevel=disabled
@@ -742,6 +797,7 @@ netsh int tcp set global maxsynretransmissions=2
 ```
 
 **Option 2: Reset TCP Settings Completely**
+
 ```powershell
 # Reset all TCP/IP settings
 netsh int ip reset resetall.log
@@ -750,6 +806,7 @@ ipconfig /renew
 ```
 
 **Option 3: Restore from Registry Backup**
+
 ```powershell
 REG RESTORE HKLM\SYSTEM\CurrentControlSet\Services\Tcpip c:\backups\network-backup.reg
 ```
@@ -769,6 +826,7 @@ REG RESTORE HKLM\SYSTEM\CurrentControlSet\Services\Tcpip c:\backups\network-back
 ---
 
 ## 7. STORAGE OPTIMIZATION
+
 ### What It Does
 
 Storage optimization prepares your hard drive or SSD for better performance:
@@ -830,6 +888,7 @@ Disk Cleanup:
 ### What It Changes
 
 **Files Deleted:**
+
 ```
 C:\Users\ADMIN\AppData\Local\Temp\*         ← Deleted
 %windir%\Temp\*                             ← Deleted
@@ -839,6 +898,7 @@ Duplicate files (optional):                 ← Identified and listed
 ```
 
 **Disk Optimization:**
+
 ```
 Before: Files fragmented across disk
         Some files in 5-10 pieces
@@ -851,6 +911,7 @@ After:  Files contiguous where possible
 ```
 
 **Compression (Optional):**
+
 ```
 Before: C: drive 95% full (97 GB used of 100 GB)
 After:  C: drive 85% full (85 GB used, 10 GB compressed)
@@ -870,6 +931,7 @@ Performance: Minimal impact (a few milliseconds on access)
 ❌ **No need to undo** — fragmentation naturally returns over time as files change
 
 **Undo Compression:**
+
 ```powershell
 # Decompress a folder
 compact /u /s C:\ProgramFiles

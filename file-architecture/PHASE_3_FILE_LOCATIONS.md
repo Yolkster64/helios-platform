@@ -24,6 +24,7 @@ Phase 3 deploys the full HELIOS capability platform including the dashboard appl
 **Purpose**: Main HELIOS user interface and control center
 
 **Files Created**:
+
 ```
 C:\Program Files\HELIOS\Dashboard\
 ├── Dashboard.exe                       # Main application executable
@@ -108,6 +109,7 @@ C:\Program Files\HELIOS\Dashboard\
 **Size**: 200-300 MB with all modules
 
 **Examples**:
+
 ```
 C:\Program Files\HELIOS\Dashboard\Dashboard.exe
 C:\Program Files\HELIOS\Dashboard\Modules\AIConsole\AIConsole.dll
@@ -122,6 +124,7 @@ C:\Program Files\HELIOS\Dashboard\Modules\AIConsole\AIConsole.dll
 **Purpose**: Machine learning models for analysis and decision-making
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Capability\AI-Models\
 ├── Core-Models\
@@ -171,6 +174,7 @@ C:\ProgramData\HELIOS\Capability\AI-Models\
 ```
 
 **Model File Format**:
+
 - Binary ML models (TensorFlow, PyTorch, or custom format)
 - Size: 75-200 MB each (total ~800 MB - 1.5 GB)
 - Loaded into memory on startup
@@ -181,6 +185,7 @@ C:\ProgramData\HELIOS\Capability\AI-Models\
 **Size**: 1-1.5 GB total
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Capability\AI-Models\Core-Models\threat-detection-v4.1.model
 C:\ProgramData\HELIOS\Capability\AI-Models\Specialized-Models\Malware-Classifier\model.bin
@@ -196,6 +201,7 @@ C:\ProgramData\HELIOS\Capability\AI-Models\Data-Files\threat-definitions.db
 **Purpose**: System and analysis profile configurations
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Profiles\
 ├── System-Profiles\
@@ -241,6 +247,7 @@ C:\ProgramData\HELIOS\Capability\Profiles\
 ```
 
 **Profile JSON Structure**:
+
 ```json
 {
   "profile_name": "Enterprise-High-Security",
@@ -273,6 +280,7 @@ C:\ProgramData\HELIOS\Capability\Profiles\
 **Size**: ~10-50 KB per profile; total ~500 KB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Profiles\System-Profiles\Enterprise-High-Security.profile
 C:\ProgramData\HELIOS\Capability\Profiles\Analysis-Profiles\Deep-Analysis.profile
@@ -288,6 +296,7 @@ C:\ProgramData\HELIOS\Capability\Profiles\AI-Profiles\AI-Aggressive-Detection.pr
 **Purpose**: Automated workflow task definitions
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Workflows\
 ├── Built-In-Workflows\
@@ -337,6 +346,7 @@ C:\ProgramData\HELIOS\Capability\Workflows\
 ```
 
 **Workflow XML Structure Example**:
+
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <Workflow>
@@ -381,6 +391,7 @@ C:\ProgramData\HELIOS\Capability\Workflows\
 **Size**: ~10-100 KB per workflow; total ~2-5 MB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Workflows\Built-In-Workflows\Daily-Security-Scan.workflow
 C:\ProgramData\HELIOS\Capability\Workflows\Custom-Workflows\User-Workflow-1.workflow
@@ -396,6 +407,7 @@ C:\ProgramData\HELIOS\Capability\Workflows\Workflow-Metadata\workflows.json
 **Purpose**: Central analysis database storing all findings, history, and metadata
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Database\
 ├── master.db                           # Main database file
@@ -430,6 +442,7 @@ C:\ProgramData\HELIOS\Database\
 ```
 
 **Database Schema** (master.db):
+
 ```
 Tables:
 ├── threats_detected
@@ -519,6 +532,7 @@ Tables:
 **Size**: 100-500 MB (grows over time; archive old data)
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Database\master.db
 C:\ProgramData\HELIOS\Database\Backups\master-2024-01-15.db.backup
@@ -534,6 +548,7 @@ C:\ProgramData\HELIOS\Database\Archives\2024-01\master-2024-01-31.db
 **Purpose**: Generated analysis reports and insights
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Reports\
 ├── Daily-Reports\
@@ -587,6 +602,7 @@ C:\ProgramData\HELIOS\Capability\Reports\
 ```
 
 **Report Contents**:
+
 - Executive summary
 - Threat statistics
 - Performance metrics
@@ -601,6 +617,7 @@ C:\ProgramData\HELIOS\Capability\Reports\
 **Size**: 5-20 MB per report; directory ~500 MB - 2 GB
 
 **Examples**:
+
 ```
 C:\ProgramData\HELIOS\Capability\Reports\Daily-Reports\Daily-Report-2024-01-15.pdf
 C:\ProgramData\HELIOS\Capability\Reports\Weekly-Reports\Weekly-Report-2024-W03.pdf
@@ -616,6 +633,7 @@ C:\ProgramData\HELIOS\Capability\Reports\Incident-Reports\Incident-2024-01-15-00
 **Purpose**: AI system configuration and settings
 
 **Registry Keys**:
+
 ```
 HKLM:\Software\HELIOS\Capability\
 ├── AI-Settings\
@@ -663,6 +681,7 @@ HKLM:\Software\HELIOS\Capability\
 ```
 
 **Examples**:
+
 ```
 HKLM:\Software\HELIOS\Capability\AI-Settings\ActiveModel = "threat-detection-v4.1.model"
 HKLM:\Software\HELIOS\Capability\Analysis-Settings\DefaultProfile = "Enterprise-High-Security"
@@ -680,6 +699,7 @@ HKLM:\Software\HELIOS\Capability\Dashboard-Settings\UITheme = "Dark"
 **Purpose**: Phase 3 deployment and capability diagnostic logs
 
 **Files Created**:
+
 ```
 C:\ProgramData\HELIOS\Logs\
 ├── Phase3.log                          # Main Phase 3 log
@@ -780,6 +800,7 @@ C:\ProgramData\HELIOS\
 ## Next Steps
 
 After Phase 3 completes:
+
 - Dashboard operational
 - AI capabilities active
 - Automated workflows running

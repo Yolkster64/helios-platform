@@ -18,6 +18,7 @@ This is your guide to navigating all HELIOS documentation. Start at "Start Here"
 ## 📁 PHASE DOCUMENTATION
 
 ### Phase 0: Foundation (Fresh Install)
+
 Everything needed for fresh Windows install and setup.
 
 | Document | Purpose | When to Read |
@@ -29,6 +30,7 @@ Everything needed for fresh Windows install and setup.
 | [phases/0-foundation/TESTING_GUIDE.md](phases/0-foundation/TESTING_GUIDE.md) | How to verify Phase 0 worked | After Phase 0 |
 
 ### Phase 1: Security (Hardening)
+
 Everything needed to harden and protect your system.
 
 | Document | Purpose | When to Read |
@@ -41,6 +43,7 @@ Everything needed to harden and protect your system.
 | [phases/1-security/TESTING_GUIDE.md](phases/1-security/TESTING_GUIDE.md) | How to verify security is working | After Phase 1 |
 
 ### Phase 2: Optimization (Performance)
+
 Everything needed to speed up and optimize your system.
 
 | Document | Purpose | When to Read |
@@ -52,7 +55,8 @@ Everything needed to speed up and optimize your system.
 | [phases/2-optimization/SCRIPTS_INDEX.md](phases/2-optimization/SCRIPTS_INDEX.md) | All Phase 2 scripts with descriptions | During Phase 2 |
 | [phases/2-optimization/TESTING_GUIDE.md](phases/2-optimization/TESTING_GUIDE.md) | How to measure performance improvements | After Phase 2 |
 
-### Phase 3: Capability (Intelligence) 
+### Phase 3: Capability (Intelligence)
+
 Everything needed for AI and automation features.
 
 | Document | Purpose | When to Read |
@@ -121,7 +125,9 @@ Modular features you can add independently.
 | [components/ADVANCED_BORROWING_SCENARIOS.md](components/ADVANCED_BORROWING_SCENARIOS.md) | Complex borrowing examples | Advanced topic |
 
 ### Individual Component Documentation
+
 Each component has its own README:
+
 - [components/ai-dashboard/README.md](components/ai-dashboard/README.md) - AI-powered dashboard
 - [components/vault-dynamics/README.md](components/vault-dynamics/README.md) - Advanced encryption vault
 - [components/security-engine/README.md](components/security-engine/README.md) - Enhanced security
@@ -146,26 +152,31 @@ Simple language explanations of what each script does.
 ## 🔄 SPECIAL TOPICS
 
 ### For Beginners
+
 1. Start: [GETTING_STARTED.md](GETTING_STARTED.md)
 2. Read: [README.md](README.md)
 3. Choose phase: [phases/0-foundation/README.md](phases/0-foundation/README.md)
 
 ### For Security-Focused Users
+
 1. Start: [phases/1-security/README.md](phases/1-security/README.md)
 2. Plain English: [phases/1-security/PLAIN_ENGLISH_GUIDE.md](phases/1-security/PLAIN_ENGLISH_GUIDE.md)
 3. Deep dive: [phases/1-security/BEFORE_AND_AFTER.md](phases/1-security/BEFORE_AND_AFTER.md)
 
 ### For Performance-Focused Users
+
 1. Start: [phases/2-optimization/README.md](phases/2-optimization/README.md)
 2. Plain English: [phases/2-optimization/PLAIN_ENGLISH_GUIDE.md](phases/2-optimization/PLAIN_ENGLISH_GUIDE.md)
 3. Metrics: [tests/PERFORMANCE_METRICS.md](tests/PERFORMANCE_METRICS.md)
 
 ### For Advanced Users
+
 1. Component borrowing: [components/BORROWING_GUIDE.md](components/BORROWING_GUIDE.md)
 2. Custom builds: [components/ADVANCED_BORROWING_SCENARIOS.md](components/ADVANCED_BORROWING_SCENARIOS.md)
 3. File architecture: [file-architecture/FILE_BORROWING_GUIDE.md](file-architecture/FILE_BORROWING_GUIDE.md)
 
 ### For Troubleshooting
+
 1. Diagnostics: [tests/TROUBLESHOOTING_TESTS.md](tests/TROUBLESHOOTING_TESTS.md)
 2. Rollback: [tests/ROLLBACK_TESTING.md](tests/ROLLBACK_TESTING.md)
 3. Phase-specific: Look for README.md in specific phase folder
@@ -175,6 +186,7 @@ Simple language explanations of what each script does.
 ## 📖 Reading Paths by Goal
 
 ### Goal: Fresh Windows Install from Scratch
+
 ```
 GETTING_STARTED.md
   ↓
@@ -190,6 +202,7 @@ phases/0-foundation/TESTING_GUIDE.md
 ```
 
 ### Goal: Secure System
+
 ```
 phases/1-security/README.md
   ↓
@@ -205,6 +218,7 @@ phases/1-security/TESTING_GUIDE.md
 ```
 
 ### Goal: Fast Optimized System
+
 ```
 phases/2-optimization/README.md
   ↓
@@ -220,6 +234,7 @@ tests/PERFORMANCE_METRICS.md [measure again]
 ```
 
 ### Goal: Intelligent AI System
+
 ```
 phases/3-capability/README.md
   ↓
@@ -237,30 +252,35 @@ phases/3-capability/TESTING_GUIDE.md
 ## 🎓 Documentation Quality Levels
 
 ### Level 1: Beginner Documentation
+
 - Simple language
 - Lots of examples
 - Step-by-step
 - Files: README.md at each phase
 
 ### Level 2: Practical Documentation
+
 - Plain English explanations
 - What each script does
 - Before/after examples
 - Files: PLAIN_ENGLISH_GUIDE.md at each phase
 
 ### Level 3: Technical Documentation
+
 - Exact paths
 - Registry locations
 - File architecture
 - Files: FILE_ARCHITECTURE.md, REGISTRY_CHANGES.md
 
 ### Level 4: Reference Documentation
+
 - Complete listings
 - Compatibility matrices
 - Dependency graphs
 - Files: SCRIPTS_INDEX.md, COMPONENT_COMPATIBILITY_MATRIX.md
 
 ### Level 5: Advanced Documentation
+
 - Component borrowing
 - Custom builds
 - Troubleshooting
@@ -307,6 +327,7 @@ phases/3-capability/TESTING_GUIDE.md
 - **Master Documentation:** 3 files (README, GETTING_STARTED, this index)
 
 **Total:** 59 documentation files covering:
+
 - Plain English explanations
 - File locations
 - Testing procedures

@@ -1,6 +1,7 @@
 # Real-Time Coaching Recommendations for Phase 5-6 Code
 
 ## Overview
+
 This guide provides real-time coaching feedback for Phase 5-6 code generation. Each rule detects specific anti-patterns and provides actionable coaching suggestions.
 
 ---
@@ -8,7 +9,9 @@ This guide provides real-time coaching feedback for Phase 5-6 code generation. E
 ## Section 1: LINQ Query Coaching
 
 ### Coaching Rule 1.1: Multiple Materializations
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ RED FLAG: ToList() called multiple times
 var result = data.Where(x => condition).ToList().Where(x => another).ToList();
@@ -17,6 +20,7 @@ var filtered = result.Where(x => x.Status == "Open").ToList();
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Multiple Materializations Detected
 
@@ -53,7 +57,9 @@ Reference: LINQ_OPTIMIZATION_GUIDE.md - Pattern 2.2
 ---
 
 ### Coaching Rule 1.2: AsNoTracking Missing on Reads
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ RED FLAG: Loading data without AsNoTracking
 var reports = context.Reports.Where(r => r.Type == "Summary").ToList();
@@ -61,6 +67,7 @@ var userList = context.Users.AsQueryable();  // Change tracking enabled
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Change Tracking Overhead Detected
 
@@ -106,7 +113,9 @@ Reference: LINQ_OPTIMIZATION_GUIDE.md - Pattern 3.3
 ---
 
 ### Coaching Rule 1.3: Filter Before Projection
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ RED FLAG: Projects before filtering
 var expensive = context.Orders
@@ -116,6 +125,7 @@ var expensive = context.Orders
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Inefficient Filter Ordering
 
@@ -171,7 +181,9 @@ Reference: LINQ_OPTIMIZATION_GUIDE.md - Pattern 3.1
 ---
 
 ### Coaching Rule 1.4: N+1 Query Pattern
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ RED FLAG: Loop with query inside
 var customers = context.Customers.ToList();
@@ -186,6 +198,7 @@ foreach (var customer in customers)
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: N+1 Query Problem Detected
 
@@ -236,7 +249,9 @@ Reference: LINQ_OPTIMIZATION_GUIDE.md - Pattern 5.1, 5.2
 ---
 
 ### Coaching Rule 1.5: FirstOrDefault vs Single
+
 **Detection Pattern:**
+
 ```csharp
 // ⚠️ CAUTION: Using Single when First is appropriate
 var user = context.Users
@@ -245,6 +260,7 @@ var user = context.Users
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Inefficient Single Usage
 
@@ -291,7 +307,9 @@ Reference: LINQ_OPTIMIZATION_GUIDE.md - Pattern 4.11
 ## Section 2: C# Async/Await Coaching
 
 ### Coaching Rule 2.1: Blocked Async Code
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ CRITICAL: Using .Result on async method
 var result = asyncMethod().Result;
@@ -307,6 +325,7 @@ public List<Order> GetOrders()
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: CRITICAL - Blocked Async Code
 
@@ -361,7 +380,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 3.2
 ---
 
 ### Coaching Rule 2.2: Missing ConfigureAwait(false)
+
 **Detection Pattern:**
+
 ```csharp
 // ⚠️ LIBRARY CODE: Missing ConfigureAwait(false)
 public class OrderService
@@ -375,6 +396,7 @@ public class OrderService
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Library Code Optimization
 
@@ -426,7 +448,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 3.3
 ---
 
 ### Coaching Rule 2.3: Missing CancellationToken
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ Missing CancellationToken parameter
 public async Task<List<Order>> GetOrdersAsync()
@@ -442,6 +466,7 @@ public async Task ProcessAsync()
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Cancellation Support Missing
 
@@ -501,7 +526,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 3.5
 ## Section 3: C# Modernization Coaching
 
 ### Coaching Rule 3.1: Old Class Patterns
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ OLD: Manual DTO with boilerplate
 public class UserDto
@@ -517,6 +544,7 @@ public class UserDto
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Legacy DTO Pattern
 
@@ -569,7 +597,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 1.1
 ---
 
 ### Coaching Rule 3.2: No Dependency Injection
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ Manual instantiation
 public class OrderService
@@ -587,6 +617,7 @@ public class Cache
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Dependency Injection Missing
 
@@ -639,7 +670,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 2
 ---
 
 ### Coaching Rule 3.3: Nullable Warnings
+
 **Detection Pattern:**
+
 ```csharp
 // ⚠️ With Nullable enabled, this warns
 public string GetUserName(User user)
@@ -655,6 +688,7 @@ public void ProcessOrder(Order? order)
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Nullable Reference Type Warnings
 
@@ -713,7 +747,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 1.3
 ## Section 4: Code Organization Coaching
 
 ### Coaching Rule 4.1: Duplicate Code
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ Duplicated validation logic
 public User GetByEmail(string email)
@@ -732,6 +768,7 @@ public User GetByName(string name)
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Code Duplication Detected
 
@@ -791,7 +828,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 5.6
 ---
 
 ### Coaching Rule 4.2: Missing XML Documentation
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ No documentation
 public async Task<Order> GetOrderAsync(int id)
@@ -806,6 +845,7 @@ public void ProcessOrders(List<Order> orders, bool includeArchived)
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Missing Documentation
 
@@ -858,7 +898,9 @@ Reference: CSHARP_MODERNIZATION_GUIDE.md - Pattern 6
 ---
 
 ### Coaching Rule 4.3: Magic Numbers/Strings
+
 **Detection Pattern:**
+
 ```csharp
 // ❌ Magic numbers
 if (order.Amount > 1000)  // What's 1000?
@@ -874,6 +916,7 @@ if (customer.Status == "ACTIVE")  // Hardcoded
 ```
 
 **Coaching Response:**
+
 ```
 🎯 COACHING POINT: Magic Values
 
@@ -1016,26 +1059,31 @@ For each generated code file:
 ## Quick Reference: Common Issues
 
 **If score is 0-30:**
+
 - Check for CRITICAL patterns (Rule 2.1, 1.4)
 - Likely has .Result or N+1 queries
 - Review entire approach
 
 **If score is 31-50:**
+
 - Check for HIGH patterns (Rule 1.1, 1.2, 3.2)
 - Multiple materialization or DI issues
 - Significant refactoring needed
 
 **If score is 51-70:**
+
 - Check for MEDIUM patterns (Rule 1.5, 2.2, 3.1)
 - Mostly good, needs polish
 - Target improvements: docs, nullability
 
 **If score is 71-85:**
+
 - Check for LOW patterns (Rule 4.2, 4.3)
 - Good code, minor optimizations
 - Focus on documentation
 
 **If score is 86-100:**
+
 - Excellent code
 - Look for edge cases
 - Production ready

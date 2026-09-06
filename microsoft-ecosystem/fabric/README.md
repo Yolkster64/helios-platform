@@ -42,6 +42,7 @@ Analytics & Intelligence
 ### Event Streams
 
 Stream live data from:
+
 - Application logs and events
 - Sensor data and telemetry
 - User activity tracking
@@ -49,6 +50,7 @@ Stream live data from:
 - Security events and alerts
 
 **Example: System Monitoring Stream**
+
 ```
 Event Stream: HELIOS-System-Metrics
 ├── Source: Azure Monitor
@@ -66,6 +68,7 @@ Event Stream: HELIOS-System-Metrics
 ### Real-time Dashboards
 
 Monitor live KPIs:
+
 - System health status (green/yellow/red)
 - Current resource utilization
 - Real-time alert count
@@ -243,6 +246,7 @@ Calculated Measures:
 ### DirectLake
 
 Enable direct query on warehouse:
+
 - Query without copying data
 - Real-time data access
 - Cost efficient
@@ -253,6 +257,7 @@ Enable direct query on warehouse:
 ### Executive Dashboard (Updated: Real-time)
 
 KPIs displayed:
+
 - System availability (%)
 - Cost YTD vs budget
 - Security incidents (count)
@@ -262,6 +267,7 @@ KPIs displayed:
 ### Operational Dashboard (Updated: Hourly)
 
 Metrics tracked:
+
 - Resource utilization (CPU, memory, disk)
 - Database performance
 - API response times
@@ -271,6 +277,7 @@ Metrics tracked:
 ### Security Dashboard (Updated: Real-time)
 
 Monitors:
+
 - Failed login attempts
 - Policy violations
 - Data access anomalies
@@ -326,6 +333,7 @@ Monitors:
 ### Partition Strategy
 
 Partition large tables by:
+
 - Date (daily or monthly)
 - Region or geography
 - Organization or department
@@ -334,6 +342,7 @@ Partition large tables by:
 ### Aggregation Strategy
 
 Pre-compute aggregates:
+
 - Hourly rollups
 - Daily summaries
 - Monthly reports
@@ -342,6 +351,7 @@ Pre-compute aggregates:
 ### Indexing
 
 Create indexes on:
+
 - Fact table foreign keys
 - Common filter columns
 - Time dimension columns
@@ -349,6 +359,7 @@ Create indexes on:
 ## Cost Optimization
 
 Estimate monthly costs:
+
 ```
 Base capacity: 500 GB ($2,000)
 Per additional 100 GB: $400
@@ -358,6 +369,7 @@ Total Estimate: $2,600-3,000/month
 ```
 
 Cost reduction strategies:
+
 1. Use partitioning to reduce scans
 2. Archive old data to blob storage
 3. Use scheduled vs. on-demand queries

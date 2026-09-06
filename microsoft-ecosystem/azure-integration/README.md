@@ -70,16 +70,19 @@ Azure is the cloud infrastructure backbone for HELIOS Platform, providing scalab
 ### Key Features
 
 **1. Autoscaling**
+
 - Scale-set configuration for load-balanced VMs
 - Metrics-based scaling (CPU > 70%, Memory > 80%)
 - Schedule-based scaling (peak hours vs off-hours)
 
 **2. Availability**
+
 - Multi-AZ deployment across Azure availability zones
 - 99.99% uptime SLA
 - Automatic failover mechanisms
 
 **3. Disk Management**
+
 - OS Disk: Premium SSD (IOPS: 3,500, Throughput: 125 MB/s)
 - Data Disk: Premium SSD (configurable IOPS)
 - Snapshots for backup/recovery
@@ -139,6 +142,7 @@ Annual Savings: $25,280 (3-year RI plan)
 ### Cost Monitoring
 
 **Azure Cost Management Dashboard**
+
 - Monthly cost breakdown by resource
 - Budget alerts (threshold: $10,000/month)
 - Anomaly detection for unusual spending
@@ -183,6 +187,7 @@ $costs | Group-Object -Property MeterCategory |
 ### Backup Implementation
 
 **1. VM Backups**
+
 ```powershell
 # Create backup policy
 $policy = New-AzRecoveryServicesBackupProtectionPolicy `
@@ -200,6 +205,7 @@ Enable-AzRecoveryServicesBackupProtection `
 ```
 
 **2. Database Backups**
+
 ```powershell
 # SQL Database automated backups
 # Point-in-time restore: 7 days (Basic), 35 days (Standard/Premium)
@@ -214,6 +220,7 @@ Restore-AzSqlDatabase `
 ```
 
 **3. Storage Account Backups**
+
 ```powershell
 # Blob snapshots and versioning
 # Soft delete: 7-day retention
@@ -234,6 +241,7 @@ Restore-AzSqlDatabase `
 ### Azure Monitor Integration
 
 **Key Metrics Monitored**:
+
 - CPU Utilization (Alert: > 80%)
 - Memory Usage (Alert: > 85%)
 - Disk Read/Write (Alert: > 90% capacity)
@@ -243,6 +251,7 @@ Restore-AzSqlDatabase `
 ### Application Insights
 
 Application Insights tracks:
+
 - Request rates and response times
 - Exception tracking and debugging
 - Performance counters
@@ -265,6 +274,7 @@ $ikey = Get-AzApplicationInsights `
 ### Diagnostic Logging
 
 **Logs stored in**:
+
 - Azure Storage: Long-term retention
 - Log Analytics: Real-time analysis and queries
 - Event Hubs: Stream to third-party tools
@@ -292,16 +302,19 @@ AzureDiagnostics
 ### Security Features
 
 **1. Vulnerability Assessment**
+
 - Automated VM vulnerability scanning
 - Patch management recommendations
 - Compliance scoring
 
 **2. Threat Detection**
+
 - Behavioral analytics
 - Anomaly detection
 - Advanced threat protection
 
 **3. Compliance Monitoring**
+
 - CIS Benchmarks
 - PCI-DSS compliance
 - HIPAA/GDPR readiness checks
@@ -321,6 +334,7 @@ Get-AzSecurityRecommendation `
 ### Network Security
 
 **Network Security Groups (NSG)**
+
 ```
 Inbound Rules:
 ┌────────────────────────────────────────────┐

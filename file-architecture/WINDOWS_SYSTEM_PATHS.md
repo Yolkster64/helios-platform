@@ -5,15 +5,18 @@
 ### System Directories
 
 #### C:\Windows\System32\
+
 **Purpose**: 64-bit system binaries, drivers, and configuration files
 
 **HELIOS Usage**:
+
 - HELIOS system drivers → `C:\Windows\System32\drivers\`
 - HELIOS system services → `C:\Windows\System32\` (DLL/EXE files)
 - Firewall rules database → `C:\Windows\System32\drivers\etc\` (hosts, rules)
 - Event logs → `C:\Windows\System32\winevt\Logs\` (security, system, application)
 
 **Example Paths**:
+
 ```
 C:\Windows\System32\drivers\etc\hosts                    # Firewall/DNS rules
 C:\Windows\System32\winevt\Logs\Security.evtx           # Security event log
@@ -29,14 +32,17 @@ C:\Windows\System32\config\SYSTEM                        # System registry hive
 ---
 
 #### C:\Windows\SysWOW64\
+
 **Purpose**: 32-bit system binaries (compatibility layer on 64-bit Windows)
 
 **HELIOS Usage**:
+
 - 32-bit drivers → `C:\Windows\SysWOW64\drivers\`
 - 32-bit system services → `C:\Windows\SysWOW64\` (legacy components)
 - 32-bit AppLocker policies reference this
 
 **Example Paths**:
+
 ```
 C:\Windows\SysWOW64\drivers\etc\hosts                    # 32-bit hosts file
 C:\Windows\SysWOW64\drivers\                             # 32-bit device drivers
@@ -51,9 +57,11 @@ C:\Windows\SysWOW64\drivers\                             # 32-bit device drivers
 ### Application Directories
 
 #### C:\Program Files\ (64-bit Only)
+
 **Purpose**: 64-bit application binaries and resources
 
 **HELIOS Usage**:
+
 ```
 C:\Program Files\HELIOS\
 ├── Dashboard\                    # Dashboard application
@@ -79,9 +87,11 @@ C:\Program Files\HELIOS\
 ---
 
 #### C:\Program Files (x86)\ (32-bit Legacy)
+
 **Purpose**: 32-bit application binaries (if supporting legacy systems)
 
 **HELIOS Usage** (Optional):
+
 ```
 C:\Program Files (x86)\HELIOS\
 ├── Legacy-Components\           # 32-bit compatibility components
@@ -97,15 +107,18 @@ C:\Program Files (x86)\HELIOS\
 ### User Data Directories
 
 #### C:\Users\[USERNAME]\AppData\Local\
+
 **Purpose**: User-specific, machine-specific application data
 
 **Characteristics**:
+
 - Per-user, per-machine (not roamed)
 - Typically smaller, ephemeral data
 - Survives user account rename
 - **Does NOT sync** between machines
 
 **HELIOS Usage**:
+
 ```
 C:\Users\[USERNAME]\AppData\Local\HELIOS\
 ├── Vault\
@@ -124,6 +137,7 @@ C:\Users\[USERNAME]\AppData\Local\HELIOS\
 ```
 
 **Example Paths**:
+
 ```
 C:\Users\Administrator\AppData\Local\HELIOS\Vault\Vault.db
 C:\Users\jsmith\AppData\Local\HELIOS\Cache\ProfileCache.db
@@ -136,15 +150,18 @@ C:\Users\jsmith\AppData\Local\HELIOS\Cache\ProfileCache.db
 ---
 
 #### C:\Users\[USERNAME]\AppData\Roaming\
+
 **Purpose**: User-specific, machine-independent application data
 
 **Characteristics**:
+
 - Per-user (synced across machines on domain)
 - User preferences, settings, profiles
 - Persists through user account rename (file migration)
 - **CAN sync** between machines via roaming profiles
 
 **HELIOS Usage**:
+
 ```
 C:\Users\[USERNAME]\AppData\Roaming\HELIOS\
 ├── Profiles\
@@ -162,6 +179,7 @@ C:\Users\[USERNAME]\AppData\Roaming\HELIOS\
 ```
 
 **Example Paths**:
+
 ```
 C:\Users\Administrator\AppData\Roaming\HELIOS\Profiles\
 C:\Users\jsmith\AppData\Roaming\HELIOS\Settings\Dashboard.settings.xml
@@ -174,9 +192,11 @@ C:\Users\jsmith\AppData\Roaming\HELIOS\Settings\Dashboard.settings.xml
 ---
 
 #### C:\Users\[USERNAME]\Desktop\
+
 **Purpose**: User desktop shortcuts and files
 
 **HELIOS Usage**:
+
 ```
 C:\Users\[USERNAME]\Desktop\
 ├── HELIOS Dashboard.lnk          # Shortcut to Dashboard.exe
@@ -189,9 +209,11 @@ C:\Users\[USERNAME]\Desktop\
 ---
 
 #### C:\Users\[USERNAME]\AppData\Local\Temp\
+
 **Purpose**: Temporary files for current user
 
 **HELIOS Usage**:
+
 - Phase 2 cleanup operations manage this
 - Temporary analysis scratch files
 - Cache files from previous runs
@@ -203,9 +225,11 @@ C:\Users\[USERNAME]\Desktop\
 ---
 
 #### C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
+
 **Purpose**: Programs to run at user login
 
 **HELIOS Usage**:
+
 ```
 C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ├── HELIOS-Monitor.lnk           # Monitor service startup (Phase 2)
@@ -221,15 +245,18 @@ C:\Users\[USERNAME]\AppData\Roaming\Microsoft\Windows\Start Menu\Startup\
 ### System-Wide Data Directory
 
 #### C:\ProgramData\
+
 **Purpose**: System-wide application data accessible to all users
 
 **Characteristics**:
+
 - All-user accessible
 - System-level configuration
 - Persistent across reboots
 - Requires admin to modify
 
 **HELIOS Main Structure**:
+
 ```
 C:\ProgramData\HELIOS\
 ├── Foundation\                   # Phase 0 files
@@ -266,6 +293,7 @@ C:\ProgramData\HELIOS\
 ```
 
 **Example Paths**:
+
 ```
 C:\ProgramData\HELIOS\Security\Quarantine\             # Quarantined files
 C:\ProgramData\HELIOS\Capability\AI-Models\            # AI model files
@@ -282,9 +310,11 @@ C:\ProgramData\HELIOS\Logs\Phase3.log                  # Phase 3 operations log
 ### Temporary Directories
 
 #### C:\Windows\Temp\
+
 **Purpose**: System-wide temporary files
 
 **HELIOS Usage**:
+
 - Phase 2 cleanup operations target this
 - Temporary installation files during Phase 0
 - Diagnostic dumps
@@ -298,14 +328,17 @@ C:\ProgramData\HELIOS\Logs\Phase3.log                  # Phase 3 operations log
 ### System Temporary Directory
 
 #### %TEMP% Environment Variable
+
 **Purpose**: User-specific temporary directory
 
 **Resolves To**:
+
 ```
 C:\Users\[USERNAME]\AppData\Local\Temp\
 ```
 
 **HELIOS Usage**:
+
 - Temporary analysis files
 - Phase 2 cleanup manages this
 - Cache operations
@@ -321,6 +354,7 @@ C:\Users\[USERNAME]\AppData\Local\Temp\
 **Location**: `C:\Windows\System32\config\SYSTEM` (hive file)
 
 **HELIOS Usage**:
+
 ```
 HKLM:\Software\
 ├── Policies\Microsoft\Windows\
@@ -352,6 +386,7 @@ HKLM:\SYSTEM\
 **Location**: `C:\Users\[USERNAME]\NTUSER.DAT` (hive file)
 
 **HELIOS Usage**:
+
 ```
 HKCU:\Software\
 ├── HELIOS\

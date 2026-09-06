@@ -135,6 +135,7 @@
 ### Critical Files
 
 Files required for operation:
+
 - {{CRITICAL_FILE_1}}: {{CRITICAL_DESC_1}}
 - {{CRITICAL_FILE_2}}: {{CRITICAL_DESC_2}}
 - {{CRITICAL_FILE_3}}: {{CRITICAL_DESC_3}}
@@ -142,6 +143,7 @@ Files required for operation:
 ### Optional Files
 
 Can be removed:
+
 - {{OPTIONAL_FILE_1}}: {{OPTIONAL_DESC_1}}
 - {{OPTIONAL_FILE_2}}: {{OPTIONAL_DESC_2}}
 

@@ -22,12 +22,14 @@ The Developer Dashboard is a comprehensive tool for monitoring, analyzing, and o
 The Overview tab provides a quick snapshot of system health and key metrics.
 
 **Features:**
+
 - Real-time CPU, Memory, Disk, and Network metrics
 - Health status summary
 - Quick access to common operations
 - Auto-refreshing indicators
 
 **How to Use:**
+
 1. Open the Dashboard
 2. The Overview tab is selected by default
 3. View current system metrics in the upper section
@@ -39,12 +41,14 @@ The Overview tab provides a quick snapshot of system health and key metrics.
 Detailed performance metrics with historical trends and visualization.
 
 **Features:**
+
 - CPU and Memory usage graphs (60-minute history)
 - Peak usage tracking
 - Trend analysis with color indicators
 - Comparative analysis tools
 
 **How to Use:**
+
 1. Navigate to the Performance tab
 2. View the metric timeline graph
 3. Hover over graph points to see exact values
@@ -56,6 +60,7 @@ Detailed performance metrics with historical trends and visualization.
 Monitor and manage system processes with detailed metrics.
 
 **Features:**
+
 - List of top 20 processes by memory usage
 - CPU percentage per process
 - Thread count tracking
@@ -63,6 +68,7 @@ Monitor and manage system processes with detailed metrics.
 - Terminate process capability
 
 **How to Use:**
+
 1. Go to the Processes tab
 2. View the process list sorted by memory usage
 3. Click "Refresh" to update the list
@@ -76,6 +82,7 @@ Monitor and manage system processes with detailed metrics.
 View and filter system logs and events with search capability.
 
 **Features:**
+
 - Real-time log entries with timestamps
 - Severity filtering (ERROR, WARNING, INFO)
 - Full-text search capability
@@ -84,6 +91,7 @@ View and filter system logs and events with search capability.
 - Auto-scroll to latest entry
 
 **How to Use:**
+
 1. Navigate to Logs & Events tab
 2. Use the Filter dropdown to select log level
 3. Use the Search box for keyword search
@@ -99,6 +107,7 @@ Suite of tools for API testing, theme customization, and plugin development.
 Interactive REST/GraphQL API testing tool.
 
 **Features:**
+
 - Request builder (GET, POST, PUT, DELETE, PATCH)
 - JSON payload editor with syntax highlighting
 - Response viewer with formatting
@@ -106,6 +115,7 @@ Interactive REST/GraphQL API testing tool.
 - Export requests as cURL commands
 
 **How to Use:**
+
 1. Select "API Explorer" from the Tools tab
 2. Enter API endpoint URL
 3. Choose HTTP method from dropdown
@@ -118,6 +128,7 @@ Interactive REST/GraphQL API testing tool.
 Visual theme customization and export.
 
 **Features:**
+
 - Live color picker for theme colors
 - Real-time preview of color changes
 - Pre-built theme templates
@@ -125,6 +136,7 @@ Visual theme customization and export.
 - Import custom themes
 
 **How to Use:**
+
 1. Click on "Theme Builder"
 2. Click on color swatches to change colors
 3. See the preview update in real-time
@@ -136,12 +148,14 @@ Visual theme customization and export.
 Scaffolding tool for new plugin development.
 
 **Features:**
+
 - Multiple plugin templates (Basic, UI Widget, Service)
 - Automatic file generation
 - Dependency resolution
 - Ready-to-use project structure
 
 **How to Use:**
+
 1. Select "Plugin Generator"
 2. Enter your plugin name
 3. Choose a template
@@ -153,6 +167,7 @@ Scaffolding tool for new plugin development.
 Built-in performance profiling for optimization.
 
 **Features:**
+
 - Function call timing
 - Memory allocation tracking
 - Hot spot detection
@@ -160,6 +175,7 @@ Built-in performance profiling for optimization.
 - Export profiling data
 
 **How to Use:**
+
 1. Click "Start Profiling"
 2. Perform the operation you want to profile
 3. Click "Stop Profiling"
@@ -175,6 +191,7 @@ Advanced debugging and analysis tools.
 Analyze crash dumps from system processes.
 
 **Features:**
+
 - Automatic crash detection
 - Stack trace extraction
 - Exception type identification
@@ -182,6 +199,7 @@ Analyze crash dumps from system processes.
 - Multi-crash comparison
 
 **How to Use:**
+
 1. Go to Advanced tab
 2. Click "Analyze Crashes"
 3. View detected crash dumps
@@ -193,6 +211,7 @@ Analyze crash dumps from system processes.
 Identify performance issues and optimization opportunities.
 
 **Features:**
+
 - Memory allocation analysis
 - Garbage collection impact assessment
 - Thread contention detection
@@ -200,6 +219,7 @@ Identify performance issues and optimization opportunities.
 - Severity scoring
 
 **How to Use:**
+
 1. Click "Detect Bottlenecks"
 2. Review detected issues with severity
 3. Read recommendations for each issue
@@ -211,12 +231,14 @@ Identify performance issues and optimization opportunities.
 Visual representation of module and package dependencies.
 
 **Features:**
+
 - Dependency graph generation
 - Circular dependency detection
 - Version compatibility checking
 - Dependency health scoring
 
 **How to Use:**
+
 1. Click "Visualize Dependencies"
 2. View the interactive dependency graph
 3. Zoom and pan to explore relationships
@@ -228,6 +250,7 @@ Visual representation of module and package dependencies.
 Detailed memory allocation and garbage collection analysis.
 
 **Features:**
+
 - Memory snapshot comparison
 - Allocation tracking by type
 - GC pause time analysis
@@ -235,6 +258,7 @@ Detailed memory allocation and garbage collection analysis.
 - Historical comparison
 
 **How to Use:**
+
 1. Click "Start Memory Profiling"
 2. Perform operations to profile
 3. Click "Stop Memory Profiling"
@@ -246,6 +270,7 @@ Detailed memory allocation and garbage collection analysis.
 System event and execution trace analysis.
 
 **Features:**
+
 - Real-time event capture
 - Timeline visualization
 - Event filtering and search
@@ -253,6 +278,7 @@ System event and execution trace analysis.
 - Component interaction mapping
 
 **How to Use:**
+
 1. Click "Start Trace"
 2. Perform operations to trace
 3. Click "Stop Trace"
@@ -324,21 +350,25 @@ System event and execution trace analysis.
 ## Troubleshooting
 
 ### Dashboard Won't Load
+
 - Restart the application
 - Check system permissions
 - Verify .NET 6.0+ is installed
 
 ### Metrics Not Updating
+
 - Check "Auto-Refresh" is enabled
 - Click "Refresh" button manually
 - Check system resource availability
 
 ### Performance Tools Not Responding
+
 - Close and reopen the dashboard
 - Check for sufficient disk space
 - Verify administrative privileges
 
 ### Logs Not Showing
+
 - Click "Clear Filters"
 - Ensure log level is not set to highest
 - Check event log service is running
@@ -395,6 +425,7 @@ dashboard.RegisterWidget(
 Extensions can add new tabs, tools, or features.
 
 **Extension Structure:**
+
 ```
 MyExtension/
 ├── MyExtensionViewModel.cs
@@ -406,6 +437,7 @@ MyExtension/
 ```
 
 **manifest.json:**
+
 ```json
 {
   "id": "my-extension",
@@ -462,6 +494,7 @@ MyExtension/
 ## Version History
 
 ### v3.6.0 (Current)
+
 - Initial release
 - 6 main tabs with 15+ sub-features
 - 35+ test coverage

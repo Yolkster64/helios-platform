@@ -7,7 +7,9 @@
 ### 1. **Security Validation Framework** (3 C# Core Files)
 
 #### SecurityValidator.cs (509 lines)
+
 Main validation engine providing executable security checks:
+
 - **ValidateBootkitSignatures()** - Reads and validates bootkit stage files (stage1, stage2, loader, manifest)
 - **ValidateEncryption()** - Tests AES-256 encryption/decryption cycle end-to-end
 - **ValidateUpdateSignatures()** - Verifies cryptographic signatures on update packages
@@ -16,6 +18,7 @@ Main validation engine providing executable security checks:
 - Export audit results to file
 
 #### SecurityAuditChecklist.cs (740 lines)
+
 Defines and implements 10-item security audit checklist:
 
 | # | Check | Implementation |
@@ -32,13 +35,16 @@ Defines and implements 10-item security audit checklist:
 | 10 | **4-Tier Firmware Validation** | Verifies BIOS/VTL0/Kernel/Runtime signatures |
 
 Each check returns `ValidationResult` with:
+
 - `Passed`: bool (check passed/failed)
 - `Score`: int (0-100)
 - `Details`: string (specific findings)
 - `Category`: string (security domain)
 
 #### ValidationResult.cs (75 lines)
+
 Framework data structures:
+
 - **ValidationResult**: Single check result (name, score, details, category, timestamp)
 - **AuditResults**: Aggregated metrics (total/passed/failed counts, overall score, timing)
 
@@ -63,6 +69,7 @@ Test Coverage:
 | **TOTAL** | **29** | **✅ ALL PASS** |
 
 **Test Highlights**:
+
 - All checklist items execute successfully
 - Bootkit signatures validated (positive & negative cases)
 - AES-256 encryption test verifies cryptographic implementation
@@ -79,6 +86,7 @@ Test Coverage:
 ### 4. **Complete Documentation** (SECURITY_VALIDATION_FRAMEWORK.md - 412 lines)
 
 Comprehensive guide covering:
+
 - Framework architecture and components
 - How to use the framework (basic & advanced)
 - How to run tests (`dotnet test`)
@@ -94,6 +102,7 @@ Comprehensive guide covering:
 ## Build & Compilation Results
 
 ### Security Validator Build
+
 ```
 Build succeeded.
     0 Error(s)
@@ -102,6 +111,7 @@ Build succeeded.
 ```
 
 ### Tests Build
+
 ```
 Build succeeded.
     0 Error(s)
@@ -109,6 +119,7 @@ Build succeeded.
 ```
 
 ### Unit Test Results
+
 ```
 Test run for C:\helios-platform\tests\bin\Debug\net8.0\SecurityValidationTests.dll
 Total tests: 29
@@ -147,27 +158,33 @@ Duration: 1.0 seconds
 ### ✅ Security Controls Validated
 
 **Firmware Level**:
+
 - UEFI Secure Boot enabled
 - 4-tier firmware signature validation
 - TPM 2.0 sealing
 
 **Encryption Level**:
+
 - BitLocker full-disk encryption
 - AES-256 cryptographic implementation
 
 **Network Security**:
+
 - Windows Firewall strict mode
 - TLS 1.3 minimum enforcement
 - Network lockdown during boot
 
 **Access Control**:
+
 - Local-only authentication on boot
 - No network credentials accepted at boot
 
 **Endpoint Protection**:
+
 - Windows Defender/Malwarebytes active
 
 **Audit & Monitoring**:
+
 - Verbose audit logging enabled
 - All security events captured
 
@@ -195,6 +212,7 @@ TOTAL: 2,565 lines of production-quality code
 **Commit**: `bb87e9f` (main branch)
 
 **Message**:
+
 ```
 Security: v2.5.1 Validation framework - executable security checks
 
@@ -210,6 +228,7 @@ All tests passing. Build successful. Ready for production use.
 ## How to Use the Framework
 
 ### Quick Start: Run Full Audit
+
 ```csharp
 var validator = new SecurityValidator();
 var results = validator.RunFullAudit();
@@ -217,6 +236,7 @@ Console.WriteLine(results.ToString());
 ```
 
 ### Output Example
+
 ```
 === SECURITY AUDIT REPORT ===
 Audit Time: 2026-04-23 15:45:30 UTC
@@ -233,6 +253,7 @@ Failed: 2/16
 ```
 
 ### Run Specific Validation
+
 ```csharp
 var validator = new SecurityValidator();
 var bootkit = validator.ValidateBootkitSignatures();
@@ -240,12 +261,14 @@ var encryption = validator.ValidateEncryption();
 ```
 
 ### Run Unit Tests
+
 ```bash
 cd C:\helios-platform\tests
 dotnet test SecurityValidationTests.csproj
 ```
 
 ### Export Full Report
+
 ```csharp
 var validator = new SecurityValidator();
 var results = validator.RunFullAudit();
@@ -292,9 +315,10 @@ validator.ExportAuditResults(results, @"C:\Audit_Report_2026-04-23.txt");
 
 ## Conclusion
 
-The Security Validation Framework for Monado Blade v2.5.1 is **complete, tested, and production-ready**. 
+The Security Validation Framework for Monado Blade v2.5.1 is **complete, tested, and production-ready**.
 
 The framework provides:
+
 - **Executable validation** of 10 critical security controls
 - **Real-time checks** against system registry and files
 - **Comprehensive testing** with 29 passing unit tests

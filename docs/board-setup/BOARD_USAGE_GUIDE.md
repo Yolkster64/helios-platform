@@ -12,18 +12,21 @@
 ### First Week Checklist
 
 **Day 1: Access & Orientation**
+
 - [ ] Access GitHub Projects board
 - [ ] Review BOARD_SETUP_COMPLETION_SUMMARY.md
 - [ ] Explore all 6 views
 - [ ] Understand your role
 
 **Day 2: Learn Your Workflow**
+
 - [ ] Review your component's column (By Component view)
 - [ ] Understand issue flow (By Status view)
 - [ ] Check My Work view
 - [ ] Understand priority levels
 
 **Day 3: Create First Issue**
+
 - [ ] Create test issue in your component
 - [ ] Apply labels correctly
 - [ ] Set custom fields
@@ -31,12 +34,14 @@
 - [ ] Close with PR
 
 **Day 4: Work with Team**
+
 - [ ] Pair with teammate
 - [ ] Review their workflow
 - [ ] Ask questions
 - [ ] Share tips you've learned
 
 **Day 5: Full Participation**
+
 - [ ] Independently manage your issues
 - [ ] Help new team members
 - [ ] Contribute to board improvements
@@ -48,6 +53,7 @@
 ### How to Create an Issue on the Board
 
 **Step 1: Create in Repository**
+
 ```
 1. Go to repository
 2. Click Issues tab
@@ -57,6 +63,7 @@
 ```
 
 **Step 2: Add to Project Board**
+
 ```
 1. Click Projects (top right of issue)
 2. Add to "HELIOS Platform" board
@@ -64,6 +71,7 @@
 ```
 
 **Step 3: Configure Custom Fields**
+
 ```
 1. In project view, click issue
 2. Fill in custom fields on right panel:
@@ -77,6 +85,7 @@
 ```
 
 **Step 4: Add Labels (Triggers Automation)**
+
 ```
 1. Back in GitHub issue
 2. Click Labels
@@ -107,6 +116,7 @@ Method 2: From Board
 ### How to Update Issue Fields
 
 **Update Priority:**
+
 ```
 1. Open issue in project view
 2. In right panel, find Priority field
@@ -116,6 +126,7 @@ Method 2: From Board
 ```
 
 **Update Component:**
+
 ```
 1. Find Component field
 2. Click to open dropdown
@@ -125,6 +136,7 @@ Method 2: From Board
 ```
 
 **Update Status Phase:**
+
 ```
 1. Find Status Phase field
 2. Click dropdown
@@ -134,6 +146,7 @@ Method 2: From Board
 ```
 
 **Update Effort Estimate:**
+
 ```
 1. Find Effort Estimate field
 2. Click dropdown
@@ -144,6 +157,7 @@ Method 2: From Board
 ### How to Move Between Columns
 
 **In By Status View (Classic Workflow):**
+
 ```
 Drag & Drop Method:
 1. Find issue card in current column
@@ -157,6 +171,7 @@ Backlog → Todo → In Progress → Review → Done
 ```
 
 **Automatic Movement (via PR):**
+
 ```
 1. Create PR linked to issue
 2. PR created → Auto moves to In Progress
@@ -168,6 +183,7 @@ Backlog → Todo → In Progress → Review → Done
 ### How to Use Filters
 
 **Filter by Component (Show my component only):**
+
 ```
 1. Open board
 2. Click Filter icon
@@ -177,6 +193,7 @@ Backlog → Todo → In Progress → Review → Done
 ```
 
 **Filter by Priority (Focus on critical):**
+
 ```
 1. Click Filter
 2. Add: Priority = Critical OR Priority = High
@@ -185,6 +202,7 @@ Backlog → Todo → In Progress → Review → Done
 ```
 
 **Filter by Assignee (See my work):**
+
 ```
 1. Click Filter
 2. Add: Assigned = [Your Name]
@@ -192,6 +210,7 @@ Backlog → Todo → In Progress → Review → Done
 ```
 
 **Complex Filters:**
+
 ```
 Show all Phase 2 work assigned to me that's in progress:
 Filter: Status Phase = Phase 2
@@ -202,6 +221,7 @@ Filter: Status Phase = Phase 2
 ### How to Link PRs to Issues
 
 **In PR Description:**
+
 ```
 Title: Fix: Dark mode toggle bug
 
@@ -213,12 +233,14 @@ This PR implements the dark mode toggle feature.
 ```
 
 **System Auto-Detects:**
+
 1. Reads "Fixes #456"
 2. Finds issue #456
 3. Links PR and issue
 4. Updates issue: In Progress (Rule 2)
 
 **Manual Linking (if needed):**
+
 ```
 1. Open issue
 2. Scroll to comments
@@ -230,6 +252,7 @@ This PR implements the dark mode toggle feature.
 ### How to Create Sub-Tasks
 
 **For Large Issues:**
+
 ```
 1. Create parent issue
 2. In description, include:
@@ -285,6 +308,7 @@ End of Day (5:00 PM):
 ### Estimation Best Practices
 
 **Story Points:**
+
 ```
 1 point = 1-2 hours of work
 2 points = 0.5-1 day of work
@@ -443,11 +467,13 @@ Scenario: Feature needs UI + Backend
 ### Issue Not Appearing on Board
 
 **Check:**
+
 1. Is issue added to project? (Check Projects tab on issue)
 2. Is view filtering it out? (Check active filters)
 3. Is view showing correct columns? (Check view settings)
 
 **Fix:**
+
 1. Click issue → Projects → Add to HELIOS Platform
 2. Remove or modify filters
 3. Reset view or try different view
@@ -455,11 +481,13 @@ Scenario: Feature needs UI + Backend
 ### Status Not Updating
 
 **Check:**
+
 1. Is PR linked correctly? (Check issue comments)
 2. Is PR merged? (Check PR status)
 3. Are automation rules active? (Check Actions logs)
 
 **Fix:**
+
 1. Link PR manually in issue comments
 2. Verify PR is merged (not just approved)
 3. Manually move if automation failed
@@ -467,11 +495,13 @@ Scenario: Feature needs UI + Backend
 ### Custom Fields Not Populating
 
 **Check:**
+
 1. Did you apply labels? (phase-*, component-*)
 2. Are labels spelled correctly? (case-sensitive)
 3. Is automation rule running?
 
 **Fix:**
+
 1. Apply labels (triggers Rule 1)
 2. Check label spelling
 3. Manually fill fields if needed
@@ -480,11 +510,13 @@ Scenario: Feature needs UI + Backend
 ### Can't Assign to Team Member
 
 **Check:**
+
 1. Is person a collaborator? (Check repo settings)
 2. Have they accepted invitation?
 3. Is field accepting this value?
 
 **Fix:**
+
 1. Add person as collaborator first
 2. Have them accept invitation
 3. Try again
@@ -536,17 +568,20 @@ By Phase: high-level-view
 ### Getting Help
 
 **For Board Questions:**
+
 - Check this guide first
 - Search GitHub Discussions
 - Ask in #project-board Slack channel
 - Tag @board-admin in issue
 
 **For Technical Issues:**
+
 - Check GitHub status page
 - File issue in DevOps repo
 - Contact @devops-team
 
 **For Process Questions:**
+
 - Ask @project-manager
 - Check team wikis
 - Consult component lead
@@ -562,6 +597,7 @@ By Phase: high-level-view
 ---
 
 **Document Control:**
+
 - Version: 1.0
 - Last Updated: 2026-04-13
 - Audience: All Team Members

@@ -1,4 +1,5 @@
 # NUGET-GITHUB-PAGES INTEGRATION GUIDE
+
 **HELIOS Platform - Complete Release & Documentation Automation**
 
 **Document Version:** 1.0
@@ -105,6 +106,7 @@ Manual Effort: ~5 minutes (create tag + review release)
 ### 2.1 Package Creation Process
 
 **Workflow Trigger:**
+
 ```yaml
 name: Create Release & Publish NuGet
 on:
@@ -114,6 +116,7 @@ on:
 ```
 
 **Build & Package Steps:**
+
 ```
 1. Checkout Repository (1 min)
    - Clone with full history
@@ -148,6 +151,7 @@ on:
 ### 2.2 Package Configuration
 
 **NuGet Package Metadata:**
+
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -228,6 +232,7 @@ All auto-verified at build time
 ### 2.4 Package Publishing
 
 **Publish to NuGet.org:**
+
 ```powershell
 # Configuration
 $nugetApiKey = $env:NUGET_API_KEY
@@ -245,6 +250,7 @@ dotnet package search "Helios.Platform" --exact
 ```
 
 **Internal Feed Publishing (optional):**
+
 ```powershell
 # Publish to private feed
 dotnet nuget push ./nupkgs/*.nupkg `
@@ -253,6 +259,7 @@ dotnet nuget push ./nupkgs/*.nupkg `
 ```
 
 **Publishing Verification:**
+
 ```
 Verification Checklist:
 ✓ Package uploaded successfully
@@ -272,6 +279,7 @@ Verification Checklist:
 ### 3.1 Release Automation
 
 **Automatic Release Generation:**
+
 ```powershell
 # Create GitHub release with release notes
 # Triggered after NuGet publish succeeds
@@ -328,6 +336,7 @@ Invoke-RestMethod `
 ### 3.2 Release Assets
 
 **Assets Attached to Release:**
+
 ```
 Release Assets:
 
@@ -357,6 +366,7 @@ Release Assets:
 ### 4.1 Pages Build Trigger
 
 **Automatic Trigger on Release:**
+
 ```yaml
 name: Pages Update on Release
 on:
@@ -400,6 +410,7 @@ jobs:
 ### 4.2 Pages Content Regeneration
 
 **Updated Pages Content:**
+
 ```
 pages/
 ├─ index.html
@@ -419,6 +430,7 @@ pages/
 ```
 
 **Installation Guide Auto-Update:**
+
 ```markdown
 # Installation Guide
 
@@ -432,18 +444,22 @@ dotnet add package Helios.Platform --version 1.2.3
 ```
 
 ### Direct Download
+
 [Download Helios Platform 1.2.3](https://www.nuget.org/packages/Helios.Platform/1.2.3/)
 
 ### System Requirements
+
 - .NET 7.0 or higher
 - 100MB disk space
 - Windows/Linux/macOS
 
 ### Installation Steps
+
 1. Download the package
 2. Extract to installation directory
 3. Run setup script
 4. Configure settings
+
 ```
 
 ---
@@ -453,6 +469,7 @@ dotnet add package Helios.Platform --version 1.2.3
 ### 5.1 Multi-Source Version Tracking
 
 ```
+
 Version Sources to Sync:
 
 1. Git Tag
@@ -495,6 +512,7 @@ Version Sources to Sync:
    Version: API v1.2.3
    Update: Automatic (code extraction)
    Automation: DocFX generator
+
 ```
 
 ### 5.2 Synchronization Verification
@@ -547,36 +565,46 @@ dotnet add package Helios.Platform --version {{LATEST_VERSION}}
 ```
 
 ### Option 2: Direct Download
+
 [Download {{LATEST_VERSION}}](https://www.nuget.org/packages/Helios.Platform/{{LATEST_VERSION}}/)
 
 ### Option 3: GitHub Release
+
 [Release {{LATEST_VERSION}}](https://github.com/helios/platform/releases/tag/v{{LATEST_VERSION}})
 
 ## Installation Steps
 
 {{#IF_MAJOR_VERSION_CHANGE}}
+
 ### Breaking Changes Alert ⚠️
+
 This major version has breaking changes. See [Migration Guide](./migration-{{MAJOR_VERSION}}.md)
 {{/IF_MAJOR_VERSION_CHANGE}}
 
 {{#IF_SECURITY_UPDATE}}
+
 ### Security Update 🔒
+
 This version includes important security fixes. Please update immediately.
 {{/IF_SECURITY_UPDATE}}
 
 {{#FOR_EACH_REQUIREMENT}}
+
 - {{REQUIREMENT}}
 {{/FOR_EACH_REQUIREMENT}}
 
 ## Changelog
+
 {{CHANGELOG_EXCERPT}}
 
 [View full changelog](./changelog.md)
 
 ## Support
+
 - Documentation: {{DOC_URL}}
 - Issues: {{GITHUB_ISSUES_URL}}
 - Discussions: {{GITHUB_DISCUSSIONS_URL}}
+
 ```
 
 ### 6.2 Template Substitution

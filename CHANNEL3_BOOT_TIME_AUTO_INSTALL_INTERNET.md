@@ -1,4 +1,5 @@
 # Channel 3: Boot-Time Internet Auto-Download & Auto-Install
+
 ## Monado Blade v2.5.0 - Complete System Setup with Latest Software
 
 ---
@@ -31,6 +32,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 ```
 
 **What happens:**
+
 - Network card drivers already loaded
 - WiFi/Ethernet adapter auto-detects
 - Connects to available network
@@ -93,6 +95,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 ```
 
 **Development Environment Ready:**
+
 - ✅ Python 3.11 with ML libraries (NumPy, SciPy, TensorFlow, PyTorch)
 - ✅ Node.js 18 with popular npm packages
 - ✅ .NET 8.0 for C# development
@@ -170,6 +173,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 | **Total** | **10 drivers** | **2.025 GB** |
 
 **All drivers are:**
+
 - ✅ Latest versions from vendors
 - ✅ Digitally signed
 - ✅ Security-patched
@@ -214,6 +218,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 | **Total** | **16.15 GB** | **6 providers + plugins** |
 
 **Benefits:**
+
 - ✅ Offline AI capabilities (no internet needed for inference)
 - ✅ Private computation (data stays local)
 - ✅ Lightning-fast response times
@@ -271,6 +276,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 ```
 
 **Installation Strategy:**
+
 - ✅ Parallel installation of 20+ components simultaneously
 - ✅ No dependencies = install in parallel
 - ✅ Dependencies respected = sequential where needed
@@ -374,6 +380,7 @@ Channel 3 Boot-Time Automation now includes **full internet connectivity** to:
 ### Network Speeds & Total Time
 
 **Fast Network (100+ Mbps):**
+
 ```
 SDKs Download:       2.8 GB @ 100 Mbps =  ~4 min
 Razer Software:      1.075 GB @ 100 Mbps = ~1.5 min
@@ -388,6 +395,7 @@ TOTAL BOOT-TO-READY: ~20-25 minutes
 ```
 
 **Moderate Network (50 Mbps):**
+
 ```
 SDKs:                ~8 min
 Razer:               ~3 min
@@ -399,6 +407,7 @@ TOTAL: ~30-35 minutes (AI models cache in background)
 ```
 
 **Fallback (USB Only, No Internet):**
+
 ```
 Uses all components from USB
 No AI model download
@@ -411,6 +420,7 @@ Limited to pre-cached models
 ## 🎯 KEY FEATURES
 
 ### Complete System Setup
+
 - ✅ 8 SDKs (Python, Node, .NET, Java, Go, Rust, Ruby, PHP)
 - ✅ Razer software suite (Synapse, Chroma, THX)
 - ✅ 10 hardware drivers (latest versions)
@@ -419,6 +429,7 @@ Limited to pre-cached models
 - ✅ All security updates & patches
 
 ### Zero Configuration
+
 - ✅ No user download prompts
 - ✅ No installation wizards
 - ✅ No driver dialogs
@@ -426,6 +437,7 @@ Limited to pre-cached models
 - ✅ All automatic and silent
 
 ### Security Throughout
+
 - ✅ HTTPS-only downloads (TLS 1.3)
 - ✅ Cryptographic signature verification
 - ✅ SSL certificate validation
@@ -433,6 +445,7 @@ Limited to pre-cached models
 - ✅ Malware scanning on all downloads
 
 ### Intelligent Fallback
+
 - ✅ If internet unavailable → uses USB components
 - ✅ If download fails → retry automatically
 - ✅ If single source slow → multi-source parallel
@@ -443,6 +456,7 @@ Limited to pre-cached models
 ## 📊 WHAT GETS INSTALLED
 
 ### Development Environment
+
 ```
 ✅ Python 3.11 (with NumPy, SciPy, TensorFlow, PyTorch)
 ✅ Node.js 18 (with npm packages)
@@ -455,6 +469,7 @@ Limited to pre-cached models
 ```
 
 ### Razer Ecosystem
+
 ```
 ✅ Synapse 3 (device management, macros, profiles)
 ✅ Chroma RGB (per-key lighting, effects)
@@ -465,6 +480,7 @@ Limited to pre-cached models
 ```
 
 ### Hardware Drivers
+
 ```
 ✅ WiFi: Intel AX210 (WiFi 6E)
 ✅ Bluetooth: Intel AX210 BT
@@ -477,6 +493,7 @@ Limited to pre-cached models
 ```
 
 ### Monado Blade Core
+
 ```
 ✅ HELIOS Platform (150 MB)
 ✅ AI Orchestration (120 MB)
@@ -486,6 +503,7 @@ Limited to pre-cached models
 ```
 
 ### AI Models & Inference
+
 ```
 ✅ Claude Base Model (4.2 GB offline capable)
 ✅ GPT-4 Embeddings (800 MB)

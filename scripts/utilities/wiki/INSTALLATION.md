@@ -3,6 +3,7 @@
 ## ✅ Installation Complete
 
 All wiki generation utilities have been successfully created in:
+
 ```
 C:\Users\ADMIN\helios-platform\scripts\utilities\wiki\
 ```
@@ -80,6 +81,7 @@ C:\Users\ADMIN\helios-platform\scripts\utilities\wiki\
 ### Database Schema
 
 **wiki.db.sql** (7.7 KB)
+
 - 9 comprehensive tables
 - 24 performance-optimized indexes
 - 5 pre-built database views
@@ -102,17 +104,20 @@ C:\Users\ADMIN\helios-platform\scripts\utilities\wiki\
 ## 🚀 Quick Start
 
 ### 1. Initialize Database
+
 ```powershell
 cd C:\Users\ADMIN\helios-platform\scripts\utilities\wiki
 .\setup-wiki.ps1
 ```
 
 ### 2. Generate Wiki
+
 ```powershell
 .\wiki-orchestrate.ps1 -Action full
 ```
 
 This will:
+
 - Scan all source directories
 - Extract metadata
 - Generate 5-level documentation
@@ -121,6 +126,7 @@ This will:
 - Map dependencies
 
 ### 3. Search the Wiki
+
 ```powershell
 .\wiki-search.ps1 -Query "keyword"
 .\wiki-search.ps1 -SearchType orphaned
@@ -128,6 +134,7 @@ This will:
 ```
 
 ### 4. View Reports
+
 ```powershell
 .\check-cross-references.ps1 -GenerateReport
 # Check: docs/cross-reference-report.md
@@ -197,6 +204,7 @@ The wiki generates documentation at 5 levels:
 ## 🤝 Integration
 
 These utilities integrate with:
+
 - **Build System** - Via build-wiki-integration.ps1
 - **CI/CD Pipeline** - Can run in automated workflows
 - **Documentation Sites** - Generates markdown for static site generators

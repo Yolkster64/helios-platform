@@ -48,17 +48,20 @@ Q{{Q3_YEAR}} ┌─────────────────┐  Q{{Q4_YE
 **Focus:** {{RELEASED_FOCUS_1}}
 
 **Features:**
+
 - ✓ {{RELEASED_FEATURE_1}}: {{RELEASED_FEATURE_1_DESC}}
 - ✓ {{RELEASED_FEATURE_2}}: {{RELEASED_FEATURE_2_DESC}}
 - ✓ {{RELEASED_FEATURE_3}}: {{RELEASED_FEATURE_3_DESC}}
 - ✓ {{RELEASED_FEATURE_4}}: {{RELEASED_FEATURE_4_DESC}}
 
 **Improvements:**
+
 - {{IMPROVEMENT_1}}
 - {{IMPROVEMENT_2}}
 - {{IMPROVEMENT_3}}
 
 **Metrics:**
+
 - {{METRIC_1}}: {{VALUE_1}}
 - {{METRIC_2}}: {{VALUE_2}}
 
@@ -69,6 +72,7 @@ Q{{Q3_YEAR}} ┌─────────────────┐  Q{{Q4_YE
 **Focus:** {{RELEASED_FOCUS_2}}
 
 **Key Changes:**
+
 - ✓ {{RELEASED_FEATURE_5}}
 - ✓ {{RELEASED_FEATURE_6}}
 - ✓ {{RELEASED_FEATURE_7}}
@@ -90,11 +94,13 @@ Q{{Q3_YEAR}} ┌─────────────────┐  Q{{Q4_YE
 - 🔄 {{IN_PROGRESS_4}}: {{IN_PROGRESS_4_DESC}} ({{IN_PROGRESS_4_PERCENT}}%)
 
 **Recent Milestones:**
+
 - ✓ {{MILESTONE_1}}: Completed {{MILESTONE_1_DATE}}
 - ✓ {{MILESTONE_2}}: Completed {{MILESTONE_2_DATE}}
 - → {{NEXT_MILESTONE}}: Expected {{NEXT_MILESTONE_DATE}}
 
 **Current Blockers:**
+
 - {{BLOCKER_1}}: {{BLOCKER_1_DESC}} (Impact: {{BLOCKER_1_IMPACT}})
 - {{BLOCKER_2}}: {{BLOCKER_2_DESC}} (Impact: {{BLOCKER_2_IMPACT}})
 
@@ -122,6 +128,7 @@ Q{{Q3_YEAR}} ┌─────────────────┐  Q{{Q4_YE
   - Owner: {{OWNER_3}}
 
 **Infrastructure Work:**
+
 - {{INFRA_1}}: {{INFRA_1_DESC}}
 - {{INFRA_2}}: {{INFRA_2_DESC}}
 
@@ -149,11 +156,13 @@ Q{{Q3_YEAR}} ┌─────────────────┐  Q{{Q4_YE
 ### {{YEAR_2}} Vision
 
 **Key Themes:**
+
 - {{THEME_Y2_1}}: {{THEME_Y2_1_DESC}}
 - {{THEME_Y2_2}}: {{THEME_Y2_2_DESC}}
 - {{THEME_Y2_3}}: {{THEME_Y2_3_DESC}}
 
 **Major Projects:**
+
 - {{PROJECT_Y2_1}}: Expected in {{PROJECT_Y2_1_TIMELINE}}
 - {{PROJECT_Y2_2}}: Expected in {{PROJECT_Y2_2_TIMELINE}}
 

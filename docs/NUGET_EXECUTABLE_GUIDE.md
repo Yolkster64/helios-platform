@@ -90,6 +90,7 @@ cd C:\Users\ADMIN\helios-platform
 ### 1. NuGet Package (`HELIOS.Platform.1.0.0.nupkg`)
 
 **What's Inside:**
+
 - Multi-framework support (.NET 6.0, 7.0, 8.0)
 - Main assembly: `HELIOS.Platform.dll`
 - Symbol files for debugging: `HELIOS.Platform.pdb`
@@ -97,10 +98,12 @@ cd C:\Users\ADMIN\helios-platform
 - Complete API documentation
 
 **Published To:**
+
 - https://www.nuget.org/packages/HELIOS.Platform/
 - https://www.nuget.org/api/v2/package/HELIOS.Platform
 
 **Dependencies:**
+
 - Azure.Identity (1.10.0+)
 - Azure.ResourceManager.Storage (1.6.0+)
 - Microsoft.Extensions.Logging (8.0.0+)
@@ -109,12 +112,14 @@ cd C:\Users\ADMIN\helios-platform
 ### 2. Standalone Executable (`HELIOS.Platform.exe`)
 
 **What's Inside:**
+
 - Self-contained console application
 - No .NET runtime required
 - All components bundled
 - ~50MB total size (single-file deployment)
 
 **Features:**
+
 - Interactive menu system
 - Command-line interface
 - Real-time progress tracking
@@ -124,6 +129,7 @@ cd C:\Users\ADMIN\helios-platform
 ### 3. Windows Installer (`setup/Install.bat` or `Install.ps1`)
 
 **What's Inside:**
+
 - Batch installer for Windows
 - PowerShell installer for Windows
 - Creates installation directory
@@ -131,12 +137,14 @@ cd C:\Users\ADMIN\helios-platform
 - Registers shortcuts
 
 **Installation Path:**
+
 - Default: `C:\Program Files\HELIOS.Platform`
 - Customizable during installation
 
 ### 4. Demo Applications
 
 **Included Demos:**
+
 1. **Demo1_BasicUsage.cs** - Simple deployment and monitoring
 2. **Demo2_ComponentIntegration.cs** - Access all 7 components
 3. **Demo3_MultiTierDeployment.cs** - Multi-tier deployment scenarios
@@ -216,41 +224,48 @@ foreach ($server in $servers) {
 ## 📊 Component Overview - 7 Integrated Components
 
 ### 1. **Monado Engine**
+
 - Core performance optimization
 - System resource management
 - Performance metrics collection
 
 ### 2. **Security System**
+
 - Windows security hardening
 - Threat landscape analysis
 - Security policy application
 - Event log integration
 
 ### 3. **AI Orchestrator**
+
 - Intelligent automation
 - Deployment orchestration
 - Query processing
 - Model management
 
 ### 4. **GUI Dashboard**
+
 - Real-time monitoring
 - Metrics visualization
 - Status updates
 - Interactive controls
 
 ### 5. **Build Agents**
+
 - CI/CD pipeline management
 - Build execution
 - Agent deployment
 - Build result tracking
 
 ### 6. **DevAI Hub**
+
 - AI-assisted development
 - Code recommendations
 - Collaboration features
 - Development insights
 
 ### 7. **Software Stack**
+
 - Dependency management
 - Software provisioning
 - Stack configuration
@@ -321,12 +336,14 @@ set HELIOS_AUTO_UPDATE=true
 ## 📈 Deployment Tiers
 
 ### Standard Tier
+
 - Basic component initialization
 - Standard security policies
 - Essential monitoring
 - Ideal for: Development environments
 
 ### Professional Tier
+
 - All components fully initialized
 - Advanced security hardening
 - Comprehensive monitoring
@@ -334,6 +351,7 @@ set HELIOS_AUTO_UPDATE=true
 - Ideal for: Production environments
 
 ### Enterprise Tier
+
 - Full feature set
 - Enterprise security policies
 - Advanced AI orchestration
@@ -346,6 +364,7 @@ set HELIOS_AUTO_UPDATE=true
 ## ✅ Verification Checklist
 
 ### Pre-Deployment
+
 - [ ] .NET 6.0 or later installed
 - [ ] Administrator privileges available
 - [ ] Network connectivity verified
@@ -353,6 +372,7 @@ set HELIOS_AUTO_UPDATE=true
 - [ ] Sufficient disk space available (~500MB)
 
 ### Post-Deployment
+
 - [ ] All 7 components initialized successfully
 - [ ] No error messages in logs
 - [ ] Platform validation passing
@@ -360,6 +380,7 @@ set HELIOS_AUTO_UPDATE=true
 - [ ] All metrics displaying correctly
 
 ### Post-Installation
+
 - [ ] Executable in PATH
 - [ ] Start Menu shortcuts working
 - [ ] Environment variables set
@@ -371,6 +392,7 @@ set HELIOS_AUTO_UPDATE=true
 ## 🐛 Troubleshooting
 
 ### Issue: "Platform validation failed"
+
 ```powershell
 # Check system requirements
 Get-ComputerInfo | Select-Object -Property OSName, OSVersion
@@ -383,6 +405,7 @@ dotnet package list HELIOS.Platform
 ```
 
 ### Issue: "Cannot find HELIOS.Platform.exe"
+
 ```powershell
 # Verify PATH is set correctly
 $env:PATH -split ';' | Select-String 'HELIOS'
@@ -393,6 +416,7 @@ $path = [Environment]::GetEnvironmentVariable("PATH")
 ```
 
 ### Issue: "Deployment stuck"
+
 ```powershell
 # Check deployment status
 HELIOS.Platform.exe status
@@ -405,6 +429,7 @@ HELIOS.Platform.exe undeploy
 ```
 
 ### Issue: "Azure authentication failed"
+
 ```powershell
 # Verify Azure credentials
 az login
@@ -444,15 +469,18 @@ az account set --subscription "your-subscription-id"
 ## 📞 Support & Resources
 
 ### Documentation
+
 - **API Reference:** `HELIOS.Platform\API_REFERENCE.md`
 - **Deployment Guide:** `docs\DEPLOYMENT_GUIDE.md`
 - **Contributing:** `CONTRIBUTION_GUIDE.md`
 
 ### Reporting Issues
+
 - **GitHub Issues:** https://github.com/M0nado/helios-platform/issues
 - **NuGet Page:** https://www.nuget.org/packages/HELIOS.Platform/
 
 ### Community
+
 - **GitHub Discussions:** https://github.com/M0nado/helios-platform/discussions
 - **Project Board:** https://github.com/orgs/M0nado/projects/
 
@@ -461,6 +489,7 @@ az account set --subscription "your-subscription-id"
 ## 📝 Version History
 
 ### v1.0.0 (Current - 2024)
+
 - ✓ Complete 7-component ecosystem
 - ✓ Multi-framework support (.NET 6.0, 7.0, 8.0)
 - ✓ Standalone executable deployment
@@ -470,6 +499,7 @@ az account set --subscription "your-subscription-id"
 - ✓ Demo applications
 
 ### Planned Features
+
 - [ ] Web dashboard UI
 - [ ] Docker container support
 - [ ] Kubernetes orchestration
@@ -483,6 +513,7 @@ az account set --subscription "your-subscription-id"
 This project is licensed under the MIT License - see LICENSE.md for details.
 
 **Quick License Summary:**
+
 - ✓ Commercial use allowed
 - ✓ Modification allowed
 - ✓ Distribution allowed

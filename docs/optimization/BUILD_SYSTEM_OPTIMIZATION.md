@@ -9,6 +9,7 @@
 This guide provides strategies to optimize the HELIOS Platform build system, reducing compilation time by 45-50% and improving developer productivity.
 
 **Key Targets:**
+
 - ✅ Full rebuild: 18 min → 9-10 min (45-50%)
 - ✅ Incremental build: 12 min → 5-6 min (50-60%)
 - ✅ NuGet restore: 5 min → 1.5-2 min (65-70%)
@@ -109,6 +110,7 @@ Write-Host "All frameworks built in parallel"
 ```
 
 **Time Analysis:**
+
 ```
 Sequential: 8 × 3 = 24 minutes
 Parallel:   8 minutes
@@ -212,6 +214,7 @@ dotnet restore --locked-mode
 ```
 
 **Cache Optimization:**
+
 ```
 First restore:     5 minutes
 Cached restore:    30 seconds
@@ -270,6 +273,7 @@ foreach ($framework in $buildCache.Keys) {
 ```
 
 **Size Reduction:**
+
 ```
 Before trimming:     95 MB
 After trimming:      52 MB
@@ -310,6 +314,7 @@ public partial class HeliosConfiguration {
 ```
 
 **Package Size Optimization:**
+
 ```
 Current:     45 MB (.nupkg)
 Optimized:   25 MB (.nupkg)
@@ -409,6 +414,7 @@ Write-Host "Average build time: $([math]::Round($average/60, 2)) minutes"
 ## 8. Implementation Checklist
 
 ### Phase 1: Configuration (30 min)
+
 - [ ] Update HELIOS.Platform.csproj
 - [ ] Enable parallel compilation
 - [ ] Configure tiered compilation
@@ -416,6 +422,7 @@ Write-Host "Average build time: $([math]::Round($average/60, 2)) minutes"
 - [ ] Expected improvement: 25%
 
 ### Phase 2: Caching (1 hour)
+
 - [ ] Setup NuGet cache
 - [ ] Configure build cache
 - [ ] Verify cache hits
@@ -423,6 +430,7 @@ Write-Host "Average build time: $([math]::Round($average/60, 2)) minutes"
 - [ ] Expected improvement: 35%
 
 ### Phase 3: Trimming (1-2 hours)
+
 - [ ] Enable assembly trimming
 - [ ] Test trimmed assemblies
 - [ ] Verify functionality
@@ -430,6 +438,7 @@ Write-Host "Average build time: $([math]::Round($average/60, 2)) minutes"
 - [ ] Expected improvement: 10%
 
 ### Phase 4: Optimization (1-2 hours)
+
 - [ ] Run performance analysis
 - [ ] Identify slow projects
 - [ ] Apply optimizations

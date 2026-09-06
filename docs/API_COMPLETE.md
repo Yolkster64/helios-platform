@@ -11,6 +11,7 @@ The HELIOS Platform provides comprehensive APIs for integrating with all core se
 Routes all API requests, handles authentication, and applies rate limiting.
 
 **Key Methods**:
+
 - `RouteRequestAsync(APIRequest)` - Route request to handler
 - `AuthenticateAsync(username, password, claims)` - Get JWT token
 - `ApplyRateLimitAsync(clientId, config)` - Set rate limits
@@ -18,6 +19,7 @@ Routes all API requests, handles authentication, and applies rate limiting.
 - `ClearCacheAsync(pattern)` - Clear response cache
 
 **Example**:
+
 ```csharp
 var gateway = serviceProvider.GetRequiredService<IAPIGateway>();
 var response = await gateway.RouteRequestAsync(new APIRequest 
@@ -32,6 +34,7 @@ var response = await gateway.RouteRequestAsync(new APIRequest
 Implements publish-subscribe pattern for domain events.
 
 **Key Methods**:
+
 - `PublishAsync(DomainEvent)` - Publish single event
 - `PublishBatchAsync(List<DomainEvent>)` - Publish multiple events
 - `SubscribeAsync(eventType, handler)` - Subscribe to events
@@ -39,6 +42,7 @@ Implements publish-subscribe pattern for domain events.
 - `ReplayEventsAsync(eventType, handler)` - Replay events
 
 **Example**:
+
 ```csharp
 var eventBus = serviceProvider.GetRequiredService<IEventBus>();
 await eventBus.PublishAsync(new DomainEvent 
@@ -54,6 +58,7 @@ await eventBus.PublishAsync(new DomainEvent
 Manages plugin lifecycle and marketplace operations.
 
 **Key Methods**:
+
 - `DiscoverPluginsAsync(searchTerm)` - Find plugins
 - `InstallPluginAsync(pluginId, version)` - Install plugin
 - `UninstallPluginAsync(pluginId)` - Remove plugin
@@ -64,6 +69,7 @@ Manages plugin lifecycle and marketplace operations.
 Manages user sessions and authentication state.
 
 **Key Methods**:
+
 - `CreateSessionAsync(userId, credentials)` - Create session
 - `InvalidateSessionAsync(sessionId)` - Logout user
 - `GetCurrentUserAsync(sessionId)` - Get user info
@@ -74,6 +80,7 @@ Manages user sessions and authentication state.
 Sends notifications via multiple channels.
 
 **Key Methods**:
+
 - `SendEmailAsync(userId, subject, body)` - Send email
 - `SendPushAsync(deviceId, title, message)` - Send push notification
 - `SendSmsAsync(phoneNumber, message)` - Send SMS
@@ -94,11 +101,13 @@ Sends notifications via multiple channels.
 ## Rate Limiting
 
 All API endpoints respect rate limiting via headers:
+
 - `X-RateLimit-Limit`: Maximum requests allowed
 - `X-RateLimit-Remaining`: Requests remaining in window
 - `X-RateLimit-Reset`: Unix timestamp when limit resets
 
 **Default Quotas**:
+
 - Basic: 60 req/min
 - Professional: 1,000 req/min
 - Enterprise: 10,000 req/min
@@ -106,6 +115,7 @@ All API endpoints respect rate limiting via headers:
 ## Versioning
 
 API follows semantic versioning (MAJOR.MINOR.PATCH):
+
 - `/api/v1` - Current version
 - `/api/v2` - Future version
 

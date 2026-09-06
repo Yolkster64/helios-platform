@@ -10,6 +10,7 @@
    - Configure profile and API keys
 
 2. **Local Setup**
+
    ```powershell
    # Install nuget CLI (if not already installed)
    choco install nuget.commandline
@@ -63,16 +64,19 @@ nuget pack src/HELIOS.Platform/HELIOS.Platform.csproj -OutputDirectory dist -Ver
 ### Step 4: Configure API Key
 
 **Option A: Configure Globally**
+
 ```powershell
 nuget setApiKey Your-API-Key-Here
 ```
 
 **Option B: Configure Per-Command**
+
 ```powershell
 $apiKey = "Your-API-Key-Here"
 ```
 
 **Option C: Use NuGet.Config**
+
 ```xml
 <!-- Create %APPDATA%\NuGet\NuGet.Config -->
 <?xml version="1.0" encoding="utf-8"?>
@@ -89,6 +93,7 @@ $apiKey = "Your-API-Key-Here"
 ### Step 5: Publish Package
 
 **Using dotnet CLI (Recommended)**
+
 ```powershell
 dotnet nuget push dist/HELIOS.Platform.1.0.0.nupkg `
     --api-key $apiKey `
@@ -96,6 +101,7 @@ dotnet nuget push dist/HELIOS.Platform.1.0.0.nupkg `
 ```
 
 **Using nuget CLI**
+
 ```powershell
 nuget push dist/HELIOS.Platform.1.0.0.nupkg `
     -ApiKey $apiKey `
@@ -103,6 +109,7 @@ nuget push dist/HELIOS.Platform.1.0.0.nupkg `
 ```
 
 **Using PowerShell with Authentication**
+
 ```powershell
 $headers = @{
     "X-NuGet-ApiKey" = $apiKey
@@ -117,11 +124,13 @@ Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package" `
 ### Step 6: Verify Publication
 
 **Wait for Processing**
+
 - Processing typically takes 1-5 minutes
 - Package will appear on NuGet.org dashboard
 - Full indexing may take up to 1 hour
 
 **Check Status**
+
 ```powershell
 # Online
 https://www.nuget.org/packages/HELIOS.Platform/
@@ -134,6 +143,7 @@ Find-Package HELIOS.Platform -Source NuGet
 ```
 
 **Test Installation**
+
 ```powershell
 # Create test project
 dotnet new console -n TestHelios
@@ -152,6 +162,7 @@ dotnet run
 ## 📋 Publishing Checklist
 
 ### Pre-Publication
+
 - [ ] Version number correct (1.0.0)
 - [ ] CHANGELOG.md updated
 - [ ] README.md reviewed
@@ -164,6 +175,7 @@ dotnet run
 - [ ] Security review completed
 
 ### Publication
+
 - [ ] .nupkg file created
 - [ ] Package size verified (~100MB)
 - [ ] API key configured
@@ -172,6 +184,7 @@ dotnet run
 - [ ] No error messages
 
 ### Post-Publication
+
 - [ ] Package appears on NuGet.org
 - [ ] Package searchable (search for "HELIOS.Platform")
 - [ ] Installation works: `dotnet add package HELIOS.Platform`
@@ -204,6 +217,7 @@ v2.0.0 → Breaking changes
 ### Publishing Updates
 
 **Update Version Number**
+
 ```xml
 <!-- In HELIOS.Platform.csproj -->
 <PropertyGroup>
@@ -212,6 +226,7 @@ v2.0.0 → Breaking changes
 ```
 
 **Update CHANGELOG**
+
 ```markdown
 # Changelog
 
@@ -228,6 +243,7 @@ v2.0.0 → Breaking changes
 ```
 
 **Build and Publish**
+
 ```powershell
 .\build.ps1 -All
 dotnet nuget push dist/HELIOS.Platform.1.0.1.nupkg --api-key $apiKey
@@ -240,6 +256,7 @@ dotnet nuget push dist/HELIOS.Platform.1.0.1.nupkg --api-key $apiKey
 ### Setup Internal Feed (Azure Artifacts)
 
 **Create Feed in Azure DevOps**
+
 ```
 1. Go to Azure DevOps Organization
 2. Click "Artifacts"
@@ -250,6 +267,7 @@ dotnet nuget push dist/HELIOS.Platform.1.0.1.nupkg --api-key $apiKey
 ```
 
 **Get Connection String**
+
 ```powershell
 # In Azure DevOps Artifacts
 # Click "Connect to feed" → .NET Core
@@ -259,6 +277,7 @@ $internalFeed = "https://pkgs.dev.azure.com/YOUR-ORG/_packaging/HELIOS/nuget/v3/
 ```
 
 **Publish to Internal Feed**
+
 ```powershell
 dotnet nuget push dist/HELIOS.Platform.1.0.0.nupkg `
     --api-key AzureArtifacts `
@@ -268,6 +287,7 @@ dotnet nuget push dist/HELIOS.Platform.1.0.0.nupkg `
 ### Setup Internal Feed (ProGet)
 
 **Install ProGet**
+
 ```powershell
 # Download from https://inedo.com/proget/download
 # Or use Docker
@@ -275,6 +295,7 @@ docker run -p 8080:80 inedo/proget
 ```
 
 **Configure Feed**
+
 ```
 1. Go to http://localhost:8080
 2. Create new feed named "HELIOS"
@@ -283,6 +304,7 @@ docker run -p 8080:80 inedo/proget
 ```
 
 **Publish to ProGet Feed**
+
 ```powershell
 $progetFeed = "http://proget.internal/nuget/HELIOS"
 
@@ -346,6 +368,7 @@ dotnet restore --use-lock-file
 ### Track Downloads
 
 **Via NuGet.org Dashboard**
+
 ```
 https://www.nuget.org/packages/HELIOS.Platform/
 Dashboard shows:
@@ -355,6 +378,7 @@ Dashboard shows:
 ```
 
 **Via API**
+
 ```powershell
 # Get package statistics
 $statsUri = "https://api.nuget.org/v3/stats/packages/download"
@@ -363,6 +387,7 @@ $result | ConvertTo-Json
 ```
 
 **Via PowerShell**
+
 ```powershell
 # Check latest version
 Find-Package HELIOS.Platform -Source NuGet
@@ -441,17 +466,20 @@ dotnet nuget push dist/*.nupkg `
 ## 📚 Additional Resources
 
 ### NuGet Documentation
+
 - **Creating Packages:** https://learn.microsoft.com/en-us/nuget/create-packages/creating-a-package
 - **Publishing:** https://learn.microsoft.com/en-us/nuget/nuget-org/publish-a-package
 - **Versioning:** https://learn.microsoft.com/en-us/nuget/concepts/package-versioning
 - **Metadata:** https://learn.microsoft.com/en-us/nuget/reference/nuspec
 
 ### Best Practices
+
 - **Package Naming:** https://docs.microsoft.com/en-us/nuget/create-packages/package-naming-conventions
 - **Semantic Versioning:** https://semver.org/
 - **nuspec Reference:** https://learn.microsoft.com/en-us/nuget/reference/nuspec
 
 ### Tools
+
 - **NuGet Package Explorer:** https://github.com/NuGetPackageExplorer/NuGetPackageExplorer
 - **Package Search:** https://www.nuget.org/packages/
 - **API Explorer:** https://api.nuget.org/v3/index.json
@@ -461,6 +489,7 @@ dotnet nuget push dist/*.nupkg `
 ## 🎯 Multi-Platform Publishing Strategy
 
 ### Phase 1: NuGet.org (Public)
+
 ```
 ✓ Publish to NuGet.org for public consumption
 ✓ Enable community feedback and contributions
@@ -469,6 +498,7 @@ dotnet nuget push dist/*.nupkg `
 ```
 
 ### Phase 2: Internal Feed (Corporate)
+
 ```
 ✓ Mirror on internal NuGet feed
 ✓ Ensure availability for enterprise deployments
@@ -477,6 +507,7 @@ dotnet nuget push dist/*.nupkg `
 ```
 
 ### Phase 3: GitHub Releases (Artifacts)
+
 ```
 ✓ Publish executable as GitHub Release
 ✓ Include release notes and changelog
@@ -485,6 +516,7 @@ dotnet nuget push dist/*.nupkg `
 ```
 
 ### Phase 4: Docker Registry (Optional)
+
 ```
 ✓ Publish containerized version
 ✓ Enable Kubernetes deployments
@@ -497,18 +529,21 @@ dotnet nuget push dist/*.nupkg `
 ## 📋 Post-Publication Tasks
 
 ### Documentation Updates
+
 - [ ] Update website with new version
 - [ ] Post release announcement
 - [ ] Update GitHub releases page
 - [ ] Announce on community channels
 
 ### Support Readiness
+
 - [ ] Monitor GitHub issues
 - [ ] Track bug reports
 - [ ] Prepare hotfix if needed
 - [ ] Update support documentation
 
 ### Analytics
+
 - [ ] Track download statistics
 - [ ] Analyze usage patterns
 - [ ] Collect user feedback

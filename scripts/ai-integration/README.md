@@ -72,21 +72,25 @@ cd chatgpt-pro
 ### ChatGPT Pro
 
 **sync-with-chatgpt.ps1** - Initialize and sync configurations
+
 ```powershell
 .\sync-with-chatgpt.ps1 [-DryRun] [-Verbose]
 ```
 
 **get-ai-suggestions.ps1** - Get optimization suggestions
+
 ```powershell
 .\get-ai-suggestions.ps1 -FocusArea {performance|caching|dependencies|security|all}
 ```
 
 **validate-with-ai.ps1** - Validate configurations
+
 ```powershell
 .\validate-with-ai.ps1 -ConfigPath ./build-config.json [-StrictMode]
 ```
 
 **document-with-chatgpt.ps1** - Generate documentation
+
 ```powershell
 .\document-with-chatgpt.ps1 -DocumentType {guide|reference|troubleshooting|all}
 ```
@@ -94,21 +98,25 @@ cd chatgpt-pro
 ### Codex
 
 **generate-code-snippets.ps1** - Generate code
+
 ```powershell
 .\generate-code-snippets.ps1 -Description "parallel build runner" -Language powershell
 ```
 
 **refactor-with-codex.ps1** - Analyze and refactor
+
 ```powershell
 .\refactor-with-codex.ps1 -FilePath ./build.ps1
 ```
 
 **test-with-codex.ps1** - Generate tests
+
 ```powershell
 .\test-with-codex.ps1 -CodeFile ./build.ps1 -TestFramework pester
 ```
 
 **document-with-codex.ps1** - Generate documentation
+
 ```powershell
 .\document-with-codex.ps1 -FilePath ./build.ps1
 ```
@@ -116,32 +124,38 @@ cd chatgpt-pro
 ### AI Coordination
 
 **detect-ai-conflicts.ps1** - Find conflicts
+
 ```powershell
 .\detect-ai-conflicts.ps1 -RecommendationFiles @('./rec1.json', './rec2.json')
 ```
 
 **resolve-ai-conflicts.ps1** - Resolve conflicts
+
 ```powershell
 .\resolve-ai-conflicts.ps1 -ConflictFile ./conflicts.json
 ```
 
 **track-ai-modifications.ps1** - Track changes
+
 ```powershell
 .\track-ai-modifications.ps1 -Action summary
 .\track-ai-modifications.ps1 -Action record -ChangeDescription "..." -ApprovalStatus pending
 ```
 
 **approve-ai-changes.ps1** - Approve changes
+
 ```powershell
 .\approve-ai-changes.ps1 -RecommendationFile ./recommendations.json
 ```
 
 **view-ai-version-history.ps1** - View history
+
 ```powershell
 .\view-ai-version-history.ps1 [-Filter {all|pending|approved|rejected}]
 ```
 
 **rollback-ai-change.ps1** - Rollback modifications
+
 ```powershell
 .\rollback-ai-change.ps1 -ModificationId abc123def456 [-DryRun]
 ```

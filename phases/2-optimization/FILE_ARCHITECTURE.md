@@ -1,4 +1,5 @@
 # HELIOS Phase 2: File Architecture & Registry Paths
+
 ## Where Optimization Settings Live
 
 This document maps out every file and registry location that Phase 2 touches. Use this to understand what gets changed, where to find backups, and how to manually verify changes.
@@ -59,16 +60,19 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\
 ### Startup Folder
 
 **Location:**
+
 ```
 C:\Users\ADMIN\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
 ```
 
 **What Happens:**
+
 - Shortcuts here automatically run when user logs in
 - Phase 2 removes unnecessary shortcuts (OneDrive, Cortana, etc.)
 - Each shortcut = 2-5 seconds to boot time
 
 **Shortcuts Removed (Examples):**
+
 ```
 OneDrive.lnk                    ← Cloud sync startup
 Cortana.lnk                     ← Voice assistant startup
@@ -78,6 +82,7 @@ ZoomLauncher.lnk                ← Zoom app (if installed)
 ```
 
 **How to Restore Manually:**
+
 ```powershell
 # Recreate OneDrive startup
 Copy-Item "C:\Program Files\Microsoft OneDrive\OneDrive.exe" `
@@ -87,28 +92,34 @@ Copy-Item "C:\Program Files\Microsoft OneDrive\OneDrive.exe" `
 ### Temporary Files Folders
 
 #### Windows Temp Folder
+
 ```
 C:\Windows\Temp\
 ```
+
 - Contains temporary files created by Windows and system processes
 - Safe to delete entirely (rebuilds automatically)
 - Typically contains: log files, crash dumps, temporary installers
 - Phase 2 deletes all files here
 
 #### User Temp Folder
+
 ```
 C:\Users\ADMIN\AppData\Local\Temp\
 ```
+
 - Contains temporary files created by applications
 - Safe to delete entirely (applications recreate when needed)
 - Typically contains: browser caches, installer temps, app logs
 - Phase 2 deletes all files here (except those in use)
 
 #### Update Installation Temp
+
 ```
 C:\$Windows.~BT\
 C:\$Windows.~LS\
 ```
+
 - Temporary folders from Windows Update installation
 - Only safe to delete if older than 30 days (no active updates)
 - Can contain: Downloaded updates, installation media
@@ -119,17 +130,20 @@ C:\$Windows.~LS\
 ### Recycle Bin
 
 **Location:**
+
 ```
 C:\$Recycle.Bin\
 ```
 
 **Behavior:**
+
 - Usually hidden folder
 - Contains files deleted by users (recoverable until emptied)
 - Phase 2 empties this folder
 - Files here count toward used disk space
 
 **To View:**
+
 ```powershell
 # Show hidden files
 Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" `
@@ -139,6 +153,7 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer
 ```
 
 **Restoration:**
+
 - Files cannot be restored after permanent deletion
 - This is by design; recycle bin is for "trash"
 
@@ -151,6 +166,7 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer
 #### Services Configuration
 
 **Base Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\
 ```
@@ -170,6 +186,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\
 | Spooler | `Services\Spooler` | Printing | Must re-enable to print |
 
 **Actual Registry Location Examples:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\DiagTrack
   └─ Start: 2 (AutoStart) → 4 (Disabled)
@@ -184,11 +201,13 @@ HKLM:\SYSTEM\CurrentControlSet\Services\WSearch
 ```
 
 **Backup Location:**
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\services-backup.reg
 ```
 
 **How to Restore One Service:**
+
 ```powershell
 # Example: Restore Windows Search
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WSearch" `
@@ -201,6 +220,7 @@ Start-Service -Name "WSearch"
 #### Memory Management
 
 **Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
 ```
@@ -214,11 +234,13 @@ HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
 | ClearPageFileAtShutdown | 0 (keep data) | 1 (clear data) | Security improvement, slower shutdown |
 
 **Backup Location:**
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\resources-backup.reg
 ```
 
 **Registry View:**
+
 ```
 Registry: HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
   DisablePagingExecutive: 1         ← Phase 2 sets to 1
@@ -229,6 +251,7 @@ Registry: HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Managemen
 #### TCP/IP Network Settings
 
 **Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 ```
@@ -244,6 +267,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 | TCPNoDelay | 0 or missing | 1 | Disable Nagle algorithm for faster sends |
 
 **Full Registry Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
   TcpWindowSize: REG_DWORD: (Hex) 0x40000000 (1 GB)
@@ -255,6 +279,7 @@ HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
 ```
 
 **Backup Location:**
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\network-backup.reg
 ```
@@ -262,12 +287,14 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\network-backup.reg
 #### Page File Configuration
 
 **Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management
   PagingFiles: [registry value]
 ```
 
 **Actual Entry:**
+
 ```
 Registry Value: PagingFiles
   Type: REG_MULTI_SZ
@@ -281,6 +308,7 @@ Before:
 ```
 
 **Actual File Location:**
+
 ```
 C:\pagefile.sys                   ← Hidden system file
   Before: 4 GB - 16 GB (wasteful)
@@ -294,6 +322,7 @@ C:\pagefile.sys                   ← Hidden system file
 #### Visual Effects
 
 **Base Path:**
+
 ```
 HKCU:\Control Panel\Desktop
 ```
@@ -308,6 +337,7 @@ HKCU:\Control Panel\Desktop
 | MenuShowDelay | 400ms | 0ms | Menu fade delay |
 
 **Window Metrics Sub-key:**
+
 ```
 HKCU:\Control Panel\Desktop\WindowMetrics
   CaptionFont: [font object] → [optimized font] (less anti-alias)
@@ -315,6 +345,7 @@ HKCU:\Control Panel\Desktop\WindowMetrics
 ```
 
 **Registry Snapshot:**
+
 ```
 HKCU:\Control Panel\Desktop
   UserPreferencesMask: (Binary) 
@@ -323,6 +354,7 @@ HKCU:\Control Panel\Desktop
 ```
 
 **Backup Location:**
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\visual-backup.reg
 ```
@@ -330,12 +362,14 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\visual-backup.reg
 #### Startup Programs (Run Keys)
 
 **Path:**
+
 ```
 HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce
 ```
 
 **Before Phase 2:**
+
 ```
 HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
   OneDrive: "C:\Program Files\Microsoft OneDrive\OneDrive.exe"
@@ -347,12 +381,14 @@ HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
 ```
 
 **After Phase 2:**
+
 ```
 HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
   (Most entries removed; only essential ones remain)
 ```
 
 **Backup Location:**
+
 ```
 C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\startup-backup.reg
 ```
@@ -364,6 +400,7 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\startup-backup.reg
 #### Explorer Advanced Settings
 
 **Path:**
+
 ```
 HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
 ```
@@ -377,6 +414,7 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
 | IconsOnly | 0 (show all) | 1 (only icons) | Simpler appearance |
 
 **Registry Example:**
+
 ```
 HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
   DisablePreload: REG_DWORD: 1
@@ -389,16 +427,19 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
 ### HKLM: SERVICES\EVENTLOG (Event Log Configuration)
 
 **Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Services\EventLog
 ```
 
 **What Gets Changed:**
+
 - Log file sizes optimized (not delete, just reduce size)
 - Old logs may be archived instead of deleted
 - Some debug logs disabled
 
 **Paths:**
+
 ```
 C:\Windows\System32\winevt\Logs\
   ├─ System.evtx              (System events)
@@ -424,6 +465,7 @@ Backup: C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\*-backup.re
 #### Microsoft Windows Tasks
 
 **Path:**
+
 ```
 %windir%\System32\Tasks\Microsoft\Windows\
 ```
@@ -448,6 +490,7 @@ Backup: C:\Users\ADMIN\helios-platform\phases\2-optimization\backups\*-backup.re
 | System Restore\SR | Tasks\Microsoft\Windows\System Restore\ | Manual restore instead |
 
 **Registry Path for Tasks:**
+
 ```
 HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\
   {GUID-of-task}
@@ -456,6 +499,7 @@ HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\
 ```
 
 **XML Task Definition:**
+
 ```
 %windir%\System32\Tasks\Microsoft\Windows\UpdateOrchestrator\Regular Maintenance
   ← This file marks when task should run
@@ -486,6 +530,7 @@ Contains all task definitions and enabled/disabled states
 ### Network Driver Offloading
 
 **Path:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\
   [Device-specific subkeys]
@@ -502,6 +547,7 @@ HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE103
 | *RSSProfile | 0 or 1 | 2 | Receive-Side Scaling enabled |
 
 **Example:**
+
 ```
 HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}\0000
   DriverDesc: "Intel(R) Ethernet Connection I217-V"
@@ -523,6 +569,7 @@ C:\Users\ADMIN\helios-platform\phases\2-optimization\logs\
 ### Log Files Created During Phase 2
 
 #### Execution Log
+
 ```
 phase2-execution.log
 
@@ -537,6 +584,7 @@ Content:
 ```
 
 #### Services Disabled Log
+
 ```
 services-disabled.log
 
@@ -550,6 +598,7 @@ Content:
 ```
 
 #### Startup Items Removed Log
+
 ```
 startup-removed.log
 
@@ -561,6 +610,7 @@ Content:
 ```
 
 #### Storage Cleanup Log
+
 ```
 storage-cleanup.log
 
@@ -581,6 +631,7 @@ Content:
 ```
 
 #### Performance Comparison Log
+
 ```
 before-after-comparison.log
 
@@ -736,6 +787,7 @@ Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" |
 ---
 
 **Next Steps:**
+
 - Consult `PLAIN_ENGLISH_GUIDE.md` for explanations
 - Check `TESTING_GUIDE.md` to measure improvements
 - Review `BEFORE_AND_AFTER.md` for expected gains

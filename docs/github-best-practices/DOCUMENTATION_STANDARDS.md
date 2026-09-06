@@ -5,6 +5,7 @@ Standards and templates for creating clear, maintainable documentation.
 ---
 
 ## Table of Contents
+
 1. [README.md Structure](#readmemd-structure)
 2. [API Documentation](#api-documentation)
 3. [Component Documentation](#component-documentation)
@@ -19,7 +20,7 @@ Standards and templates for creating clear, maintainable documentation.
 
 ### Template
 
-```markdown
+````markdown
 # Project Name
 
 Brief one-line description of what this project is.
@@ -168,7 +169,8 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 ---
 
 **Last Updated:** April 2026
-```
+
+````
 
 ### README.md Best Practices
 
@@ -197,13 +199,15 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ### Template
 
-```markdown
+````markdown
 # API Documentation
 
 ## Base URL
 
 ```
+
 https://api.example.com/v1
+
 ```
 
 ## Authentication
@@ -353,6 +357,7 @@ curl -X GET "https://api.example.com/v1/users/user-123" \
 API rate limits: 1000 requests per hour per API key.
 
 Response headers:
+
 ```
 X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 999
@@ -387,12 +392,15 @@ Your application can receive webhooks for certain events.
 ## Changelog
 
 ### v1.1.0 (2026-04-01)
+
 - Added webhook support
 - Added rate limiting
 
 ### v1.0.0 (2026-03-15)
+
 - Initial release
-```
+
+````
 
 ### API Documentation Best Practices
 
@@ -421,7 +429,7 @@ Your application can receive webhooks for certain events.
 
 ### Template
 
-```markdown
+````markdown
 # Component: Button
 
 Reusable button component for forms and actions.
@@ -526,7 +534,8 @@ it('should call onClick when clicked', () => {
 - [Link Component](./Link.md)
 - [IconButton Component](./IconButton.md)
 - [ButtonGroup Component](./ButtonGroup.md)
-```
+
+````
 
 ---
 
@@ -534,7 +543,7 @@ it('should call onClick when clicked', () => {
 
 ### Template
 
-```markdown
+````markdown
 # Phase 1: Foundation Setup
 
 Complete setup of core infrastructure and development environment.
@@ -590,7 +599,7 @@ This phase establishes the foundation for the entire project.
 ## Next Phase
 
 [Phase 2: Core Features](./PHASE_2.md)
-```
+````
 
 ---
 
@@ -598,7 +607,7 @@ This phase establishes the foundation for the entire project.
 
 ### Template
 
-```markdown
+````markdown
 # Tutorial: Building Your First Component
 
 Learn how to create reusable React components in HELIOS.
@@ -691,7 +700,8 @@ export { MyButton } from './MyButton';
 ## Troubleshooting
 
 See [Component Troubleshooting](../troubleshooting.md#components)
-```
+
+````
 
 ---
 
@@ -699,7 +709,7 @@ See [Component Troubleshooting](../troubleshooting.md#components)
 
 ### Template
 
-```markdown
+````markdown
 # Example: API Integration
 
 This example shows how to integrate with the HELIOS API.
@@ -777,7 +787,8 @@ export function UserList() {
 
 - [Form Submission Example](./form-submission.md)
 - [Real-time Updates Example](./realtime-updates.md)
-```
+
+````
 
 ---
 
@@ -785,7 +796,7 @@ export function UserList() {
 
 ### Template
 
-```markdown
+````markdown
 # Troubleshooting
 
 ## Issue: API Returns 401 Unauthorized
@@ -811,17 +822,20 @@ echo $API_TOKEN
 
 **Check 2: Verify token format**
 Token should be Bearer token:
+
 ```
 Authorization: Bearer your-token-here
 ```
 
 NOT:
+
 ```
 Authorization: your-token-here
 Authorization: Bearer Bearer your-token-here
 ```
 
 **Check 3: Token expiration**
+
 ```bash
 # Check token expiration
 curl https://api.example.com/v1/token/verify \
@@ -829,6 +843,7 @@ curl https://api.example.com/v1/token/verify \
 ```
 
 **Check 4: Request format**
+
 ```bash
 # Correct format
 curl -X GET https://api.example.com/v1/users \
@@ -836,6 +851,7 @@ curl -X GET https://api.example.com/v1/users \
 ```
 
 ### Resolution
+
 1. Verify token exists: `echo $API_TOKEN`
 2. Verify token format: `Bearer <token>`
 3. Verify token not expired
@@ -846,6 +862,7 @@ curl -X GET https://api.example.com/v1/users \
 ## Issue: Database Connection Fails
 
 ### Symptoms
+
 - "ECONNREFUSED" error
 - "Cannot connect to database"
 - Application won't start
@@ -853,30 +870,35 @@ curl -X GET https://api.example.com/v1/users \
 ### Solutions
 
 **Check 1: Database running**
+
 ```bash
 # Check if PostgreSQL is running
 psql --version
 ```
 
 **Check 2: Connection string**
+
 ```bash
 # Verify connection string in .env
 DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
 ```
 
 **Check 3: Credentials**
+
 ```bash
 # Test connection
 psql $DATABASE_URL
 ```
 
 **Check 4: Port availability**
+
 ```bash
 # Check if port 5432 is in use
 lsof -i :5432
 ```
 
 ### Resolution
+
 1. Start database service
 2. Verify connection string
 3. Check database is accessible
@@ -887,6 +909,7 @@ lsof -i :5432
 ## Issue: Tests Fail with Timeout
 
 ### Symptoms
+
 - Tests timeout after 5000ms
 - "Timeout - Async callback was not invoked"
 - Tests are very slow
@@ -894,6 +917,7 @@ lsof -i :5432
 ### Solutions
 
 **Increase timeout**
+
 ```typescript
 it('should do something', async () => {
   // ...
@@ -901,6 +925,7 @@ it('should do something', async () => {
 ```
 
 **Fix slow tests**
+
 ```typescript
 // Bad: Actual network call
 it('should fetch users', async () => {
@@ -918,6 +943,7 @@ it('should fetch users', async () => {
 ```
 
 ### Prevention
+
 - Mock external API calls
 - Use fast test database
 - Run tests in parallel
@@ -931,7 +957,8 @@ it('should fetch users', async () => {
 - 💬 [Community Slack](https://slack.example.com)
 - 🐛 [Report Bug](https://github.com/your-repo/issues)
 - 📧 [Email Support](mailto:support@example.com)
-```
+
+````
 
 ---
 

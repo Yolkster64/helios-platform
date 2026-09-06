@@ -139,18 +139,23 @@ Rollback Tests (Recovery Verified)
 ## Common Tasks
 
 ### Add a new unit test
+
 See `UNIT_TESTS_GUIDE.md` for template and examples
 
 ### Test a phase integration
+
 See `INTEGRATION_TESTS_GUIDE.md` for phase interaction validation
 
 ### Establish performance baseline
+
 See `PERFORMANCE_METRICS.md` for measurement procedures
 
 ### Create rollback snapshot
+
 See `BEFORE_AFTER_CAPTURE.md` and `ROLLBACK_TESTING.md`
 
 ### Debug test failures
+
 See `TROUBLESHOOTING_TESTS.md` for diagnostic procedures
 
 ## Success Criteria
@@ -168,6 +173,7 @@ A phase is ready for deployment when:
 ## Continuous Improvement
 
 Test coverage and procedures are continuously refined based on:
+
 - Phase execution results
 - Performance measurements
 - User feedback

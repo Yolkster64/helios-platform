@@ -12,15 +12,18 @@
 **Released:** {{RELEASE_DATE_1}}
 
 **Changes:**
+
 - {{CHANGE_1_1}}: {{CHANGE_1_1_DESC}}
 - {{CHANGE_1_2}}: {{CHANGE_1_2_DESC}}
 - {{CHANGE_1_3}}: {{CHANGE_1_3_DESC}}
 
 **Files Modified:**
+
 - {{FILE_MOD_1}}: {{MODIFICATION_1}}
 - {{FILE_MOD_2}}: {{MODIFICATION_2}}
 
 **Bug Fixes:**
+
 - {{BUG_FIX_1}}: {{FIX_DESC_1}}
 - {{BUG_FIX_2}}: {{FIX_DESC_2}}
 
@@ -29,6 +32,7 @@
 ### Version {{VERSION_2}} ({{DATE_2}})
 
 **Changes:**
+
 - {{CHANGE_2_1}}: {{CHANGE_2_1_DESC}}
 - {{CHANGE_2_2}}: {{CHANGE_2_2_DESC}}
 

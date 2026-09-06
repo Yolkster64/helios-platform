@@ -125,6 +125,7 @@ Subscribe-Event -EventName "MyEvent" `
 ## Configuration Templates
 
 ### azure-config.template.json (1.7 KB)
+
 - Azure subscription, resource group, location
 - GitHub Copilot API configuration
 - Azure DevOps organization and pipelines
@@ -132,6 +133,7 @@ Subscribe-Event -EventName "MyEvent" `
 - Monitoring and logging setup
 
 ### security-config.template.json (2.4 KB)
+
 - AppLocker policies
 - Windows Defender settings
 - Bitdefender threat defense
@@ -142,6 +144,7 @@ Subscribe-Event -EventName "MyEvent" `
 - MFA configuration
 
 ### agent-profiles.template.json (5.2 KB)
+
 - 12 AI agent profiles with capabilities:
   - Copilot Core, Security, DevOps, Testing, Documentation
   - Monitoring, Optimization, Analytics, Compliance, Integration
@@ -149,6 +152,7 @@ Subscribe-Event -EventName "MyEvent" `
 - Per-agent: models, concurrency, timeouts
 
 ### model-registry.template.json (7.2 KB)
+
 - 12+ AI models across major providers:
   - OpenAI (GPT-4 Turbo, GPT-4, GPT-3.5)
   - Anthropic (Claude 3 Opus, Sonnet, Haiku)
@@ -158,6 +162,7 @@ Subscribe-Event -EventName "MyEvent" `
 - Routing strategy with fallbacks and load balancing
 
 ### optimization-config.template.json (5.2 KB)
+
 - 5 optimization profiles:
   1. Cost-optimized (minimize spending)
   2. Speed-optimized (minimize latency)
@@ -170,6 +175,7 @@ Subscribe-Event -EventName "MyEvent" `
 - Caching and batch processing
 
 ### component-state.template.json (5.0 KB)
+
 - State tracking for 7 HELIOS components
 - Per-component: status, health, endpoints, statistics
 - System-level: overall health, resources, performance
@@ -180,6 +186,7 @@ Subscribe-Event -EventName "MyEvent" `
 ## Common Use Cases
 
 ### Log Operations
+
 ```powershell
 Log-Message -Message "Processing started" -Component "Auth" -Level "Info"
 Log-Error -Message "Connection failed" -Exception $ex -Component "Auth"
@@ -187,6 +194,7 @@ Log-Success -Message "Authentication complete" -Component "Auth"
 ```
 
 ### Load & Modify Config
+
 ```powershell
 $config = Load-Config "C:\config.json"
 $subscriptionId = Get-ConfigValue $config "azure.subscriptionId"
@@ -195,6 +203,7 @@ Save-Config "C:\config.json" $config
 ```
 
 ### Call Another Component
+
 ```powershell
 # Sync call
 $result = Invoke-ComponentAPI -ComponentName "Security" -Operation "Scan" -Parameters @{path=$p}
@@ -205,6 +214,7 @@ $status = Get-RequestStatus $job.RequestId
 ```
 
 ### Emit & Subscribe Events
+
 ```powershell
 Subscribe-Event -EventName "SecurityAlert" -Component "Monitor" `
                -Callback { Log-Message "Alert received!" }
@@ -213,6 +223,7 @@ Emit-Event -EventName "SecurityAlert" -Payload @{level="high"} -Component "Secur
 ```
 
 ### Retry with Backoff
+
 ```powershell
 $result = Try-Catch-Retry -ScriptBlock {
     # Your code here
@@ -236,6 +247,7 @@ $result = Try-Catch-Retry -ScriptBlock {
 ## Key Features by Component
 
 ### common-functions.psm1
+
 - ✓ Unified logging with 5 levels + color coding
 - ✓ Config management with caching and backup
 - ✓ System validation (prerequisites, admin)
@@ -245,6 +257,7 @@ $result = Try-Catch-Retry -ScriptBlock {
 - ✓ Retry logic with exponential backoff
 
 ### api-gateway.ps1
+
 - ✓ Component registration and discovery
 - ✓ Sync and async request handling
 - ✓ 5-minute request caching
@@ -253,6 +266,7 @@ $result = Try-Catch-Retry -ScriptBlock {
 - ✓ Error handling and fallbacks
 
 ### event-bus.ps1
+
 - ✓ Event registration with schemas
 - ✓ Priority-based processing
 - ✓ Subscription filtering

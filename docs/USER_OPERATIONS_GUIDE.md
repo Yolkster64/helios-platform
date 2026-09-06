@@ -971,21 +971,25 @@ Resolution for this case:
 ## Key Takeaways
 
 ### Daily Responsibilities
+
 - Morning: 5-minute health check (all systems running?)
 - Throughout Day: Monitor for alerts, respond quickly
 - End of Day: Quick recap of the day's events
 
 ### Weekly Responsibilities
+
 - Security and compliance verification
 - Cost trend analysis
 - Performance review and optimization planning
 
 ### Monthly Responsibilities
+
 - Deep dive performance analysis
 - Full capacity planning
 - Security audit
 
 ### Critical Skills
+
 - Alert response and triage (identify severity)
 - Log reading and troubleshooting (root cause analysis)
 - Incident communication (keep team informed)

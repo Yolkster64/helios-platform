@@ -5,7 +5,9 @@ Welcome to the complete documentation set for **Helios Platform v2.5.1**. This i
 ## 📚 Documentation Files
 
 ### [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
 Complete API reference for all core classes and components.
+
 - **PathConfiguration**: Configuration management for system paths
 - **ErrorHandler**: Error handling and logging system
 - **ServiceInterfaces**: Core service abstractions
@@ -15,7 +17,9 @@ Complete API reference for all core classes and components.
 **Best for**: Developers implementing features, extending functionality, or integrating with Helios components.
 
 ### [OPTIMIZATION_GUIDE.md](./OPTIMIZATION_GUIDE.md)
+
 Comprehensive guide to Phase 1 performance optimizations in v2.5.1.
+
 - Download parallelization strategies (4-concurrent batching)
 - GUI rendering optimization using StringBuilder
 - Build compilation with parallel compilation enabled
@@ -25,7 +29,9 @@ Comprehensive guide to Phase 1 performance optimizations in v2.5.1.
 **Best for**: Performance engineers, optimization work, benchmarking, and understanding architectural decisions.
 
 ### [DEPLOYMENT_MANUAL.md](./DEPLOYMENT_MANUAL.md)
+
 Step-by-step deployment and operational procedures.
+
 - Pre-deployment checklist and requirements
 - USB wizard walkthrough for creating system USBs
 - Boot and auto-setup phases
@@ -37,7 +43,9 @@ Step-by-step deployment and operational procedures.
 **Best for**: Deployment teams, system administrators, and users setting up Helios Platform.
 
 ### [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
+
 Solutions for common issues and diagnostic procedures.
+
 - Build failures and resolution steps
 - USB creation troubleshooting
 - Boot issues and diagnostics
@@ -54,17 +62,20 @@ Solutions for common issues and diagnostic procedures.
 ## 🚀 Quick Start
 
 ### For New Deployments
+
 1. Review [DEPLOYMENT_MANUAL.md](./DEPLOYMENT_MANUAL.md) - Pre-deployment Checklist
 2. Follow USB Wizard section for creating deployment media
 3. Run boot and auto-setup phases
 4. Use Post-Boot GUI for system configuration
 
 ### For Developers
+
 1. Start with [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for class references
 2. Review [OPTIMIZATION_GUIDE.md](./OPTIMIZATION_GUIDE.md) for performance-critical code
 3. Check [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md) for common development issues
 
 ### If You Encounter Issues
+
 1. See [TROUBLESHOOTING_GUIDE.md](./TROUBLESHOOTING_GUIDE.md)
 2. Check the FAQ section for your specific error
 3. Follow diagnostic procedures provided
@@ -85,17 +96,20 @@ Solutions for common issues and diagnostic procedures.
 ## ✨ What's New in v2.5.1
 
 ### Performance Improvements
+
 - **4x Download Parallelization**: Concurrent batch downloads for faster deployment
 - **GUI Optimization**: StringBuilder-based rendering for snappier interface response
 - **Parallel Compilation**: Build time reduced by up to 40% on multi-core systems
 
 ### New Features
+
 - Enhanced USB management interface with progress tracking
 - Improved error messages with actionable guidance
 - Profile switching support (5 profiles available)
 - Better network resilience for update downloads
 
 ### Stability & Quality
+
 - Fixed 15+ edge cases in update installation
 - Improved error handling and logging
 - Enhanced security verification procedures
