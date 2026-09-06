@@ -7,12 +7,31 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
+import xml.etree.ElementTree as ET
 
 
 REPO = Path(__file__).resolve().parents[3]
 
 
 class DevcontainerSetupTests(unittest.TestCase):
+    def test_devcontainer_runs_post_create_script(self):
+        config = json.loads((REPO / ".devcontainer/devcontainer.json").read_text(encoding="utf-8"))
+        self.assertEqual(config.get("postCreateCommand"), "bash .devcontainer/post-create.sh")
+
+    def test_devcontainer_image_matches_global_sdk_major(self):
+        config = json.loads((REPO / ".devcontainer/devcontainer.json").read_text(encoding="utf-8"))
+        sdk = json.loads((REPO / "global.json").read_text(encoding="utf-8"))
+        major = sdk["sdk"]["version"].split(".", 1)[0]
+        self.assertIn(f"-{major}.0-", config.get("image", ""))
+
+    def test_cli_target_framework_matches_global_sdk_major(self):
+        sdk = json.loads((REPO / "global.json").read_text(encoding="utf-8"))
+        major = sdk["sdk"]["version"].split(".", 1)[0]
+        project = ET.parse(REPO / "src/ai/HELIOS.AIHub.Cli/HELIOS.AIHub.Cli.csproj")
+        target = project.findtext("./PropertyGroup/TargetFramework")
+        self.assertEqual(target, f"net{major}.0")
+
     def run_setup(self, failure=""):
         with tempfile.TemporaryDirectory(prefix="helios-container-") as directory:
             root = Path(directory)
