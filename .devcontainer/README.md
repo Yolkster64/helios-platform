@@ -9,7 +9,7 @@ That split keeps one canonical toolchain while still offering an opt-in local da
 
 ## What the devcontainer includes
 
-- .NET 8 SDK base image for the portable `HELIOS.sln` build.
+- A `.devcontainer/Dockerfile` image that inherits `mcr.microsoft.com/devcontainers/dotnet:8.0` for the portable `HELIOS.sln` build.
 - Dev Container features for Azure CLI, GitHub CLI, **Node.js 22** (pinned for current repository tooling), PowerShell 7, Python 3.11, and Terraform.
 - A small Dockerfile layer with `cmake`, `postgresql-client`, `shellcheck`, `sqlite3`, and other repo-level utilities.
 - Port forwarding for `helios-ai-api` on `5170`.
@@ -24,6 +24,8 @@ The workspace opens at `/workspaces/<repo-name>`. The post-create step runs `.de
 - runs `dotnet build HELIOS.sln -c Release` plus `pwsh scripts/build/verify-readiness.ps1`.
 
 It does **not** create or overwrite Git hooks, Git identity, `.env`, `.npmrc`, helper scripts, or other tracked workspace files.
+
+This Linux devcontainer is for the portable AIHub/CLI/MCP/test solution. The active WinUI desktop shell stays on its separate .NET 10 + Windows toolchain and is not built by this container.
 
 ## Open the supported devcontainer
 
