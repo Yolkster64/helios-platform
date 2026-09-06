@@ -9,6 +9,7 @@ on:
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - 'global.json'
+      - 'nuget.config'
       - '.github/workflows/gui-windows.yml'
   workflow_dispatch:
 

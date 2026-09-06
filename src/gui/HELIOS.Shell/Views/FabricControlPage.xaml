@@ -18,14 +18,14 @@
     <Border Grid.Row="1" Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
       <StackPanel Spacing="10">
         <TextBlock Text="Operator actions" Style="{StaticResource HeliosTitleTextBlockStyle}"/>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Content="Copy bootstrap" Command="{x:Bind ViewModel.CopyBootstrapCommand}"/>
-          <Button Content="Copy verify-only" Command="{x:Bind ViewModel.CopyVerifyCommand}"/>
-          <Button Content="Azure portal" Command="{x:Bind ViewModel.OpenAzurePortalCommand}"/>
-          <Button Content="Claude workflow" Command="{x:Bind ViewModel.OpenClaudeWorkflowCommand}"/>
-          <Button Content="GitHub repo" Command="{x:Bind ViewModel.OpenRepositoryCommand}"/>
-          <Button Content="OIDC issue #146" Command="{x:Bind ViewModel.OpenClaudeIssueCommand}"/>
-        </StackPanel>
+        <CommandBar DefaultLabelPosition="Right" OverflowButtonVisibility="Auto">
+          <AppBarButton Label="Copy bootstrap" Command="{x:Bind ViewModel.CopyBootstrapCommand}"/>
+          <AppBarButton Label="Copy verify-only" Command="{x:Bind ViewModel.CopyVerifyCommand}"/>
+          <AppBarButton Label="Azure portal" Command="{x:Bind ViewModel.OpenAzurePortalCommand}"/>
+          <AppBarButton Label="Claude workflow" Command="{x:Bind ViewModel.OpenClaudeWorkflowCommand}"/>
+          <AppBarButton Label="GitHub repo" Command="{x:Bind ViewModel.OpenRepositoryCommand}"/>
+          <AppBarButton Label="OIDC record #152" Command="{x:Bind ViewModel.OpenClaudeIssueCommand}"/>
+        </CommandBar>
         <TextBlock Text="Bootstrap" Style="{StaticResource HeliosLabelTextBlockStyle}"/>
         <TextBlock Text="{x:Bind ViewModel.BootstrapCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap"/>
         <TextBlock Text="Verify without mutation" Style="{StaticResource HeliosLabelTextBlockStyle}"/>
