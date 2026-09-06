@@ -602,8 +602,12 @@ function Test-RepositorySecretPresent {
     # Tri-state: $true / $false when the listing answered, $null when it could not be
     # read (permission or API error) - "unreadable" must never be reported as "absent",
     # because absent leads the owner to a key rotation.
-    $names = Get-GhJson -Arguments @('secret', 'list', '--repo', $Repository, '--json', 'name')
-    if ($null -eq $names) { return $null }
+    # The exit code decides readability; an empty listing (`[]`, which ConvertFrom-Json
+    # unrolls to nothing) is a readable "absent", not an unreadable one.
+    $result = Invoke-Gh -Arguments @('secret', 'list', '--repo', $Repository, '--json', 'name')
+    if ($result.ExitCode -ne 0) { return $null }
+    $names = @()
+    try { $names = @(("$($result.StdOut)".Trim() | ConvertFrom-Json)) } catch { return $null }
     return (@($names | ForEach-Object { [string](Get-OptionalProperty $_ 'name' '') }) -contains $Name)
 }
 
