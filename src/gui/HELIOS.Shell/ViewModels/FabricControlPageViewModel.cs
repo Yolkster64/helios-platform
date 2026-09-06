@@ -31,7 +31,10 @@ public partial class FabricControlPageViewModel : ObservableObject
         var hasKeyVault = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AZURE_KEY_VAULT_URI"));
         var hasOpenAiCredential = HasAny("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY") || hasKeyVault;
         var brokerUrl = FirstNonEmpty("HELIOS_INTEGRATION_BROKER_URL", "HELIOS_BROKER_URL");
-        var apiUrl = FirstNonEmpty("HELIOS_API_URL") ?? "http://localhost:5170";
+        var rawApiUrl = FirstNonEmpty(HELIOS.Shell.Services.AIHubApiClient.BaseUrlEnvVar);
+        var apiUrl = (!string.IsNullOrWhiteSpace(rawApiUrl) && Uri.TryCreate(rawApiUrl, UriKind.Absolute, out var configured))
+            ? configured.ToString()
+            : HELIOS.Shell.Services.AIHubApiClient.DefaultBaseUrl;
 
         Integrations.Add(new("GitHub control plane", "Ready", "Yolkster64/helios-platform is the engineering source of truth; Claude, Codex, CI, and OIDC workflows are repository-managed.", "GitHub"));
         Integrations.Add(new("Claude Code", "Ready", "Claude project settings, agents/skills, Foundry workflow, and split-authority patch publishing are installed.", "GitHub + Claude"));
