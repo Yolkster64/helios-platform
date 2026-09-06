@@ -89,8 +89,10 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     what_if = _find_step(steps, "What-if (sanitized custody record)")
     what_if_if = str(what_if.get("if", ""))
     what_if_run = str(what_if.get("run", ""))
-    _require("workflow_dispatch" in what_if_if and "inputs.what_if" in what_if_if,
-             "what-if step must be restricted to workflow_dispatch + what_if=true")
+    _require(
+        _normalize_if(what_if_if) == _normalize_if("steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if"),
+        "what-if step must be restricted to workflow_dispatch + what_if=true",
+    )
     _require("--result-format ResourceIdOnly" in what_if_run,
              "what-if custody must use ResourceIdOnly output to avoid sensitive payload capture")
     _require("--no-pretty-print" in what_if_run,

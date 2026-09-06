@@ -59,6 +59,13 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "resource-group creation",
         )
 
+    def test_fails_when_what_if_guard_allows_push(self) -> None:
+        self._validate_mutation(
+            "id: whatif\n        if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if",
+            "id: whatif\n        if: steps.creds.outputs.configured == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && inputs.what_if",
+            "restricted to workflow_dispatch",
+        )
+
     def test_fails_when_artifact_upload_is_removed(self) -> None:
         self._validate_mutation(
             "        uses: actions/upload-artifact@v4",
