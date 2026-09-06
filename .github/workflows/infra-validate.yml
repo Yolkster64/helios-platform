@@ -82,8 +82,10 @@ jobs:
         id: gate
         run: |
           should_run=true
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
             should_run=false
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::warning::changes job did not succeed; running Bicep validation instead of treating it as not-applicable."
           fi
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
 
@@ -118,8 +120,10 @@ jobs:
         id: gate
         run: |
           should_run=true
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
             should_run=false
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::warning::changes job did not succeed; running ARM freshness validation instead of treating it as not-applicable."
           fi
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
 
@@ -186,8 +190,10 @@ jobs:
         id: gate
         run: |
           should_run=true
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.relevant }}" = "false" ]; then
             should_run=false
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::warning::changes job did not succeed; running Terraform validation instead of treating it as not-applicable."
           fi
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
 
