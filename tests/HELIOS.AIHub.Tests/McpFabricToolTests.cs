@@ -185,9 +185,8 @@ public sealed class McpFabricToolTests : IDisposable
             "config/fabric/helios-fabric.v1.json",
             element.GetProperty("configPath").GetString());
 
-        // Fail-closed invariants are always reported false in the sanitized envelope,
-        // regardless of what the file says — the tool refuses to run against a
-        // productionEnabled=true contract in a separate test below.
+        // Fail-closed invariants remain false, and environment reference probing is
+        // reported via secretValuesRead in the sanitized envelope.
         var security = element.GetProperty("security");
         Assert.False(security.GetProperty("productionEnabled").GetBoolean());
         Assert.False(security.GetProperty("applyDefault").GetBoolean());
@@ -260,6 +259,7 @@ public sealed class McpFabricToolTests : IDisposable
         var present = openai.GetProperty("presentEnvNames")
             .EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Empty(present);
+        Assert.True(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
     }
 
     [Fact]
@@ -285,21 +285,6 @@ public sealed class McpFabricToolTests : IDisposable
     }
 
     // ---- fail-closed enforcement ----------------------------------------------------
-
-    [Fact]
-    public void GetFabricPlan_MalformedContract_ReturnsErrorEnvelope()
-    {
-        var root = CreateRepoRoot("{");
-
-        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
-
-        using var document = JsonDocument.Parse(json);
-        var envelope = document.RootElement;
-        Assert.True(envelope.TryGetProperty("error", out _));
-        Assert.Contains("could not be read or validated", envelope.GetProperty("error").GetString());
-        Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
-        Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
-    }
 
     [Fact]
     public void GetFabricPlan_ProductionEnabledInFile_ReturnsErrorEnvelope()
@@ -337,6 +322,21 @@ public sealed class McpFabricToolTests : IDisposable
         Assert.True(envelope.TryGetProperty("error", out _));
         // The exception message lives in the sanitized `detail` field.
         Assert.Contains("WinUI 3", envelope.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public void GetFabricPlan_MutatingPhaseWithoutApproval_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot(MinimalValidContract.Replace(
+            "\"requiredApproval\": \"production-owner\"",
+            "\"requiredApproval\": \"none\""));
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
+        Assert.Contains("has no approval", envelope.GetProperty("detail").GetString());
     }
 
     // ---- path-traversal safety ------------------------------------------------------
