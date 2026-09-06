@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import pathlib
 import unittest
 
 from scripts.validation.validate_deploy_custody import ROOT, WORKFLOW, validate_workflow_text
