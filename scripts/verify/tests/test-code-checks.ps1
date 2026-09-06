@@ -96,6 +96,20 @@ Describe 'Get-CodeCheckTargetFiles' {
         { Get-CodeCheckTargetFiles -RepoRoot $repo -EventName 'pull_request' -BaseRef 'main:evil' } |
             Should -Throw '*Unsafe pull request base ref*'
     }
+
+    It 'preserves rename-away changes in the parsed diff set' {
+        $repo = New-CodeChecksTestRepo
+        Add-TrackedFile -Repo $repo -RelativePath 'old-script.ps1' -Content 'Write-Host "a"'
+        Commit-Repo -Repo $repo -Message 'base'
+
+        & git -C $repo checkout -b feature | Out-Null
+        & git -C $repo mv 'old-script.ps1' 'old-script.txt'
+        Commit-Repo -Repo $repo -Message 'rename away'
+
+        $targets = Get-CodeCheckTargetFiles -RepoRoot $repo -EventName 'pull_request' -BaseRef 'main'
+
+        $targets | Should -Be @('old-script.ps1')
+    }
 }
 
 Describe 'Test-PowerShellSyntax' {

@@ -60,7 +60,7 @@ class OnCreateCommandTests(unittest.TestCase):
         )
         return workspace
 
-    def _tool_bin(self, root: Path) -> Path:
+    def _tool_bin(self, root: Path, dotnet_build_exit_code: int = 0, readiness_exit_code: int = 0) -> Path:
         bin_dir = root / "bin"
         bin_dir.mkdir()
         make_executable(
@@ -69,11 +69,20 @@ class OnCreateCommandTests(unittest.TestCase):
             "echo \"$@\" >> \"$HELIOS_TEST_TOOL_LOG\"\n"
             "if [[ \"$1\" == \"--version\" ]]; then echo 8.0.999; fi\n",
         )
+        if dotnet_build_exit_code:
+            make_executable(
+                bin_dir / "dotnet",
+                "#!/usr/bin/env bash\n"
+                "echo \"$@\" >> \"$HELIOS_TEST_TOOL_LOG\"\n"
+                "if [[ \"$1\" == \"--version\" ]]; then echo 8.0.999; exit 0; fi\n"
+                f"if [[ \"$1\" == \"build\" ]]; then exit {dotnet_build_exit_code}; fi\n",
+            )
         make_executable(
             bin_dir / "pwsh",
             "#!/usr/bin/env bash\n"
             "echo \"pwsh $@\" >> \"$HELIOS_TEST_TOOL_LOG\"\n"
-            "if [[ \"$1\" == \"--version\" ]]; then echo 'PowerShell 7.9.0'; fi\n",
+            "if [[ \"$1\" == \"--version\" ]]; then echo 'PowerShell 7.9.0'; exit 0; fi\n"
+            f"if [[ \"$*\" == *'scripts/build/verify-readiness.ps1'* ]]; then exit {readiness_exit_code}; fi\n",
         )
         return bin_dir
 
@@ -138,6 +147,44 @@ class OnCreateCommandTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
         self.assertIn("Native spoke build failed", completed.stdout)
+
+    def test_required_dotnet_build_failure_is_fatal(self) -> None:
+        workspace = self._workspace()
+        log_file = workspace / "tool.log"
+        bin_dir = self._tool_bin(workspace, dotnet_build_exit_code=7)
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["HELIOS_TEST_TOOL_LOG"] = str(log_file)
+
+        completed = subprocess.run(
+            ["bash", str(workspace / ".devcontainer" / "onCreateCommand.sh")],
+            cwd=workspace,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 7)
+
+    def test_required_readiness_failure_is_fatal(self) -> None:
+        workspace = self._workspace()
+        log_file = workspace / "tool.log"
+        bin_dir = self._tool_bin(workspace, readiness_exit_code=9)
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["HELIOS_TEST_TOOL_LOG"] = str(log_file)
+
+        completed = subprocess.run(
+            ["bash", str(workspace / ".devcontainer" / "onCreateCommand.sh")],
+            cwd=workspace,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 9)
 
 
 if __name__ == "__main__":

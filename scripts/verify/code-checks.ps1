@@ -68,9 +68,38 @@ function Get-DiffPowerShellFiles {
         [string]$Range
     )
 
-    @(Get-GitTextOrThrow -RepoRoot $RepoRoot -Arguments @('diff', '--name-only', '--diff-filter=ACMR', '--find-renames', $Range) -FailureMessage "Unable to diff files for range $Range." |
-        Where-Object { $_ -match '\.ps(m)?1$' } |
-        Sort-Object -Unique)
+    $changed = [System.Collections.Generic.List[string]]::new()
+    $lines = @(Get-GitTextOrThrow -RepoRoot $RepoRoot -Arguments @('diff', '--name-status', '--find-renames', $Range) -FailureMessage "Unable to diff files for range $Range.")
+    foreach ($line in $lines) {
+        $parts = @($line -split "`t")
+        if ($parts.Count -lt 2) {
+            continue
+        }
+
+        $status = $parts[0]
+        if ($status -match '^[RC]' -and $parts.Count -ge 3) {
+            $oldPath = $parts[1]
+            $newPath = $parts[2]
+            if ($newPath -match '\.ps(m)?1$') {
+                $changed.Add($newPath)
+            }
+            elseif ($oldPath -match '\.ps(m)?1$') {
+                $changed.Add($oldPath)
+            }
+            continue
+        }
+
+        if ($status -notmatch '^[AM]') {
+            continue
+        }
+
+        $path = $parts[1]
+        if ($path -match '\.ps(m)?1$') {
+            $changed.Add($path)
+        }
+    }
+
+    @($changed | Sort-Object -Unique)
 }
 
 function Resolve-PullRequestBaseRef {

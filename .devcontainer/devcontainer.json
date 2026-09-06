@@ -22,6 +22,7 @@
   "containerEnv": {
     "DOTNET_NOLOGO": "1",
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "HOME": "/home/vscode",
     "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     "POWERSHELL_TELEMETRY_OPTOUT": "1"
   },
