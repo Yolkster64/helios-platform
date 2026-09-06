@@ -152,6 +152,7 @@ function Test-PowerShellSyntax {
         [string[]]$Paths
     )
 
+    $Paths = @($Paths)
     if ($Paths.Count -eq 0) {
         return New-CheckResult -Name 'Syntax' -Status 'skipped'
     }
@@ -183,6 +184,7 @@ function Test-PowerShellSecrets {
         [string[]]$Paths
     )
 
+    $Paths = @($Paths)
     if ($Paths.Count -eq 0) {
         return New-CheckResult -Name 'Security' -Status 'skipped'
     }
@@ -229,6 +231,7 @@ function Test-RegistryDocumentation {
         [string[]]$Paths
     )
 
+    $Paths = @($Paths)
     if ($Paths.Count -eq 0) {
         return New-CheckResult -Name 'Registry' -Status 'skipped'
     }
@@ -259,6 +262,7 @@ function Test-PathWarnings {
         [string[]]$Paths
     )
 
+    $Paths = @($Paths)
     if ($Paths.Count -eq 0) {
         return New-CheckResult -Name 'Path warnings' -Status 'skipped'
     }
@@ -291,6 +295,7 @@ function Test-DocumentationHeaders {
         [string[]]$Paths
     )
 
+    $Paths = @($Paths)
     $phaseFiles = @($Paths | Where-Object { $_ -match '(^|[\\/])Phase-.*\.ps1$' })
     if ($phaseFiles.Count -eq 0) {
         return New-CheckResult -Name 'Documentation' -Status 'skipped'

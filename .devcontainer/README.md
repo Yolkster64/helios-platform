@@ -89,6 +89,7 @@ cd /workspaces/<repo-name>
 dotnet build HELIOS.sln -c Release
 dotnet test tests/HELIOS.AIHub.Tests -c Release
 cd src/ai/python && python3 -m pytest tests
+cd /workspaces/<repo-name>
 bicep build infra/main.bicep --stdout
 python3 scripts/validation/validate_yolkster_cutover.py
 python3 -m unittest discover -s .devcontainer/tests
