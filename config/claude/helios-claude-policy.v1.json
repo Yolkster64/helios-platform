@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "policyId": "helios-claude-code",
+  "repositories": {
+    "currentCore": "Yolkster64/helios-platform",
+    "targetCore": "Yolkster64/helios-control",
+    "targetGui": "Yolkster64/helios-gui"
+  },
+  "instructionSources": [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "docs/fabric/HELIOS_FABRIC_SETUP.md",
+    "docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md",
+    "docs/architecture/ADR-0010-WINUI3-ONLY.md"
+  ],
+  "projectMcp": {
+    "configuration": ".mcp.json",
+    "allowedServerClasses": [
+      "helios-local-read-plan",
+      "linear-read",
+      "azure-plan",
+      "github-read-and-reviewed-branch"
+    ],
+    "untrustedPullRequestMayReplaceConfiguration": false,
+    "credentialBearingJobLoadsPullRequestMcp": false
+  },
+  "allowed": [
+    "read-repository",
+    "compare-commits",
+    "edit-reviewed-feature-branch",
+    "build-dotnet",
+    "build-winui-on-windows",
+    "run-tests",
+    "validate-json-yaml-bicep-powershell",
+    "prepare-pull-request",
+    "prepare-canonical-issue",
+    "run-development-what-if-through-approved-tool",
+    "review-redacted-evidence"
+  ],
+  "denied": [
+    "merge-pull-request",
+    "rename-or-transfer-repository",
+    "change-ruleset-or-environment",
+    "azure-deployment",
+    "rbac-or-entra-mutation",
+    "graph-admin-consent",
+    "key-vault-secret-write-or-readback",
+    "slack-linear-sharepoint-write-without-approved-broker",
+    "disk-bitlocker-tpm-secure-boot-driver-or-firmware-mutation",
+    "generic-unrestricted-shell",
+    "publish-private-memory"
+  ],
+  "subagents": [
+    "canonical-migration",
+    "fabric-setup",
+    "winui3-engineer",
+    "azure-plan-reviewer",
+    "connector-contract-reviewer",
+    "security-and-provenance-reviewer"
+  ],
+  "requiredEvidence": [
+    "source-repository",
+    "source-commit",
+    "commands-run",
+    "tests-and-results",
+    "files-changed",
+    "risks",
+    "approval-boundary",
+    "rollback-or-non-action"
+  ],
+  "productionEnabled": false
+}
