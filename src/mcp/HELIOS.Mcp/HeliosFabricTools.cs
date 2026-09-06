@@ -404,18 +404,6 @@ public static class HeliosFabricTools
             ? DefaultRelativePath
             : requestedPath;
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, relative));
-        var relativeToRoot = Path.GetRelativePath(repoRoot, fullPath);
-        if (Path.IsPathRooted(relativeToRoot)
-            || relativeToRoot.Equals("..", StringComparison.Ordinal)
-            || relativeToRoot.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("Fabric config path must remain inside HELIOS_REPO_ROOT.");
-        }
-        if (!File.Exists(fullPath))
-        {
-            throw new FileNotFoundException("Fabric contract does not exist.", fullPath);
-        }
-
         var canonicalRoot = CanonicalizePath(repoRoot);
         var canonicalPath = CanonicalizePath(fullPath);
         var canonicalRelative = Path.GetRelativePath(canonicalRoot, canonicalPath);
@@ -424,6 +412,10 @@ public static class HeliosFabricTools
             || canonicalRelative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
         {
             throw new InvalidDataException("Fabric config path must remain inside HELIOS_REPO_ROOT.");
+        }
+        if (!File.Exists(canonicalPath))
+        {
+            throw new FileNotFoundException("Fabric contract does not exist.", canonicalPath);
         }
 
         return canonicalPath;

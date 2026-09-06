@@ -388,6 +388,35 @@ public sealed class McpFabricToolTests : IDisposable
     }
 
     [Fact]
+    public void GetFabricPlan_IntermediateDirectorySymlinkOutsideRoot_IsRejected()
+    {
+        var root = CreateRepoRoot(MinimalValidContract);
+        var outsideRoot = CreateEmptyRoot();
+        var outsideContract = Path.Combine(outsideRoot, "helios-fabric.v1.json");
+        File.WriteAllText(outsideContract, MinimalValidContract);
+
+        var linkedDirectory = Path.Combine(root, "linked");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedDirectory, outsideRoot);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return;
+        }
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(
+            startDirectory: root,
+            requestedPath: "linked/helios-fabric.v1.json");
+
+        using var document = JsonDocument.Parse(json);
+        Assert.True(document.RootElement.TryGetProperty("error", out _));
+        Assert.Contains(
+            "HELIOS_REPO_ROOT",
+            document.RootElement.GetProperty("detail").GetString());
+    }
+
+    [Fact]
     public void GetFabricPlan_MissingContract_ReturnsErrorEnvelope()
     {
         var root = CreateEmptyRoot();
