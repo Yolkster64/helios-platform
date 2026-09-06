@@ -57,7 +57,7 @@ public partial class FabricControlPageViewModel : ObservableObject
         Integrations.Add(new(
             "Claude Code",
             "Ready",
-            "Claude project settings, agents/skills, GitHub workflow, and split-authority patch publishing are installed. Runtime model access still depends on Foundry identity readiness.",
+            "Claude project settings, agents/skills, Foundry workflow, and split-authority patch publishing are installed. Runtime model access still depends on Foundry identity readiness.",
             "GitHub + Claude"));
 
         Integrations.Add(new(
@@ -118,19 +118,19 @@ public partial class FabricControlPageViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private static Task OpenRepositoryAsync() => OpenUriAsync(RepositoryUrl);
+    private Task OpenRepositoryAsync() => OpenUriAsync(RepositoryUrl);
 
     [RelayCommand]
-    private static Task OpenClaudeWorkflowAsync() => OpenUriAsync(ClaudeWorkflowUrl);
+    private Task OpenClaudeWorkflowAsync() => OpenUriAsync(ClaudeWorkflowUrl);
 
     [RelayCommand]
-    private static Task OpenClaudeIssueAsync() => OpenUriAsync(ClaudeIssueUrl);
+    private Task OpenClaudeIssueAsync() => OpenUriAsync(ClaudeIssueUrl);
 
     [RelayCommand]
-    private static Task OpenClaudePrAsync() => OpenUriAsync(ClaudePrUrl);
+    private Task OpenClaudePrAsync() => OpenUriAsync(ClaudePrUrl);
 
     [RelayCommand]
-    private static Task OpenAzurePortalAsync() => OpenUriAsync(AzurePortalUrl);
+    private Task OpenAzurePortalAsync() => OpenUriAsync(AzurePortalUrl);
 
     private static void CopyText(string text)
     {
