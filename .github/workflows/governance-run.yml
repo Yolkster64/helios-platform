@@ -3,8 +3,8 @@
 # It has no trigger of its own; the exit-code contract, the summary table and the
 # credential rules are specified in governance-apply.yml's header, this file only
 # implements them. Everything the two lanes differ in arrives as inputs (run_mode,
-# apply, scope) plus one optional secret (HELIOS_ADMIN_TOKEN, passed by the apply
-# caller only).
+# apply, scope) plus two optional secrets (HELIOS_APP_PRIVATE_KEY and
+# HELIOS_ADMIN_TOKEN, both passed by the apply caller only).
 #
 # No `permissions:` block, deliberately: a called workflow can only NARROW the
 # caller's GITHUB_TOKEN grant, never widen it, and the two callers hold different
@@ -13,11 +13,21 @@
 # whichever job calls this file.
 #
 # Credentials, chosen per script and never echoed (gh reads GH_TOKEN by name):
-#   ADMIN_TOKEN   HELIOS_ADMIN_TOKEN when the caller passed it, else the workflow
+#   ADMIN_TOKEN   the HELIOS GitHub App installation token when the first step
+#                 minted one (vars.HELIOS_APP_CLIENT_ID and the
+#                 HELIOS_APP_PRIVATE_KEY secret BOTH present), else
+#                 HELIOS_ADMIN_TOKEN when the caller passed it, else the workflow
 #                 token -> rulesets and settings (need repo ADMIN)
 #   ISSUES_TOKEN  always the workflow token -> labels and milestones (issues:
 #                 write, which the apply caller grants), so a dead or under-scoped
-#                 PAT can only ever fail the two rows that need it
+#                 admin credential can only ever fail the two rows that need it
+# The mint is a hard gate, not a fallback: a stored app credential that no longer
+# works (app uninstalled, key rotated on the app page, installation narrowed
+# below the permissions requested) fails the mint step and with it the job, RED,
+# with the repair named - it never degrades to the PAT or the workflow token,
+# because a green run that quietly applied nothing is the failure this runner
+# exists to catch. Only the variable or only the secret stored (a half-finished
+# connect-github-app.ps1 run) is a ::warning and the next credential in line.
 name: Governance Run (reusable)
 
 on:
@@ -36,8 +46,11 @@ on:
         type: string
         default: all
     secrets:
+      HELIOS_APP_PRIVATE_KEY:
+        description: 'PEM private key of the HELIOS GitHub App, paired with vars.HELIOS_APP_CLIENT_ID (apply caller only; empty = not stored)'
+        required: false
       HELIOS_ADMIN_TOKEN:
-        description: 'Owner PAT with repo Administration RW (apply caller only; empty = not stored)'
+        description: 'Owner PAT with repo Administration RW, the manual fallback (apply caller only; empty = not stored)'
         required: false
 
 jobs:
@@ -45,18 +58,70 @@ jobs:
     name: ${{ inputs.apply && 'reconcile' || 'dry-run' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Presence booleans only: the secrets context is not usable in `if:`, so each
+    # credential is reduced here to a job-level true/false that steps can test.
     env:
-      ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN || github.token }}
+      HAS_APP_KEY: ${{ secrets.HELIOS_APP_PRIVATE_KEY != '' }}
+      HAS_APP_CLIENT_ID: ${{ vars.HELIOS_APP_CLIENT_ID != '' }}
+      HAS_PAT: ${{ secrets.HELIOS_ADMIN_TOKEN != '' }}
       ISSUES_TOKEN: ${{ github.token }}
-      HAS_ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN != '' }}
       APPLY: ${{ inputs.apply }}
       SCOPE: ${{ inputs.scope }}
       RUN_MODE: ${{ inputs.run_mode }}
     steps:
       - uses: actions/checkout@v4
 
+      # Both halves or nothing: the variable without the key (or the reverse) is
+      # not a mint attempt, it is reported by the run step below. The token is
+      # scoped to this repository and to exactly the permissions the four
+      # scripts need, and the action revokes it when the job ends.
+      - name: Mint the HELIOS GitHub App installation token
+        id: app
+        if: env.HAS_APP_KEY == 'true' && env.HAS_APP_CLIENT_ID == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.HELIOS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HELIOS_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: write
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+          permission-pages: write
+          permission-metadata: read
+
+      # Runs only when the mint step ran and failed. The job is already red at
+      # this point (the failed step is not continue-on-error); this step exists
+      # so the annotation and the summary name the repair instead of leaving the
+      # action's raw API error as the only clue.
+      - name: Name the repair for a rejected app credential
+        if: failure() && steps.app.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must name the owner/repo this run executes in}"
+          repair="from your own machine (never an agent container): pwsh scripts/bootstrap/connect-github-app.ps1 -Repository ${repo} - one Create click, one Install click; it re-stores HELIOS_APP_CLIENT_ID / HELIOS_APP_ID / HELIOS_APP_SLUG and HELIOS_APP_PRIVATE_KEY. Key rotated on the app page only: gh secret set HELIOS_APP_PRIVATE_KEY --repo ${repo} < key.pem, then delete key.pem"
+          echo "::error::HELIOS GitHub App credential stored but rejected: the app is uninstalled from ${repo}, HELIOS_APP_PRIVATE_KEY no longer matches HELIOS_APP_CLIENT_ID, or the installation lost one of Administration / Contents / Issues / Pull requests / Pages write. Nothing was applied and no other credential was tried. Repair ${repair}"
+          {
+            echo "## Governance ${RUN_MODE}"
+            echo ""
+            echo "mode: **${RUN_MODE}** | apply: \`${APPLY}\` | scope: \`${SCOPE}\` | admin token: \`false\` (mint failed) | app token: \`FAILED\` | event: \`${GITHUB_EVENT_NAME}\`"
+            echo ""
+            echo "| Item | State | Exit code | Note |"
+            echo "|---|---|---|---|"
+            echo "| app token | FAILED (HELIOS GitHub App credential stored but rejected) | - | repair ${repair} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Precedence is resolved in expressions, right here, so the chosen token
+      # value never touches GITHUB_ENV or a file: the app token when the mint step
+      # ran, else the PAT, else the workflow token. HAS_ADMIN_TOKEN keeps its
+      # meaning ("a real admin credential is present") across both real ones.
       - name: Run every governance script
         shell: bash
+        env:
+          ADMIN_TOKEN: ${{ steps.app.outputs.token || secrets.HELIOS_ADMIN_TOKEN || github.token }}
+          HAS_APP_TOKEN: ${{ steps.app.outputs.token != '' }}
+          HAS_ADMIN_TOKEN: ${{ steps.app.outputs.token != '' || secrets.HELIOS_ADMIN_TOKEN != '' }}
         run: |
           set -euo pipefail
           failed=0
@@ -67,6 +132,21 @@ jobs:
           # Actions always sets it; the :? guard makes a local replay fail loudly
           # instead of silently targeting the scripts' default.
           repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must name the owner/repo to reconcile}"
+          # The NAME of the admin credential in force (the only thing ever printed
+          # about it) and the app-token state for the summary. The :-false defaults
+          # let a local dry-run replay run with none of the presence booleans set.
+          if [ "${HAS_APP_TOKEN:-false}" = "true" ]; then admin_cred="HELIOS_APP (installation token)"
+          elif [ "${HAS_PAT:-false}" = "true" ]; then admin_cred="HELIOS_ADMIN_TOKEN"
+          else admin_cred="GITHUB_TOKEN"; fi
+          app_state="not configured"
+          if [ "${HAS_APP_TOKEN:-false}" = "true" ]; then app_state="minted"
+          elif [ "${HAS_APP_KEY:-false}" != "${HAS_APP_CLIENT_ID:-false}" ]; then
+            # One half stored, the other missing: a connect-github-app.ps1 run that
+            # did not finish. Loud, because the next credential in line is a
+            # downgrade the owner did not choose.
+            app_state="half-configured"
+            echo "::warning::HELIOS GitHub App half-configured on ${repo} (HELIOS_APP_CLIENT_ID variable present: ${HAS_APP_CLIENT_ID:-false}; HELIOS_APP_PRIVATE_KEY secret present: ${HAS_APP_KEY:-false}); admin items fall back to ${admin_cred}. Finish it from your own machine: pwsh scripts/bootstrap/connect-github-app.ps1 -Repository ${repo}"
+          fi
           in_scope() { [ "${SCOPE}" = "all" ] || [ "${SCOPE}" = "$1" ]; }
           run_item() {
             local item="$1" script="$2" needs_admin="$3"
@@ -81,16 +161,18 @@ jobs:
             # dry-run replay run without either variable (a dry run needs none).
             if [ "${needs_admin}" = "true" ]; then
               token="${ADMIN_TOKEN:-}"
-              if [ "${HAS_ADMIN_TOKEN}" = "true" ]; then cred="HELIOS_ADMIN_TOKEN"; else cred="GITHUB_TOKEN"; fi
+              cred="${admin_cred}"
             else
               token="${ISSUES_TOKEN:-}"
               cred="GITHUB_TOKEN"
             fi
             if [ "${APPLY}" = "true" ]; then
-              if [ "${needs_admin}" = "true" ] && [ "${HAS_ADMIN_TOKEN}" != "true" ]; then
-                # --repo is spelled out because this text is pasted from the browser
-                # into any shell, not necessarily inside a checkout.
-                note="needs HELIOS_ADMIN_TOKEN - owner: create a fine-grained PAT at https://github.com/settings/personal-access-tokens/new (repository access: ${repo}; permissions Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R), then: gh secret set HELIOS_ADMIN_TOKEN --repo ${repo} (paste when prompted) or export HELIOS_ADMIN_TOKEN and run pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply"
+              if [ "${needs_admin}" = "true" ] && [ "${HAS_ADMIN_TOKEN:-false}" != "true" ]; then
+                # The app path first (durable, rotates itself, fires on: push), the
+                # PAT second. --repo / -Repository are spelled out because this text
+                # is pasted from the browser into any shell, not necessarily inside
+                # a checkout.
+                note="needs an admin credential - owner, from your own machine: pwsh scripts/bootstrap/connect-github-app.ps1 -Repository ${repo} -DispatchGovernance (one Create click, one Install click; stores variables HELIOS_APP_CLIENT_ID / HELIOS_APP_ID / HELIOS_APP_SLUG and secret HELIOS_APP_PRIVATE_KEY, then re-dispatches this workflow). Fallback, a fine-grained PAT: https://github.com/settings/personal-access-tokens/new (repository access: ${repo}; permissions Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R), then gh secret set HELIOS_ADMIN_TOKEN --repo ${repo} (paste when prompted) or export HELIOS_ADMIN_TOKEN and run pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply"
               else
                 args="-Apply"
               fi
@@ -122,13 +204,18 @@ jobs:
                 ;;
               2)
                 if [ "${needs_admin}" = "true" ] && [ "${args}" = "-Apply" ]; then
-                  # -Apply ran WITH the stored HELIOS_ADMIN_TOKEN and the script still
-                  # failed its wire probe: the PAT is expired, revoked or under-scoped
-                  # (no Administration RW on this repository). A green "needs owner"
-                  # row would hide exactly that, so this one is red.
-                  state="FAILED (HELIOS_ADMIN_TOKEN stored but rejected: expired, revoked or under-scoped)"
-                  note="rotate the PAT (Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R on ${repo}), then: gh secret set HELIOS_ADMIN_TOKEN --repo ${repo}"
-                  echo "::error::${item}: ${script} exited 2 although HELIOS_ADMIN_TOKEN is stored - the PAT is expired, revoked or lacks Administration RW on ${repo}; rotate it and re-run"
+                  # -Apply ran WITH a real admin credential (the app token or the
+                  # PAT, named in cred) and the script still failed its wire probe:
+                  # that credential no longer confers Administration RW on this
+                  # repository. A green "needs owner" row would hide exactly that,
+                  # so this one is red, and the repair names the credential used.
+                  state="FAILED (${cred} present but rejected: expired, revoked or under-scoped)"
+                  if [ "${HAS_APP_TOKEN:-false}" = "true" ]; then
+                    note="the installation token was minted but ${repo} refused it as admin: re-run pwsh scripts/bootstrap/connect-github-app.ps1 -Repository ${repo} from your own machine (re-installs the app on ${repo} with Administration RW)"
+                  else
+                    note="rotate the PAT (Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R on ${repo}), then: gh secret set HELIOS_ADMIN_TOKEN --repo ${repo}"
+                  fi
+                  echo "::error::${item}: ${script} exited 2 although ${cred} is present - it no longer confers Administration RW on ${repo}; ${note}"
                   failed=1
                 else
                   state="needs owner (precondition)"; [ -n "${note}" ] || note="credential/precondition missing - see output"
@@ -150,7 +237,7 @@ jobs:
           {
             echo "## Governance ${RUN_MODE}"
             echo ""
-            echo "mode: **${RUN_MODE}** | apply: \`${APPLY}\` | scope: \`${SCOPE}\` | admin token: \`${HAS_ADMIN_TOKEN}\` | event: \`${GITHUB_EVENT_NAME}\`"
+            echo "mode: **${RUN_MODE}** | apply: \`${APPLY}\` | scope: \`${SCOPE}\` | admin token: \`${HAS_ADMIN_TOKEN:-false}\` (${admin_cred}) | app token: \`${app_state}\` | event: \`${GITHUB_EVENT_NAME}\`"
             echo ""
             echo "| Item | State | Exit code | Note |"
             echo "|---|---|---|---|"

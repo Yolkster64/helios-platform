@@ -24,7 +24,7 @@ read-only pass. Then:
 3. [Set the connector secrets (Slack, Linear)](#3-connectors-slack-and-linear) per `config/connectors.json`.
 4. [Create the Azure OIDC deploy identity](#4-azure-oidc-for-deploys) with `scripts/bootstrap/azure-oidc-setup.sh`.
 5. [Decide on the fleet VMSS](#5-fleet-vmss-opt-in) — it is OFF by default and stays off until you opt in.
-6. [Store the admin PAT and let the control fabric apply the rest](#6-control-fabric-the-admin-pat) — ruleset (mind the PR #113 ordering rule), Pages source, auto-merge, labels, milestones, from `main`; then the wiki, Pages and Projects clicks the fabric cannot make.
+6. [Connect the GitHub App (two clicks) and let the control fabric apply the rest](#6-control-fabric-the-github-app) — ruleset (mind the PR #113 ordering rule), Pages source, auto-merge, labels, milestones, from `main`; then the wiki, Pages and Projects clicks the fabric cannot make.
 7. [Flip the Linear switch, then run the hygiene passes](#7-branch-prune-and-issue-hygiene) — close the loop duplicates #54–#92 and prune the stale branches; both reversible.
 
 ## 1. Secrets: env vars and Key Vault
@@ -65,13 +65,19 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
 - **Actions secrets** (Settings → Secrets and variables → Actions → Secrets):
   - `SLACK_WEBHOOK_URL` — used by `.github/workflows/notify-slack.yml`.
   - `LINEAR_API_KEY` — used by `.github/workflows/linear-sync.yml`.
-  - `HELIOS_ADMIN_TOKEN` — the one admin credential, read only by
-    `.github/workflows/governance-apply.yml` (step 6).
+  - `HELIOS_ADMIN_TOKEN` — the fine-grained PAT that is the admin fallback for
+    `.github/workflows/governance-apply.yml`, used only when no GitHub App
+    token is minted (step 6).
   - `COPILOT_DISPATCH_TOKEN` — optional, for `copilot-dispatch.yml`
     (`docs/architecture/CONNECTIONS_SETUP.md` § GitHub ↔ Copilot).
   - All of the above, plus the three variables, can be set from env vars of the
     same name with `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply`
     (dry run by default; values travel over stdin, never argv).
+  - `HELIOS_APP_PRIVATE_KEY` — the HELIOS GitHub App's private key, the
+    durable admin credential of `governance-apply.yml`; stored together with
+    the identifier variables `HELIOS_APP_CLIENT_ID`, `HELIOS_APP_ID` and
+    `HELIOS_APP_SLUG` by `scripts/bootstrap/connect-github-app.ps1` (step 6);
+    rotation is the key swap described there.
 - **Environment `production`** (Settings → Environments): the OIDC federated
   credential is scoped to `environment:production`, so deploy jobs declaring it
   can only get Azure tokens through this environment. Add required reviewers
@@ -139,21 +145,21 @@ az deployment group create ... --parameters deployFleetVmss=true \
 Details: `infra/README.md` ("Fleet burst capacity (VMSS)") and
 `docs/architecture/HERMES_FLEET_AND_XCORE.md`.
 
-## 6. Control fabric: the admin PAT
+## 6. Control fabric: the GitHub App
 
-**One command**: `pwsh scripts/bootstrap/connect-admin.ps1` (from your own
-machine) does everything in this section around the two clicks only you can
-make. It prints the PAT creation URL with the exact permission checklist, reads
-the value from a masked prompt (or `-FromEnv HELIOS_ADMIN_TOKEN`), verifies
-`.permissions.admin` live and stores the secret over stdin; then, if the Azure
-session is missing or MFA-expired, runs the device-code sign-in and waits, mints
-the ops identity via `setup-tenant.ps1 -OpsIdentity -Apply`, and prints the
-three `AZURE_*` names to export so no later session needs you. Add
-`-ApplyGovernance` once PR #113 is on `main` — it reads `dotnet-build.yml` on
-`main` and refuses the ruleset otherwise (item 4 below); `-VerifyOnly` reports
-and changes nothing. From an agent session the transport rewrites GitHub
-credentials and the script says so instead of claiming a pass. The steps below
-are what it automates, for doing them by hand.
+**One command**: `pwsh scripts/bootstrap/connect-devices.ps1` (from your own
+machine, Cloud Shell or a Codespace — never an agent container, whose transport
+rewrites GitHub credentials) starts the `gh` and `az` device-code flows
+together, prints both codes in one table, waits, then chains everything this
+section needs: the GitHub Models token export,
+`connect-github-app.ps1 -DispatchGovernance` (the two clicks below and the
+first governance apply; `-SkipGitHubApp` skips it),
+`connect-admin.ps1 -SkipGitHub` (the Azure ops identity via
+`setup-tenant.ps1 -OpsIdentity -Apply` and the three `AZURE_*` names to export;
+`-SkipOpsIdentity` skips it), `auto-login.ps1`, `auth-doctor.ps1 -Json` and
+`first-run.sh --verify-only`. `-VerifyOnly` reports and changes nothing,
+`-Json` emits one object, `-Retry` re-runs what did not finish; `-Tenant`,
+`-Repository` and `-TimeoutMinutes` are the knobs. Twin: `connect-devices.sh`.
 
 Repository admin writes — the `main` ruleset, Pages source = GitHub Actions,
 "Allow auto-merge", delete-branch-on-merge, the `automerge` label — and the
@@ -161,26 +167,38 @@ label/milestone manifests under `config/github/` are applied by
 `.github/workflows/governance-apply.yml` from `main`, never from an agent
 session: the proxy those sessions sit behind rewrites GitHub credentials
 (`.permissions.admin` reads false, `/pages` is blocked), so admin mutations
-there are refused by design and only the dry runs are possible. The workflow
-needs one credential from you:
+there are refused by design and only the dry runs are possible. The workflow's
+admin credential is a private GitHub App, `helios-control-Yolkster64`, and the
+only human part of it is two clicks.
+`pwsh scripts/bootstrap/connect-github-app.ps1` (what `connect-devices.ps1`
+calls; it runs on its own too) does the rest:
 
-1. GitHub → **Settings** (profile menu) → **Developer settings** → **Personal
-   access tokens** → **Fine-grained tokens** → **Generate new token**: resource
-   owner **Yolkster64**, repository access **Yolkster64/helios-platform** only,
-   repository permissions **Administration RW, Contents RW, Issues RW, Pull
-   requests RW, Pages RW, Metadata R**; nothing else.
-2. `gh secret set HELIOS_ADMIN_TOKEN --repo Yolkster64/helios-platform` and
-   paste when prompted — or, with the value held in an env var of the same
-   name, `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply` (it feeds
-   `gh secret set` over stdin). The value goes into that prompt or that env var
-   and nowhere else.
-3. Once the workflow is on `main`:
-   `gh workflow run governance-apply.yml -f apply=true -f scope=all`, then read
-   the job summary: one row per item; an exit-2 row names the owner step, an
-   exit-1 row carries a replay list. Verify: `gh ruleset list` (a ruleset named
-   `main`), `gh label list` (the 21 manifest labels),
-   `gh api repos/Yolkster64/helios-platform/milestones` (the 4 manifest
-   milestones). Interim, while the workflow is not yet on `main`:
+1. **Create.** It opens the GitHub App manifest flow pre-filled (name
+   `helios-control-<owner>`, or `-AppName`; repository permissions
+   Administration, Contents, Issues, Pull requests, Pages, Actions, Workflows
+   write, Metadata read; no webhook; not public); you click **Create GitHub
+   App**. The one-hour code comes back on a one-shot listener on a free
+   `127.0.0.1` port (`-CallbackPort 0`, the default) or you paste it from the
+   address bar (`-CallbackPort -1`; `-FromCode <env var NAME>` for a code you
+   already hold); the script converts it at
+   `POST /app-manifests/{code}/conversions` and stores the *variables*
+   `HELIOS_APP_CLIENT_ID`, `HELIOS_APP_ID`, `HELIOS_APP_SLUG` (identifiers)
+   and the *secret* `HELIOS_APP_PRIVATE_KEY` (the PEM, over stdin to
+   `gh secret set`). The client and webhook secrets it also receives are
+   discarded; they stay on the app page, where you can delete them.
+2. **Install.** It opens
+   `https://github.com/apps/<slug>/installations/new/permissions?target_id=<owner id>`;
+   you click **Install** for this repository. It waits up to `-TimeoutMinutes`
+   (15; `-SkipInstallWait` returns at once) and verifies the installation the
+   way the workflow will: an in-process app JWT, then
+   `gh api /user/installations`.
+3. With `-DispatchGovernance` it runs
+   `gh workflow run governance-apply.yml -f apply=true -f scope=all`; read the
+   job summary: `app token: minted` on the header line, one row per item (an
+   exit-2 row names the owner step, an exit-1 row carries a replay list).
+   Verify: `gh ruleset list` (a ruleset named `main`), `gh label list` (the 21
+   manifest labels), `gh api repos/Yolkster64/helios-platform/milestones` (the
+   4 manifest milestones). Interim, while the workflow is not yet on `main`:
    `pwsh scripts/github/apply-rulesets.ps1` (dry run), then `-Apply` under an
    owner `gh auth login` on a workstation.
 4. **Ordering rule for the ruleset**: apply it only after PR #113's
@@ -190,11 +208,44 @@ needs one credential from you:
    never start on a PR that touches none of their paths and strand as
    **Expected**, blocking every such merge.
 
-The clicks the fabric cannot make (or makes only with the PAT), each with the
-command that follows it:
+Why an app rather than a PAT: the workflow mints an installation token per run
+(`actions/create-github-app-token@v3`, scoped to this repository and to
+exactly the permissions the four scripts need, revoked when the job ends), so
+nothing long-lived sits in a password manager; rotation is a key swap on the
+app page (`https://github.com/settings/apps/<slug>`: generate a new private
+key, delete the old one, then
+`gh secret set HELIOS_APP_PRIVATE_KEY --repo Yolkster64/helios-platform < key.pem`
+from a shell and delete `key.pem`); and a push or merge made with it fires
+`on: push`, which the cascade `GITHUB_TOKEN` cannot. A stored app credential
+that stops working (uninstalled at `https://github.com/settings/installations`,
+key rotated without re-storing) turns the run red with the repair named —
+never a silent fallback to a weaker token.
+
+**Fallback: the fine-grained PAT.** The runner takes `HELIOS_ADMIN_TOKEN` only
+when no app token was minted. `pwsh scripts/bootstrap/connect-admin.ps1`
+automates this lane around the one click only you can make (prints the PAT
+creation URL with the exact permission checklist, masked prompt or
+`-FromEnv HELIOS_ADMIN_TOKEN`, verifies `.permissions.admin` live, stores the
+secret over stdin; `-ApplyGovernance` once PR #113 is on `main` — it reads
+`dotnet-build.yml` on `main` and refuses the ruleset otherwise, item 4 above;
+`-VerifyOnly` reports only) — or by hand:
+
+- GitHub → **Settings** (profile menu) → **Developer settings** → **Personal
+  access tokens** → **Fine-grained tokens** → **Generate new token**: resource
+  owner **Yolkster64**, repository access **Yolkster64/helios-platform** only,
+  repository permissions **Administration RW, Contents RW, Issues RW, Pull
+  requests RW, Pages RW, Metadata R**; nothing else.
+- `gh secret set HELIOS_ADMIN_TOKEN --repo Yolkster64/helios-platform` and
+  paste when prompted — or, with the value held in an env var of the same
+  name, `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply` (it feeds
+  `gh secret set` over stdin). The value goes into that prompt or that env var
+  and nowhere else.
+
+The clicks the fabric cannot make (or makes only with an admin credential),
+each with the command that follows it:
 
 - **Pages**: the `pages` item of `apply-repo-settings.ps1` sets the source with
-  the PAT; by hand it is Settings → **Pages** → Source: **GitHub Actions**.
+  the app token or the PAT; by hand it is Settings → **Pages** → Source: **GitHub Actions**.
   Either way, then `gh workflow run pages-dashboard.yml` publishes the first
   dashboard instead of waiting for the next **Status Dashboard** completion.
 - **"Allow auto-merge"**: already on (Settings → General → Pull Requests;
@@ -210,9 +261,9 @@ command that follows it:
 - **Branch prune**: step 7 below — `gh workflow run branch-prune.yml` (plan),
   then `-f apply=true`.
 
-Without the secret the workflow still applies labels and milestones with
-`GITHUB_TOKEN` and reports the ruleset and settings as "needs
-HELIOS_ADMIN_TOKEN". It also applies on every push to `main` touching
+Without either credential the workflow still applies labels and milestones
+with `GITHUB_TOKEN` and reports the ruleset and settings as "needs an admin
+credential", the app path first. It also applies on every push to `main` touching
 `.github/rulesets/**`, `config/github/**` or `scripts/github/**` and once a day
 (06:17 UTC) as a drift net; every PR touching those paths gets a read-only plan
 in its checks. Full detail:
@@ -251,7 +302,8 @@ in its checks. Full detail:
 | One-command bring-up | `scripts/bootstrap/first-run.sh` / `.ps1`: the soft chain over every bootstrap script, `.helios/bootstrap-state.json`, the numbered checklist (exit 0 = chain ran, 1 = internal failure) | Typing the device codes; every item the checklist prints |
 | Provider keys → Key Vault | `scripts/bootstrap/set-provider-secrets.ps1`: dry run lists targets by name; `-Apply` writes through a mode-600 `--file`, verifies by name (exit 0/1/2) | Running it `-Apply` with the values in a masked prompt or `-FromEnv` |
 | Repo secrets and variables | `scripts/bootstrap/provision-github-secrets.ps1`: dry run in every first-run (state by name); `-Apply` sets from same-name env vars over stdin (exit 0/1/2) | Holding the values in the environment when applying; minting the PATs |
-| Ruleset, settings, labels, milestones | `.github/workflows/governance-apply.yml`: plan on every PR, apply on push to `main`, the daily schedule, or dispatch; manifests `config/github/labels.json`, `milestones.json`, `.github/rulesets/main.json` | Minting `HELIOS_ADMIN_TOKEN` and `gh secret set` it once; the first dispatch, after PR #113's no-path-filter triggers are on `main` |
+| GitHub App (admin authority) | `scripts/bootstrap/connect-github-app.ps1`: manifest flow, code conversion, the three `HELIOS_APP_*` variables + `HELIOS_APP_PRIVATE_KEY` over stdin, install wait, JWT verify, `-DispatchGovernance`; `connect-devices.ps1` runs it after the two device-code logins, then `connect-admin.ps1 -SkipGitHub`, `auto-login.ps1`, `auth-doctor.ps1 -Json`, `first-run.sh --verify-only` | Two clicks in the browser, **Create GitHub App** then **Install** (plus typing the two device codes); a key rotation on the app page when you choose to |
+| Ruleset, settings, labels, milestones | `.github/workflows/governance-apply.yml`: plan on every PR, apply on push to `main`, the daily schedule, or dispatch, with a per-run app installation token (then `HELIOS_ADMIN_TOKEN`, then `GITHUB_TOKEN` for labels/milestones only); manifests `config/github/labels.json`, `milestones.json`, `.github/rulesets/main.json` | The first dispatch, after PR #113's no-path-filter triggers are on `main`; PAT fallback only: minting `HELIOS_ADMIN_TOKEN` and `gh secret set` it once |
 | Pages, wiki, Projects board | `pages-dashboard.yml` publishes on every **Status Dashboard** completion; `wiki-generator.yml` pushes `docs/` on every push to `main` touching them | Pages source (the PAT item or the Settings → Pages click) and the first `pages-dashboard.yml` dispatch; the wiki's first page, then the first `wiki-generator.yml` dispatch; the classic `project` PAT and the two board commands |
 | Branch prune | `.github/workflows/branch-prune.yml` + `scripts/github/prune-branches.ps1`: classify, archive-tag, delete; JSON report artifact | Dispatching it (plan, then `apply=true`); choosing `keep` and, above 200 deletions, `max_delete` |
 | Duplicate issues | `scripts/github/close-duplicate-issues.ps1`: classify #54–#92, label, comment, close as duplicate (dry run default, exit 0/1/2) | Linear switch OFF first, then running `-Apply` |
@@ -263,7 +315,7 @@ in its checks. Full detail:
 - `CLAUDE.md` (repo root) — build commands and hard rules; the no-secrets rule lives here.
 - `docs/CONSOLIDATION_BLUEPRINT.md` and `docs/architecture/` — the trustworthy architecture docs.
 - `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md` — runners, Projects, wiki, connectors design.
-- `docs/architecture/CONNECTIONS_SETUP.md` — every connection, the Control fabric, the PAT click path.
+- `docs/architecture/CONNECTIONS_SETUP.md` — every connection, the Control fabric, the GitHub App and PAT click paths.
 - `docs/architecture/ABSORPTION_LEDGER.md` — the 40 absorption epics (issues #14–#53).
 - `scripts/github/README.md` — the governance and hygiene scripts and their dry-run/apply/exit contract.
 - `infra/README.md` — deploy dialects (Bicep/ARM/Terraform), VMSS gates, OIDC identity details.

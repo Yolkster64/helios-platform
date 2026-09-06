@@ -26,7 +26,7 @@ that owns rulesets/CODEOWNERS/merge-queue rollout is tranche T9 in
 | Workflow acting on its own repo | Actions `GITHUB_TOKEN`, deny-all default + per-job opt-ins | `.github/workflows/claude-foundry.yml:22` |
 | Projects v2 (board fields/items) | **Classic PAT, `project` scope — the only thing that works** | `docs/architecture/CONNECTIONS_SETUP.md:248-250` |
 | Copilot coding-agent assignment when `GITHUB_TOKEN` is refused | Fine-grained PAT secret with `GITHUB_TOKEN` fallback | `.github/workflows/copilot-dispatch.yml:38` |
-| Workflow cascades, org-scale automation, ARC runners | GitHub App (none exists in this repo yet) | `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md:47,55` |
+| Repo-admin writes from a workflow (rulesets, settings) and anything that must fire `on: push` | **GitHub App `helios-control-<owner>`** — per-run installation token via `actions/create-github-app-token@v3`; registered by `scripts/bootstrap/connect-github-app.ps1` from the owner's machine (two clicks); `HELIOS_ADMIN_TOKEN` PAT is the fallback, `GITHUB_TOKEN` last | `.github/workflows/governance-run.yml` (step `id: app`), `docs/architecture/CONNECTIONS_SETUP.md` § The one owner step |
 | A human's interactive CLI | `gh` device flow (`models:read` scope for the models provider) | `scripts/bootstrap/connect-github.sh:70` |
 | Workflow acting on **Azure** | OIDC federation — identifiers only, no client secret | `scripts/bootstrap/azure-oidc-setup.sh`, `helios-deploy.yml:62-64` |
 
