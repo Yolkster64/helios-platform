@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "publicationId": "helios-governance-publication",
+  "hostname": "heli0s-my.sharepoint.com",
+  "sitePath": "/personal/jmore_heli0s_onmicrosoft_com",
+  "driveName": "OneDrive",
+  "rootPath": "Helios/Governance",
+  "destinations": {
+    "architecture": "Architecture/Repository-Topology",
+    "runbooks": "Runbooks",
+    "security": "Security",
+    "compliance": "Compliance",
+    "deploymentEvidence": "Deployment-Evidence",
+    "releases": "Releases",
+    "rollback": "Rollback",
+    "aihub": "AIHub",
+    "monadoBlade": "MonadoBlade"
+  },
+  "requiredArtifacts": [
+    "docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md",
+    "docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md",
+    "docs/migration/yolkster-control-cutover/CANONICAL-ISSUE-LEDGER.md",
+    "docs/architecture/ADR-0010-WINUI3-ONLY.md",
+    "docs/architecture/CLAUDE-CODE-CANONICALIZATION.md",
+    "docs/repository/FORK-INVENTORY-2026-09-05.md",
+    "docs/fabric/HELIOS_FABRIC_SETUP.md",
+    "docs/fabric/FABRIC_ACTIVATION_MATRIX.md",
+    "config/fabric/helios-fabric.v1.json",
+    "config/connectors/helios-fabric.connections.v1.json",
+    "config/agents/helios-fabric-roles.v1.json",
+    "config/providers/helios-model-providers.v1.json"
+  ],
+  "publicationRules": {
+    "deterministicManifestRequired": true,
+    "sha256Required": true,
+    "sourceCommitRequired": true,
+    "readbackVerificationRequired": true,
+    "overwriteRequiresVersionedBackup": true,
+    "resumableUploadForLargeFiles": true,
+    "secretValuePublicationAllowed": false,
+    "tokenPublicationAllowed": false
+  },
+  "receiptFields": [
+    "publicationId",
+    "sourceRepository",
+    "sourceCommit",
+    "sourceSha256",
+    "sharePointSiteId",
+    "driveId",
+    "itemId",
+    "webUrl",
+    "eTag",
+    "size",
+    "publishedAt",
+    "verifiedAt",
+    "graphRequestId"
+  ]
+}
