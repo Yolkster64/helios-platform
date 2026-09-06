@@ -263,10 +263,7 @@ jobs:
           head_ref = ((pull_request.get("head") or {}).get("ref") or "")
           repo_owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "")
           can_comment = (
-              (
-                  str(repo.get("id", "")) == os.environ.get("GITHUB_REPOSITORY_ID", "")
-                  or repo.get("full_name", "") == os.environ.get("GITHUB_REPOSITORY", "")
-              )
+              repo.get("full_name", "") == os.environ.get("GITHUB_REPOSITORY", "")
               and (
                   author in {repo_owner, "Copilot", "copilot-swe-agent[bot]"}
                   or (
