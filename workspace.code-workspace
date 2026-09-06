@@ -1,51 +1,40 @@
 {
-  "workspace": {
-    "name": "HELIOS Platform - Unified Workspace",
-    "version": "1.0.0",
-    "description": "Monorepo workspace coordinating all 7 component repositories",
-    "folders": [
-      {
-        "path": ".",
-        "name": "helios-platform"
-      },
-      {
-        "path": "components/monado-engine",
-        "name": "Monado Engine (submodule)"
-      },
-      {
-        "path": "components/security-system",
-        "name": "Security System (submodule)"
-      },
-      {
-        "path": "components/ai-orchestrator",
-        "name": "AI Orchestrator (submodule)"
-      },
-      {
-        "path": "components/dev-ai-hub",
-        "name": "Developer AI Hub (submodule)"
-      },
-      {
-        "path": "components/build-agents",
-        "name": "Build Agents (submodule)"
-      },
-      {
-        "path": "components/gui-framework",
-        "name": "GUI Framework (submodule)"
-      },
-      {
-        "path": "components/software-stack",
-        "name": "Software Stack (submodule)"
-      }
-    ],
-    "settings": {
-      "editor.formatOnSave": true,
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
-      "files.exclude": {
-        "**/node_modules": true,
-        "**/.git": true,
-        "**/build": true,
-        "**/.devcontainer": false
-      }
+  "folders": [
+    {
+      "path": ".",
+      "name": "helios-platform"
     }
+  ],
+  "settings": {
+    "dotnet.defaultSolution": "HELIOS.sln",
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/.git": true,
+      "**/bin": true,
+      "**/obj": true,
+      "**/node_modules": true
+    },
+    "search.exclude": {
+      "**/.helios": true
+    },
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "powershell.codeFormatting.preset": "OTBS",
+    "terminal.integrated.defaultProfile.linux": "bash"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-dotnettools.csharp",
+      "ms-dotnettools.csdevkit",
+      "ionide.ionide-fsharp",
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-azuretools.vscode-bicep",
+      "hashicorp.terraform",
+      "ms-vscode.powershell",
+      "github.vscode-pull-request-github",
+      "github.copilot",
+      "github.copilot-chat"
+    ]
   }
 }
