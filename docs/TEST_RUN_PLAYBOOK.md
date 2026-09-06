@@ -24,7 +24,8 @@ pwsh scripts/setup/setup-all.ps1 -Fix       # also installs missing AI CLIs via 
 
 **Expected**: an `== INVENTORY ==` table (or JSON object) with one row per component —
 `toolchain`, `github-auth`, `azure-auth`, `ai-clis`, `fleet-topology`,
-`mcp-registration` — each `ready` or `needs-attention` with a `Next command` to fix.
+`mcp-registration`, `board-setup` — each `ready` or `needs-attention` with a
+`Next command` to fix.
 
 - Exit code **0** = every component ready; **2** = at least one needs attention. A 2 on a
   fresh box is normal (auth not done yet, CLIs not installed yet) — it is a to-do list,

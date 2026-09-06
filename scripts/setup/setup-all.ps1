@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
 Unified HELIOS readiness entrypoint (absorption ledger epic E1): one command that
-inventories toolchain, auth state, AI CLI fleet, fleet topology, and MCP registration.
+inventories toolchain, auth state, AI CLI fleet, fleet topology, MCP registration, and
+board setup.
 
 .DESCRIPTION
 Orchestrator only — every check calls the existing script that owns the area (repo
@@ -14,6 +15,8 @@ convention: PowerShell wraps, it never reimplements):
   c. scripts/bootstrap/setup-ai-clis.ps1               (-VerifyOnly unless -Fix)
   d. config/fleet/fleet-topology.json                  (parses + pools listed)
   e. .mcp.json                                         (parses + server project exists)
+  f. scripts/config/board-config.json                  (parses + persisted board +
+                                                        custom-field tiers listed)
 
 The result is a single INVENTORY table: component / status (ready | needs-attention) /
 detail / next command to fix. Exit 0 when everything is ready, 2 otherwise.
@@ -385,6 +388,56 @@ if (Test-Path -LiteralPath $mcpPath) {
 $components += New-Component -Name 'mcp-registration' -Ready $mcpReady -Detail $mcpDetail `
     -FixCommand 'dotnet build HELIOS.sln -c Release   # builds src/mcp/HELIOS.Mcp; then re-check .mcp.json paths'
 Write-ChildOutput @($mcpDetail)
+
+# --- f. Board setup (persisted board config) --------------------------------------
+Write-Section ''
+Write-Section '-- f. Board setup (scripts/config/board-config.json) --'
+# Read-only, no-network: the board-setup scripts own the real GraphQL provisioning
+# (setup-board.ps1) and validation (validate-board.ps1). Here we only confirm the
+# persisted board-config artifact exists and describes a board, so the operator knows
+# whether the board layout is captured before running those credentialed steps.
+$boardConfigPath = Join-Path $repoRoot 'scripts' 'config' 'board-config.json'
+$boardReady = $false
+$boardDetail = 'scripts/config/board-config.json not found'
+if (Test-Path -LiteralPath $boardConfigPath) {
+    try {
+        $board = Get-Content -Raw -LiteralPath $boardConfigPath | ConvertFrom-Json
+        $boardConfig = if ($board.PSObject.Properties['boardConfiguration']) { $board.boardConfiguration } else { $null }
+        if ($boardConfig) {
+            $boardName = if ($boardConfig.PSObject.Properties['name']) { [string]$boardConfig.name } else { '' }
+            $boardOrg = if ($boardConfig.PSObject.Properties['organization']) { [string]$boardConfig.organization } else { '' }
+            $projectNumber = if ($boardConfig.PSObject.Properties['projectNumber']) { $boardConfig.projectNumber } else { $null }
+            if (-not [string]::IsNullOrWhiteSpace($boardName) -and $null -ne $projectNumber) {
+                # Sum the persisted custom fields across every tier so the detail lines up
+                # with what setup-custom-fields.ps1 provisions and validate-board.ps1 checks.
+                $fieldCount = 0
+                if ($board.PSObject.Properties['customFields']) {
+                    foreach ($tier in $board.customFields.PSObject.Properties) {
+                        $tierValue = $tier.Value
+                        if ($tierValue.PSObject.Properties['fields']) {
+                            $fieldCount += @($tierValue.fields).Count
+                        }
+                    }
+                }
+                $boardReady = $true
+                $ownerText = if ([string]::IsNullOrWhiteSpace($boardOrg)) { '(owner unset)' } else { $boardOrg }
+                $boardDetail = "'$boardName' owner=$ownerText project #$projectNumber; $fieldCount custom fields persisted"
+            }
+            else {
+                $boardDetail = 'boardConfiguration is missing a name or projectNumber'
+            }
+        }
+        else {
+            $boardDetail = 'parses but declares no boardConfiguration'
+        }
+    }
+    catch {
+        $boardDetail = "does not parse: $($_.Exception.Message)"
+    }
+}
+$components += New-Component -Name 'board-setup' -Ready $boardReady -Detail $boardDetail `
+    -FixCommand 'pwsh scripts/board-setup/setup-board.ps1   # provision custom fields, then validate-board.ps1 for a read-only GraphQL verify'
+Write-ChildOutput @($boardDetail)
 
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })
