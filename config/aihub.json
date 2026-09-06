@@ -20,6 +20,14 @@
       "apiKeyEnv": "ANTHROPIC_API_KEY",
       "apiKeySecretName": "anthropic-api-key"
     },
+    "anthropic-foundry": {
+      "$comment": "Claude deployed in Microsoft Foundry, reached through the Anthropic Messages API at https://<resource>.services.ai.azure.com/anthropic. 'model' is the Foundry DEPLOYMENT name (may differ from the model id) - the same deployments scripts/ai-integration/Connect-ClaudeFoundry.ps1 targets. endpointEnv holds either a bare Foundry resource name or an absolute https base URL. When the key env var / Key Vault secret is absent the provider falls back to Microsoft Entra ID (DefaultAzureCredential, scope https://ai.azure.com/.default) exactly like azure-openai; it is Unconfigured only when the resource is unset.",
+      "type": "anthropic-foundry",
+      "model": "claude-sonnet-4-6",
+      "endpointEnv": "ANTHROPIC_FOUNDRY_RESOURCE",
+      "apiKeyEnv": "ANTHROPIC_FOUNDRY_API_KEY",
+      "apiKeySecretName": "anthropic-foundry-api-key"
+    },
     "azure-openai": {
       "type": "azure-openai",
       "model": "gpt-5-mini",
@@ -81,6 +89,7 @@
       "azure-openai",
       "openai",
       "anthropic",
+      "anthropic-foundry",
       "github-models",
       "ollama"
     ],
@@ -106,20 +115,24 @@
       ],
       "code_review": [
         "anthropic",
+        "anthropic-foundry",
         "claude-cli",
         "openai"
       ],
       "long_context_analysis": [
         "anthropic",
+        "anthropic-foundry",
         "claude-cli"
       ],
       "documentation_generation": [
         "anthropic",
+        "anthropic-foundry",
         "openai",
         "github-models"
       ],
       "code_analysis": [
         "anthropic",
+        "anthropic-foundry",
         "openai"
       ],
       "debugging": [
@@ -130,14 +143,17 @@
       ],
       "security_analysis": [
         "anthropic",
+        "anthropic-foundry",
         "openai"
       ],
       "architecture_design": [
         "anthropic",
+        "anthropic-foundry",
         "openai"
       ],
       "enterprise_data": [
         "azure-foundry",
+        "anthropic-foundry",
         "azure-openai"
       ],
       "inline_completion": [

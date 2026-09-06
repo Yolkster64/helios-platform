@@ -56,6 +56,21 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task RouteAsync_ExhaustedChain_ReportsEachProvidersRealReason()
+    {
+        var options = EchoOnlyOptions();
+        options.Routing.DefaultChain = new List<string> { "ghost-agent" };
+        var hub = new AIHubService(options);
+
+        var result = await hub.RouteAsync(taskType: null, "ping");
+
+        // The unconfigured hint must reach the caller, not "provider reported failure".
+        Assert.False(result.Success);
+        Assert.Contains("ghost-agent: CLI 'no-such-cmd-xyz' not found on PATH", result.Error);
+        Assert.DoesNotContain("provider reported failure", result.Error);
+    }
+
+    [Fact]
     public async Task RouteAsync_UnknownTaskTypeWithEmptyDefault_ReturnsActionableError()
     {
         var options = EchoOnlyOptions();
@@ -423,10 +438,20 @@ public class AIHubServiceTests
         var hub = new AIHubService(AIHubOptions.Load(path!));
         var status = hub.GetStatus();
 
-        // 7 API providers + 5 CLI agents from config/aihub.json.
-        Assert.Equal(12, status.Count);
+        // 8 API providers + 5 CLI agents from config/aihub.json.
+        Assert.Equal(13, status.Count);
         // Nothing requiring secrets should be Ready in a keyless environment.
         Assert.Equal(ProviderReadiness.Unconfigured,
             status.Single(p => p.Name == "anthropic").Readiness);
+        // anthropic-foundry keys off ANTHROPIC_FOUNDRY_RESOURCE (unset in CI), so it must
+        // surface as Unconfigured with a hint naming that variable — never Ready via the
+        // Entra fallback and never an exception. An operator who has run
+        // Connect-ClaudeFoundry.ps1 locally legitimately has it set; skip only that check.
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ANTHROPIC_FOUNDRY_RESOURCE")))
+        {
+            var foundry = status.Single(p => p.Name == "anthropic-foundry");
+            Assert.Equal(ProviderReadiness.Unconfigured, foundry.Readiness);
+            Assert.Contains("ANTHROPIC_FOUNDRY_RESOURCE", foundry.Detail);
+        }
     }
 }

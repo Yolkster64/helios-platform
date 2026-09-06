@@ -48,13 +48,58 @@ public static class ProviderFactory
             "anthropic" => new AnthropicAgent(
                 name, "Claude (Anthropic)", provider.Model,
                 secrets.Resolve(provider.ApiKeyEnv ?? "ANTHROPIC_API_KEY", provider.ApiKeySecretName)),
+            "anthropic-foundry" => CreateAnthropicFoundry(name, provider, secrets),
             "ollama" => CreateOllama(name, provider),
             "azure-foundry-agent" => new FoundryAgentProvider(
                 name, "Azure AI Foundry Agent", provider.Model,
                 Environment.GetEnvironmentVariable(provider.EndpointEnv ?? "AZURE_FOUNDRY_PROJECT_ENDPOINT")),
             _ => new ChatClientAgent(name, name, provider.Model, null,
-                $"Unknown provider type '{provider.Type}' — expected openai | azure-openai | anthropic | github-models | ollama | azure-foundry-agent."),
+                $"Unknown provider type '{provider.Type}' — expected openai | azure-openai | anthropic | anthropic-foundry | github-models | ollama | azure-foundry-agent."),
         };
+    }
+
+    /// <summary>
+    /// Claude deployed in Microsoft Foundry. Same readiness contract as
+    /// <see cref="CreateAzureOpenAi"/>: a missing or malformed resource is Unconfigured with
+    /// a hint (never a construction crash); a present key selects key auth; an absent key
+    /// selects Entra ID via <see cref="DefaultAzureCredential"/> and the agent is Ready.
+    /// </summary>
+    private static IChatProviderAgent CreateAnthropicFoundry(string name, ProviderOptions provider, ISecretResolver secrets)
+    {
+        const string displayName = "Claude (Microsoft Foundry)";
+        var endpointEnv = provider.EndpointEnv ?? AnthropicFoundryAgent.DefaultEndpointEnv;
+        var resource = Environment.GetEnvironmentVariable(endpointEnv);
+
+        // Explicit baseUrl in config overrides the env-derived base URL; without either
+        // the provider is Unconfigured and the hint names the env var to set.
+        string? candidate;
+        string source;
+        if (!string.IsNullOrWhiteSpace(provider.BaseUrl))
+        {
+            candidate = provider.BaseUrl;
+            source = $"baseUrl for provider '{name}' in config/aihub.json";
+        }
+        else if (!string.IsNullOrWhiteSpace(resource))
+        {
+            candidate = resource;
+            source = endpointEnv;
+        }
+        else
+        {
+            return new AnthropicFoundryAgent(name, displayName, provider.Model,
+                $"Set {endpointEnv} (Foundry resource name or https base URL) — " +
+                "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login.");
+        }
+
+        if (!AnthropicFoundryAgent.TryResolveBaseUri(candidate, source, out var baseUri, out var hint))
+        {
+            return new AnthropicFoundryAgent(name, displayName, provider.Model, hint);
+        }
+
+        var key = secrets.Resolve(provider.ApiKeyEnv ?? AnthropicFoundryAgent.DefaultApiKeyEnv, provider.ApiKeySecretName);
+        return key is null
+            ? new AnthropicFoundryAgent(name, displayName, provider.Model, baseUri, new DefaultAzureCredential())
+            : new AnthropicFoundryAgent(name, displayName, provider.Model, baseUri, key);
     }
 
     private static IChatProviderAgent CreateOpenAi(string name, ProviderOptions provider, ISecretResolver secrets)

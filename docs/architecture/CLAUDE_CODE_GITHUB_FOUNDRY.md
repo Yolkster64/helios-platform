@@ -79,6 +79,11 @@ The helper is observational/configurational: it reads Azure account/resource/dep
 metadata and sets process environment variables. It does not create resources, deploy
 models, write secrets, or assign RBAC.
 
+The hub's `anthropic-foundry` provider (`config/aihub.json`) uses the same Foundry
+resource and Claude deployments: it reads `ANTHROPIC_FOUNDRY_RESOURCE` as set by this
+helper and authenticates with `ANTHROPIC_FOUNDRY_API_KEY` when present, otherwise with
+the same Entra ID login via `DefaultAzureCredential`.
+
 ## GitHub review workflow
 
 After `.github/workflows/claude-foundry-comment-review.yml` is on `main`, the repository

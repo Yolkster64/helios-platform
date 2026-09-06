@@ -18,7 +18,7 @@ public class ConfigBindingTests
     {
         var options = LoadShippedConfig();
 
-        foreach (var expected in new[] { "openai", "openai-codex", "anthropic", "azure-openai", "github-models", "ollama", "azure-foundry" })
+        foreach (var expected in new[] { "openai", "openai-codex", "anthropic", "anthropic-foundry", "azure-openai", "github-models", "ollama", "azure-foundry" })
         {
             Assert.True(options.Providers.ContainsKey(expected), $"provider '{expected}' missing");
         }
