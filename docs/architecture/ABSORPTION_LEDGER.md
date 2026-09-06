@@ -43,7 +43,14 @@ fleet topology, and board-setup scripts (PS7 wrapping the C# CLI, per repo conve
   persisted `scripts/config/board-config.json` artifact via the pure
   `Get-BoardSetupReadiness` function, covered offline by
   `scripts/verify/tests/test_setup_all_board.ps1` and gated by
-  `.github/workflows/setup-fabric-contracts.yml`.
+  `.github/workflows/setup-fabric-contracts.yml`. The `azure-auth` leg additionally
+  runs a read-only ARM REST reachability probe (a GET to `management.azure.com`,
+  surfaced as `azure-control-plane`) so readiness reflects that the cached token still
+  works against the control plane, not just that it exists — the audit-first half of
+  #207, classified by the pure `Get-AzureControlPlaneReadiness` function and covered
+  offline by `scripts/verify/tests/test_setup_all_azure_probe.ps1`. The credential-
+  acquiring auto-login half of #207 is intentionally deferred: this orchestrator never
+  acquires or exports a secret.
 
 ## E2 — XCore9 evaluation service & runtime matrix (`ai-hub`) — open
 

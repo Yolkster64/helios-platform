@@ -25,7 +25,10 @@ pwsh scripts/setup/setup-all.ps1 -Fix       # also installs missing AI CLIs via 
 **Expected**: an `== INVENTORY ==` table (or JSON object) with one row per component —
 `toolchain`, `github-auth`, `azure-auth`, `ai-clis`, `fleet-topology`,
 `mcp-registration`, `board-setup` — each `ready` or `needs-attention` with a
-`Next command` to fix.
+`Next command` to fix. When Azure auth verifies and `az` is present, an extra
+`azure-control-plane` row reports a read-only ARM REST reachability probe (a GET to
+`management.azure.com`); it is omitted when the probe cannot run (`az` missing or
+`azure-auth` not ready) rather than shown as a misleading `ready`.
 
 - Exit code **0** = every component ready; **2** = at least one needs attention. A 2 on a
   fresh box is normal (auth not done yet, CLIs not installed yet) — it is a to-do list,

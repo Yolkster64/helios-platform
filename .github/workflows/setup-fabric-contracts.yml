@@ -2,8 +2,9 @@ name: Setup Fabric Contracts
 
 # Offline contract for the unified setup-all control-fabric orchestrator (absorption E1).
 # Mirrors auth-contracts.yml: it runs the pure, no-network readiness checks that
-# scripts/setup/setup-all.ps1 factors out, so a change to the orchestrator or its board
-# leg cannot silently break the persisted board-config contract. No secrets, no login
+# scripts/setup/setup-all.ps1 factors out (board-setup and Azure control-plane REST
+# reachability), so a change to the orchestrator or those legs cannot silently break the
+# persisted board-config contract or the ARM probe classifier. No secrets, no login
 # flows, and no PR event context is interpolated into any run block.
 
 on:
@@ -11,6 +12,7 @@ on:
     paths:
       - 'scripts/setup/setup-all.ps1'
       - 'scripts/verify/tests/test_setup_all_board.ps1'
+      - 'scripts/verify/tests/test_setup_all_azure_probe.ps1'
       - 'scripts/config/board-config.json'
       - '.github/workflows/setup-fabric-contracts.yml'
   push:
@@ -18,6 +20,7 @@ on:
     paths:
       - 'scripts/setup/setup-all.ps1'
       - 'scripts/verify/tests/test_setup_all_board.ps1'
+      - 'scripts/verify/tests/test_setup_all_azure_probe.ps1'
       - 'scripts/config/board-config.json'
       - '.github/workflows/setup-fabric-contracts.yml'
 
@@ -36,3 +39,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/verify/tests/test_setup_all_board.ps1
+      - name: Verify Azure control-plane readiness contract (offline)
+        shell: pwsh
+        run: |
+          ./scripts/verify/tests/test_setup_all_azure_probe.ps1

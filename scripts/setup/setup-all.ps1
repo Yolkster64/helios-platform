@@ -11,7 +11,9 @@ convention: PowerShell wraps, it never reimplements):
   a. scripts/build/verify-readiness.ps1 -Json          (build/test toolchain)
   b. scripts/bootstrap/connect-github.sh --verify-only  and
      scripts/bootstrap/connect-azure.sh --verify-only / connect-azure.ps1 -VerifyOnly
-     (auth state — read-only; login flows are never started from here)
+     (auth state — read-only; login flows are never started from here). When Azure auth
+     verifies and az is present, a read-only GET to management.azure.com then confirms the
+     ARM control plane is actually reachable with that token (azure-control-plane row).
   c. scripts/bootstrap/setup-ai-clis.ps1               (-VerifyOnly unless -Fix)
   d. config/fleet/fleet-topology.json                  (parses + pools listed)
   e. .mcp.json                                         (parses + server project exists)
@@ -23,7 +25,9 @@ detail / next command to fix. Exit 0 when everything is ready, 2 otherwise.
 
 -Fix runs the actual installers (setup-ai-clis.ps1 without -VerifyOnly). Authentication
 is NEVER mutated in either mode: device-code logins stay behind the connect-* scripts,
-run by a human when the inventory says so.
+run by a human when the inventory says so. The Azure control-plane check is verification
+only — it never acquires or exports a credential; the credential-acquiring "auto-login"
+half of issue #207 stays with the interactive connect-* scripts by design.
 
 .PARAMETER Json
 Emit a machine-readable inventory object instead of the table (nothing else on stdout —
@@ -148,6 +152,51 @@ function Get-BoardSetupReadiness {
     return [pscustomobject]@{
         Ready  = $true
         Detail = "'$boardName' owner=$ownerText project #$projectNumber; $fieldCount custom fields persisted"
+    }
+}
+
+# Pure interpreter for the Azure control-plane REST reachability probe (issue #207,
+# audit-first half). `az account show` only reads the local token cache; it never
+# confirms the ARM control plane is actually reachable with that token. The orchestrator
+# runs a read-only GET against https://management.azure.com and hands the exit code plus
+# output lines here, so the verdict logic has an offline contract test the same way the
+# board leg does. Returns { Ready = [bool]; Detail = [string] }. Classifies four cases:
+# reachable (exit 0), an auth/expiry failure, a network/DNS failure, and everything else.
+# NOTE: this is verification only. The credential-acquiring, credential-exporting
+# "auto-login" the issue also mentions is intentionally NOT implemented here -- it would
+# mutate and surface secrets, which this read-only orchestrator never does; that half is
+# deferred to the connect-* login scripts a human runs, tracked separately on #207.
+function Get-AzureControlPlaneReadiness {
+    param(
+        [Parameter(Mandatory)][int]$ExitCode,
+        [string[]]$Output = @()
+    )
+    $text = (@($Output) -join "`n")
+    if ($ExitCode -eq 0) {
+        return [pscustomobject]@{
+            Ready  = $true
+            Detail = 'Azure ARM: control plane reachable (read-only GET to management.azure.com).'
+        }
+    }
+    # Token present but rejected/expired by ARM: distinct from a network outage because the
+    # fix is a re-login, not connectivity. Match the shapes az/ARM emit for 401/expiry.
+    if ($text -match '(?i)AADSTS|expired|401|InvalidAuthenticationToken|re-?authenticate|az login') {
+        return [pscustomobject]@{
+            Ready  = $false
+            Detail = 'Azure ARM: reachable but the token was rejected (expired or unauthorized); re-run connect-azure.'
+        }
+    }
+    # Could not reach ARM at all (offline, DNS, proxy, TLS). Not an auth problem.
+    if ($text -match '(?i)could not resolve|name or service not known|network is unreachable|connection (refused|timed out|reset)|getaddrinfo|SSLError|temporary failure in name resolution|failed to establish') {
+        return [pscustomobject]@{
+            Ready  = $false
+            Detail = 'Azure ARM: control plane not reachable (network/DNS failure); check connectivity.'
+        }
+    }
+    $first = Get-FirstLine $Output
+    return [pscustomobject]@{
+        Ready  = $false
+        Detail = "Azure ARM: control-plane probe failed (exit $ExitCode): $first"
     }
 }
 
@@ -331,6 +380,32 @@ else {
 $components += New-Component -Name 'azure-auth' -Ready ($step.ExitCode -eq 0) -Detail $azureDetail `
     -FixCommand 'scripts/bootstrap/connect-azure.sh   # or connect-azure.ps1; device-code login'
 Write-ChildOutput $step.Output
+
+# Azure control-plane REST reachability (issue #207, audit-first half). The verify above
+# only proves a token is cached locally; it never confirms that token still works against
+# ARM. When az is available and the local check passed, follow up with a read-only GET to
+# management.azure.com and report it as a distinct component. Skipped (not failed) when the
+# local check already said not-authenticated or when az is unavailable, so this never
+# double-penalizes an already-surfaced gap. Read-only: no resource is created or mutated,
+# and no credential is acquired or exported.
+if ($azExe -and $step.ExitCode -eq 0) {
+    $armProbe = Invoke-Step -Executable $azExe -Arguments @(
+        'rest', '--method', 'get',
+        '--url', 'https://management.azure.com/subscriptions?api-version=2022-12-01',
+        '--output', 'none')
+    $armReadiness = Get-AzureControlPlaneReadiness -ExitCode $armProbe.ExitCode -Output $armProbe.Output
+    $components += New-Component -Name 'azure-control-plane' -Ready $armReadiness.Ready -Detail $armReadiness.Detail `
+        -FixCommand 'scripts/bootstrap/connect-azure.sh   # re-run device-code login, then retry the ARM probe'
+    Write-ChildOutput $armProbe.Output
+}
+else {
+    # No row rather than a misleading "ready": the ARM probe genuinely did not run, and the
+    # azure-auth component above already carries the actionable verdict (az missing, or local
+    # auth not ready). Inventing a component here would either lie ("ready") or double-count
+    # an already-surfaced gap ("needs-attention").
+    $skipReason = if (-not $azExe) { 'az CLI not installed' } else { 'local Azure auth not ready' }
+    Write-Section "   azure-control-plane: skipped ($skipReason)."
+}
 
 # --- c. AI CLI fleet --------------------------------------------------------------
 Write-Section ''
