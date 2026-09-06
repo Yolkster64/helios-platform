@@ -249,7 +249,7 @@ def validate(config: dict[str, Any]) -> dict[str, Any]:
 
 def _integration_plan(integration: dict[str, Any], inspect_env: bool) -> dict[str, Any]:
     env_names = integration["requiredEnv"]
-    present = [name for name in env_names if inspect_env and os.environ.get(name)]
+    present = [name for name in env_names if inspect_env and name in os.environ]
     missing = [name for name in env_names if name not in present]
     desired = integration["desiredState"]
     if desired == "disabled":
