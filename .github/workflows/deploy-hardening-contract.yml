@@ -1,0 +1,37 @@
+name: Deploy hardening contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/helios-deploy.yml'
+      - '.github/workflows/deploy-hardening-contract.yml'
+      - 'scripts/validation/validate_deploy_custody.py'
+      - 'scripts/validation/tests/test_validate_deploy_custody.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/helios-deploy.yml'
+      - '.github/workflows/deploy-hardening-contract.yml'
+      - 'scripts/validation/validate_deploy_custody.py'
+      - 'scripts/validation/tests/test_validate_deploy_custody.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install validator dependencies
+        run: python3 -m pip install --disable-pip-version-check pyyaml==6.0.2
+
+      - name: Validate deploy hardening contract
+        run: python3 scripts/validation/validate_deploy_custody.py
+
+      - name: Run deploy hardening mutation tests
+        run: python3 -m unittest scripts.validation.tests.test_validate_deploy_custody -v
