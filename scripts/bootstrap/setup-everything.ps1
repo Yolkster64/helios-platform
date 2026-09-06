@@ -163,6 +163,7 @@ try {
         @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) }
         @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') }
         @{ Step = 'stack-smoke'; Script = 'scripts/verify/stack-smoke.ps1'; Arguments = @('-Json'); Soft = $true }
+        @{ Step = 'rest-connect'; Script = 'scripts/verify/rest-connect.ps1'; Arguments = @('-Json'); Soft = $true }
     )
 
     Write-Report "== HELIOS setup-everything ($modeLabel) — ordered chain over existing scripts =="
