@@ -14,10 +14,11 @@ connector, or deployment authority.
   recovery roles without treating a planned rename as already complete.
 - `examples/` contains inert, non-networked compatibility fixtures.
 
-The contract was adapted from the historical M0nado event and repository maps. Exact
-source blob SHAs are recorded in `repository-capabilities.v1.json`. Cross-repository
-policy remains governed by `Heli0s-Dynamics/adaptive-multibrain-bootstrap`; the current
-Yolkster product repository distributes and executes this version of the contract.
+The contract was adapted from the historical M0nado event and repository maps and is
+reconciled with the merged Yolkster cutover topology. Exact source blob SHAs are recorded
+in `repository-capabilities.v1.json`. Cross-repository policy remains governed by
+`Heli0s-Dynamics/adaptive-multibrain-bootstrap`; the current Yolkster product repository
+distributes and executes this version of the contract.
 
 ## Envelope rules
 

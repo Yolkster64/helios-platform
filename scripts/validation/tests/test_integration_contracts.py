@@ -105,6 +105,16 @@ class IntegrationContractTests(unittest.TestCase):
         errors = contracts.validate_repository_registry(self.registry_schema, registry)
         self.assertTrue(any("active capability" in error for error in errors), errors)
 
+    def test_current_yolkster_topology_provenance_is_required(self):
+        registry = copy.deepcopy(self.registry)
+        registry["provenance"] = [
+            source
+            for source in registry["provenance"]
+            if source["path"] != "config/migration/yolkster-control/topology.v1.json"
+        ]
+        errors = contracts.validate_repository_registry(self.registry_schema, registry)
+        self.assertTrue(any("missing historical provenance" in error for error in errors), errors)
+
     def test_only_github_is_deployment_authority(self):
         registry = copy.deepcopy(self.registry)
         next(surface for surface in registry["surfaces"] if surface["name"] == "azure")[

@@ -487,6 +487,7 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
     required_sources = {
         ("M0nado/helios-platform", "config/integrations/event-contract.schema.json"),
         ("M0nado/helios-platform", "config/integrations/repositories.json"),
+        ("Yolkster64/helios-platform", "config/migration/yolkster-control/topology.v1.json"),
     }
     observed_sources: set[tuple[object, object]] = set()
     if not isinstance(provenance, list) or not provenance:

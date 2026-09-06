@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": 1,
+  "observedAt": "2026-09-05",
+  "currentAuthority": {
+    "repository": "Yolkster64/helios-platform",
+    "branch": "main",
+    "planningBaseSha": "26829ea80e0d50258c6bd867eb155a2ffcca5dd5",
+    "forkParent": "M0nado/helios-platform",
+    "renamePending": true
+  },
+  "targetAuthority": {
+    "coreRepository": "Yolkster64/helios-control",
+    "guiRepository": "Yolkster64/helios-gui",
+    "profileRepository": "Yolkster64/Yolkster64",
+    "governanceRepository": "Yolkster64/.github-enterprise-control"
+  },
+  "desktop": {
+    "framework": "WinUI 3",
+    "language": "C#",
+    "targetFramework": "net10.0-windows",
+    "xamlNamespace": "Microsoft.UI.Xaml",
+    "compositionNamespace": "Microsoft.UI.Composition",
+    "wpfAllowed": false,
+    "uwpAllowed": false,
+    "legacyWpfRemovalIssue": "HC-002"
+  },
+  "deployment": {
+    "authority": "GitHub protected environments",
+    "azureDevOpsRole": "validation-and-evidence-mirror",
+    "applyDefault": false,
+    "productionEnabled": false
+  },
+  "collaboration": {
+    "slackWorkspace": "T0BAFGSNY5P",
+    "slackConversation": "D0BB80HRZFA",
+    "linearProject": "Helios Integration Fabric",
+    "sharePointRoot": "Helios/Governance"
+  }
+}

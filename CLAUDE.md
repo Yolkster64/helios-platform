@@ -1,97 +1,69 @@
-# HELIOS Platform
+# HELIOS Control
 
-Enterprise Windows management platform. C#/.NET 10 + PowerShell 7, with a multi-LLM hub
-(`src/ai/`), an MCP server (`src/mcp/`), and Azure AI Foundry infrastructure (`infra/`).
+Enterprise Windows management and multi-agent control platform. The current repository is `Yolkster64/helios-platform`; after the reviewed in-place cutover it becomes `Yolkster64/helios-control`. Do not create a competing canonical copy.
 
-## Build & test (what CI runs)
+The stack is C#/.NET 10 + PowerShell 7, with a multi-LLM hub under `src/ai`, an MCP server under `src/mcp`, Azure/Foundry infrastructure under `infra`, and the active native desktop shell under `src/gui`.
+
+## Build and test
 
 ```bash
-dotnet build HELIOS.sln -c Release          # AIHub + CLI + MCP + tests ONLY
+dotnet build HELIOS.sln -c Release
 dotnet test tests/HELIOS.AIHub.Tests -c Release
-cd src/ai/python && python3 -m pytest tests # Python spoke (dependency-free; [ml] extra optional)
-bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
+cd src/ai/python && python3 -m pytest tests
+bicep build infra/main.bicep --stdout
+python3 scripts/validation/validate_yolkster_cutover.py
 ```
 
-**`HELIOS.sln` deliberately excludes `src/core/HELIOS.Platform`** — the core project does
-not compile today (~323 errors). Do not add it back until it builds. The two seam files
-`Core/AI/Interfaces/IAgent.cs` and `Core/AI/Router/IRouter.cs` are source-linked into
-HELIOS.AIHub; keep them dependency-free (System.* usings only).
+`HELIOS.sln` intentionally excludes the non-compiling legacy root/core project. The source-linked seams `Core/AI/Interfaces/IAgent.cs` and `Core/AI/Router/IRouter.cs` must remain dependency-free.
 
-## Hard rules
+## Binding architecture rules
 
-- **Root `HELIOS.Platform.csproj` recursively globs `**/*.cs`.** Any new C# directory
-  outside `src/ai`/`src/mcp` must be added to its `<Compile Remove>` list in the same
-  commit, or it silently breaks the root WPF project.
-- **New C# goes under `src/`** and must be added to `HELIOS.sln`. Exception:
-  Windows-only UI projects (`src/gui/`) cannot compile on the Linux CI that builds
-  `HELIOS.sln`, so they live in their own solution (`src/gui/HELIOS.Shell.sln`,
-  built on Windows — see `src/gui/README.md`) and MUST still be covered by the
-  root csproj's glob guards.
-- **No secrets in the repo.** `config/aihub.json` carries env-var names only; keys come
-  from the environment or Azure Key Vault (`AZURE_KEY_VAULT_URI`). Bicep takes secrets as
-  `@secure()` parameters and never outputs them.
-- Root-level `*_COMPLETE/*_REPORT/*_SUMMARY.md` status docs are historical and
-  unreliable; trust `docs/CONSOLIDATION_BLUEPRINT.md` and `docs/architecture/`.
+- **WinUI 3 is the only active desktop framework.** New desktop code uses C#/.NET 10, Windows App SDK, `Microsoft.UI.Xaml`, and `Microsoft.UI.Composition` under `src/gui`.
+- No new WPF, UWP, `System.Windows`, `PresentationFramework`, `PresentationCore`, `Windows.UI.Xaml`, or PowerShell GUI host is permitted. The root `HELIOS.Platform.csproj` is a temporary, explicit legacy WPF baseline tracked by HC-002; it is not a fallback or migration layer.
+- Windows-only GUI projects build through `src/gui/HELIOS.Shell.sln` on Windows runners and remain excluded from the portable Linux solution.
+- The legacy root project recursively globs C# files. Until HC-002 removes it, every new C# directory outside `src/ai`, `src/mcp`, and the existing exclusions must update its `<Compile Remove>` guards in the same commit.
+- No secrets in Git. Provider configuration stores environment-variable or Key Vault references only. Bicep uses secure parameters and must not output secret values.
+- Root-level `*_COMPLETE`, `*_REPORT`, and `*_SUMMARY` documents are historical. Trust `docs/CONSOLIDATION_BLUEPRINT.md`, `docs/architecture`, and `docs/migration/yolkster-control-cutover`.
+- GitHub protected environments remain deployment authority. Slack, Linear, SharePoint, Azure DevOps, Claude, Codex, Copilot, Hermes, and XCore cannot approve production.
 
-## Claude Code / Microsoft Foundry
+## Repository cutover
 
-- Local PowerShell: `scripts/ai-integration/Connect-ClaudeFoundry.ps1` verifies the
-  current Azure CLI session, resolves the Foundry resource, sets Claude Foundry
-  environment variables, and can launch `claude` with `-Launch`.
-- GitHub automation: `.github/workflows/claude-foundry.yml` is owner-dispatched from
-  `main` and supports read-only review plus implementation-to-draft-PR through
-  Microsoft Foundry.
-- Claude uses a **dedicated least-privilege Entra/OIDC identity**, not the deployment
-  identity. Bootstrap it with `scripts/bootstrap/claude-foundry-oidc-setup.ps1`.
-  The canonical GitHub variables are `CLAUDE_AZURE_CLIENT_ID`,
-  `CLAUDE_AZURE_TENANT_ID`, `CLAUDE_AZURE_SUBSCRIPTION_ID`, and
-  `ANTHROPIC_FOUNDRY_RESOURCE`.
-- The dedicated principal receives only `Cognitive Services User` on the selected
-  Foundry account. No client secret is created. The existing HELIOS deployment identity
-  remains a compatibility fallback only.
-- The implementation lane deliberately separates authority: Claude's Azure-authenticated
-  job has a read-only GitHub token and emits a patch; validation/publishing jobs have no
-  Azure OIDC token and can only publish a validated draft PR.
-- Project permission denials live in `.claude/settings.json`. Never use a bypass-permission
-  mode in CI.
-- Full operator setup: `docs/architecture/CLAUDE_CODE_GITHUB_FOUNDRY.md`.
+- Current live authority: `Yolkster64/helios-platform`.
+- Target after administrator rename: `Yolkster64/helios-control`.
+- Target GUI repository: `Yolkster64/helios-gui`.
+- Profile repository: `Yolkster64/Yolkster64`.
+- Historical parent: `M0nado/helios-platform`.
+
+Run `/review-yolkster-cutover` or the `canonical-migration` agent before any repository move. The migration is plan/read-first. Claude may prepare code, tests, evidence, draft issues, and draft PRs; it may not rename, transfer, archive, merge, force-push, deploy, alter RBAC/Entra, read secrets, or perform workstation administration.
+
+## Claude Code and Microsoft Foundry
+
+- `scripts/ai-integration/Connect-ClaudeFoundry.ps1` verifies Azure CLI context, resolves the Foundry resource, sets process-local variables, and can launch Claude.
+- `.github/workflows/claude-foundry.yml` is owner-dispatched from trusted `main`; Azure-authenticated work has read-only GitHub authority and emits a patch. Validation/publishing has no Azure OIDC token and may create only a validated draft PR.
+- Claude uses a dedicated least-privilege OIDC identity and `Cognitive Services User` scope on the selected Foundry account. It does not share the deployment identity and no client secret is created.
+- Canonical identifiers are `CLAUDE_AZURE_CLIENT_ID`, `CLAUDE_AZURE_TENANT_ID`, `CLAUDE_AZURE_SUBSCRIPTION_ID`, and `ANTHROPIC_FOUNDRY_RESOURCE`.
+- Project denials live in `.claude/settings.json`. Bypass-permission mode is forbidden in CI.
+- Migration-specific limits are documented in `docs/architecture/CLAUDE-CODE-CANONICALIZATION.md`.
 
 ## Multi-LLM hub
 
-- `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `tandem` /
-  `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan` /
-  `fleet-plan`. Providers and the task-routing table live in `config/aihub.json`; engine
-  candidates and fleet-plan chain suggestions are advisory and never auto-execute.
-- `helios-ai-api` (src/ai/HELIOS.AIHub.Api): `GET /healthz`; `/v1/status`,
-  `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/metrics`, `/v1/engines`;
-  `POST /v1/learning`, `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`,
-  `/v1/compare`. `/v1/*` is loopback-only unless a caller sends
-  `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; hosted use still needs
-  identity-aware ingress.
-- Python spoke (src/ai/python, `helios-agents`): outcome analytics, text grouping, and
-  truthful engine catalog/recommendation operations behind `PythonInsightsSpoke`'s
-  four-process cap. Prototype/concept candidates never auto-execute.
-- MCP server (src/mcp/HELIOS.Mcp, registered in `.mcp.json`): `helios_ai_ask`,
-  `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
-  `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
-  `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
-  `helios_absorb_status_get`, `helios_fleet_status_get`, `helios_azure_inventory_get`,
-  `helios_auth_status_get`, `helios_fleet_plan_get`, `helios_foundry_agent_list`,
-  `helios_foundry_agent_create`,
-  `helios_operator_profile_get`, `helios_operator_profile_save`,
-  `helios_operator_context_sync`, `helios_operator_next_steps_get`.
-- Claude Code plugin (`plugins/helios-operator`, cataloged by
-  `.claude-plugin/marketplace.json`): the `operate-helios` skill, `fabric-operator`
-  subagent, and the same MCP server. Durable, sanitized handoff state is local and
-  inspectable under the gitignored `.helios/operator/` directory.
-- Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
+`helios-ai` supports `ask`, `route`, `tandem`, `compare`, `status`, provider inspection, routing, engines, engine plans, and fleet plans. Provider and routing configuration lives in `config/aihub.json`; recommendations are advisory and never auto-execute.
 
-## Architecture docs
+`helios-ai-api` provides `/healthz`, status, routing, learning, insights, metrics, engines, provider operations, and bounded learning endpoints. `/v1/*` is loopback-only unless the caller supplies `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; hosted use still requires identity-aware ingress.
 
-`docs/architecture/MULTI_LLM_INTEGRATION.md` (this design), `GITHUB_ECOSYSTEM_DESIGN.md`
-(runners/Projects/wiki/connectors), `HERMES_FLEET_AND_XCORE.md` (agent fleet),
-`GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `GUI_UPGRADE_PLAN.md` (shell completion:
-canonical tokens, pages, Adobe assets, agent roster), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
-known-red workflow inventory), `CLAUDE_CODE_OPERATOR_PLUGIN.md` (Claude plugin and shared
-operator context). Coding skills live in `.claude/skills/` (index and
-per-stack library references: `.claude/skills/README.md`).
+The Python spoke provides analytics and engine recommendations behind a bounded process cap. Prototype engines never auto-execute. Hermes/XCore may route, simulate, score, reflect, and update redacted memory, but cannot grant itself cloud or production authority.
+
+The MCP server in `.mcp.json` exposes the governed `helios_*` tools for AI routing, status, providers, engines, infrastructure validation, absorption/fleet/auth status, Azure inventory, Foundry agents, and sanitized operator context. The Claude plugin under `plugins/helios-operator` uses the same MCP server and stores durable sanitized handoff state under the gitignored `.helios/operator` directory.
+
+## Key architecture references
+
+- `docs/architecture/MULTI_LLM_INTEGRATION.md`
+- `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md`
+- `docs/architecture/HERMES_FLEET_AND_XCORE.md`
+- `docs/architecture/GUI_THEME_ANALYSIS.md`
+- `docs/architecture/GUI_UPGRADE_PLAN.md`
+- `docs/architecture/CLAUDE_CODE_GITHUB_FOUNDRY.md`
+- `docs/architecture/CLAUDE-CODE-CANONICALIZATION.md`
+- `docs/architecture/ADR-0010-WINUI3-ONLY.md`
+- `docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md`
+- `docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md`
