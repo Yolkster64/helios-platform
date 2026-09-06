@@ -90,7 +90,7 @@ jobs:
         if: steps.creds.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.what_if
         run: |
           if [ "$(az group exists --name "$AZURE_RESOURCE_GROUP")" != "true" ]; then
-            echo "::error::What-if is read-only and will not create missing resource group '$AZURE_RESOURCE_GROUP'. Create it first or run deploy mode."
+            echo "::error::What-if is read-only and will not create missing resource group '$AZURE_RESOURCE_GROUP'. Create it before rerunning what-if."
             exit 1
           fi
 
