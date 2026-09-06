@@ -114,6 +114,20 @@ jobs:
         env:
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Changed files only (measured on PR #208): with the default whole-codebase
+          # scope the per-linter statuses this job now publishes report the legacy
+          # src/core status documents and tests/UAT.md - none of them touched by the
+          # PR under review - so every PR read red for the same pre-existing lines.
+          # Scoped to the diff against DEFAULT_BRANCH, a status names the PR's own
+          # files; the legacy backlog is issue #144 (legacy removal).
+          VALIDATE_ALL_CODEBASE: false
+          # The repo's own markdownlint baseline (.markdownlint.json at the root, the
+          # one the dedicated markdown-lint job above applies) instead of super-linter's
+          # bundled template - one rule set for both jobs, so the two cannot disagree
+          # about the same file. Other linters keep super-linter's defaults (a missing
+          # rules file falls back to the bundled template).
+          LINTER_RULES_PATH: .
+          MARKDOWN_CONFIG_FILE: .markdownlint.json
           VALIDATE_CSHARP: true
           VALIDATE_JSON: true
           VALIDATE_MARKDOWN: true
