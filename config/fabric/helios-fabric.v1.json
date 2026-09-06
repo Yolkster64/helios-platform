@@ -4,24 +4,24 @@
   "version": 1,
   "migrationIssue": "HC-029",
   "sourcePullRequest": {
-    "repository": "M0nado/helios-platform",
-    "number": 184,
-    "mergeSha": "pending",
+    "repository": "Yolkster64/helios-platform",
+    "number": 154,
+    "mergeSha": "50337e3faace1cdf8834db895fa5c5cf1f904a47",
     "requiredChecks": [
       {
         "name": "CI - Code Validation & Testing",
-        "result": "pending",
-        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+        "result": "success",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence"
       },
       {
         "name": "PR Pipeline",
-        "result": "pending",
-        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+        "result": "success",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence"
       },
       {
         "name": "Infra Validation",
-        "result": "pending",
-        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence"
+        "result": "n/a",
+        "evidenceRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence"
       }
     ]
   },
@@ -66,15 +66,16 @@
   },
   "checklist": [
     {
-      "id": "record-pr184-merge-evidence",
-      "title": "Record M0nado/helios-platform#184 merge SHA and required-check evidence.",
-      "status": "pending",
+      "id": "record-pr154-merge-evidence",
+      "title": "Record Yolkster64/helios-platform#154 merge SHA and exact required-check evidence.",
+      "status": "done",
       "category": "evidence",
-      "owner": "repo-owner",
+      "owner": "copilot",
       "requiresRename": false,
       "dependsOn": [],
-      "externalAction": true,
-      "notes": "Copy the merge SHA, check names, and run URLs into the PR-184 receipt section."
+      "externalAction": false,
+      "receiptRef": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence",
+      "notes": "Merge SHA and exact-head required-check run URLs are captured in the PR-154 receipt section."
     },
     {
       "id": "validate-fabric-schema",
@@ -149,7 +150,7 @@
       "owner": "repo-owner",
       "requiresRename": true,
       "dependsOn": [
-        "record-pr184-merge-evidence"
+        "record-pr154-merge-evidence"
       ],
       "externalAction": true,
       "notes": "Use repo:Yolkster64/helios-control:environment:azure-dev subject and keep deployment authority in protected environments."
