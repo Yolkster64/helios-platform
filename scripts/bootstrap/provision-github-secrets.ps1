@@ -28,10 +28,10 @@ missing scope - the state reads "unknown" with the reason, never a guess).
 skipped by name. Every mutation prints its exact command FIRST, a failed item never
 aborts the pass, and the script exits 1 with a replay list.
 
-SECURITY - values never on argv, never printed, never logged: `gh secret set` /
-`gh variable set` read the body from STDIN when --body is absent, so the value is
-written to the child's stdin by this process and nowhere else. gh's own stderr on
-failure (HTTP status, permission text) is value-free and is shown truncated.
+SECURITY - secret values never on argv, never printed, never logged: `gh secret set`
+receives the value through the child's stdin. Non-secret OIDC identifiers use
+`gh variable set --body`; printed commands show only the source environment-variable
+name. gh's own stderr on failure (HTTP status, permission text) is shown truncated.
 
 .PARAMETER Repository
 Target repository as owner/name. Defaults to Yolkster64/helios-platform.
