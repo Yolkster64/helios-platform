@@ -246,7 +246,7 @@ pwsh scripts/absorption/absorb-pr.ps1 -PrNumber 294
 
 **Expected**: the script fetches the upstream PR head (`M0nado/helios-platform` —
 public, read-only, no credentials), trial-merges it in a disposable worktree, runs the
-same gate CI runs, and writes a scored report to `.helios/absorption/pr-222.json` with
+same gate CI runs, and writes a scored report to `.helios/absorption/pr-294.json` with
 per-step results and a verdict. **A merge-conflict outcome is a valid result** — the
 report records the conflicting files and the verdict; it is evidence, not a failed run.
 Nothing merges automatically; `-Apply` only keeps the scratch worktree for deliberate
