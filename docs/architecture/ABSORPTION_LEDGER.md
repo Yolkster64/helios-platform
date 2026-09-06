@@ -19,7 +19,7 @@ Per PR (watchlist): `candidate → benchmarked → absorbed | rejected`.
 
 ---
 
-## E1 — Unified `setup-all` control-fabric CLI (`enhancement`) — open
+## E1 — Unified `setup-all` control-fabric CLI (`enhancement`) — tranche-1
 
 Ten upstream PRs circle one idea: a single `setup-all` entrypoint that brings the whole
 control fabric to readiness — inventory, hardened wrappers, persisted board config —
@@ -35,6 +35,15 @@ fleet topology, and board-setup scripts (PS7 wrapping the C# CLI, per repo conve
 - Extracts: one command surface; readiness inventory (dedupe with E14); persisted
   board-config artifact pattern
 - Risks: competing drafts — pick one shape, credit the rest; heavy tree divergence
+- Landed (tranche-1): `scripts/setup/setup-all.ps1` is the single entrypoint and now
+  inventories all three legs — auth bootstrap (`github-auth`/`azure-auth`), fleet
+  topology (`fleet-topology`), and board setup (`board-setup`) — alongside `toolchain`,
+  `ai-clis`, and `mcp-registration`, as a read-only table or `-Json` object (auth is
+  never mutated; `-Fix` only installs missing AI CLIs). The `board-setup` leg reads the
+  persisted `scripts/config/board-config.json` artifact via the pure
+  `Get-BoardSetupReadiness` function, covered offline by
+  `scripts/verify/tests/test_setup_all_board.ps1` and gated by
+  `.github/workflows/setup-fabric-contracts.yml`.
 
 ## E2 — XCore9 evaluation service & runtime matrix (`ai-hub`) — open
 

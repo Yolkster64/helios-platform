@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
 Unified HELIOS readiness entrypoint (absorption ledger epic E1): one command that
-inventories toolchain, auth state, AI CLI fleet, fleet topology, and MCP registration.
+inventories toolchain, auth state, AI CLI fleet, fleet topology, MCP registration, and
+board setup.
 
 .DESCRIPTION
 Orchestrator only — every check calls the existing script that owns the area (repo
@@ -14,6 +15,8 @@ convention: PowerShell wraps, it never reimplements):
   c. scripts/bootstrap/setup-ai-clis.ps1               (-VerifyOnly unless -Fix)
   d. config/fleet/fleet-topology.json                  (parses + pools listed)
   e. .mcp.json                                         (parses + server project exists)
+  f. scripts/config/board-config.json                  (parses + persisted board +
+                                                        custom-field tiers listed)
 
 The result is a single INVENTORY table: component / status (ready | needs-attention) /
 detail / next command to fix. Exit 0 when everything is ready, 2 otherwise.
@@ -103,6 +106,49 @@ function Get-FirstLine {
     param([string[]]$Lines = @())
     $line = $Lines | Where-Object { $_ -and $_.Trim() } | Select-Object -First 1
     if ($line) { $line.Trim() } else { '(no output)' }
+}
+
+# Pure, no-network read of the persisted board-config artifact so the board-setup
+# component (step f) has an offline contract test (scripts/verify/tests/test_setup_all_board.ps1)
+# the same way the auth lanes do. Returns { Ready = [bool]; Detail = [string] }; a missing,
+# malformed, or incomplete file is reported as not-ready rather than throwing.
+function Get-BoardSetupReadiness {
+    param([Parameter(Mandatory)][string]$ConfigPath)
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'scripts/config/board-config.json not found' }
+    }
+    try {
+        $board = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{ Ready = $false; Detail = "does not parse: $($_.Exception.Message)" }
+    }
+    $boardConfig = if ($board.PSObject.Properties['boardConfiguration']) { $board.boardConfiguration } else { $null }
+    if (-not $boardConfig) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'parses but declares no boardConfiguration' }
+    }
+    $boardName = if ($boardConfig.PSObject.Properties['name']) { [string]$boardConfig.name } else { '' }
+    $boardOrg = if ($boardConfig.PSObject.Properties['organization']) { [string]$boardConfig.organization } else { '' }
+    $projectNumber = if ($boardConfig.PSObject.Properties['projectNumber']) { $boardConfig.projectNumber } else { $null }
+    if ([string]::IsNullOrWhiteSpace($boardName) -or $null -eq $projectNumber) {
+        return [pscustomobject]@{ Ready = $false; Detail = 'boardConfiguration is missing a name or projectNumber' }
+    }
+    # Sum the persisted custom fields across every tier so the detail lines up with what
+    # setup-custom-fields.ps1 provisions and validate-board.ps1 checks.
+    $fieldCount = 0
+    if ($board.PSObject.Properties['customFields']) {
+        foreach ($tier in $board.customFields.PSObject.Properties) {
+            $tierValue = $tier.Value
+            if ($tierValue.PSObject.Properties['fields']) {
+                $fieldCount += @($tierValue.fields).Count
+            }
+        }
+    }
+    $ownerText = if ([string]::IsNullOrWhiteSpace($boardOrg)) { '(owner unset)' } else { $boardOrg }
+    return [pscustomobject]@{
+        Ready  = $true
+        Detail = "'$boardName' owner=$ownerText project #$projectNumber; $fieldCount custom fields persisted"
+    }
 }
 
 # -Json promises "nothing else on stdout", and from an external caller's viewpoint
@@ -385,6 +431,19 @@ if (Test-Path -LiteralPath $mcpPath) {
 $components += New-Component -Name 'mcp-registration' -Ready $mcpReady -Detail $mcpDetail `
     -FixCommand 'dotnet build HELIOS.sln -c Release   # builds src/mcp/HELIOS.Mcp; then re-check .mcp.json paths'
 Write-ChildOutput @($mcpDetail)
+
+# --- f. Board setup (persisted board config) --------------------------------------
+Write-Section ''
+Write-Section '-- f. Board setup (scripts/config/board-config.json) --'
+# Read-only, no-network: the board-setup scripts own the real GraphQL provisioning
+# (setup-board.ps1) and validation (validate-board.ps1). Here we only confirm the
+# persisted board-config artifact exists and describes a board, so the operator knows
+# whether the board layout is captured before running those credentialed steps.
+$boardConfigPath = Join-Path $repoRoot 'scripts' 'config' 'board-config.json'
+$boardReadiness = Get-BoardSetupReadiness -ConfigPath $boardConfigPath
+$components += New-Component -Name 'board-setup' -Ready $boardReadiness.Ready -Detail $boardReadiness.Detail `
+    -FixCommand 'pwsh scripts/board-setup/setup-board.ps1   # provision custom fields, then validate-board.ps1 for a read-only GraphQL verify'
+Write-ChildOutput @($boardReadiness.Detail)
 
 # --- INVENTORY --------------------------------------------------------------------
 $needsAttention = @($components | Where-Object { $_.Status -eq 'needs-attention' })
