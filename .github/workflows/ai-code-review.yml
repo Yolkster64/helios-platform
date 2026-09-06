@@ -106,8 +106,10 @@ jobs:
             $base = '${{ github.event.pull_request.base.sha }}'
             $head = '${{ github.event.pull_request.head.sha }}'
             git diff --name-only "${base}...${head}" | Tee-Object -Variable changedFiles
-          } else {
+          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') {
             git diff --name-only HEAD~1 HEAD | Tee-Object -Variable changedFiles
+          } else {
+            $changedFiles = @()
           }
           Write-Host "Changed files:"
           foreach ($file in $changedFiles) {
