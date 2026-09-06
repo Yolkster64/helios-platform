@@ -1,0 +1,54 @@
+name: Yolkster HELIOS cutover contract
+
+on:
+  pull_request:
+    paths:
+      - 'docs/migration/yolkster-control-cutover/**'
+      - 'docs/architecture/ADR-0010-WINUI3-ONLY.md'
+      - 'docs/architecture/CLAUDE-CODE-CANONICALIZATION.md'
+      - 'docs/repository/FORK-INVENTORY-2026-09-05.md'
+      - 'docs/profile/YOLKSTER64-PROFILE-README.md'
+      - 'config/migration/yolkster-control/**'
+      - 'config/ui/winui3-only.v1.json'
+      - 'scripts/validation/validate_yolkster_cutover.py'
+      - '.claude/agents/canonical-migration.md'
+      - '.claude/commands/review-yolkster-cutover.md'
+      - '.github/workflows/yolkster-cutover-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/migration/yolkster-control-cutover/**'
+      - 'docs/architecture/ADR-0010-WINUI3-ONLY.md'
+      - 'docs/architecture/CLAUDE-CODE-CANONICALIZATION.md'
+      - 'docs/repository/FORK-INVENTORY-2026-09-05.md'
+      - 'docs/profile/YOLKSTER64-PROFILE-README.md'
+      - 'config/migration/yolkster-control/**'
+      - 'config/ui/winui3-only.v1.json'
+      - 'scripts/validation/validate_yolkster_cutover.py'
+      - '.claude/agents/canonical-migration.md'
+      - '.claude/commands/review-yolkster-cutover.md'
+      - '.github/workflows/yolkster-cutover-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate canonical cutover
+        run: python3 scripts/validation/validate_yolkster_cutover.py
+      - name: Verify no deployment authority was introduced
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '"applyDefault": false' config/migration/yolkster-control/topology.v1.json
+          grep -q '"productionEnabled": false' config/migration/yolkster-control/topology.v1.json
+          ! grep -R --line-number --fixed-string 'az deployment group create' \
+            docs/migration/yolkster-control-cutover \
+            config/migration/yolkster-control \
+            scripts/validation/validate_yolkster_cutover.py
