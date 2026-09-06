@@ -187,8 +187,8 @@ public sealed class McpFabricToolTests : IDisposable
             "config/fabric/helios-fabric.v1.json",
             element.GetProperty("configPath").GetString());
 
-        // Fail-closed invariants remain false, and environment reference probing is
-        // reported via secretValuesRead in the sanitized envelope.
+        // Fail-closed invariants remain false, and the sanitized envelope reports
+        // that environment values are never read back from the host.
         var security = element.GetProperty("security");
         Assert.False(security.GetProperty("productionEnabled").GetBoolean());
         Assert.False(security.GetProperty("applyDefault").GetBoolean());
@@ -283,7 +283,7 @@ public sealed class McpFabricToolTests : IDisposable
         var present = openai.GetProperty("presentEnvNames")
             .EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Equal(new[] { "TEST_OPENAI_API_KEY" }, present);
-        Assert.True(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
+        Assert.False(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
     }
 
     // ---- fail-closed enforcement ----------------------------------------------------

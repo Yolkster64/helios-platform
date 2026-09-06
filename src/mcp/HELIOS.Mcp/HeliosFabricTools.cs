@@ -8,8 +8,8 @@ namespace HELIOS.Mcp;
 /// <summary>
 /// Read-only visibility into the canonical HELIOS Fabric setup contract. The tool
 /// intentionally reports environment-variable names and presence only; it never returns
-/// or serializes a credential value, invokes a provider, or mutates an external
-/// system.
+/// or serializes a credential value, reads a credential value back from the host, invokes
+/// a provider, or mutates an external system.
 /// </summary>
 [McpServerToolType]
 public static class HeliosFabricTools
@@ -36,7 +36,7 @@ public static class HeliosFabricTools
     [Description(
         "Return the sanitized HELIOS Fabric authority map, integration readiness, and " +
         "gated setup phases from config/fabric/helios-fabric.v1.json. The result reports " +
-        "only whether named environment references exist; values are never returned. " +
+        "only whether named environment references exist; values are never returned or read. " +
         "Read-only: no repository, provider, connector, Azure, secret, or workstation " +
         "state is changed.")]
     public static string GetFabricPlan(
@@ -79,17 +79,8 @@ public static class HeliosFabricTools
                     .Select(item => item.GetString() ?? string.Empty)
                     .Where(name => name.Length > 0)
                     .ToArray();
-                var environmentVariables = Environment.GetEnvironmentVariables();
                 var presentEnvNames = requiredEnvNames
-                    .Where(name =>
-                    {
-                        if (environmentVariables.Contains(name))
-                        {
-                            secretValuesRead = true;
-                            return true;
-                        }
-                        return false;
-                    })
+                    .Where(name => EnvironmentVariableExists(name))
                     .ToArray();
                 var missingEnvNames = requiredEnvNames.Except(presentEnvNames, StringComparer.Ordinal).ToArray();
                 var readiness = desiredState switch
@@ -190,6 +181,11 @@ public static class HeliosFabricTools
         .Select(item => item.GetString() ?? string.Empty)
         .Where(value => value.Length > 0)
         .ToArray();
+
+    private static bool EnvironmentVariableExists(string name)
+    {
+        return Environment.GetEnvironmentVariables().Contains(name);
+    }
 
     private static void EnsureFailClosed(JsonElement root, JsonElement canonical, JsonElement security)
     {
