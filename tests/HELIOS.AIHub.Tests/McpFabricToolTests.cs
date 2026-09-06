@@ -363,6 +363,20 @@ public sealed class McpFabricToolTests : IDisposable
         Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
     }
 
+    [Fact]
+    public void GetFabricPlan_MalformedContract_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot("{ malformed json");
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
+        Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
+        Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
+    }
+
     // ---- CLI-facing GetFabricPlan(null) is a thin wrapper over the core -------------
 
     [Fact]
