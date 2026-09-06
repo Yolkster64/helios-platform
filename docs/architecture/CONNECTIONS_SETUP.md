@@ -512,7 +512,7 @@ this order:
 2. `pwsh scripts/github/close-duplicate-issues.ps1` — dry run by default;
    `-Apply` from an owner `gh` login or the PAT (needs `.permissions.push`). It
    sweeps #54–#92 (`-From`/`-To`) and closes a number only when all four hold:
-   open, title starts with `[GH-<n>] `, body carries Linear's `GitHub (system of
+   open, title starts with `[GH-<n>]` followed by a space, body carries Linear's `GitHub (system of
    record)` line, and original `#n` exists and is open. Per candidate, each
    command printed first: add `duplicate` (skipped if present), post ONE
    "Duplicate of #<n> …" comment with the footer (skipped if present), `PATCH

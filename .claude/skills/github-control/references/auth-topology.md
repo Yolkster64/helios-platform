@@ -73,8 +73,8 @@ degrades, it does not fail the pipeline (`:10-14`).
 No GitHub App is wired anywhere in this repo today. It appears only as a
 docs-level aspiration for ARC self-hosted runners:
 `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md:47` (the
-`githubConfigSecret: helios-runners-app` Helm value — app id + installation id
-+ private key) and `:55` ("Auth via a GitHub App (not PAT)").
+`githubConfigSecret: helios-runners-app` Helm value — app id + installation id +
+private key) and `:55` ("Auth via a GitHub App (not PAT)").
 
 Introduce one when you hit either wall:
 
