@@ -136,7 +136,7 @@ jobs:
 
   apply:
     name: Apply (main / dispatch)
-    if: always()
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     # One group for every apply, never cancelled: two reconciliations racing on the
     # same repository could interleave their GET-diff-then-apply passes.
     concurrency:
