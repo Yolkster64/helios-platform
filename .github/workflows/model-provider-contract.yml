@@ -1,0 +1,52 @@
+name: HELIOS model-provider contract
+
+on:
+  pull_request:
+    paths:
+      - 'config/providers/helios-model-providers.v1.json'
+      - 'scripts/validation/validate_model_providers.py'
+      - '.github/workflows/model-provider-contract.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/providers/helios-model-providers.v1.json'
+      - 'scripts/validation/validate_model_providers.py'
+      - '.github/workflows/model-provider-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile validator
+        run: python -m py_compile scripts/validation/validate_model_providers.py
+      - name: Validate provider registry
+        run: python scripts/validation/validate_model_providers.py
+      - name: Verify no provider credential values are committed
+        run: |
+          set -euo pipefail
+          if grep -E '(sk-(proj-)?[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})' \
+            config/providers/helios-model-providers.v1.json; then
+            echo 'Possible provider credential detected.' >&2
+            exit 1
+          fi
+      - name: Publish provider contract evidence
+        run: |
+          mkdir -p validation-evidence
+          python scripts/validation/validate_model_providers.py > validation-evidence/model-provider-contract.json
+          sha256sum config/providers/helios-model-providers.v1.json > validation-evidence/SHA256SUMS
+          printf 'repository=%s\ncommit=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" > validation-evidence/source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-model-provider-contract-${{ github.sha }}
+          path: validation-evidence
+          if-no-files-found: error
+          retention-days: 30
