@@ -47,6 +47,10 @@ Pass -Apply through to auth-doctor.ps1: automatic NON-INTERACTIVE repair only
 .PARAMETER Json
 Emit the single rollup object (nothing else on stdout — chained-script convention).
 
+.PARAMETER Repository
+Explicit owner/repo target. When supplied, automatically forwards label/milestone
+dry-run readiness to setup-all.ps1. Neither -Apply nor -Fix reaches issue setup.
+
 .EXAMPLE
 pwsh scripts/bootstrap/setup-everything.ps1
 
@@ -61,7 +65,10 @@ pwsh scripts/bootstrap/setup-everything.ps1 -Json | ConvertFrom-Json
 param(
     [switch]$Apply,
 
-    [switch]$Json
+    [switch]$Json,
+
+    [ValidatePattern('\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.{1,2}\z)[A-Za-z0-9_.-]{1,100}\z')]
+    [string]$Repository
 )
 
 Set-StrictMode -Version Latest
@@ -162,8 +169,10 @@ try {
     $chainSpecs = @(
         @{ Step = 'toolchain'; Script = 'scripts/build/verify-readiness.ps1'; Arguments = @('-Json') }
         @{ Step = 'identity'; Script = 'scripts/bootstrap/connect-account.ps1'; Arguments = @('-Json') }
-        @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) }
-        @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') }
+        @{ Step = 'auth'; Script = 'scripts/bootstrap/auth-doctor.ps1'; Arguments = @('-Json') + @(if ($Apply) { '-Apply' }) +
+            @(if ($Repository) { '-Repository'; $Repository }) }
+        @{ Step = 'inventory'; Script = 'scripts/setup/setup-all.ps1'; Arguments = @('-Json') +
+            @(if ($Repository) { '-Repository'; $Repository }) }
         @{ Step = 'stack-smoke'; Script = 'scripts/verify/stack-smoke.ps1'; Arguments = @('-Json'); Soft = $true }
         @{ Step = 'rest-connect'; Script = 'scripts/verify/rest-connect.ps1'; Arguments = @('-Json'); Soft = $true }
     )

@@ -4,8 +4,9 @@ One command stands up the whole cross-LLM shell in **Azure Cloud Shell** (the re
 environment), **GitHub Codespaces**, or a **local** Linux/macOS shell:
 
 ```bash
-bash scripts/bootstrap/first-run.sh            # pwsh scripts/bootstrap/first-run.ps1 is the twin
-bash scripts/bootstrap/first-run.sh --verify-only   # read-only pass: no installs, no logins
+bash scripts/bootstrap/first-run.sh --repository Yolkster64/helios-platform --verify-only  # no installs or logins
+bash scripts/bootstrap/first-run.sh --repository Yolkster64/helios-platform  # normal automatic bring-up
+# PowerShell twin: pwsh scripts/bootstrap/first-run.ps1 -Repository Yolkster64/helios-platform
 ```
 
 `first-run` is an orchestrator over the scripts below, run as an ordered chain where
@@ -18,6 +19,23 @@ repo secrets by name). Every report is captured into `.helios/bootstrap-state.js
 (gitignored) and the run ends with ONE numbered checklist of the steps only a human
 can do, with the exact command for each. `--verify-only` skips `auto-login.ps1`
 because it delegates to `auth-doctor.ps1 -Apply`, which can log in non-interactively.
+
+An explicit, validated `--repository owner/repo` (`-Repository owner/repo` in
+PowerShell) automatically adds label/milestone dry-run readiness to the setup
+chain and targets the repository-secret **name-only** probe at that same repository.
+Existing credentials are used automatically; normal installation/login behavior
+is retained. Omit the target for compatibility: no issue probes, and the existing
+repository-secret default remains unchanged. `--skip-setup` / `-SkipSetup` skips
+issue readiness with the setup step, but still forwards the target to the secret probe.
+
+The same target reaches `auth-doctor.ps1`, including through `auto-login.ps1` and
+`setup-everything.ps1`: connector secret metadata is read from that repository,
+not the checkout origin or `GH_REPO`. Printed `gh secret set` commands for
+`HELIOS_ADMIN_TOKEN`, `LINEAR_API_KEY`, and `SLACK_WEBHOOK_URL` include
+`--repo owner/repo` exactly once, before any comment. These are owner actions,
+not executed writes. Both auth scripts also accept `-Repository owner/repo`
+directly; without it, the doctor still pins metadata to the checkout's GitHub
+origin (never `GH_REPO`) and leaves its printed secret commands unqualified.
 
 ## The pieces (each usable on its own)
 
@@ -158,6 +176,47 @@ pwsh scripts/setup/setup-all.ps1 -Json   # machine-readable inventory, nothing e
 Exit 0 when every component is ready, 2 otherwise. Auth is never mutated in either
 mode — device-code logins stay behind the `connect-*` scripts, run by a human when the
 inventory says so.
+
+### Automatic issue setup readiness (labels and milestones only)
+
+```powershell
+pwsh scripts/setup/setup-all.ps1 -Repository Yolkster64/helios-platform -Json
+pwsh scripts/bootstrap/setup-everything.ps1 -Repository Yolkster64/helios-platform -Json
+```
+
+The explicit, validated `owner/repo` triggers these checks automatically, including
+through either first-run twin; there is no additional enable switch. No issue target
+is inferred, and omitting `-Repository` preserves existing behavior. This adds two
+gating inventory rows by calling `scripts/github/apply-labels.ps1` and
+`scripts/github/apply-milestones.ps1` with `-Repository ... -Json`, **dry-run only**.
+Neither `-Fix` nor `-Apply` reaches those scripts (existing CLI installation/auth
+repair switches retain their separate behavior).
+
+`gh` automatically reuses its inherited credentials (`GH_TOKEN`/`GITHUB_TOKEN` or
+its existing credential store). This integration does not read/export token values,
+create tokens, grant permissions, or bypass access controls. Successful reads and
+in-sync readiness **do not verify Issues or Projects write scope**; only effective
+required access is relevant, not unrestricted “full access.”
+
+**Dry-run is not offline:** with a credential, the producers perform online GitHub
+reads to compare live labels/milestones. The CI contract tests are offline: they run
+both real first-run entrypoints with inert child fixtures and no inherited credentials,
+and never install, log in, provision, or call live GitHub/Azure APIs.
+
+Unknown live state is not ready even if a child exits 0. Missing/malformed reports,
+pending creates/updates, closed milestones, invalid/failed rows, and unknown row
+states also need attention. Output contains bounded summaries, not raw child
+responses or replay commands. `nextCommand` and the consolidated owner checklist
+only suggest another dry run. Inventory exits 2 for attention; `setup-everything`
+retains its report-first exit 0 for a degraded inventory, with `ready: false` and
+owner actions.
+
+Review the direct dry-run reports first. Required write access and subsequent
+changes remain with the existing governed `governance-apply.yml` /
+`governance-run.yml` workflows (labels/milestones use their existing
+`issues: write` grant); this integration never dispatches them or broadens
+`-Apply` / `-Fix`. This increment is **not Azure, Projects, or AI provisioning**:
+creating issues, configuring Projects, and granting GitHub/Azure access are not wired.
 
 ## Cloud-only profile
 

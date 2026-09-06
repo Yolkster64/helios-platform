@@ -211,14 +211,16 @@ try {
     $env:AIHUB_CONFIG = $null
     $script:aihubConfigState = $null
 
-    # --- 7. Repository-secret probes are pinned to this checkout's origin remote ------
+    # --- 7. Without an explicit target, repository-secret probes use the origin ------
+    $Repository = ''
     # gh's {owner}/{repo} placeholders follow GH_REPO when it is set; the probe must
     # name the checkout's repository explicitly and never consult GH_REPO.
     $script:probeArgs = [System.Collections.Generic.List[string]]::new()
+    $script:remoteProbeCalls = 0
     $script:remoteUrl = 'https://github.com/inert-owner/inert-repo.git'
     function Get-CliCommand { param($Name) [pscustomobject]@{ Source = "Fake-$Name" } }
     function Invoke-Probe { param($Executable, $Arguments)
-        if ($Executable -eq 'Fake-git') { return [pscustomobject]@{ ExitCode = 0; Output = @($script:remoteUrl) } }
+        if ($Executable -eq 'Fake-git') { $script:remoteProbeCalls++; return [pscustomobject]@{ ExitCode = 0; Output = @($script:remoteUrl) } }
         $script:probeArgs.Add(($Arguments -join ' '))
         return [pscustomobject]@{ ExitCode = 0; Output = @('HTTP/2.0 200 OK', '{}') } }
     function Get-NonGitHubOwnedTokenNames { @() }
@@ -236,7 +238,23 @@ try {
         $script:remoteUrl = 'https://dev.azure.com/org/proj/_git/repo'; $script:checkoutRepositorySlug = $null
         $state = Get-RepositorySecretState -Name 'LINEAR_API_KEY'
         Assert-True ($state.State -eq 'unknown' -and $state.Reason -like '*GH_REPO is deliberately not consulted*') 'A non-GitHub remote did not yield unknown.'
+
+        # Explicit metadata targets override both origin and GH_REPO, even with
+        # a cached checkout slug or a checkout that has no GitHub origin.
+        $Repository = 'target-owner/target-repo'
+        foreach ($cachedSlug in @('inert-owner/inert-repo', '')) {
+            $script:checkoutRepositorySlug = $cachedSlug
+            $script:probeArgs.Clear()
+            $remoteCallsBefore = $script:remoteProbeCalls
+            $state = Get-RepositorySecretState -Name 'LINEAR_API_KEY'
+            Assert-True ($state.State -eq 'configured') 'Explicit target metadata was not reported as configured.'
+            Assert-True ($script:remoteProbeCalls -eq $remoteCallsBefore) 'Explicit metadata target unnecessarily consulted origin.'
+            Assert-True ($script:probeArgs.Count -eq 2) 'Explicit target did not perform exactly the listing and named-secret probes.'
+            Assert-True ($script:probeArgs[0] -ceq "api -i repos/$Repository/actions/secrets?per_page=1") 'Listing metadata escaped the explicit target.'
+            Assert-True ($script:probeArgs[1] -ceq "api -i repos/$Repository/actions/secrets/LINEAR_API_KEY") 'Named-secret metadata escaped the explicit target.'
+        }
     } finally {
+        $Repository = ''
         [Environment]::SetEnvironmentVariable('GH_REPO', $savedGhRepo)
         $script:checkoutRepositorySlug = $null
     }

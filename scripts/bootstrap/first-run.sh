@@ -50,6 +50,8 @@
 #   bash scripts/bootstrap/first-run.sh --json               # the state JSON only on stdout
 #   bash scripts/bootstrap/first-run.sh --skip-setup         # skip step 5 (setup-everything)
 #   bash scripts/bootstrap/first-run.sh --managed-identity   # forward -UseManagedIdentity
+#   bash scripts/bootstrap/first-run.sh --repository owner/repo  # automatic issue dry-run probes;
+#                                                               # same target for repo-secret probe
 #
 # Exit codes: 0 = the chain ran (needs-owner lanes NEVER gate — they ARE the
 # checklist); 1 = internal failure (pwsh missing so no lane could be probed, or the
@@ -65,17 +67,31 @@ verify_only=""
 json_mode=""
 skip_setup=""
 managed_identity=""
-for arg in "$@"; do
+repository=""
+while [[ $# -gt 0 ]]; do
+  arg="$1"
   case "$arg" in
     --verify-only) verify_only=1 ;;
     --json) json_mode=1 ;;
     --skip-setup) skip_setup=1 ;;
     --managed-identity) managed_identity=1 ;;
+    --repository)
+      if [[ $# -lt 2 ]]; then
+        echo "--repository requires owner/repo" >&2; exit 1
+      fi
+      repository="$2"
+      # Match the PowerShell guards before installs, logins, or local state writes.
+      if [[ ! "$repository" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9_.-]{1,100}$ ||
+            "${repository#*/}" == "." || "${repository#*/}" == ".." ]]; then
+        echo "--repository must be a valid owner/repo" >&2; exit 1
+      fi
+      shift ;;
     -h|--help)
-      echo "usage: bash scripts/bootstrap/first-run.sh [--verify-only] [--json] [--skip-setup] [--managed-identity]"
+      echo "usage: bash scripts/bootstrap/first-run.sh [--verify-only] [--json] [--skip-setup] [--managed-identity] [--repository owner/repo]"
       exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 1 ;;
   esac
+  shift
 done
 
 # Documented env vars only, never heuristics (setup-ai-clis.ps1 / auth-doctor.ps1
@@ -187,6 +203,8 @@ skip_step() {
   record_step "$name" "$script" -1 "skipped: $why"
 }
 
+repository_args=(-Json)
+[[ -n "$repository" ]] && repository_args+=(-Repository "$repository")
 if [[ -n "$verify_only" ]]; then
   # auto-login.ps1 has no report-only switch: it always spawns auth-doctor -Apply,
   # which performs `az login --service-principal` / `--identity` when the env holds
@@ -196,18 +214,18 @@ if [[ -n "$verify_only" ]]; then
   skip_step 2 "auto-login" "scripts/bootstrap/auto-login.ps1" \
     "verify-only (auto-login delegates to auth-doctor -Apply, which can log in non-interactively; -UseManagedIdentity not forwarded)"
 else
-  auto_login_args=(-Json)
+  auto_login_args=("${repository_args[@]}")
   [[ -n "$managed_identity" ]] && auto_login_args+=(-UseManagedIdentity)
   run_json 2 "auto-login" "scripts/bootstrap/auto-login.ps1" "${auto_login_args[@]}"
 fi
 run_json 3 "rest-connect" "scripts/verify/rest-connect.ps1" -Json
-run_json 4 "auth-doctor" "scripts/bootstrap/auth-doctor.ps1" -Json
+run_json 4 "auth-doctor" "scripts/bootstrap/auth-doctor.ps1" "${repository_args[@]}"
 if [[ -n "$skip_setup" ]]; then
   skip_step 5 "setup-everything" "scripts/bootstrap/setup-everything.ps1" "--skip-setup"
 else
-  run_json 5 "setup-everything" "scripts/bootstrap/setup-everything.ps1" -Json
+  run_json 5 "setup-everything" "scripts/bootstrap/setup-everything.ps1" "${repository_args[@]}"
 fi
-run_json 6 "provision-github-secrets" "scripts/bootstrap/provision-github-secrets.ps1" -Json
+run_json 6 "provision-github-secrets" "scripts/bootstrap/provision-github-secrets.ps1" "${repository_args[@]}"
 
 # --- Merge + checklist ----------------------------------------------------------
 # python3 does the JSON merge (Cloud Shell, Codespaces, and every mainstream Linux
@@ -221,10 +239,11 @@ vault_set=0
 [[ -n "${AZURE_KEY_VAULT_URI:-}" && -n "${AZURE_KEY_VAULT_URI// /}" ]] && vault_set=1
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! python3 - "$state_dir" "$state_file" "$environment" "$verify_flag" "$json_flag" "$vault_set" <<'PY'
+  if ! python3 - "$state_dir" "$state_file" "$environment" "$verify_flag" "$json_flag" "$vault_set" "$repository" <<'PY'
 import datetime, json, os, sys
 
 state_dir, state_file, environment, verify_flag, json_flag, vault_set = sys.argv[1:7]
+repository = sys.argv[7]
 verify_only = verify_flag == "1"
 json_mode = json_flag == "1"
 vault_present = vault_set == "1"
@@ -354,6 +373,9 @@ items = []
 covered = set()
 gh_login = "gh auth login --hostname github.com --git-protocol https --web --scopes models:read"
 provision_apply = "pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply"
+repo_option = " --repo " + repository if repository else ""
+if repository:
+    provision_apply += " -Repository " + repository
 # The load step, once: the doctor's `(bash) or pwsh: ...` prose and connect-account's
 # `# after the az lane ...` comment are this same step in two wordings, so every
 # owner action starting with either command is covered by it.
@@ -463,7 +485,7 @@ if admin_state != "present":
         "HELIOS_ADMIN_TOKEN repo secret (%s) — owner PAT for governance-apply.yml admin writes (fine-grained: "
         "Administration, Contents, Issues, Pull requests, Pages RW + Metadata R; permission list in the "
         ".github/workflows/governance-apply.yml header)" % admin_state,
-        ["gh secret set HELIOS_ADMIN_TOKEN   # paste when prompted; the value never touches argv",
+        ["gh secret set HELIOS_ADMIN_TOKEN" + repo_option + "   # paste when prompted; the value never touches argv",
          "read -rs HELIOS_ADMIN_TOKEN && export HELIOS_ADMIN_TOKEN   # or: typed hidden, never on argv or in shell history, then:",
          provision_apply + "   # feeds every exported target to gh secret set over stdin"],
     ))
@@ -472,7 +494,7 @@ for lane, env_name in (("linear", "LINEAR_API_KEY"), ("slack", "SLACK_WEBHOOK_UR
     if needs_owner(lane) or secret_state != "present":
         raw = raw_action(lane)
         items.append((lane + " connector secret (repo secret " + secret_state + ")", [
-            raw if raw else ("gh secret set " + env_name),
+            raw if raw else ("gh secret set " + env_name + repo_option),
             "read -rs " + env_name + " && export " + env_name + "   # or: typed hidden, never on argv or in shell history, then:",
             provision_apply + "   # feeds every exported target to gh secret set over stdin",
         ]))
