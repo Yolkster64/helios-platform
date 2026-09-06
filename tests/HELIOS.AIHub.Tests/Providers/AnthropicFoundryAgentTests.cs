@@ -244,7 +244,19 @@ public class AnthropicFoundryAgentTests
         Assert.False(AnthropicFoundryAgent.TryResolveBaseUri(input, "ANTHROPIC_FOUNDRY_RESOURCE", out var baseUri, out var hint));
         Assert.Null(baseUri);
         Assert.Contains("Set ANTHROPIC_FOUNDRY_RESOURCE", hint);
-        Assert.Contains("Connect-ClaudeFoundry.ps1", hint);
+        Assert.Contains("Connect-ClaudeFoundry.ps1 sets it", hint);
+    }
+
+    [Fact]
+    public void TryResolveBaseUri_Blank_OverriddenVariable_DoesNotClaimTheHelperSetsIt()
+    {
+        // Connect-ClaudeFoundry.ps1 exports only ANTHROPIC_FOUNDRY_RESOURCE; an entry that
+        // reads another variable must be pointed at the shell / .helios/azure.env instead.
+        Assert.False(AnthropicFoundryAgent.TryResolveBaseUri("", "MY_FOUNDRY", out _, out var hint));
+        Assert.Contains("Set MY_FOUNDRY", hint);
+        Assert.Contains(".helios/azure.env", hint);
+        Assert.DoesNotContain("Connect-ClaudeFoundry.ps1 sets it", hint);
+        Assert.Contains("sets only the default ANTHROPIC_FOUNDRY_RESOURCE", hint);
     }
 
     [Theory]
@@ -291,6 +303,9 @@ public class AnthropicFoundryAgentTests
         Assert.Equal(ProviderReadiness.Unconfigured, agent.Readiness);
         Assert.Contains(envName, agent.ConfigurationHint);
         Assert.Contains("https base URL", agent.ConfigurationHint);
+        // An overridden endpointEnv is never attributed to Connect-ClaudeFoundry.ps1.
+        Assert.DoesNotContain("Connect-ClaudeFoundry.ps1 sets it", agent.ConfigurationHint);
+        Assert.Contains(".helios/azure.env", agent.ConfigurationHint);
     }
 
     [Fact]

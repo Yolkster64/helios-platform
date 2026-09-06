@@ -212,9 +212,17 @@ public sealed class AnthropicFoundryAgent : ProviderAgentBase
         return AnthropicMessageMapping.ToResult(response, Provider, deployment, stopwatch.Elapsed);
     }
 
-    private static string MissingEndpointHint(string sourceName) =>
+    /// <summary>
+    /// The hint for a missing resource value. <c>Connect-ClaudeFoundry.ps1</c> exports only
+    /// the default <see cref="DefaultEndpointEnv"/>, so an entry that overrides
+    /// <c>endpointEnv</c> is pointed at the shell or <c>.helios/azure.env</c> instead of at
+    /// a script that would never set its variable.
+    /// </summary>
+    public static string MissingEndpointHint(string sourceName) =>
         $"Set {sourceName} (Foundry resource name or https base URL) — " +
-        "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login.";
+        (string.Equals(sourceName, DefaultEndpointEnv, StringComparison.Ordinal)
+            ? "scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets it from your Azure CLI login, and azure-up writes it into .helios/azure.env."
+            : $"set it in your shell or .helios/azure.env (scripts/ai-integration/Connect-ClaudeFoundry.ps1 sets only the default {DefaultEndpointEnv}).");
 
     /// <summary>Azure resource-name shape: alphanumerics and hyphens, 1–64 chars, leading alphanumeric.</summary>
     private static bool IsResourceName(string value)
