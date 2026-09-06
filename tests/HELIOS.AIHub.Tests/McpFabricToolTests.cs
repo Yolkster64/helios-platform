@@ -339,6 +339,21 @@ public sealed class McpFabricToolTests : IDisposable
         Assert.Contains("has no approval", envelope.GetProperty("detail").GetString());
     }
 
+    [Fact]
+    public void GetFabricPlan_InvalidApprovalValue_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot(MinimalValidContract.Replace(
+            "\"requiredApproval\": \"production-owner\"",
+            "\"requiredApproval\": \"unknown\""));
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
+        Assert.Contains("invalid requiredApproval", envelope.GetProperty("detail").GetString());
+    }
+
     // ---- path-traversal safety ------------------------------------------------------
 
     [Fact]

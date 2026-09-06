@@ -277,6 +277,9 @@ public static class HeliosFabricTools
         }
 
         var phaseDependencies = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var allowedApprovals = new HashSet<string>(
+            new[] { "none", "operator", "repository-admin", "tenant-admin", "production-owner" },
+            StringComparer.Ordinal);
         foreach (var phase in phases.EnumerateArray())
         {
             var phaseId = phase.GetProperty("id").GetString()
@@ -298,6 +301,10 @@ public static class HeliosFabricTools
 
             var mutatesExternalState = phase.GetProperty("mutatesExternalState").GetBoolean();
             var requiredApproval = phase.GetProperty("requiredApproval").GetString() ?? "none";
+            if (!allowedApprovals.Contains(requiredApproval))
+            {
+                throw new InvalidDataException($"phase {phaseId} has invalid requiredApproval {requiredApproval}.");
+            }
             if (mutatesExternalState && string.Equals(requiredApproval, "none", StringComparison.Ordinal))
             {
                 throw new InvalidDataException($"phase {phaseId} mutates external state but has no approval.");
