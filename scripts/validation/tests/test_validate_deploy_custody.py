@@ -8,6 +8,7 @@ from scripts.validation import validate_deploy_custody as target
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github/workflows/helios-deploy.yml"
+CONTRACT_WORKFLOW = ROOT / ".github/workflows/deploy-hardening-contract.yml"
 
 
 class DeployCustodyValidatorTests(unittest.TestCase):
@@ -67,6 +68,16 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "            --output json 2>\"$stderr_file\" | tee \"$record\"",
             "must not archive raw command output",
         )
+
+    def test_contract_workflow_must_run_unittest(self) -> None:
+        contract_text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("python3 -m unittest", contract_text)
+        mutated = contract_text.replace("python3 -m unittest", "echo", 1)
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
+            path.write_text(mutated, encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "regression tests"):
+                target.validate_contract_workflow(path)
 
 
 if __name__ == "__main__":

@@ -106,6 +106,14 @@ jobs:
             $base = '${{ github.event.pull_request.base.sha }}'
             $head = '${{ github.event.pull_request.head.sha }}'
             git diff --name-only $base $head | Tee-Object -Variable changedFiles
+          } elseif ('${{ github.event_name }}' -eq 'push') {
+            $before = '${{ github.event.before }}'
+            $after = '${{ github.sha }}'
+            if ($before -match '^0+$') {
+              git diff-tree --no-commit-id --name-only -r $after | Tee-Object -Variable changedFiles
+            } else {
+              git diff --name-only $before $after | Tee-Object -Variable changedFiles
+            }
           } else {
             git diff --name-only HEAD~1 HEAD | Tee-Object -Variable changedFiles
           }

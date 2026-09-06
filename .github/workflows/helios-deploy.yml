@@ -190,7 +190,14 @@ jobs:
             --arg deployOutcome "${{ steps.deploy.outcome }}" \
             --arg sealedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{inputs:$inputs[0], mode:$mode, outcomes:{whatIf:$whatIfOutcome, deploy:$deployOutcome}, sealedAt:$sealedAt}' > manifest.json
-          sha256sum manifest-inputs.json manifest.json record-*.json > checksums.sha256
+          shopt -s nullglob
+          records=(record-*.json)
+          if [ "${#records[@]}" -eq 0 ]; then
+            echo "::warning::No record-*.json files were produced; sealing manifest-only diagnostics."
+            sha256sum manifest-inputs.json manifest.json > checksums.sha256
+          else
+            sha256sum manifest-inputs.json manifest.json "${records[@]}" > checksums.sha256
+          fi
           sha256sum checksums.sha256 > checksums.sha256.sha256
           {
             echo "## Deploy custody ($mode)"
