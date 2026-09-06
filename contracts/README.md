@@ -14,6 +14,10 @@ connector, or deployment authority.
   recovery roles without treating a planned rename as already complete.
 - `examples/` contains inert, non-networked compatibility fixtures.
 
+The 26 catalog entries register event names and families, not 26 typed payload schemas.
+`payload` is an object whose event-specific shape must be agreed by each producer and
+consumer. The catalog alone does not validate approval bindings or authorize execution.
+
 The contract was adapted from the historical M0nado event and repository maps and is
 reconciled with the merged Yolkster cutover topology. Exact source blob SHAs are recorded
 in `repository-capabilities.v1.json`. Cross-repository policy remains governed by
@@ -57,6 +61,15 @@ Run the dependency-free validation locally:
 python3 scripts/validation/validate_integration_contracts.py
 python3 -m unittest discover -s scripts/validation/tests -p 'test_integration_contracts.py' -v
 ```
+
+This gate checks the checked-in v1 contract and semantic invariants; it is not a general
+JSON Schema interpreter. It rejects malformed JSON field types, invalid optional/null
+values, out-of-bounds strings, non-RFC3339 timestamps, and malformed or userinfo-bearing
+receipt URLs. The authority transition requires HTTPS; receipt links may also use URNs.
+Validation performs no DNS lookup, URL fetch, credential access, or receipt verification.
+A structurally valid receipt link is not proof that its target exists or authorizes an
+action. Producers remain responsible for redaction, destination policy, and actual
+durable persistence before publishing an event.
 
 ## MCP boundary
 

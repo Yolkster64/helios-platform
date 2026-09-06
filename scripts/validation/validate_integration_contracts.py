@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,14 @@ REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SOURCE_SHA = re.compile(r"^([0-9a-f]{40}|[0-9a-f]{64})$")
 IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{7,255}$")
 TRACEPARENT = re.compile(r"^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
+RFC3339 = re.compile(
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]"
+    r"([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?"
+    r"([Zz]|[+-][0-9]{2}:[0-9]{2})"
+)
+URI_CHARACTERS = re.compile(r"[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
+DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+URN_PATH = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,30}[A-Za-z0-9]:[^/?#][^?#]*")
 
 EVENT_FAMILIES = {"command", "result", "approval", "deployment", "connector", "fleet"}
 REPOSITORY_LIFECYCLES = {"active", "planned", "satellite", "historical", "recovery"}
@@ -90,6 +99,25 @@ def _require_keys(value: object, required: set[str], where: str, errors: list[st
         errors.append(f"{where}: missing field(s): {', '.join(missing)}")
 
 
+def _string_member(value: object, allowed: set[str]) -> bool:
+    """Reject JSON arrays/objects before membership can attempt to hash them."""
+    return isinstance(value, str) and value in allowed
+
+
+def _bounded_string(value: object, minimum: int = 1, maximum: int | None = None) -> bool:
+    return isinstance(value, str) and len(value) >= minimum and (
+        maximum is None or len(value) <= maximum
+    )
+
+
+def _object_at(value: object, *path: str) -> dict:
+    for field in path:
+        if not isinstance(value, dict):
+            return {}
+        value = value.get(field)
+    return value if isinstance(value, dict) else {}
+
+
 def validate_event_types(catalog: object) -> tuple[set[str], list[str]]:
     errors: list[str] = []
     _exact_keys(catalog, {"schemaVersion", "eventTypes"}, "event type catalog", errors)
@@ -118,7 +146,7 @@ def validate_event_types(catalog: object) -> tuple[set[str], list[str]]:
             errors.append(f"{where}.id: duplicate '{identifier}'")
         else:
             identifiers.add(identifier)
-        if family not in EVENT_FAMILIES:
+        if not _string_member(family, EVENT_FAMILIES):
             errors.append(f"{where}.family: unsupported family '{family}'")
         elif isinstance(identifier, str) and identifier.split(".", 1)[0] != family:
             errors.append(f"{where}: family does not match id prefix")
@@ -145,7 +173,12 @@ def validate_event_schema(schema: object, event_types: set[str]) -> list[str]:
         errors.append("event schema: top level must be a closed object")
     properties = schema.get("properties")
     required = schema.get("required")
-    if not isinstance(properties, dict) or not isinstance(required, list):
+    if (
+        not isinstance(properties, dict)
+        or not isinstance(required, list)
+        or any(not isinstance(field, str) for field in required)
+        or any(not isinstance(definition, dict) for definition in properties.values())
+    ):
         return errors + ["event schema: properties and required must be present"]
     core = {
         "schemaVersion",
@@ -168,7 +201,7 @@ def validate_event_schema(schema: object, event_types: set[str]) -> list[str]:
         errors.append(f"event schema: required list misses: {', '.join(missing)}")
     if set(required) - set(properties):
         errors.append("event schema: required contains undefined properties")
-    receipt = properties.get("links", {}).get("contains", {}).get("properties", {}).get("rel", {}).get("const")
+    receipt = _object_at(properties, "links", "contains", "properties", "rel").get("const")
     if receipt != "receipt" or properties.get("links", {}).get("minContains") != 1:
         errors.append("event schema: links must require at least one receipt")
     pattern = properties.get("eventType", {}).get("pattern")
@@ -181,28 +214,109 @@ def validate_event_schema(schema: object, event_types: set[str]) -> list[str]:
             if not compiled.fullmatch(identifier):
                 errors.append(f"event schema: registered type '{identifier}' does not match eventType pattern")
     sources = properties.get("source", {}).get("enum")
-    if not isinstance(sources, list) or not sources or len(sources) != len(set(sources)):
+    if (
+        not isinstance(sources, list)
+        or not sources
+        or any(not isinstance(source, str) for source in sources)
+        or len(sources) != len(set(sources))
+    ):
         errors.append("event schema: source enum must be non-empty and unique")
     elif any(not isinstance(source, str) or not EVENT_TYPE.fullmatch(source) for source in sources):
         errors.append("event schema: source enum contains an invalid source name")
     return errors
 
 
-def _valid_uri(value: object) -> bool:
-    if not isinstance(value, str):
+def _valid_rfc3339(value: object) -> bool:
+    if not isinstance(value, str) or (match := RFC3339.fullmatch(value)) is None:
         return False
-    parsed = urlparse(value)
-    return (parsed.scheme == "https" and bool(parsed.netloc)) or (
-        parsed.scheme == "urn" and bool(parsed.path)
-    )
+    year, month, day, hour, minute, second = map(int, match.groups()[:6])
+    offset = match.group(7)
+    offset_minutes = 0
+    if offset not in {"Z", "z"}:
+        offset_hour, offset_minute = int(offset[1:3]), int(offset[4:6])
+        if offset_hour > 23 or offset_minute > 59:
+            return False
+        offset_minutes = (offset_hour * 60 + offset_minute) * (1 if offset[0] == "+" else -1)
+    if second > 60:
+        return False
+    try:
+        instant = datetime(
+            year, month, day, hour, minute, min(second, 59),
+            tzinfo=timezone(timedelta(minutes=offset_minutes)),
+        )
+        if second == 60:
+            # RFC 3339 allows leap seconds at the end of a UTC month. Validate
+            # their placement, not an externally maintained leap-second table.
+            utc = instant.astimezone(timezone.utc)
+            following = utc + timedelta(seconds=1)
+            return (utc.hour, utc.minute) == (23, 59) and following.day == 1
+    except (ValueError, OverflowError):
+        return False
+    return True
+
+
+def _valid_uri(value: object, *, https_only: bool = False) -> bool:
+    """Check URI syntax only; never resolve DNS or authorize a destination."""
+    if (
+        not isinstance(value, str)
+        or URI_CHARACTERS.fullmatch(value) is None
+        or re.search(r"%(?![0-9A-Fa-f]{2})", value)
+    ):
+        return False
+    try:
+        parsed = urlsplit(value)
+        # Brackets are reserved for IP literals in the authority, not a path.
+        if any(character in parsed.path + parsed.query + parsed.fragment for character in "[]"):
+            return False
+        if "#" in parsed.fragment:
+            return False
+        if not https_only and value.startswith("urn:"):
+            return not parsed.netloc and URN_PATH.fullmatch(parsed.path) is not None
+        if not value.startswith("https://") or parsed.scheme != "https" or not parsed.netloc:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        host = parsed.hostname
+        if not host or "%" in host:
+            return False
+        # Accessing port validates its numeric syntax and range; an empty port
+        # would otherwise be normalized to None by urllib.
+        _ = parsed.port
+        if parsed.netloc.endswith(":"):
+            return False
+        if parsed.netloc.startswith("["):
+            ipaddress.IPv6Address(host)
+            closing = parsed.netloc.index("]")
+            suffix = parsed.netloc[closing + 1:]
+            return not suffix or re.fullmatch(r":[0-9]+", suffix) is not None
+        if ":" in host or "[" in parsed.netloc or "]" in parsed.netloc:
+            return False
+        name = host.removesuffix(".")
+        if len(name) > 253 or any(DNS_LABEL.fullmatch(label) is None for label in name.split(".")):
+            return False
+        if re.fullmatch(r"[0-9.]+", name):
+            ipaddress.IPv4Address(name)
+    except ValueError:
+        return False
+    return True
 
 
 def validate_event(event: object, schema: dict, event_types: set[str], where: str = "event") -> list[str]:
     errors: list[str] = []
     if not isinstance(event, dict):
         return [f"{where}: expected object"]
-    properties = schema["properties"]
-    required = set(schema["required"])
+    properties = _object_at(schema, "properties")
+    required_fields = schema.get("required") if isinstance(schema, dict) else None
+    sources = _object_at(properties, "source").get("enum")
+    if (
+        not properties
+        or not isinstance(required_fields, list)
+        or any(not isinstance(field, str) for field in required_fields)
+        or not isinstance(sources, list)
+        or any(not isinstance(source, str) for source in sources)
+    ):
+        return [f"{where}: event schema is malformed"]
+    required = set(required_fields)
     unknown = sorted(set(event) - set(properties))
     missing = sorted(required - set(event))
     if unknown:
@@ -216,15 +330,18 @@ def validate_event(event: object, schema: dict, event_types: set[str], where: st
     if not isinstance(identifier, str) or not IDENTIFIER.fullmatch(identifier):
         errors.append(f"{where}.eventId: invalid identifier")
     event_type = event.get("eventType")
-    if event_type not in event_types:
+    if not _string_member(event_type, event_types):
         errors.append(f"{where}.eventType: unregistered event type '{event_type}'")
     source = event.get("source")
-    known_sources = set(schema["properties"]["source"].get("enum", []))
-    if source not in known_sources:
+    known_sources = set(sources)
+    if not _string_member(source, known_sources):
         errors.append(f"{where}.source: unregistered source '{source}'")
     repository = event.get("repository")
     if repository is not None and (not isinstance(repository, str) or not REPOSITORY.fullmatch(repository)):
         errors.append(f"{where}.repository: invalid owner/name")
+    entity_id = event.get("entityId")
+    if entity_id is not None and not _bounded_string(entity_id, maximum=256):
+        errors.append(f"{where}.entityId: expected string or null up to 256 characters")
     source_sha = event.get("sourceSha")
     if not isinstance(source_sha, str) or not SOURCE_SHA.fullmatch(source_sha):
         errors.append(f"{where}.sourceSha: expected a lowercase 40- or 64-character Git SHA")
@@ -237,36 +354,28 @@ def validate_event(event: object, schema: dict, event_types: set[str], where: st
     key = event.get("idempotencyKey")
     if not isinstance(key, str) or not IDEMPOTENCY_KEY.fullmatch(key):
         errors.append(f"{where}.idempotencyKey: invalid key")
-    if event.get("environment") not in {"local", "development", "test", "staging", "production"}:
+    if not _string_member(event.get("environment"), {"local", "development", "test", "staging", "production"}):
         errors.append(f"{where}.environment: unsupported value")
-    if event.get("dataClassification") not in {"public", "internal", "confidential", "restricted"}:
+    if not _string_member(event.get("dataClassification"), {"public", "internal", "confidential", "restricted"}):
         errors.append(f"{where}.dataClassification: unsupported value")
 
-    occurred_at = event.get("occurredAt")
-    if not isinstance(occurred_at, str):
-        errors.append(f"{where}.occurredAt: expected RFC 3339 timestamp")
-    else:
-        try:
-            parsed = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                raise ValueError("timezone required")
-        except ValueError:
-            errors.append(f"{where}.occurredAt: expected timezone-aware RFC 3339 timestamp")
+    if not _valid_rfc3339(event.get("occurredAt")):
+        errors.append(f"{where}.occurredAt: expected timezone-aware RFC 3339 timestamp")
 
     actor = event.get("actor")
     _exact_keys(actor, {"type", "id", "displayName"}, f"{where}.actor", errors)
     _require_keys(actor, {"type", "id"}, f"{where}.actor", errors)
     if isinstance(actor, dict):
-        if actor.get("type") not in {"human", "service", "agent", "workflow"}:
+        if not _string_member(actor.get("type"), {"human", "service", "agent", "workflow"}):
             errors.append(f"{where}.actor.type: unsupported value")
-        if not isinstance(actor.get("id"), str) or not actor["id"].strip():
-            errors.append(f"{where}.actor.id: expected non-empty string")
+        if not _bounded_string(actor.get("id"), maximum=256) or not actor["id"].strip():
+            errors.append(f"{where}.actor.id: expected non-empty string up to 256 characters")
         display_name = actor.get("displayName")
-        if display_name is not None and not isinstance(display_name, str):
-            errors.append(f"{where}.actor.displayName: expected string or null")
+        if display_name is not None and not _bounded_string(display_name, minimum=0, maximum=256):
+            errors.append(f"{where}.actor.displayName: expected string or null up to 256 characters")
 
     trace = event.get("trace")
-    if trace is not None:
+    if "trace" in event:
         _exact_keys(trace, {"traceparent", "tracestate"}, f"{where}.trace", errors)
         _require_keys(trace, {"traceparent"}, f"{where}.trace", errors)
         if isinstance(trace, dict):
@@ -291,19 +400,20 @@ def validate_event(event: object, schema: dict, event_types: set[str], where: st
                 continue
             rel = link.get("rel")
             href = link.get("href")
-            if rel not in {"source", "subject", "receipt", "approval", "evidence", "result", "parent"}:
+            if not _string_member(rel, {"source", "subject", "receipt", "approval", "evidence", "result", "parent"}):
                 errors.append(f"{link_where}.rel: unsupported relation")
             if not _valid_uri(href):
                 errors.append(f"{link_where}.href: expected an absolute HTTPS URL or URN")
             title = link.get("title")
-            if title is not None and (not isinstance(title, str) or not title.strip() or len(title) > 256):
+            if "title" in link and (not _bounded_string(title, maximum=256) or not title.strip()):
                 errors.append(f"{link_where}.title: expected non-empty string up to 256 characters")
             if rel == "receipt":
                 receipts += 1
-            pair = (rel, href)
-            if pair in seen_links:
-                errors.append(f"{link_where}: duplicate link")
-            seen_links.add(pair)
+            if isinstance(rel, str) and isinstance(href, str):
+                pair = (rel, href)
+                if pair in seen_links:
+                    errors.append(f"{link_where}: duplicate link")
+                seen_links.add(pair)
         if receipts == 0:
             errors.append(f"{where}.links: at least one receipt relation is required")
     if not isinstance(event.get("payload"), dict):
@@ -319,8 +429,15 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
         errors.append("repository schema: must declare JSON Schema draft 2020-12")
     if schema.get("additionalProperties") is not False:
         errors.append("repository schema: top level must be closed")
-    allowed = set(schema.get("properties", {}))
-    required = set(schema.get("required", []))
+    properties, required_fields = schema.get("properties"), schema.get("required")
+    if (
+        not isinstance(properties, dict)
+        or not isinstance(required_fields, list)
+        or any(not isinstance(field, str) for field in required_fields)
+    ):
+        return errors + ["repository schema: properties and required must be present"]
+    allowed = set(properties)
+    required = set(required_fields)
     _exact_keys(registry, allowed, "repository registry", errors)
     missing = sorted(required - set(registry))
     if missing:
@@ -347,7 +464,7 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
             if name in repo_by_name:
                 errors.append(f"{where}.name: duplicate '{name}'")
             repo_by_name[name] = entry
-            if entry.get("lifecycle") not in REPOSITORY_LIFECYCLES:
+            if not _string_member(entry.get("lifecycle"), REPOSITORY_LIFECYCLES):
                 errors.append(f"{where}.lifecycle: unsupported value")
             if (
                 not isinstance(entry.get("role"), str)
@@ -355,9 +472,9 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
                 or len(entry["role"]) > 256
             ):
                 errors.append(f"{where}.role: expected non-empty string")
-            if entry.get("integrationMode") not in INTEGRATION_MODES:
+            if not _string_member(entry.get("integrationMode"), INTEGRATION_MODES):
                 errors.append(f"{where}.integrationMode: unsupported value")
-            if entry.get("importPolicy") not in IMPORT_POLICIES:
+            if not _string_member(entry.get("importPolicy"), IMPORT_POLICIES):
                 errors.append(f"{where}.importPolicy: unsupported value")
 
     authority = registry.get("authority")
@@ -379,12 +496,12 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
         }
         for field, expected_lifecycle in lifecycle_rules.items():
             name = authority.get(field)
-            repository = repo_by_name.get(name)
+            repository = repo_by_name.get(name) if isinstance(name, str) else None
             if repository is None:
                 errors.append(f"authority.{field}: repository '{name}' is not registered")
             elif repository.get("lifecycle") != expected_lifecycle:
                 errors.append(f"authority.{field}: expected {expected_lifecycle} repository")
-        if not _valid_uri(authority.get("transitionUrl")):
+        if not _valid_uri(authority.get("transitionUrl"), https_only=True):
             errors.append("authority.transitionUrl: expected absolute HTTPS URL")
 
     external = registry.get("externalAuthorities")
@@ -421,11 +538,11 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
             else:
                 capability_ids.add(identifier)
             authority_name = capability.get("authorityRepository")
-            authority_repo = repo_by_name.get(authority_name)
+            authority_repo = repo_by_name.get(authority_name) if isinstance(authority_name, str) else None
             if authority_repo is None:
                 errors.append(f"{where}.authorityRepository: unregistered repository '{authority_name}'")
             status = capability.get("status")
-            if status not in {"active", "planned", "reference-only"}:
+            if not _string_member(status, {"active", "planned", "reference-only"}):
                 errors.append(f"{where}.status: unsupported value")
             elif authority_repo is not None:
                 lifecycle = authority_repo.get("lifecycle")
@@ -434,7 +551,7 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
                     "planned": {"planned"},
                     "reference-only": {"satellite", "historical", "recovery"},
                 }[status]
-                if lifecycle not in valid_lifecycles:
+                if not _string_member(lifecycle, valid_lifecycles):
                     errors.append(f"{where}: {status} capability cannot be owned by {lifecycle} repository")
             if (
                 not isinstance(capability.get("description"), str)
@@ -468,8 +585,8 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
                 errors.append(f"{where}.name: duplicate '{name}'")
             else:
                 surface_names.add(name)
-            if not isinstance(surface.get("role"), str) or not surface["role"].strip():
-                errors.append(f"{where}.role: expected non-empty string")
+            if not _bounded_string(surface.get("role"), maximum=256) or not surface["role"].strip():
+                errors.append(f"{where}.role: expected non-empty string up to 256 characters")
             for field in ("eventSource", "receiptRequired", "deploymentAuthority"):
                 if type(surface.get(field)) is not bool:
                     errors.append(f"{where}.{field}: expected boolean")
@@ -500,18 +617,20 @@ def validate_repository_registry(schema: object, registry: object) -> list[str]:
             _require_keys(source, allowed_provenance_fields, where, errors)
             if not isinstance(source, dict):
                 continue
-            pair = (source.get("repository"), source.get("path"))
-            if pair in observed_sources:
-                errors.append(f"{where}: duplicate provenance source")
-            observed_sources.add(pair)
-            if source.get("repository") not in repo_by_name:
+            repository_name, path = source.get("repository"), source.get("path")
+            if isinstance(repository_name, str) and isinstance(path, str):
+                pair = (repository_name, path)
+                if pair in observed_sources:
+                    errors.append(f"{where}: duplicate provenance source")
+                observed_sources.add(pair)
+            if not isinstance(repository_name, str) or repository_name not in repo_by_name:
                 errors.append(f"{where}.repository: source repository is not registered")
             if not isinstance(source.get("path"), str) or not source["path"].strip():
                 errors.append(f"{where}.path: expected non-empty path")
             sha = source.get("blobSha")
             if not isinstance(sha, str) or not SOURCE_SHA.fullmatch(sha):
                 errors.append(f"{where}.blobSha: expected immutable Git blob SHA")
-            if source.get("relationship") not in {"adapted-from", "supersedes", "mirrors"}:
+            if not _string_member(source.get("relationship"), {"adapted-from", "supersedes", "mirrors"}):
                 errors.append(f"{where}.relationship: unsupported value")
         missing_sources = sorted(required_sources - observed_sources)
         if missing_sources:
@@ -531,14 +650,16 @@ def validate_all() -> list[str]:
 
     event_types, type_errors = validate_event_types(event_catalog)
     errors.extend(type_errors)
-    errors.extend(validate_event_schema(event_schema, event_types))
+    schema_errors = validate_event_schema(event_schema, event_types)
+    errors.extend(schema_errors)
     errors.extend(validate_repository_registry(repository_schema, repository_registry))
-    if isinstance(event_schema, dict) and isinstance(repository_registry, dict):
+    if not schema_errors and isinstance(repository_registry, dict):
         source_names = set(event_schema.get("properties", {}).get("source", {}).get("enum", []))
+        surfaces = repository_registry.get("surfaces")
         surface_names = {
             surface.get("name")
-            for surface in repository_registry.get("surfaces", [])
-            if isinstance(surface, dict)
+            for surface in (surfaces if isinstance(surfaces, list) else [])
+            if isinstance(surface, dict) and isinstance(surface.get("name"), str)
         }
         missing_sources = sorted(surface_names - source_names)
         if missing_sources:
@@ -546,7 +667,7 @@ def validate_all() -> list[str]:
                 "event schema: repository surfaces missing from source enum: "
                 + ", ".join(missing_sources)
             )
-    if isinstance(event_schema, dict):
+    if not schema_errors:
         for path in sorted(EXAMPLES_PATH.glob("*.json")):
             try:
                 event = load_json(path)
