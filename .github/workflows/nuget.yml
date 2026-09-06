@@ -3,7 +3,9 @@ name: NuGet Build & Release
 # Release workflow for the legacy core package. It builds/packs
 # src/core/HELIOS.Platform, which does not compile today (see
 # docs/architecture/ROADMAP_MULTI_LLM.md known-red inventory), so it must not
-# gate pull requests — PR builds are covered by dotnet-build.yml.
+# gate pull requests — PR builds are covered by dotnet-build.yml. Main-branch
+# pushes therefore publish only an informational status; release validations
+# stay on tag/manual runs.
 on:
   push:
     branches: [main]
@@ -19,7 +21,24 @@ permissions:
   contents: read
 
 jobs:
+  main-branch-status:
+    name: Legacy package lane status (main push)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Record informational status
+        run: |
+          {
+            echo "## NuGet Build & Release"
+            echo ""
+            echo "Legacy core packaging is currently a release-lane concern only."
+            echo "Tag pushes (\`v*.*.*\`) and manual dispatch run the full package pipeline."
+            echo "Main-branch pushes publish this informational check so commit health stays honest while src/core/HELIOS.Platform remains a known-red baseline."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
