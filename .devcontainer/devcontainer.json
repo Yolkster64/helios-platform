@@ -1,6 +1,10 @@
 {
   "name": "HELIOS Platform",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb"
+  },
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -18,12 +22,15 @@
       "extensions": [
         "ms-dotnettools.csharp",
         "ms-dotnettools.csdevkit",
-        "Ionide.Ionide-fsharp",
+        "ionide.ionide-fsharp",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-azuretools.vscode-bicep",
-        "HashiCorp.terraform",
-        "ms-vscode.powershell"
+        "hashicorp.terraform",
+        "ms-vscode.powershell",
+        "github.vscode-pull-request-github",
+        "github.copilot",
+        "github.copilot-chat"
       ],
       "settings": {
         "dotnet.defaultSolution": "HELIOS.sln",
@@ -33,6 +40,26 @@
           "editor.tabSize": 2
         }
       }
+    }
+  },
+  "secrets": {
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key for the openai provider in config/aihub.json and the codex CLI. Optional: without it those lanes report not-ready instead of failing. Alternative source: Key Vault secret openai-api-key via scripts/bootstrap/load-env-from-keyvault.sh."
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for the anthropic provider in config/aihub.json and the claude CLI. Optional. Alternative source: Key Vault secret anthropic-api-key via scripts/bootstrap/load-env-from-keyvault.sh."
+    },
+    "GITHUB_MODELS_TOKEN": {
+      "description": "GitHub token with the models:read scope for the github-models provider. Optional: `source scripts/bootstrap/connect-github.sh` exports it from the gh login instead. Alternative source: Key Vault secret github-models-token."
+    },
+    "AZURE_KEY_VAULT_URI": {
+      "description": "URI of the Key Vault deployed by infra/main.bicep (printed by scripts/bootstrap/azure-up.sh). Lets load-env-from-keyvault.sh and auto-login.ps1 pull the provider keys after az login, so the three keys above need not be stored as Codespaces secrets at all."
+    },
+    "AZURE_OPENAI_ENDPOINT": {
+      "description": "Azure OpenAI account endpoint (https://<account>.openai.azure.com/) for the azure-openai provider in config/aihub.json, which leads the hub's defaultChain. An identifier, not a secret, but declared here so the creation page prompts for it. Printed by scripts/bootstrap/azure-up.sh (infra/main.bicep output); no Key Vault fallback. Optional: without it the azure-openai lane reports not-ready instead of failing."
+    },
+    "AZURE_OPENAI_API_KEY": {
+      "description": "Optional key for the azure-openai provider. Leave it EMPTY (or unset) to authenticate with Entra ID via DefaultAzureCredential after az login --use-device-code; set it only where key auth is required. No Key Vault fallback (config/aihub.json declares no apiKeySecretName for this provider)."
     }
   },
   "remoteEnv": {
@@ -48,5 +75,6 @@
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "echo '== [1/4] native C++ spoke (optional; AIHub falls back to managed paths) =='; { command -v cmake >/dev/null 2>&1 && ./scripts/build/build-native.sh || echo 'SKIP: cmake missing or native build failed (non-fatal)'; }; echo '== [2/4] restore + build HELIOS.sln =='; dotnet restore HELIOS.sln || true; dotnet build HELIOS.sln -c Release --no-restore || true; echo '== [3/4] python spoke (ml extras, falling back to dependency-free) =='; python3 -m pip install -e 'src/ai/python[ml]' || python3 -m pip install -e src/ai/python || true; echo '== [4/4] helios-ai on PATH =='; sudo ln -sf \"$PWD/src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai\" /usr/local/bin/helios-ai || true; { command -v helios-ai >/dev/null 2>&1 && test -x src/ai/HELIOS.AIHub.Cli/bin/Release/net8.0/helios-ai && echo 'helios-ai ready (try: helios-ai status)' || echo 'helios-ai symlinked; run: dotnet build HELIOS.sln -c Release'; }"
+  "postCreateCommand": "echo '== [1/4] native C++ spoke (optional; AIHub falls back to managed paths) =='; { command -v cmake >/dev/null 2>&1 && ./scripts/build/build-native.sh || echo 'SKIP: cmake missing or native build failed (non-fatal)'; }; echo '== [2/4] restore + build HELIOS.sln =='; dotnet restore HELIOS.sln || true; dotnet build HELIOS.sln -c Release --no-restore || true; echo '== [3/4] python spoke (ml extras, falling back to dependency-free) =='; python3 -m pip install -e 'src/ai/python[ml]' || python3 -m pip install -e src/ai/python || true; echo '== [4/4] helios-ai on PATH =='; sudo ln -sf \"$PWD/src/ai/HELIOS.AIHub.Cli/bin/Release/net10.0/helios-ai\" /usr/local/bin/helios-ai || true; { command -v helios-ai >/dev/null 2>&1 && test -x src/ai/HELIOS.AIHub.Cli/bin/Release/net10.0/helios-ai && echo 'helios-ai ready (try: helios-ai status)' || echo 'helios-ai symlinked; run: dotnet build HELIOS.sln -c Release'; }",
+  "postAttachCommand": "bash scripts/bootstrap/session-start-check.sh || true"
 }

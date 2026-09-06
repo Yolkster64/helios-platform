@@ -7,11 +7,15 @@ PRs; the per-PR benchmark status lives in `config/absorption/pr-watchlist.json` 
 evidence loop is `docs/architecture/ABSORPTION_PIPELINE.md`. Upstream is read-only —
 benchmark provenance, never a write target.
 
-> **GitHub Issues**: this fork has Issues disabled (fork default; the API write to flip
-> it is proxy-blocked). Once **Settings → General → Features → Issues** is enabled on
-> `Yolkster64/helios-platform`, each epic below becomes one GitHub issue verbatim
-> (labels in parentheses; `absorption` on all). Until then this page is the system of
-> record, published to the wiki by the Wiki Sync workflow.
+> **GitHub Issues**: enabled on `Yolkster64/helios-platform` (measured 2026-09-03,
+> `has_issues=true`). Every epic below IS a GitHub issue — **E-n is issue #(13+n)**, so
+> E1 = #14 … E40 = #53 (E24 #37, E32 #45 and E34 #47 are closed; the rest open). Issues
+> #54–#93 are `[GH-NN]` copies of #14–#53 created by Linear's GitHub integration looping
+> this repo's own Linear sync; #93 is closed and #54–#92 are being closed as duplicates
+> by `scripts/github/close-duplicate-issues.ps1` once the owner switches the Linear-side
+> sync off (`docs/architecture/CONNECTIONS_SETUP.md` § Issue hygiene). Status, labels and
+> milestones live on the issues; this page stays the narrative source, published to the
+> wiki by `.github/workflows/wiki-generator.yml`.
 
 **Status legend** — per epic: `open` (not started), `tranche-1` (first integration pass
 landed or in flight), `audit-first` (safety carve-out; documentation before any code).
@@ -74,7 +78,7 @@ fleet pools' tool allowlists (the review pool is read-only by design).
   too), the capability-backlog taxonomy as roadmap seed
 - Risks: security model differs; absorb taxonomy and validators, not the runtime
 
-## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — open
+## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — tranche-1
 
 Managed-identity→Key-Vault secret binding, token audience hardening, and immutable
 plan/deploy custody — extending our OIDC + Key Vault stack with audit custody
@@ -85,6 +89,12 @@ discipline on the deploy path.
   (OIDC guards + orchestration inventory)
 - Extracts: custody/audit pattern, audience-hardening checks, OIDC guard patterns
 - Risks: assumes upstream pipeline; adapt to `helios-deploy.yml`
+- Landed (tranche-1): `helios-deploy.yml` now pins OIDC audience
+  `api://AzureADTokenExchange`, separates read-only what-if from mutating deploy
+  behavior, records allowlisted custody metadata/results (not raw payload dumps),
+  and seals/upload artifacts even for failed attempts. Enforcement is in
+  `scripts/validation/validate_deploy_custody.py` via
+  `.github/workflows/deploy-hardening-contract.yml`.
 
 ## E6 — Private Azure edge & segmented network (`infra`) — open
 
@@ -286,9 +296,9 @@ profiles, a deep-AI orchestrator with inventory/workflow/docs, control-plane
 scripts, and submodule consolidation tooling. The planner profiles and inventory
 model are the durable ideas; the orchestrators are era-specific.
 
-- PRs: #71 (integration planner with profiles), #72 (deep-AI orchestrator: inventory
-  + workflow + docs), #73 (deep AI & workflow automation), #77 (automation workflows
-  + control-plane scripts + submodule consolidation tooling), #68 (SRE Agent
+- PRs: #71 (integration planner with profiles), #72 (deep-AI orchestrator: inventory +
+  workflow + docs), #73 (deep AI & workflow automation), #77 (automation workflows +
+  control-plane scripts + submodule consolidation tooling), #68 (SRE Agent
   deployment automation docs and assets)
 - Extracts: planner profile shape, inventory model; submodule tooling defers to E7's
   governance

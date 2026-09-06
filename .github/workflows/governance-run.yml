@@ -1,0 +1,165 @@
+# Governance runner: the ONE copy of the script loop that governance-apply.yml's
+# `plan` and `apply` jobs both call (`uses: ./.github/workflows/governance-run.yml`).
+# It has no trigger of its own; the exit-code contract, the summary table and the
+# credential rules are specified in governance-apply.yml's header, this file only
+# implements them. Everything the two lanes differ in arrives as inputs (run_mode,
+# apply, scope) plus one optional secret (HELIOS_ADMIN_TOKEN, passed by the apply
+# caller only).
+#
+# No `permissions:` block, deliberately: a called workflow can only NARROW the
+# caller's GITHUB_TOKEN grant, never widen it, and the two callers hold different
+# grants on purpose (plan: contents + pages read; apply: + issues write). Declaring
+# either set here would break the other caller, so the grant is inherited from
+# whichever job calls this file.
+#
+# Credentials, chosen per script and never echoed (gh reads GH_TOKEN by name):
+#   ADMIN_TOKEN   HELIOS_ADMIN_TOKEN when the caller passed it, else the workflow
+#                 token -> rulesets and settings (need repo ADMIN)
+#   ISSUES_TOKEN  always the workflow token -> labels and milestones (issues:
+#                 write, which the apply caller grants), so a dead or under-scoped
+#                 PAT can only ever fail the two rows that need it
+name: Governance Run (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      run_mode:
+        description: 'Summary label: plan (pull_request dry-run) or apply (push / schedule / dispatch)'
+        type: string
+        required: true
+      apply:
+        description: 'true = pass -Apply to every in-scope script that holds the credential it needs'
+        type: boolean
+        default: false
+      scope:
+        description: 'all | rulesets | settings | labels | milestones'
+        type: string
+        default: all
+    secrets:
+      HELIOS_ADMIN_TOKEN:
+        description: 'Owner PAT with repo Administration RW (apply caller only; empty = not stored)'
+        required: false
+
+jobs:
+  run:
+    name: ${{ inputs.apply && 'reconcile' || 'dry-run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN || github.token }}
+      ISSUES_TOKEN: ${{ github.token }}
+      HAS_ADMIN_TOKEN: ${{ secrets.HELIOS_ADMIN_TOKEN != '' }}
+      APPLY: ${{ inputs.apply }}
+      SCOPE: ${{ inputs.scope }}
+      RUN_MODE: ${{ inputs.run_mode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run every governance script
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          rows=""
+          details=""
+          # The repository this run executes in, passed to every script so a fork
+          # never reconciles upstream (the scripts default to upstream on their own).
+          # Actions always sets it; the :? guard makes a local replay fail loudly
+          # instead of silently targeting the scripts' default.
+          repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must name the owner/repo to reconcile}"
+          in_scope() { [ "${SCOPE}" = "all" ] || [ "${SCOPE}" = "$1" ]; }
+          run_item() {
+            local item="$1" script="$2" needs_admin="$3"
+            local note="" state="" code=0 out="" args="" pending=0 token="" cred=""
+            if ! in_scope "${item}"; then
+              rows="${rows}| ${item} | skipped (scope=${SCOPE}) | - |  |"$'\n'
+              return
+            fi
+            # Per-script credential (see the header): the admin items take
+            # ADMIN_TOKEN, the issues items always take ISSUES_TOKEN. Only the
+            # NAME of the credential is ever printed. The :- defaults let a local
+            # dry-run replay run without either variable (a dry run needs none).
+            if [ "${needs_admin}" = "true" ]; then
+              token="${ADMIN_TOKEN:-}"
+              if [ "${HAS_ADMIN_TOKEN}" = "true" ]; then cred="HELIOS_ADMIN_TOKEN"; else cred="GITHUB_TOKEN"; fi
+            else
+              token="${ISSUES_TOKEN:-}"
+              cred="GITHUB_TOKEN"
+            fi
+            if [ "${APPLY}" = "true" ]; then
+              if [ "${needs_admin}" = "true" ] && [ "${HAS_ADMIN_TOKEN}" != "true" ]; then
+                # --repo is spelled out because this text is pasted from the browser
+                # into any shell, not necessarily inside a checkout.
+                note="needs HELIOS_ADMIN_TOKEN - owner: create a fine-grained PAT at https://github.com/settings/personal-access-tokens/new (repository access: ${repo}; permissions Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R), then: gh secret set HELIOS_ADMIN_TOKEN --repo ${repo} (paste when prompted) or export HELIOS_ADMIN_TOKEN and run pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply"
+              else
+                args="-Apply"
+              fi
+            fi
+            echo "::group::${item} (${script})"
+            # The exact command, printed before it runs (mutation announcement rule).
+            echo "+ GH_TOKEN=<${cred}> pwsh -NoProfile -File ${script} -Repository ${repo} ${args}"
+            set +e
+            # shellcheck disable=SC2086
+            out="$(GH_TOKEN="${token}" pwsh -NoProfile -File "${script}" -Repository "${repo}" ${args} 2>&1)"
+            code=$?
+            set -e
+            printf '%s\n' "${out}"
+            echo "::endgroup::"
+            # Count the commands a dry run said it WOULD run, so the summary row can
+            # never read "clean" while changes are pending. apply-rulesets.ps1 prints
+            # "[dry-run] gh api ...", the other three print "would run: ..."; both are
+            # printed once per pending mutation. grep -c exits 1 on zero matches, hence
+            # the || true (the "0" it printed is still captured).
+            pending="$(printf '%s\n' "${out}" | grep -cE 'would run: |^\[dry-run\] gh api ' || true)"
+            case "${code}" in
+              0)
+                if [ -n "${args}" ]; then state="applied"
+                elif [ -n "${note}" ]; then
+                  state="dry-run only"
+                  note="${pending} pending change(s) in details; ${note}"
+                elif [ "${pending}" -eq 0 ]; then state="in sync (dry-run)"
+                else state="dry-run: ${pending} pending change(s), see details"; fi
+                ;;
+              2)
+                if [ "${needs_admin}" = "true" ] && [ "${args}" = "-Apply" ]; then
+                  # -Apply ran WITH the stored HELIOS_ADMIN_TOKEN and the script still
+                  # failed its wire probe: the PAT is expired, revoked or under-scoped
+                  # (no Administration RW on this repository). A green "needs owner"
+                  # row would hide exactly that, so this one is red.
+                  state="FAILED (HELIOS_ADMIN_TOKEN stored but rejected: expired, revoked or under-scoped)"
+                  note="rotate the PAT (Administration RW, Contents RW, Issues RW, Pull requests RW, Pages RW, Metadata R on ${repo}), then: gh secret set HELIOS_ADMIN_TOKEN --repo ${repo}"
+                  echo "::error::${item}: ${script} exited 2 although HELIOS_ADMIN_TOKEN is stored - the PAT is expired, revoked or lacks Administration RW on ${repo}; rotate it and re-run"
+                  failed=1
+                else
+                  state="needs owner (precondition)"; [ -n "${note}" ] || note="credential/precondition missing - see output"
+                fi
+                ;;
+              1) state="FAILED (item failed, replay list in output)"; failed=1 ;;
+              *) state="FAILED (exit ${code})"; failed=1 ;;
+            esac
+            rows="${rows}| ${item} | ${state} | ${code} | ${note} |"$'\n'
+            details="${details}<details><summary>${script} (exit ${code})</summary>"$'\n\n'
+            details="${details}"'```text'$'\n'"${out}"$'\n''```'$'\n\n'"</details>"$'\n'
+          }
+
+          run_item rulesets   scripts/github/apply-rulesets.ps1      true
+          run_item settings   scripts/github/apply-repo-settings.ps1 true
+          run_item labels     scripts/github/apply-labels.ps1        false
+          run_item milestones scripts/github/apply-milestones.ps1    false
+
+          {
+            echo "## Governance ${RUN_MODE}"
+            echo ""
+            echo "mode: **${RUN_MODE}** | apply: \`${APPLY}\` | scope: \`${SCOPE}\` | admin token: \`${HAS_ADMIN_TOKEN}\` | event: \`${GITHUB_EVENT_NAME}\`"
+            echo ""
+            echo "| Item | State | Exit code | Note |"
+            echo "|---|---|---|---|"
+            printf '%s' "${rows}"
+            echo ""
+            printf '%s' "${details}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::at least one governance item failed; see the rows marked FAILED and the replay list above."
+            exit 1
+          fi
