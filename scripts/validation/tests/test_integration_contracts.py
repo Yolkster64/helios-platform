@@ -225,6 +225,18 @@ class IntegrationContractTests(unittest.TestCase):
                 errors = contracts.validate_event(event, self.event_schema, self.event_types)
                 self.assertEqual(bool(errors), value in invalid, errors)
 
+    def test_schema_uri_patterns_match_validator_restrictions(self):
+        href_pattern = self.event_schema["properties"]["links"]["items"]["properties"]["href"]["pattern"]
+        transition_pattern = self.registry_schema["properties"]["authority"]["properties"]["transitionUrl"]["pattern"]
+        self.assertIsNotNone(re.fullmatch(href_pattern, "https://example.invalid/receipt"))
+        self.assertIsNotNone(re.fullmatch(href_pattern, "urn:helios:receipt:example-1"))
+        self.assertIsNone(re.fullmatch(href_pattern, "https://user@example.invalid/receipt"))
+        self.assertIsNone(re.fullmatch(href_pattern, "urn:"))
+        self.assertIsNotNone(
+            re.fullmatch(transition_pattern, "https://github.com/Yolkster64/helios-platform/pull/185")
+        )
+        self.assertIsNone(re.fullmatch(transition_pattern, "https://user@example.invalid/pull/185"))
+
     def test_catalog_malformed_json_types_are_errors_not_exceptions(self):
         paths = [("schemaVersion",), ("eventTypes",)]
         paths += [("eventTypes", 0, field) for field in self.catalog["eventTypes"][0]]
