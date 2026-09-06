@@ -1,74 +1,58 @@
-# HELIOS Platform
+# HELIOS Control Agent Contract
 
-Enterprise Windows management platform. C#/.NET 10 + PowerShell 7, with a multi-LLM hub
-(`src/ai/`), an MCP server (`src/mcp/`), and Azure AI Foundry infrastructure (`infra/`).
+The current repository is `Yolkster64/helios-platform`; the reviewed target is an in-place rename to `Yolkster64/helios-control`. `Yolkster64/helios-gui` is the separate native desktop target. Agents must not create a competing canonical copy.
 
-## Build & test (what CI runs)
+## Required local gates
 
 ```bash
-dotnet build HELIOS.sln -c Release          # AIHub + CLI + MCP + tests ONLY
+dotnet build HELIOS.sln -c Release
 dotnet test tests/HELIOS.AIHub.Tests -c Release
-cd src/ai/python && python3 -m pytest tests # dependency-free spoke; [ml] optional
-bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
+cd src/ai/python && python3 -m pytest tests
+bicep build infra/main.bicep --stdout
+python3 scripts/validation/validate_yolkster_cutover.py
 ```
 
-**`HELIOS.sln` deliberately excludes `src/core/HELIOS.Platform`** — the core project does
-not compile today (~323 errors). Do not add it back until it builds. The two seam files
-`Core/AI/Interfaces/IAgent.cs` and `Core/AI/Router/IRouter.cs` are source-linked into
-HELIOS.AIHub; keep them dependency-free (System.* usings only).
+The portable solution covers AIHub, CLI, MCP, and tests. Windows-only GUI code builds through `src/gui/HELIOS.Shell.sln` on a Windows runner.
 
-## Hard rules
+## Non-negotiable boundaries
 
-- **Root `HELIOS.Platform.csproj` recursively globs `**/*.cs`.** Any new C# directory
-  outside `src/ai`/`src/mcp` must be added to its `<Compile Remove>` list in the same
-  commit, or it silently breaks the root WPF project.
-- **New C# goes under `src/`** and must be added to `HELIOS.sln`. Exception:
-  Windows-only UI projects (`src/gui/`) cannot compile on the Linux CI that builds
-  `HELIOS.sln`, so they live in their own solution (`src/gui/HELIOS.Shell.sln`,
-  built on Windows — see `src/gui/README.md`) and MUST still be covered by the
-  root csproj's glob guards.
-- **No secrets in the repo.** `config/aihub.json` carries env-var names only; keys come
-  from the environment or Azure Key Vault (`AZURE_KEY_VAULT_URI`). Bicep takes secrets as
-  `@secure()` parameters and never outputs them.
-- Root-level `*_COMPLETE/*_REPORT/*_SUMMARY.md` status docs are historical and
-  unreliable; trust `docs/CONSOLIDATION_BLUEPRINT.md` and `docs/architecture/`.
+- Active desktop work is **WinUI 3 only**: C#/.NET 10, Windows App SDK, `Microsoft.UI.Xaml`, and `Microsoft.UI.Composition`.
+- Do not add WPF, UWP, `System.Windows`, `PresentationFramework`, `PresentationCore`, `Windows.UI.Xaml`, or a PowerShell GUI host.
+- The root `HELIOS.Platform.csproj` is a known legacy WPF baseline tracked by HC-002. Do not expand it, use it as a fallback, or re-add it to the portable solution.
+- New C# goes under `src` and must be included in the correct solution. Until HC-002 removes the legacy root glob, maintain its explicit compile exclusions.
+- Never commit secret values. Use environment-variable names, workload identity, managed identity, or Azure Key Vault references.
+- Never weaken a required check, mark skipped work as passed, fabricate a receipt, or claim a connector write without its returned identifier.
+- Production is disabled. GitHub protected environments are the only deployment authority.
 
-## Multi-LLM hub
+## Repository and fork policy
 
-- `helios-ai` (src/ai/HELIOS.AIHub.Cli): `ask` / `route <task-type>` / `tandem` /
-  `compare` / `status` / `providers` (`list`) / `routing` / `engines` / `engine-plan` /
-  `fleet-plan`. Providers and the task-routing table live in `config/aihub.json`; engine
-  candidates and fleet-plan chain suggestions are advisory and never auto-execute.
-- `helios-ai-api` (src/ai/HELIOS.AIHub.Api): `GET /healthz`; `/v1/status`,
-  `/v1/routing`, `/v1/learning`, `/v1/insights`, `/v1/metrics`, `/v1/engines`;
-  `POST /v1/learning`, `/v1/engines/recommend`, `/v1/ask`, `/v1/route`, `/v1/tandem`,
-  `/v1/compare`. `/v1/*` is loopback-only unless a caller sends
-  `HELIOS_API_ACCESS_KEY` as `X-HELIOS-Api-Key`; hosted use still needs
-  identity-aware ingress.
-- Python spoke (src/ai/python, `helios-agents`): outcome analytics, text grouping, and
-  truthful engine catalog/recommendation operations behind `PythonInsightsSpoke`'s
-  four-process cap. Prototype/concept candidates never auto-execute.
-- MCP server (src/mcp/HELIOS.Mcp, registered in `.mcp.json`): `helios_ai_ask`,
-  `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`, `helios_ai_status`,
-  `helios_providers_list`, `helios_optimal_provider_get`, `helios_task_routing_get`,
-  `helios_engine_catalog_get`, `helios_engine_mix_recommend`, `helios_infra_validate`,
-  `helios_absorb_status_get`, `helios_fleet_status_get`, `helios_azure_inventory_get`,
-  `helios_auth_status_get`, `helios_fleet_plan_get`, `helios_foundry_agent_list`,
-  `helios_foundry_agent_create`,
-  `helios_operator_profile_get`, `helios_operator_profile_save`,
-  `helios_operator_context_sync`, `helios_operator_next_steps_get`.
-- Claude Code plugin (`plugins/helios-operator`, cataloged by
-  `.claude-plugin/marketplace.json`): the `operate-helios` skill, `fabric-operator`
-  subagent, and the same MCP server. Durable, sanitized handoff state is local and
-  inspectable under the gitignored `.helios/operator/` directory.
-- Which model for which task: `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`.
+- Start from the latest `Yolkster64/helios-platform/main`; it is newer than the M0nado parent.
+- Prefer an administrator rename to `Yolkster64/helios-control` after CI. Do not copy the old M0nado tree over the Yolkster line.
+- Extract `src/gui` into `Yolkster64/helios-gui` through a reviewed, provenance-preserving change.
+- Import only original HELIOS deltas from Hermes, WindowsDeveloperConfig, or other forks.
+- Consume Azure SDKs as versioned packages with thin HELIOS adapters; do not vendor upstream SDK repositories.
+- Never delete or archive a source repository until target SHA, CI, issue mapping, releases, licenses, and checksums are proven.
 
-## Architecture docs
+## Agent authority
 
-`docs/architecture/MULTI_LLM_INTEGRATION.md` (this design), `GITHUB_ECOSYSTEM_DESIGN.md`
-(runners/Projects/wiki/connectors), `HERMES_FLEET_AND_XCORE.md` (agent fleet),
-`GUI_THEME_ANALYSIS.md` (WinUI 3 direction), `GUI_UPGRADE_PLAN.md` (shell completion:
-canonical tokens, pages, Adobe assets, agent roster), `ROADMAP_MULTI_LLM.md` (follow-up PRs and
-known-red workflow inventory), `CLAUDE_CODE_OPERATOR_PLUGIN.md` (Claude plugin and shared
-operator context). Coding skills live in `.claude/skills/` (index and
-per-stack library references: `.claude/skills/README.md`).
+Agents may inspect, edit allowlisted repository paths, build, test, validate Bicep, produce plans, prepare a development `what-if`, and open draft issues or pull requests when authorized.
+
+Agents may not merge, force-push, rename/transfer/archive repositories, change rulesets or protected environments, deploy Azure, mutate Entra/RBAC/Graph, read back secrets, approve production, or perform disk/driver/Defender/BitLocker/TPM/firmware operations.
+
+Hermes and XCore are planning, routing, simulation, evaluation, and redacted-memory systems. They are not human approvers or cloud principals. Slack, Linear, SharePoint, Teams, and Azure DevOps are coordination/evidence surfaces, not alternate deployment authorities.
+
+## Multi-LLM and MCP
+
+The provider-neutral AIHub routes OpenAI, Azure/Foundry, Claude, Copilot, local models, Hermes, and XCore through typed task/result, capability, approval, redaction, tracing, and evidence contracts. Provider-specific business logic must not leak into the WinUI application.
+
+The local MCP server in `.mcp.json` exposes bounded `helios_*` tools. Consequential operations are separate request/approval flows. Project MCP configuration from an untrusted branch must never be loaded in a credential-bearing workflow.
+
+## Authoritative references
+
+- `CLAUDE.md`
+- `docs/architecture/ADR-0010-WINUI3-ONLY.md`
+- `docs/architecture/CLAUDE-CODE-CANONICALIZATION.md`
+- `docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md`
+- `docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md`
+- `docs/migration/yolkster-control-cutover/CANONICAL-ISSUE-LEDGER.md`
+- `docs/repository/FORK-INVENTORY-2026-09-05.md`
