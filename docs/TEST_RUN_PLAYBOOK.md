@@ -10,7 +10,7 @@ Legend for requirements:
 - **Needs credentials** — marked inline; nothing below silently requires a secret.
 - **Windows-only** — marked inline; everything else runs on Linux/macOS/WSL2 too.
 
-Prerequisites for the core lanes: .NET SDK 8, PowerShell 7 (`pwsh`), Python 3.10+, Git.
+Prerequisites for the core lanes: .NET SDK 10 (`global.json` pins 10.0.100), PowerShell 7 (`pwsh`), Python 3.10+, Git.
 Optional lanes need Docker, a Bicep compiler (`bicep` or `az`), or Terraform — each lane
 says so. `pwsh scripts/build/verify-readiness.ps1` checks your box in one command.
 

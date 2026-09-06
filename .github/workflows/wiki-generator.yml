@@ -2,6 +2,7 @@ name: Wiki Sync
 
 # Mirrors curated docs into the GitHub wiki (Yolkster64/helios-platform.wiki.git)
 # with a flattened naming scheme:
+#   docs/GETTING_STARTED.md     -> Getting-Started.md
 #   docs/architecture/<NAME>.md -> Architecture-<NAME>.md
 #   docs/mcp/<NAME>.md          -> Mcp-<NAME>.md
 # plus a generated _Sidebar.md. Commit-if-changed, so re-runs are no-ops.
@@ -63,7 +64,12 @@ jobs:
           # Remove previously synced pages first so renames/deletions in docs/
           # do not leave stale wiki pages. Hand-written pages (Home.md, etc.)
           # are untouched.
-          rm -f wiki/Architecture-*.md wiki/Mcp-*.md wiki/_Sidebar.md
+          rm -f wiki/Getting-Started.md wiki/Architecture-*.md wiki/Mcp-*.md wiki/_Sidebar.md
+
+          # The beginner's guide is the wiki's front door; its relative links point at
+          # files that are not on the wiki, so it is copied as-is and the sidebar names
+          # it first.
+          [ -e docs/GETTING_STARTED.md ] && cp docs/GETTING_STARTED.md wiki/Getting-Started.md
 
           for f in docs/architecture/*.md; do
             [ -e "$f" ] || continue
@@ -77,6 +83,9 @@ jobs:
           # _Sidebar.md — wiki links are [[Page-Name]] (file name minus .md).
           {
             echo '## HELIOS docs'
+            echo
+            echo '### Start here'
+            [ -e wiki/Getting-Started.md ] && echo '- [[Getting-Started]]'
             echo
             echo '### Architecture'
             for f in wiki/Architecture-*.md; do

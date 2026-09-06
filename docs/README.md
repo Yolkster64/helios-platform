@@ -10,6 +10,8 @@ Use this page to find the documents that reflect the current engineering contrac
 
 | Need | Read |
 | --- | --- |
+| New here: five minutes to a working `helios-ai ask` (three paths, no paid key) | [GETTING_STARTED.md](GETTING_STARTED.md) |
+| Zero-install: open the repo in a Codespace | [.github/CODESPACES_GUIDE.md](../.github/CODESPACES_GUIDE.md) |
 | Contributor setup, build, CLI, MCP | [PROJECT_SETUP.md](PROJECT_SETUP.md) |
 | Owner-only GitHub, Azure, and secret wiring | [OWNER_START_HERE.md](OWNER_START_HERE.md) |
 | Exact build, test, and smoke-run commands | [TEST_RUN_PLAYBOOK.md](TEST_RUN_PLAYBOOK.md) |

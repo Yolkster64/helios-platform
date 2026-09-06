@@ -13,7 +13,7 @@ commands need:
 
 | Tool | Version | Used for |
 | --- | --- | --- |
-| .NET SDK | 8.x | `dotnet build HELIOS.sln` (AIHub + CLI + API + MCP + tests) |
+| .NET SDK | 10.x (`global.json` pins 10.0.100) | `dotnet build HELIOS.sln` (AIHub + CLI + API + MCP + tests) |
 | PowerShell | 7.x (`pwsh`) | The automation layer under `scripts/` (portable; runs on Linux CI too) |
 | Python | 3.10+ (`python3`) | The Python spoke `src/ai/python` (its tests are dependency-free) |
 | Bicep CLI | any current | `bicep build infra/main.bicep` (or use `az bicep` instead) |
@@ -128,14 +128,10 @@ thing to run after a build. Which model suits which task:
 }
 ```
 
-Exposed tools: `helios_ai_ask`, `helios_ai_route`, `helios_ai_tandem`,
-`helios_ai_compare`, `helios_ai_status`, `helios_providers_list`,
-`helios_optimal_provider_get`, `helios_task_routing_get`,
-`helios_engine_catalog_get`, `helios_engine_mix_recommend`,
-`helios_infra_validate`, `helios_absorb_status_get`, `helios_fleet_status_get`,
-`helios_foundry_agent_list`, `helios_foundry_agent_create`,
-`helios_operator_profile_get`, `helios_operator_profile_save`,
-`helios_operator_context_sync`, `helios_operator_next_steps_get`.
+The tool list lives in one place, [docs/mcp/CLIENT_SETUP.md](mcp/CLIENT_SETUP.md)
+(`scripts/verify/stack-smoke.ps1` parses it), together with the per-client registration
+for Claude Code, VS Code / Copilot, Codex and Cursor and the Playwright browser server
+that rides next to `helios` in each of them.
 
 ## Fleet quickstart
 

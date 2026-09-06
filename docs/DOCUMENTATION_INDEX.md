@@ -7,6 +7,8 @@ state.
 
 | Audience | Read first | Purpose |
 | --- | --- | --- |
+| Newcomers | [GETTING_STARTED.md](GETTING_STARTED.md) | Three paths to a first `helios-ai ask`; what to expect without Azure |
+| Anyone without a toolchain | [.github/CODESPACES_GUIDE.md](../.github/CODESPACES_GUIDE.md) | The zero-install Codespace |
 | Contributors | [PROJECT_SETUP.md](PROJECT_SETUP.md) | Toolchain, build, test, CLI, MCP |
 | Repository owner | [OWNER_START_HERE.md](OWNER_START_HERE.md) | GitHub settings, Azure OIDC, secrets, connectors |
 | Reviewers and operators | [TEST_RUN_PLAYBOOK.md](TEST_RUN_PLAYBOOK.md) | Exact validation and smoke-run commands |

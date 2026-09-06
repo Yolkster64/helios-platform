@@ -257,7 +257,8 @@ each with the command that follows it:
   `pwsh scripts/board-setup/validate-board.ps1` is the read-only check.
 - **Wiki**: Wiki tab → **Create the first page**, once by hand (that is what
   creates the wiki git repo), then `gh workflow run wiki-generator.yml` pushes
-  `docs/`.
+  `docs/GETTING_STARTED.md` (as `Getting-Started`), `docs/architecture/**` and
+  `docs/mcp/**` — nothing else under `docs/` reaches the wiki.
 - **Branch prune**: step 7 below — `gh workflow run branch-prune.yml` (plan),
   then `-f apply=true`.
 
