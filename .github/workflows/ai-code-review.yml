@@ -258,7 +258,7 @@ jobs:
       - name: Decide PR comment mode
         id: comment-guard
         run: |
-          head_repo_id="$(python3 - <<'PY'
+          python3 - <<'PY'
           import json
           import os
 
@@ -266,14 +266,13 @@ jobs:
               event = json.load(handle)
 
           repo = (((event.get("pull_request") or {}).get("head") or {}).get("repo") or {})
-          print(repo.get("id", ""))
+          can_comment = (
+              str(repo.get("id", "")) == os.environ.get("GITHUB_REPOSITORY_ID", "")
+              or repo.get("full_name", "") == os.environ.get("GITHUB_REPOSITORY", "")
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"can_comment={'true' if can_comment else 'false'}\n")
           PY
-          )"
-          if [ "$head_repo_id" = "$GITHUB_REPOSITORY_ID" ]; then
-            echo "can_comment=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "can_comment=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Fork PR notice
         if: ${{ steps.comment-guard.outputs.can_comment != 'true' }}
