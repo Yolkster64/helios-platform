@@ -158,14 +158,30 @@ jobs:
             --output json > "$stdout_file" 2>"$stderr_file"
           rc=$?
           set -e
+          deployment_id=""
+          resource_group=""
+          provisioning_state=""
+          result_name=""
+          result_timestamp=""
+          if [ "$rc" -eq 0 ]; then
+            deployment_id="$(jq -r '.id // ""' "$stdout_file")"
+            resource_group="$(jq -r '.resourceGroup // ""' "$stdout_file")"
+            provisioning_state="$(jq -r '.provisioningState // ""' "$stdout_file")"
+            result_name="$(jq -r '.name // ""' "$stdout_file")"
+            result_timestamp="$(jq -r '.timestamp // ""' "$stdout_file")"
+          fi
           jq -n \
             --arg phase "deploy" \
             --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --argjson exitCode "$rc" \
+            --arg deploymentName "$result_name" \
+            --arg deploymentId "$deployment_id" \
+            --arg resourceGroup "$resource_group" \
+            --arg provisioningState "$provisioning_state" \
+            --arg deploymentTimestamp "$result_timestamp" \
             --arg stdoutDigestSha256 "$(sha256sum "$stdout_file" | awk '{print $1}')" \
             --arg stderrDigestSha256 "$(sha256sum "$stderr_file" | awk '{print $1}')" \
-            --slurpfile result "$stdout_file" \
-            '{phase:$phase, timestamp:$timestamp, exitCode:$exitCode, result:($result[0] // {}), stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
+            '{phase:$phase, timestamp:$timestamp, exitCode:$exitCode, result:{name:$deploymentName, id:$deploymentId, resourceGroup:$resourceGroup, provisioningState:$provisioningState, timestamp:$deploymentTimestamp}, stdoutDigestSha256:$stdoutDigestSha256, stderrDigestSha256:$stderrDigestSha256}' \
             > "$record"
           if [ "$rc" -ne 0 ]; then
             echo "::error::Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics."
