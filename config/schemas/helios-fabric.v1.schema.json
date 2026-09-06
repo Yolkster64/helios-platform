@@ -52,17 +52,41 @@
       "properties": {
         "repository": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          "const": "Yolkster64/helios-platform"
         },
-        "number": { "type": "integer", "minimum": 1 },
+        "number": { "type": "integer", "const": 154 },
         "mergeSha": {
           "type": "string",
-          "pattern": "^(pending|[0-9a-f]{40})$"
+          "pattern": "^[0-9a-f]{40}$"
         },
         "requiredChecks": {
           "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/requiredCheck" }
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/requiredCheck" },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "CI - Code Validation & Testing" } }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "PR Pipeline" } }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "const": "Infra Validation" } }
+              }
+            }
+          ]
         }
       }
     },

@@ -26,7 +26,7 @@ class FabricContractValidatorTests(unittest.TestCase):
     def test_current_contract_passes(self) -> None:
         result = target.validate_contract(CONTRACT)
         self.assertEqual(result["status"], "passed")
-        self.assertEqual(result["statusCounts"]["done"], 2)
+        self.assertEqual(result["statusCounts"]["done"], 3)
         self.assertEqual(result["statusCounts"]["blocked"], 3)
 
     def test_fails_when_production_enabled_is_true(self) -> None:
@@ -43,6 +43,13 @@ class FabricContractValidatorTests(unittest.TestCase):
             "workspaceId must remain T0BAFGSNY5P",
         )
 
+    def test_fails_when_source_repository_drifted(self) -> None:
+        self._validate_mutation(
+            '"repository": "Yolkster64/helios-platform"',
+            '"repository": "M0nado/helios-platform"',
+            "sourcePullRequest.repository must be Yolkster64/helios-platform",
+        )
+
     def test_fails_when_done_item_has_no_receipt(self) -> None:
         self._validate_mutation(
             '"status": "pending",',
@@ -57,6 +64,13 @@ class FabricContractValidatorTests(unittest.TestCase):
             "mcp.requiredTool must be helios_fabric_plan_get",
         )
 
+    def test_fails_when_required_check_name_drifted(self) -> None:
+        self._validate_mutation(
+            '"name": "PR Pipeline"',
+            '"name": "Pipeline"',
+            "exact check names/order",
+        )
+
     def test_fails_when_checklist_id_is_duplicated(self) -> None:
         self._validate_mutation(
             '"id": "linear-joh-208-sync"',
@@ -69,6 +83,13 @@ class FabricContractValidatorTests(unittest.TestCase):
             '"issueKey": "JOH-208"',
             '"issueKey": "sk-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"',
             "secret-like value",
+        )
+
+    def test_fails_when_contract_has_unexpected_property(self) -> None:
+        self._validate_mutation(
+            '"migrationIssue": "HC-029",',
+            '"migrationIssue": "HC-029",\n  "unexpectedFlag": true,',
+            "schema validation failed at \\$: Additional properties are not allowed",
         )
 
 

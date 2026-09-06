@@ -51,8 +51,8 @@ public sealed class McpFabricPlanToolTests : IDisposable
               "version": 1,
               "migrationIssue": "HC-029",
               "sourcePullRequest": {
-                "repository": "M0nado/helios-platform",
-                "number": 184,
+                "repository": "Yolkster64/helios-platform",
+                "number": 154,
                 "mergeSha": "pending",
                 "requiredChecks": [
                   { "name": "CI", "result": "pending", "evidenceRef": "docs" }

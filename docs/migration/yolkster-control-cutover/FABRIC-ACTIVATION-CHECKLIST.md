@@ -2,7 +2,7 @@
 
 Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fabric/helios-fabric.v1.json`
 
-- [ ] Record PR #184 merge SHA and required-check evidence.
+- [x] Record Cutover/Fabric PR #154 merge SHA and required-check evidence for issue #184.
 - [x] Validate Fabric schema and instance contract.
 - [x] Verify `helios_fabric_plan_get` and catalog contract wiring.
 - [ ] Connect Slack workspace `T0BAFGSNY5P` and resolve `D0BB80HRZFA`.
@@ -12,15 +12,19 @@ Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fa
 - [ ] Run development Azure `what-if` with `apply=false` and capture plan hash.
 - [ ] Complete correlated smoke tests and rollback rehearsal.
 
-## PR-184 required-check evidence
+## PR-154 required-check evidence
 
-- Merge SHA: `pending`
-- Source PR URL: `https://github.com/M0nado/helios-platform/pull/184`
+- Merge SHA: `50337e3faace1cdf8834db895fa5c5cf1f904a47`
+- Source PR URL: `https://github.com/Yolkster64/helios-platform/pull/154`
 - Required checks:
-  - CI - Code Validation & Testing: `pending`
-  - PR Pipeline: `pending`
-  - Infra Validation: `pending`
-- Evidence links: `pending`
+  - CI - Code Validation & Testing: `success` (`https://github.com/Yolkster64/helios-platform/actions/runs/33998245259`, head `3daefb0d3734dd05a10ddb864274d59d511f61d4`)
+  - PR Pipeline: `success` (`https://github.com/Yolkster64/helios-platform/actions/runs/33998245249`, head `3daefb0d3734dd05a10ddb864274d59d511f61d4`)
+  - Infra Validation: `n/a` (no pull_request run for this head; branch filter query returned zero runs)
+- Evidence links:
+  - Merge commit: `https://github.com/Yolkster64/helios-platform/commit/50337e3faace1cdf8834db895fa5c5cf1f904a47`
+  - CI workflow run: `https://github.com/Yolkster64/helios-platform/actions/runs/33998245259`
+  - PR pipeline workflow run: `https://github.com/Yolkster64/helios-platform/actions/runs/33998245249`
+  - Infra workflow branch query: `https://github.com/Yolkster64/helios-platform/actions/workflows/infra-validate.yml`
 
 ## Slack receipt
 
@@ -33,8 +37,8 @@ Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fa
 
 - Team: `JOH`
 - Issue: `JOH-208`
-- Sync evidence (Linear URL + GitHub comment URL): `pending`
-- Idempotency re-run note: `pending`
+- Sync evidence (Linear URL + GitHub comment URL): `https://linear.app/641974/issue/JOH-208` + `https://github.com/Yolkster64/helios-platform/issues/184#issuecomment-5555420685`
+- Idempotency re-run note: `Linkback exists; explicit connector re-run evidence is still pending.`
 
 ## SharePoint receipt
 
@@ -56,6 +60,6 @@ Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fa
 
 ## Smoke and rollback receipt
 
-- Smoke run IDs/evidence: `pending`
+- Smoke run IDs/evidence: `scripts/verify/stack-smoke.ps1 -Json` at `2026-09-06T10:20:24Z`, summary `ok=5,degraded=0,failed=0,buildMissing=0`
 - Rollback rehearsal evidence: `pending`
 - Final status: `BLOCKED (awaiting external owner actions)`

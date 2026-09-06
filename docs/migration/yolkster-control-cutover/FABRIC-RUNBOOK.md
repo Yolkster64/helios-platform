@@ -30,8 +30,8 @@ It is activation-only guidance: production stays disabled and `applyDefault=fals
    - `dotnet test tests/HELIOS.AIHub.Tests -c Release --filter "FullyQualifiedName~Fabric"`
 3. Capture stdio JSON-RPC tool-catalog evidence:
    - `pwsh scripts/verify/stack-smoke.ps1 -Json > stack-smoke.fabric.json`
-4. Record PR #184 merge SHA and required-check URLs in
-   `FABRIC-ACTIVATION-CHECKLIST.md#pr-184-required-check-evidence`.
+4. Record merged Cutover/Fabric PR #154 evidence (tracking issue #184) in
+   `FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence`.
 5. Connect Slack workspace `T0BAFGSNY5P`, resolve `D0BB80HRZFA`, store receipt in
    `FABRIC-ACTIVATION-CHECKLIST.md#slack-receipt`.
 6. Confirm `JOH-208` synchronization receipt in

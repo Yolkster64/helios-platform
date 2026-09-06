@@ -7,9 +7,21 @@ import re
 import sys
 from typing import Any
 
+try:
+    import jsonschema
+except ModuleNotFoundError:  # pragma: no cover - surfaced in validate_schema_instance
+    jsonschema = None
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "config/fabric/helios-fabric.v1.json"
 DEFAULT_SCHEMA = ROOT / "config/schemas/helios-fabric.v1.schema.json"
+EXPECTED_SOURCE_REPOSITORY = "Yolkster64/helios-platform"
+EXPECTED_SOURCE_PR_NUMBER = 154
+EXPECTED_REQUIRED_CHECKS = (
+    "CI - Code Validation & Testing",
+    "PR Pipeline",
+    "Infra Validation",
+)
 
 SECRET_PATTERNS = (
     re.compile(r"sk-[A-Za-z0-9]{20,}"),
@@ -47,6 +59,35 @@ def iter_strings(value: Any, path: str = "$"):
             yield from iter_strings(item, f"{path}.{key}")
 
 
+def format_json_path(path_parts: Any) -> str:
+    rendered = "$"
+    for part in path_parts:
+        if isinstance(part, int):
+            rendered += f"[{part}]"
+        else:
+            rendered += f".{part}"
+    return rendered
+
+
+def validate_schema_instance(contract: dict[str, Any], schema: dict[str, Any], errors: list[str]) -> None:
+    if jsonschema is None:
+        raise ValueError(
+            "python package 'jsonschema' is required to validate "
+            "config/schemas/helios-fabric.v1.schema.json"
+        )
+    try:
+        validator = jsonschema.Draft202012Validator(schema)
+    except jsonschema.exceptions.SchemaError as exc:
+        raise ValueError(f"schema is invalid: {exc.message}") from exc
+
+    schema_errors = sorted(
+        validator.iter_errors(contract),
+        key=lambda error: (list(error.absolute_path), error.message),
+    )
+    for error in schema_errors:
+        errors.append(f"schema validation failed at {format_json_path(error.absolute_path)}: {error.message}")
+
+
 def validate_contract(
     contract_path: pathlib.Path = DEFAULT_CONTRACT,
     schema_path: pathlib.Path = DEFAULT_SCHEMA,
@@ -60,6 +101,8 @@ def validate_contract(
     if errors:
         raise AssertionError("; ".join(errors))
 
+    validate_schema_instance(contract, schema, errors)
+
     try:
         checklist_schema = schema["$defs"]["checklistItem"]
         status_enum = set(checklist_schema["properties"]["status"]["enum"])
@@ -69,6 +112,35 @@ def validate_contract(
 
     ensure(contract.get("version") == 1, "version must be 1", errors)
     ensure(contract.get("migrationIssue") == "HC-029", "migrationIssue must be HC-029", errors)
+
+    source_pr = contract.get("sourcePullRequest")
+    ensure(isinstance(source_pr, dict), "sourcePullRequest must be an object", errors)
+    if isinstance(source_pr, dict):
+        ensure(
+            source_pr.get("repository") == EXPECTED_SOURCE_REPOSITORY,
+            f"sourcePullRequest.repository must be {EXPECTED_SOURCE_REPOSITORY}",
+            errors,
+        )
+        ensure(
+            source_pr.get("number") == EXPECTED_SOURCE_PR_NUMBER,
+            f"sourcePullRequest.number must be {EXPECTED_SOURCE_PR_NUMBER}",
+            errors,
+        )
+        merge_sha = source_pr.get("mergeSha")
+        ensure(
+            isinstance(merge_sha, str) and bool(re.fullmatch(r"[0-9a-f]{40}", merge_sha)),
+            "sourcePullRequest.mergeSha must be a 40-character lowercase SHA-1 digest",
+            errors,
+        )
+        required_checks = source_pr.get("requiredChecks")
+        ensure(isinstance(required_checks, list), "sourcePullRequest.requiredChecks must be an array", errors)
+        if isinstance(required_checks, list):
+            names = [item.get("name") if isinstance(item, dict) else None for item in required_checks]
+            ensure(
+                names == list(EXPECTED_REQUIRED_CHECKS),
+                "sourcePullRequest.requiredChecks must preserve the exact check names/order",
+                errors,
+            )
 
     safety = contract.get("safetyState")
     ensure(isinstance(safety, dict), "safetyState must be an object", errors)
