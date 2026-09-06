@@ -66,7 +66,6 @@ public static class HeliosFabricTools
             var security = root.GetProperty("security");
             EnsureFailClosed(root, canonical, security);
 
-            var secretValuesRead = false;
             var integrations = new List<object>();
             var integrationStates = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var integration in root.GetProperty("integrations").EnumerateArray())
