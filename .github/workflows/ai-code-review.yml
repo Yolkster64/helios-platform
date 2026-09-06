@@ -277,7 +277,7 @@ jobs:
 
       - name: Fork PR notice
         if: ${{ steps.comment-guard.outputs.can_comment != 'true' }}
-        run: echo "::notice::Skipping PR comment update for forked pull requests because write-scoped comment APIs are restricted."
+        run: echo "::notice::Skipping PR comment update because the pull request head repository identity does not match this repository."
 
       - name: Generate Review Comment
         if: ${{ steps.comment-guard.outputs.can_comment == 'true' }}

@@ -184,9 +184,11 @@ def validate_contract_workflow(path: pathlib.Path = CONTRACT_WORKFLOW) -> None:
     if not path.is_file():
         fail(f"contract workflow missing: {path.relative_to(ROOT)}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    jobs = (data.get("jobs") or {}).get("contract") or {}
-    _ensure_permissions_are_read_only(jobs, "contract job")
-    steps = jobs.get("steps") or []
+    jobs_map = data.get("jobs") or {}
+    contract_job = jobs_map.get("contract")
+    _require(isinstance(contract_job, dict), "contract workflow must define jobs.contract")
+    _ensure_permissions_are_read_only(contract_job, "contract job")
+    steps = contract_job.get("steps") or []
     runs = "\n".join(str(step.get("run", "")) for step in steps)
     _require("validate_deploy_custody.py" in runs,
              "contract workflow must run validate_deploy_custody.py")

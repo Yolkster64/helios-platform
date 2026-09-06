@@ -4,6 +4,8 @@ import pathlib
 import tempfile
 import unittest
 
+import yaml
+
 from scripts.validation import validate_deploy_custody as target
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -126,6 +128,15 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
             path.write_text(mutated, encoding="utf-8")
             with self.assertRaisesRegex(AssertionError, "helper tests"):
+                target.validate_contract_workflow(path)
+
+    def test_contract_workflow_requires_contract_job_mapping(self) -> None:
+        contract_data = yaml.safe_load(CONTRACT_WORKFLOW.read_text(encoding="utf-8"))
+        contract_data["jobs"]["contract"] = []
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
+            path.write_text(yaml.safe_dump(contract_data, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "jobs.contract"):
                 target.validate_contract_workflow(path)
 
 
