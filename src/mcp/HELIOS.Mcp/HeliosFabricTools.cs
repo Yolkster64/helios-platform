@@ -15,6 +15,16 @@ namespace HELIOS.Mcp;
 public static class HeliosFabricTools
 {
     private const string DefaultRelativePath = "config/fabric/helios-fabric.v1.json";
+    private static readonly string[] SecretPrefixes =
+    [
+        "sk-",
+        "sk-proj-",
+        "ghp_",
+        "github_pat_",
+        "xoxb-",
+        "xoxp-",
+        "lin_api_",
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -44,6 +54,7 @@ public static class HeliosFabricTools
     /// </summary>
     public static string BuildFabricPlanJson(string? startDirectory, string? requestedPath = null)
     {
+        var secretValuesRead = false;
         try
         {
             var repoRoot = ResolveRepositoryRoot(startDirectory);
@@ -53,7 +64,7 @@ public static class HeliosFabricTools
 
             var canonical = root.GetProperty("canonical");
             var security = root.GetProperty("security");
-            EnsureFailClosed(canonical, security);
+            EnsureFailClosed(root, canonical, security);
 
             var secretValuesRead = false;
             var integrations = new List<object>();
@@ -165,7 +176,7 @@ public static class HeliosFabricTools
                 error = "HELIOS Fabric contract could not be read or validated.",
                 detail = exception.Message,
                 externalMutationPerformed = false,
-                secretValuesRead = false,
+                secretValuesRead,
             }, JsonOptions);
         }
     }
@@ -176,7 +187,7 @@ public static class HeliosFabricTools
         .Where(value => value.Length > 0)
         .ToArray();
 
-    private static void EnsureFailClosed(JsonElement canonical, JsonElement security)
+    private static void EnsureFailClosed(JsonElement root, JsonElement canonical, JsonElement security)
     {
         if (canonical.GetProperty("productionEnabled").GetBoolean()
             || security.GetProperty("productionEnabled").GetBoolean()
@@ -193,6 +204,147 @@ public static class HeliosFabricTools
                 StringComparison.Ordinal))
         {
             throw new InvalidDataException("WinUI 3 must remain the active desktop framework.");
+        }
+
+        if (!security.GetProperty("externalWritesRequireApproval").GetBoolean())
+        {
+            throw new InvalidDataException("externalWritesRequireApproval must remain true.");
+        }
+
+        var forbiddenUiFrameworks = new HashSet<string>(
+            Strings(security.GetProperty("forbiddenUiFrameworks")),
+            StringComparer.Ordinal);
+        if (!forbiddenUiFrameworks.Contains("WPF") || !forbiddenUiFrameworks.Contains("UWP"))
+        {
+            throw new InvalidDataException("forbiddenUiFrameworks must include WPF and UWP.");
+        }
+
+        EnsureNoSecretLikeValues(root);
+        ValidatePhaseTopology(root.GetProperty("integrations"), root.GetProperty("phases"));
+    }
+
+    private static void EnsureNoSecretLikeValues(JsonElement value)
+    {
+        foreach (var text in EnumerateStrings(value))
+        {
+            var lowered = text.ToLowerInvariant();
+            if (SecretPrefixes.Any(prefix => lowered.StartsWith(prefix, StringComparison.Ordinal))
+                || lowered.Contains("-----begin private key-----", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Fabric contract appears to contain a credential value.");
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateStrings(JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in value.EnumerateObject())
+                {
+                    foreach (var child in EnumerateStrings(property.Value))
+                    {
+                        yield return child;
+                    }
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in value.EnumerateArray())
+                {
+                    foreach (var child in EnumerateStrings(item))
+                    {
+                        yield return child;
+                    }
+                }
+                break;
+            case JsonValueKind.String:
+                var text = value.GetString();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    yield return text;
+                }
+                break;
+        }
+    }
+
+    private static void ValidatePhaseTopology(JsonElement integrations, JsonElement phases)
+    {
+        var integrationIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var integration in integrations.EnumerateArray())
+        {
+            integrationIds.Add(integration.GetProperty("id").GetString()
+                ?? throw new InvalidDataException("integration id is null"));
+        }
+
+        var phaseDependencies = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var phase in phases.EnumerateArray())
+        {
+            var phaseId = phase.GetProperty("id").GetString()
+                ?? throw new InvalidDataException("phase id is null");
+            if (!phaseDependencies.TryAdd(phaseId, Strings(phase.GetProperty("dependsOn"))))
+            {
+                throw new InvalidDataException($"duplicate phase id {phaseId}");
+            }
+
+            var requiredIntegrations = Strings(phase.GetProperty("requiredIntegrations"));
+            var missingIntegrations = requiredIntegrations
+                .Where(integrationId => !integrationIds.Contains(integrationId))
+                .ToArray();
+            if (missingIntegrations.Length > 0)
+            {
+                throw new InvalidDataException(
+                    $"phase {phaseId} references missing integrations [{string.Join(", ", missingIntegrations)}]");
+            }
+
+            var mutatesExternalState = phase.GetProperty("mutatesExternalState").GetBoolean();
+            var requiredApproval = phase.GetProperty("requiredApproval").GetString() ?? "none";
+            if (mutatesExternalState && string.Equals(requiredApproval, "none", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"phase {phaseId} mutates external state but has no approval.");
+            }
+        }
+
+        var missingDependencies = phaseDependencies
+            .SelectMany(pair => pair.Value.Select(dependency => (Phase: pair.Key, Dependency: dependency)))
+            .Where(item => !phaseDependencies.ContainsKey(item.Dependency))
+            .ToArray();
+        if (missingDependencies.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"phase {missingDependencies[0].Phase} references missing phase {missingDependencies[0].Dependency}");
+        }
+
+        var incoming = phaseDependencies.ToDictionary(pair => pair.Key, _ => 0, StringComparer.Ordinal);
+        var outgoing = phaseDependencies.Keys.ToDictionary(key => key, _ => new List<string>(), StringComparer.Ordinal);
+        foreach (var (phaseId, dependencies) in phaseDependencies)
+        {
+            foreach (var dependency in dependencies)
+            {
+                incoming[phaseId]++;
+                outgoing[dependency].Add(phaseId);
+            }
+        }
+
+        var ready = new Queue<string>(incoming.Where(pair => pair.Value == 0).Select(pair => pair.Key));
+        var visited = 0;
+        while (ready.Count > 0)
+        {
+            var phaseId = ready.Dequeue();
+            visited++;
+            foreach (var child in outgoing[phaseId])
+            {
+                incoming[child]--;
+                if (incoming[child] == 0)
+                {
+                    ready.Enqueue(child);
+                }
+            }
+        }
+
+        if (visited != phaseDependencies.Count)
+        {
+            throw new InvalidDataException("phase dependency graph contains a cycle.");
         }
     }
 
@@ -264,6 +416,66 @@ public static class HeliosFabricTools
         {
             throw new FileNotFoundException("Fabric contract does not exist.", fullPath);
         }
-        return fullPath;
+
+        var canonicalRoot = CanonicalizePath(repoRoot);
+        var canonicalPath = CanonicalizePath(fullPath);
+        var canonicalRelative = Path.GetRelativePath(canonicalRoot, canonicalPath);
+        if (Path.IsPathRooted(canonicalRelative)
+            || canonicalRelative.Equals("..", StringComparison.Ordinal)
+            || canonicalRelative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("Fabric config path must remain inside HELIOS_REPO_ROOT.");
+        }
+
+        return canonicalPath;
+    }
+
+    private static string CanonicalizePath(string path)
+    {
+        var normalized = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(normalized)
+            ?? throw new InvalidDataException("Path root could not be resolved.");
+        var segments = normalized[root.Length..]
+            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+        var current = root;
+        foreach (var segment in segments)
+        {
+            var next = Path.Combine(current, segment);
+            var linkTarget = TryResolveLinkTarget(next);
+            current = linkTarget is null
+                ? next
+                : Path.GetFullPath(linkTarget);
+        }
+
+        return Path.GetFullPath(current);
+    }
+
+    private static string? TryResolveLinkTarget(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return null;
+        }
+
+        FileSystemInfo node = Directory.Exists(path)
+            ? new DirectoryInfo(path)
+            : new FileInfo(path);
+        if ((node.Attributes & FileAttributes.ReparsePoint) == 0)
+        {
+            return null;
+        }
+
+        var target = node.ResolveLinkTarget(returnFinalTarget: true)
+            ?? throw new InvalidDataException("Failed to resolve symbolic link target.");
+        var targetPath = target.FullName;
+        if (Path.IsPathRooted(targetPath))
+        {
+            return targetPath;
+        }
+
+        var baseDirectory = Path.GetDirectoryName(node.FullName)
+            ?? throw new InvalidDataException("Link base directory could not be resolved.");
+        return Path.GetFullPath(Path.Combine(baseDirectory, targetPath));
     }
 }

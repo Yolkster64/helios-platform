@@ -281,9 +281,25 @@ public sealed class McpFabricToolTests : IDisposable
         var present = openai.GetProperty("presentEnvNames")
             .EnumerateArray().Select(e => e.GetString()).ToArray();
         Assert.Equal(new[] { "TEST_OPENAI_API_KEY" }, present);
+        Assert.True(document.RootElement.GetProperty("security").GetProperty("secretValuesRead").GetBoolean());
     }
 
     // ---- fail-closed enforcement ----------------------------------------------------
+
+    [Fact]
+    public void GetFabricPlan_MalformedContract_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot("{");
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
+        Assert.Contains("could not be read or validated", envelope.GetProperty("error").GetString());
+        Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
+        Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
+    }
 
     [Fact]
     public void GetFabricPlan_ProductionEnabledInFile_ReturnsErrorEnvelope()
@@ -343,6 +359,35 @@ public sealed class McpFabricToolTests : IDisposable
     }
 
     [Fact]
+    public void GetFabricPlan_PathInsideRootSymlinkedOutside_IsRejected()
+    {
+        var root = CreateRepoRoot(MinimalValidContract);
+        var outsideRoot = CreateEmptyRoot();
+        var outsideContract = Path.Combine(outsideRoot, "escape.json");
+        File.WriteAllText(outsideContract, MinimalValidContract);
+
+        var linkedContract = Path.Combine(root, "config", "fabric", "linked.json");
+        try
+        {
+            File.CreateSymbolicLink(linkedContract, outsideContract);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return;
+        }
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(
+            startDirectory: root,
+            requestedPath: "config/fabric/linked.json");
+
+        using var document = JsonDocument.Parse(json);
+        Assert.True(document.RootElement.TryGetProperty("error", out _));
+        Assert.Contains(
+            "HELIOS_REPO_ROOT",
+            document.RootElement.GetProperty("detail").GetString());
+    }
+
+    [Fact]
     public void GetFabricPlan_MissingContract_ReturnsErrorEnvelope()
     {
         var root = CreateEmptyRoot();
@@ -358,6 +403,20 @@ public sealed class McpFabricToolTests : IDisposable
         Assert.Contains(
             "HELIOS Fabric contract not found",
             envelope.GetProperty("detail").GetString());
+        Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
+        Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
+    }
+
+    [Fact]
+    public void GetFabricPlan_MalformedContract_ReturnsErrorEnvelope()
+    {
+        var root = CreateRepoRoot("{ malformed json");
+
+        var json = HeliosFabricTools.BuildFabricPlanJson(startDirectory: root);
+
+        using var document = JsonDocument.Parse(json);
+        var envelope = document.RootElement;
+        Assert.True(envelope.TryGetProperty("error", out _));
         Assert.False(envelope.GetProperty("externalMutationPerformed").GetBoolean());
         Assert.False(envelope.GetProperty("secretValuesRead").GetBoolean());
     }

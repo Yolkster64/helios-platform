@@ -48,7 +48,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install JSON Schema validator
-        run: python -m pip install --disable-pip-version-check jsonschema
+        run: python -m pip install --disable-pip-version-check jsonschema==4.26.0
 
       - name: Validate Fabric contract
         run: python scripts/fabric/plan_helios_fabric.py --mode validate
