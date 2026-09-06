@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "registryId": "helios-fabric-connections",
+  "defaultPolicy": "deny",
+  "connections": [
+    {
+      "id": "github-canonical-control",
+      "kind": "github",
+      "currentResource": "Yolkster64/helios-platform",
+      "targetResource": "Yolkster64/helios-control",
+      "authority": "source-and-deployment",
+      "writePolicy": "pull-request-and-protected-environment",
+      "healthCheck": "repository-metadata-and-current-main"
+    },
+    {
+      "id": "github-native-gui",
+      "kind": "github",
+      "targetResource": "Yolkster64/helios-gui",
+      "authority": "desktop-source-and-packaging",
+      "writePolicy": "pull-request-only",
+      "healthCheck": "windows-build-and-msix-contract"
+    },
+    {
+      "id": "slack-operations",
+      "kind": "slack",
+      "workspaceId": "T0BAFGSNY5P",
+      "conversationId": "D0BB80HRZFA",
+      "authority": "operations-notification",
+      "writePolicy": "approved-correlated-status-only",
+      "healthCheck": "auth-test-and-conversation-lookup",
+      "fallbackAllowed": false
+    },
+    {
+      "id": "linear-work-graph",
+      "kind": "linear",
+      "project": "Helios Integration Fabric",
+      "coordinationIssue": "JOH-208",
+      "authority": "planning-and-dependency-graph",
+      "writePolicy": "idempotent-linked-update",
+      "healthCheck": "project-and-issue-read"
+    },
+    {
+      "id": "sharepoint-governance",
+      "kind": "sharepoint",
+      "hostname": "heli0s-my.sharepoint.com",
+      "sitePath": "/personal/jmore_heli0s_onmicrosoft_com",
+      "folderPath": "Helios/Governance",
+      "authority": "governance-and-evidence",
+      "writePolicy": "manifested-upload-and-readback-verification",
+      "healthCheck": "site-drive-folder-read"
+    },
+    {
+      "id": "azure-devops-validation",
+      "kind": "azure-devops",
+      "organization": "Heli0sDev",
+      "authority": "validation-and-evidence-mirror",
+      "writePolicy": "wif-plan-only-until-separate-approval",
+      "healthCheck": "organization-project-service-connection-read"
+    },
+    {
+      "id": "azure-resource-control",
+      "kind": "azure",
+      "authority": "resource-plan-and-approved-deployment",
+      "writePolicy": "github-oidc-protected-environment",
+      "healthCheck": "subscription-resource-group-and-what-if",
+      "secretReferences": [
+        "AZURE_CLIENT_ID",
+        "AZURE_TENANT_ID",
+        "AZURE_SUBSCRIPTION_ID",
+        "AZURE_RESOURCE_GROUP"
+      ]
+    },
+    {
+      "id": "openai-provider",
+      "kind": "openai",
+      "authority": "model-provider",
+      "writePolicy": "typed-aihub-request-only",
+      "healthCheck": "minimal-bounded-response",
+      "secretReferences": [
+        "OPENAI_API_KEY",
+        "OPENAI_PROJECT_ID",
+        "OPENAI_ORG_ID",
+        "OPENAI_BASE_URL"
+      ]
+    },
+    {
+      "id": "anthropic-provider",
+      "kind": "anthropic",
+      "authority": "model-provider-and-claude-code",
+      "writePolicy": "typed-aihub-or-reviewed-branch-only",
+      "healthCheck": "minimal-bounded-response",
+      "secretReferences": [
+        "ANTHROPIC_API_KEY"
+      ]
+    },
+    {
+      "id": "helios-local-mcp",
+      "kind": "mcp",
+      "authority": "read-plan-request-tools",
+      "writePolicy": "deny-by-default-with-approval-receipt",
+      "healthCheck": "initialize-tools-list-and-schema-parity"
+    }
+  ],
+  "requiredWriteEnvelope": {
+    "eventId": true,
+    "correlationId": true,
+    "idempotencyKey": true,
+    "classification": true,
+    "sourceRepository": true,
+    "sourceCommit": true,
+    "approvalReceipt": true,
+    "resultReceipt": true
+  },
+  "forbidden": [
+    "plaintext-secret",
+    "generic-unrestricted-shell",
+    "unscoped-http",
+    "cross-tenant-write",
+    "automatic-production-action",
+    "fallback-destination-without-approval"
+  ]
+}
