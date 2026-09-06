@@ -127,11 +127,10 @@ win when both exist. The comment-lane preflight prints the no-secret contract
 explicitly: *"No client secret is used."*
 (`claude-foundry-comment-review.yml:67`).
 
-**The one remaining anti-pattern** — `deploy.yml:25-30` still maps
-`AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}` into its env
-(`:30`). It is a known-red all-echo fake-deploy workflow
-(`docs/architecture/ROADMAP_MULTI_LLM.md:53`) and is **removed in this
-tranche** — never copy its auth block.
+**The last anti-pattern is gone** — the known-red all-echo `deploy.yml` that
+mapped `AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}` into its env
+was deleted (`docs/architecture/ROADMAP_MULTI_LLM.md:53`); no workflow in
+`.github/workflows/` reads a client secret. Never reintroduce that auth block.
 
 ## The absorb-pr credential guard — why auth surfaces and benchmarks collide
 
