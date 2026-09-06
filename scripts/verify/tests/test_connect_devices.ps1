@@ -149,6 +149,17 @@ try {
     Assert-True (@(Get-EventSubscriber).Count -eq $subscribersBefore) 'Stop-DeviceFlow left event subscribers behind.'
     Assert-True (@(Get-Job).Count -eq $jobsBefore) 'Stop-DeviceFlow left event jobs behind.'
 
+    # A second flow that cannot start must not leak the first: the guard stops what is
+    # already running before the error surfaces.
+    Reset-Shims -Gh 'ok' -Az 'ready'
+    $subscribersBefore = @(Get-EventSubscriber).Count
+    $jobsBefore = @(Get-Job).Count
+    $missingSpec = [pscustomobject]@{ Lane = 'missing'; Command = 'helios-no-such-cli'; Arguments = @('--never'); CodePattern = 'never'; ClearTokens = $false }
+    $startFailed = $false
+    try { $null = Invoke-DeviceFlows -Specs @($ghSpec, $missingSpec) -TimeoutMinutes 0.05 } catch { $startFailed = ("$_" -match 'helios-no-such-cli') }
+    Assert-True ($startFailed) 'A CLI that cannot start must surface as an error naming it.'
+    Assert-True (@(Get-EventSubscriber).Count -eq $subscribersBefore -and @(Get-Job).Count -eq $jobsBefore) 'A start failure must stop the flow that had already started.'
+
     # --- GitHub Models export: the scope is checked before anything is exported ---------------
     $savedModels = $env:GITHUB_MODELS_TOKEN
     [Environment]::SetEnvironmentVariable('GITHUB_MODELS_TOKEN', $null)

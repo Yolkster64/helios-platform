@@ -343,6 +343,7 @@ function Get-FlowVerdict {
 function Start-DeviceFlow {
     param([Parameter(Mandatory)]$Spec)
     $cli = Get-CliCommand -Name $Spec.Command
+    if (-not $cli) { throw "$($Spec.Command) is not installed or not on PATH; the $($Spec.Lane) flow cannot start" }
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $cli.Source
     foreach ($a in $Spec.Arguments) { $psi.ArgumentList.Add($a) }
@@ -418,7 +419,17 @@ function Write-CodeTable {
 # hashtable lane -> @{ Verdict; Detail; Code }.
 function Invoke-DeviceFlows {
     param([Parameter(Mandatory)]$Specs, [double]$TimeoutMinutes = 15)
-    $flows = @($Specs | ForEach-Object { Start-DeviceFlow -Spec $_ })
+    # Flows start one at a time inside a guard: when the second CLI fails to spawn, the
+    # flow already running (its process and two event subscriptions) is stopped before
+    # the error surfaces, instead of leaking past this function.
+    $flows = [System.Collections.Generic.List[object]]::new()
+    try {
+        foreach ($spec in @($Specs)) { $flows.Add((Start-DeviceFlow -Spec $spec)) }
+    }
+    catch {
+        foreach ($flow in $flows) { Stop-DeviceFlow -Flow $flow }
+        throw
+    }
     $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutMinutes * 60))
     $tablePrinted = $false
     $results = @{}
