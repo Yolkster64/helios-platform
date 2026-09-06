@@ -246,7 +246,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          head_repo="$(python3 -c "import json, os; print((((json.load(open(os.environ['EVENT_PATH'], encoding='utf-8')).get('pull_request') or {}).get('head') or {}).get('repo') or {}).get('full_name', ''))")"
+          head_repo="$(python3 -c "import json, os, pathlib; event=json.loads(pathlib.Path(os.environ['EVENT_PATH']).read_text(encoding='utf-8')); print((((event.get('pull_request') or {}).get('head') or {}).get('repo') or {}).get('full_name', ''))")"
           if [ "${head_repo}" = "${REPO}" ]; then
             echo "same_repo=true" >> "$GITHUB_OUTPUT"
           else
