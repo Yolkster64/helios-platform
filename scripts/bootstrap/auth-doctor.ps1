@@ -252,13 +252,15 @@ function Get-AIHubConfigState {
         # an int, and null for a non-nullable bool / int; a string member accepts a
         # string or null, except the strings the hub dereferences without a fallback:
         # provider.type (CreateAll), learning.localPath (Load), an ENABLED cliAgents
-        # entry's name (the hub keys its provider map on it) and, when learning is
-        # enabled, learning.mode / tableEndpointEnv (CreateLearningStore). Same rules
+        # entry's name (the hub keys its provider map on it) and argsTemplate
+        # (CliProcessAgent.BuildArguments calls Contains / Split on it — review finding)
+        # and, when learning is enabled, learning.mode / tableEndpointEnv
+        # (CreateLearningStore). Same rules
         # as auto-login's step 0 (review findings).
         $memberSchemas = @{
             provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
             cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
-            cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+            cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'int' }
             learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
             learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
         }
@@ -820,9 +822,11 @@ function Get-ApiKeyLaneEvaluation {
 # options.Command as written, and its IsOnPath joins the value onto each PATH directory
 # — for a rooted path Path.Combine yields the path itself, so /opt/tools/codex is "on
 # PATH" whenever that file exists even when /opt/tools is not in PATH. The lanes probe
-# the configured value the same way instead of resolving the bare leaf, so a
-# path-qualified command the hub can run is never reported missing (and a bare name
-# is looked up exactly as configured).
+# the configured value the way the hub LAUNCHES it (a bare name via PATH, an absolute
+# path as written) instead of resolving the bare leaf, so a path-qualified command the
+# hub can run is never reported missing; a relative path with a separator is the one
+# shape the readiness check and the launch resolve differently, and it is refused
+# with the config repair (review finding).
 # -Aliases (review finding): the reader map treats `claude` / `claude-cli` as the same
 # CLI, so the lane discovery accepts the same leaf names — the configured command is
 # still what gets resolved and probed.
@@ -846,20 +850,26 @@ function Resolve-CliAgentExecutable {
     $wanted = if ($Configured) { $Configured } else { $Fallback }
     if ($wanted -notmatch '[\\/]') {
         $cmd = Get-CliCommand -Name $wanted
-        if ($cmd) { return [pscustomobject]@{ Source = $cmd.Source; Configured = $wanted; Found = $true; Note = '' } }
-        return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Note = "'$wanted' is not on PATH" }
+        if ($cmd) { return [pscustomobject]@{ Source = $cmd.Source; Configured = $wanted; Found = $true; Shape = 'bare'; Note = '' } }
+        return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Shape = 'bare'; Note = "'$wanted' is not on PATH" }
+    }
+    # A RELATIVE path with a separator is refused (review finding): CliProcessAgent's
+    # readiness check joins it onto every PATH directory, but Process.Start resolves a
+    # file name that carries a separator against the hub's working directory, never
+    # PATH — the readiness check and the launch disagree, so the routed request fails
+    # whatever exists under PATH. Only a bare name or an absolute path runs the same
+    # way in both places.
+    if (-not [System.IO.Path]::IsPathRooted($wanted)) {
+        return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Shape = 'relative-with-separator'; Note = "the configured command '$wanted' is a relative path with a directory separator — CliProcessAgent's readiness check would join it onto each PATH directory, but Process.Start resolves such a name against the hub's working directory, so the two disagree and the routed request fails even where the readiness check passes; configure a bare command name on PATH or an absolute path" }
     }
     $extensions = if ($IsWindows) { @('') + @(([string][Environment]::GetEnvironmentVariable('PATHEXT')).Split(';') | Where-Object { $_ }) } else { @('') }
-    $dirs = if ([System.IO.Path]::IsPathRooted($wanted)) { @('') } else { @(([string][Environment]::GetEnvironmentVariable('PATH')).Split([System.IO.Path]::PathSeparator) | Where-Object { $_ }) }
-    foreach ($dir in $dirs) {
-        foreach ($ext in $extensions) {
-            $candidate = if ($dir) { [System.IO.Path]::Combine($dir, $wanted + $ext) } else { $wanted + $ext }
-            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                return [pscustomobject]@{ Source = $candidate; Configured = $wanted; Found = $true; Note = "the configured command '$wanted' resolves to $candidate, as CliProcessAgent runs it" }
-            }
+    foreach ($ext in $extensions) {
+        $candidate = $wanted + $ext
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return [pscustomobject]@{ Source = $candidate; Configured = $wanted; Found = $true; Shape = 'rooted'; Note = "the configured command '$wanted' resolves to $candidate, as CliProcessAgent runs it" }
         }
     }
-    return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Note = "the configured command '$wanted' does not exist at that path (checked as CliProcessAgent would: rooted as written, else joined onto each PATH directory)" }
+    return [pscustomobject]@{ Source = ''; Configured = $wanted; Found = $false; Shape = 'rooted'; Note = "the configured command '$wanted' does not exist at that path (checked as CliProcessAgent launches it: an absolute path as written)" }
 }
 # Enabled CLI entries are discovered by their configured COMMAND (review finding):
 # ProviderFactory.CreateAll instantiates every enabled cliAgents entry whatever its
@@ -1281,7 +1291,8 @@ function Test-CodexLane {
                 $cliState = 'missing'
                 $cliDetail = if ($codexCmd.Configured -match '[\\/]') { "OPENAI_API_KEY is unset and $($codexCmd.Note) — fix the cliAgents command in $($configState.Label) or install the CLI there" }
                 else { 'OPENAI_API_KEY is unset and no codex CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs @openai/codex)' }
-                $cliAction = 'pwsh scripts/bootstrap/setup-ai-clis.ps1   # installs codex; then codex login, or set OPENAI_API_KEY for the codex CLI'
+                $cliAction = if ($codexCmd.Shape -eq 'relative-with-separator') { "fix the codex cliAgents command '$($codexCmd.Configured)' in $($configState.Label): use a bare command name on PATH or an absolute path (a relative path with a separator is launched against the hub's working directory, not PATH)" }
+                else { 'pwsh scripts/bootstrap/setup-ai-clis.ps1   # installs codex; then codex login, or set OPENAI_API_KEY for the codex CLI' }
             }
         }
     }
@@ -1394,7 +1405,8 @@ function Test-ClaudeLane {
             $cliDetail = if ($claudeCmd.Found) { 'ANTHROPIC_API_KEY is unset and a cached claude login cannot be probed headlessly — probing would launch an interactive session (connect-all.ps1 rule)' + $(if ($claudeCmd.Note) { " ($($claudeCmd.Note))" } else { '' }) }
             elseif ($claudeCmd.Configured -match '[\\/]') { "ANTHROPIC_API_KEY is unset and $($claudeCmd.Note)" }
             else { 'ANTHROPIC_API_KEY is unset and no claude CLI is on PATH (pwsh scripts/bootstrap/setup-ai-clis.ps1 installs it)' }
-            $cliAction = 'claude setup-token   # mint a long-lived token for the CLI (owner action); or set ANTHROPIC_API_KEY for the claude CLI'
+            $cliAction = if ($claudeCmd.Shape -eq 'relative-with-separator') { "fix the claude cliAgents command '$($claudeCmd.Configured)' in $((Get-AIHubConfigState).Label): use a bare command name on PATH or an absolute path (a relative path with a separator is launched against the hub's working directory, not PATH)" }
+            else { 'claude setup-token   # mint a long-lived token for the CLI (owner action); or set ANTHROPIC_API_KEY for the claude CLI' }
         }
     }
     $cliOk = $cliState -in 'not-needed', 'env'
@@ -1459,6 +1471,11 @@ function Test-CopilotLane {
     $extensionNote = ''
     if (-not $copilotCmd.Found) {
         if ($copilotCmd.Configured -match '[\\/]') {
+            if ($copilotCmd.Shape -eq 'relative-with-separator') {
+                return New-LaneResult -Lane 'copilot' -State 'needs-owner' -Method 'none' `
+                    -Detail ("$($copilotCmd.Note)") `
+                    -OwnerAction "fix the copilot cliAgents command '$($copilotCmd.Configured)' in $((Get-AIHubConfigState).Label): use a bare command name on PATH or an absolute path"
+            }
             return New-LaneResult -Lane 'copilot' -State 'unavailable' -Method 'none' `
                 -Detail ("$($copilotCmd.Note) — fix the cliAgents command in $((Get-AIHubConfigState).Label) or install the standalone copilot CLI (@github/copilot) there")
         }

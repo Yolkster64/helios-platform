@@ -596,7 +596,8 @@ function Get-CliOwnedEnvNames {
 # Typed MEMBERS of the hub config (review finding): System.Text.Json rejects a JSON
 # string where AIHubOptions declares a bool or an int, a non-integer number for an
 # int, and null for a non-nullable bool / int; a string member accepts a string or
-# null, except provider.type and learning.localPath, which the hub dereferences.
+# null, except provider.type, learning.localPath and an ENABLED cliAgents entry's name
+# and argsTemplate, which the hub dereferences (review findings).
 # Same rules as auto-login.ps1's step 0 and auth-doctor's Get-AIHubConfigState.
 $script:aihubMemberSchemas = @{
     provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
@@ -604,7 +605,7 @@ $script:aihubMemberSchemas = @{
     # An ENABLED entry's name is required (the hub keys its provider map on it) and,
     # when learning is enabled, mode / tableEndpointEnv are dereferenced by
     # CreateLearningStore (review findings) — the same rule as auto-login / auth-doctor.
-    cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+    cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'int' }
     learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
     learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
 }

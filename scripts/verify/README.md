@@ -21,8 +21,19 @@ Offline regressions (all HTTP/CLI boundaries replaced with inert fixtures):
 
 ```powershell
 pwsh -NoProfile -File scripts/verify/tests/test_auth_continuation.ps1
+pwsh -NoProfile -File scripts/verify/tests/test_auth_readiness.ps1
+pwsh -NoProfile -File scripts/verify/tests/test_auth_boundaries.ps1
+pwsh -NoProfile -File scripts/verify/tests/test_auth_config.ps1
 ```
 
 These cases cover rejected/transient environment credentials, successful token
 acquisition, secret-safe evidence, and Unix/Windows environment-name comparisons.
 [Azure Identity continuation policy](https://learn.microsoft.com/en-us/dotnet/api/overview/azure/identity-readme#continuation-policy).
+
+`test_auth_config.ps1` covers the config contracts the hub dereferences (an enabled
+CLI entry's `argsTemplate`), the command shapes CliProcessAgent launches the same way
+it checks readiness (bare names and absolute paths; a relative path with a separator
+is refused), and the rule that a selected Azure credential is proven only by
+`rest-connect.ps1` acquiring a token through it — a cached az identity whose client
+and tenant match is context, never proof — including the secretless `azure-openai`
+entry's endpoint and Entra-fallback verdicts.

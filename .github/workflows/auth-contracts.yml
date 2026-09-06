@@ -9,6 +9,7 @@ on:
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
+      - 'scripts/verify/tests/test_auth_config.ps1'
       - '.github/workflows/auth-contracts.yml'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'scripts/verify/tests/test_auth_continuation.ps1'
       - 'scripts/verify/tests/test_auth_readiness.ps1'
       - 'scripts/verify/tests/test_auth_boundaries.ps1'
+      - 'scripts/verify/tests/test_auth_config.ps1'
       - '.github/workflows/auth-contracts.yml'
 
 permissions:
@@ -38,3 +40,4 @@ jobs:
           ./scripts/verify/tests/test_auth_continuation.ps1
           ./scripts/verify/tests/test_auth_readiness.ps1
           ./scripts/verify/tests/test_auth_boundaries.ps1
+          ./scripts/verify/tests/test_auth_config.ps1
