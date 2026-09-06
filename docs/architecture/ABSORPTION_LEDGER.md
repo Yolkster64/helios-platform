@@ -74,7 +74,7 @@ fleet pools' tool allowlists (the review pool is read-only by design).
   too), the capability-backlog taxonomy as roadmap seed
 - Risks: security model differs; absorb taxonomy and validators, not the runtime
 
-## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — open
+## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — tranche-1
 
 Managed-identity→Key-Vault secret binding, token audience hardening, and immutable
 plan/deploy custody — extending our OIDC + Key Vault stack with audit custody
@@ -85,6 +85,12 @@ discipline on the deploy path.
   (OIDC guards + orchestration inventory)
 - Extracts: custody/audit pattern, audience-hardening checks, OIDC guard patterns
 - Risks: assumes upstream pipeline; adapt to `helios-deploy.yml`
+- Landed (tranche-1): `helios-deploy.yml` now pins OIDC audience
+  `api://AzureADTokenExchange`, separates read-only what-if from mutating deploy
+  behavior, records allowlisted custody metadata/results (not raw payload dumps),
+  and seals/upload artifacts even for failed attempts. Enforcement is in
+  `scripts/validation/validate_deploy_custody.py` via
+  `.github/workflows/deploy-hardening-contract.yml`.
 
 ## E6 — Private Azure edge & segmented network (`infra`) — open
 

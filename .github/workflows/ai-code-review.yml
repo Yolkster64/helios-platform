@@ -9,8 +9,6 @@ on:
 # write access or its createComment call 403s.
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   ai-security-review:
@@ -104,7 +102,21 @@ jobs:
       - name: Extract Changed Files
         shell: pwsh -Command "& '{0}'"
         run: |
-          git diff --name-only HEAD~1 HEAD | Tee-Object -Variable changedFiles
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            $base = '${{ github.event.pull_request.base.sha }}'
+            $head = '${{ github.event.pull_request.head.sha }}'
+            git diff --name-only $base $head | Tee-Object -Variable changedFiles
+          } elseif ('${{ github.event_name }}' -eq 'push') {
+            $before = '${{ github.event.before }}'
+            $after = '${{ github.sha }}'
+            if ($before -match '^0+$') {
+              git diff-tree --no-commit-id --name-only -r $after | Tee-Object -Variable changedFiles
+            } else {
+              git diff --name-only $before $after | Tee-Object -Variable changedFiles
+            }
+          } else {
+            git diff --name-only HEAD~1 HEAD | Tee-Object -Variable changedFiles
+          }
           Write-Host "Changed files:"
           foreach ($file in $changedFiles) {
             Write-Host "  - $file"
@@ -139,14 +151,16 @@ jobs:
           $files = Get-ChildItem -Recurse -Include "*.ps1"
           
           foreach ($file in $files) {
-            try {
-              [System.Management.Automation.PSParser]::Tokenize(
-                (Get-Content $file -Raw), 
-                [ref]$null
-              ) | Out-Null
-            }
-            catch {
-              Write-Host "::error::Syntax error in $($file.Name): $_"
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$null,
+              [ref]$parseErrors
+            )
+            if ($parseErrors.Count -gt 0) {
+              foreach ($parseError in $parseErrors) {
+                Write-Host "::error::Syntax error in $($file.Name): $($parseError.Message)"
+              }
               $errors++
             }
           }
@@ -233,11 +247,18 @@ jobs:
     # a gate later failed.
     needs: [ai-security-review, code-quality-check, approval-gate]
     if: ${{ always() && github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Fork PR notice
+        if: ${{ github.event.pull_request.head.repo.fork }}
+        run: echo "::notice::Skipping PR comment update for forked pull requests because write-scoped comment APIs are restricted."
 
       - name: Generate Review Comment
+        if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -247,7 +268,8 @@ jobs:
             const quality = '${{ needs.code-quality-check.result }}';
             const gate = '${{ needs.approval-gate.result }}';
             const allGreen = [security, quality, gate].every(r => r === 'success');
-            const comment = `
+            const marker = '<!-- helios-ai-code-review -->';
+            const comment = `${marker}
             ## 🤖 AI Integration Pipeline Results
 
             **Pipeline Status**: ${allGreen ? '✅ Complete' : '⚠️ Attention needed'}
@@ -269,12 +291,30 @@ jobs:
             - Approve if all checks pass
             - Request changes if issues found
             
-            [AI Integration Docs](../../ai-integration/README.md)
+            [AI Integration Docs](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/ai-integration/README.md)
             `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+
+            const existing = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              issue_number: context.issue.number,
+              per_page: 100
             });
+            const prior = existing.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
+            if (prior) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prior.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+            
+            return;
