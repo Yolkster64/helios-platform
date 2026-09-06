@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(az account show*)",
+      "Bash(az keyvault secret list*)",
+      "Bash(gh repo view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh run list*)",
+      "Bash(gh ruleset list*)",
+      "Bash(dotnet build*)",
+      "Bash(dotnet test*)",
+      "Bash(pwsh scripts/verify/stack-smoke.ps1*)",
+      "Bash(pwsh scripts/verify/rest-connect.ps1*)",
+      "Bash(pwsh scripts/verify/instructions-drift.ps1*)",
+      "Bash(pwsh scripts/bootstrap/auth-doctor.ps1*)"
+    ]
+  }
+}

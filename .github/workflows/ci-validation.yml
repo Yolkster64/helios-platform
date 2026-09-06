@@ -111,7 +111,21 @@ jobs:
       - name: Run markdownlint
         run: |
           npm install --global --no-fund --no-audit markdownlint-cli@0.33.0
-          markdownlint --config .markdownlint.json .
+          shopt -s nullglob
+          files=(
+            README.md
+            docs/README.md
+            docs/DOCUMENTATION_INDEX.md
+            docs/CONSOLIDATION_BLUEPRINT.md
+            docs/PROJECT_SETUP.md
+            docs/OWNER_START_HERE.md
+            docs/TEST_RUN_PLAYBOOK.md
+            docs/ROADMAP.md
+            docs/migration/yolkster-control-cutover/CANONICAL-ISSUE-LEDGER.md
+            docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md
+            docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md
+          )
+          markdownlint --config .markdownlint.json "${files[@]}"
         continue-on-error: true
 
   documentation-check:
@@ -223,22 +237,89 @@ jobs:
             exit 1
           fi
 
+  # Informational only: continue-on-error at the job level, absent from
+  # validation-summary's needs list, and never a required check. CLAUDE.md, AGENTS.md
+  # and .github/copilot-instructions.md carry two sections that must stay identical
+  # ("Hard rules", "Multi-LLM hub"); this surfaces the drift as a table in the job
+  # summary without blocking a merge, because the fix is a documentation edit.
+  instructions-drift:
+    runs-on: ubuntu-latest
+    name: Instructions drift (informational)
+    needs: preflight
+    continue-on-error: true
+    permissions:
+      contents: read
+    concurrency:
+      group: instructions-drift-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read-only: the script only reads the two compared files (AGENTS.md is the
+      # owner's cutover contract with its own structure and is not compared). The exact command is
+      # printed first so the log line is replayable on a workstation, and ALL output
+      # is captured before $LASTEXITCODE is read (repo pipeline-trap rule).
+      - name: Diff the shared sections of CLAUDE.md and copilot-instructions.md
+        shell: pwsh
+        run: |
+          Write-Host 'pwsh scripts/verify/instructions-drift.ps1 -Json'
+          $lines = @(& pwsh -NoProfile -File scripts/verify/instructions-drift.ps1 -Json 2>&1 | ForEach-Object { "$_" })
+          $exit = [int]$LASTEXITCODE
+          $report = $null
+          try { $report = ($lines -join "`n") | ConvertFrom-Json } catch { Write-Host "drift report did not parse: $($_.Exception.Message)" }
+          $summary = [System.Collections.Generic.List[string]]::new()
+          $summary.Add('## Instructions drift (informational)')
+          $summary.Add('')
+          if ($null -eq $report) {
+            $summary.Add("The drift script produced no parseable report (exit $exit); see the job log.")
+            $lines | ForEach-Object { Write-Host $_ }
+          }
+          else {
+            $summary.Add('| Section | Left | Right | Result |')
+            $summary.Add('| --- | --- | --- | --- |')
+            foreach ($c in @($report.comparisons)) {
+              $result = if ($c.identical) { "identical ($($c.leftItems) items)" } else { "drift (+$($c.added) / -$($c.removed) items)" }
+              $summary.Add("| $($c.section) | $($c.left) | $($c.right) | $result |")
+            }
+            foreach ($m in @($report.missing)) { $summary.Add("| (precondition) | | | $m |") }
+            $summary.Add('')
+            $summary.Add("Exit $exit (0 identical, 1 drift, 2 file or section missing). Fix: align the drifted section(s), then re-run ``pwsh scripts/verify/instructions-drift.ps1``. This job never gates a merge.")
+            foreach ($c in @($report.comparisons | Where-Object { -not $_.identical })) {
+              Write-Host "::group::$($c.section): $($c.left) vs $($c.right)"
+              $c.diff | ForEach-Object { Write-Host $_ }
+              Write-Host '::endgroup::'
+            }
+          }
+          ($summary -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          exit $exit
+
   validation-summary:
     name: Validation Summary
     if: always()
     needs: [preflight, syntax-check, markdown-check, documentation-check, test-scripts, security-scan, file-integrity]
     runs-on: ubuntu-latest
     steps:
+      # Job results travel through env rather than inline expressions: nothing
+      # from an expression is ever substituted into the script text.
       - name: Report Status
+        env:
+          R_PREFLIGHT: ${{ needs.preflight.result }}
+          R_SYNTAX: ${{ needs.syntax-check.result }}
+          R_MARKDOWN: ${{ needs.markdown-check.result }}
+          R_DOCS: ${{ needs.documentation-check.result }}
+          R_TESTS: ${{ needs.test-scripts.result }}
+          R_SECURITY: ${{ needs.security-scan.result }}
+          R_FILES: ${{ needs.file-integrity.result }}
         run: |
           {
             echo "## Validation Results"
             echo ""
-            echo "- Preflight: ${{ needs.preflight.result }}"
-            echo "- Syntax Check: ${{ needs.syntax-check.result }}"
-            echo "- Markdown Check: ${{ needs.markdown-check.result }}"
-            echo "- Documentation: ${{ needs.documentation-check.result }}"
-            echo "- Script Tests: ${{ needs.test-scripts.result }}"
-            echo "- Security Scan: ${{ needs.security-scan.result }}"
-            echo "- File Integrity: ${{ needs.file-integrity.result }}"
+            echo "- Preflight: ${R_PREFLIGHT}"
+            echo "- Syntax Check: ${R_SYNTAX}"
+            echo "- Markdown Check: ${R_MARKDOWN}"
+            echo "- Documentation: ${R_DOCS}"
+            echo "- Script Tests: ${R_TESTS}"
+            echo "- Security Scan: ${R_SECURITY}"
+            echo "- File Integrity: ${R_FILES}"
           } >> "$GITHUB_STEP_SUMMARY"

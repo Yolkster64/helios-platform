@@ -52,6 +52,49 @@ jobs:
             exit 0
           fi
 
+          # Loop guard, before anything touches Linear. When Linear's own GitHub
+          # integration is also linked to team JOH it re-creates this workflow's
+          # mirrors back on GitHub as "[GH-N] ..." issues (docs/architecture/
+          # CONNECTIONS_SETUP.md, "Owner action — disable Linear's own GitHub
+          # sync"); syncing those would mirror a mirror and the two syncs chase
+          # each other. The title marker names the loop's own re-imports and
+          # nothing else (Linear's importer always writes it, and
+          # scripts/github/close-duplicate-issues.ps1 requires it), so a title
+          # starting with this workflow's titlePrefix up to its {number} slot
+          # (read from config so a prefix change moves the guard with it) is
+          # skipped on EVERY event. The `duplicate` label is a weaker marker:
+          # the closer stamps it on the twins, but config/github/labels.json
+          # also provisions it for hand-triaged duplicates, and one of those
+          # may already have a mirror. So the label is checked only on the two
+          # events that can CREATE a mirror, `opened` and `labeled` (a
+          # hand-marked duplicate gets no mirror), while `unlabeled`, `closed`
+          # and `reopened` fall through to their branches below, which only
+          # update an existing mirror (Done/Todo + comment) and no-op when
+          # none exists. Green skip with a notice, so the loop is broken on
+          # this side even before the owner flips the Linear-side switch off
+          # (Settings -> Integrations -> GitHub -> team John -> issue sync OFF).
+          loop_marker=$(jq -r '.linear.titlePrefix // ""' config/connectors.json | sed 's/{number}.*//')
+          loop_reason=""
+          if [ -n "$loop_marker" ]; then
+            case "$ISSUE_TITLE" in
+              "$loop_marker"*) loop_reason="title starts with '$loop_marker'" ;;
+            esac
+          fi
+          if [ -z "$loop_reason" ]; then
+            case "$EVENT_ACTION" in
+              opened|labeled)
+                IFS=',' read -ra guard_labels <<< "$ISSUE_LABELS"
+                for l in "${guard_labels[@]}"; do
+                  if [ "$l" = "duplicate" ]; then loop_reason="carries the 'duplicate' label on '$EVENT_ACTION' (no mirror is created for a duplicate)"; break; fi
+                done
+                ;;
+            esac
+          fi
+          if [ -n "$loop_reason" ]; then
+            echo "::notice title=Linear Sync::Skipping #$ISSUE_NUMBER — $loop_reason (loop guard; see docs/architecture/CONNECTIONS_SETUP.md)."
+            exit 0
+          fi
+
           team_key=$(jq -r '.linear.teamKey' config/connectors.json)
           prefix=$(jq -r '.linear.titlePrefix' config/connectors.json |
             sed "s/{number}/$ISSUE_NUMBER/")

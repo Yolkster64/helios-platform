@@ -4,6 +4,8 @@ import pathlib
 import tempfile
 import unittest
 
+import yaml
+
 from scripts.validation import validate_deploy_custody as target
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -148,6 +150,27 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "must not archive raw command output",
         )
 
+    def test_fails_when_helper_script_is_removed_from_deploy_step(self) -> None:
+        self._validate_mutation(
+            "python3 scripts/validation/emit_deploy_custody_record.py",
+            "python3 -c 'print(42)'",
+            "shared deploy custody record helper",
+        )
+
+    def test_fails_when_precheck_no_longer_retains_failure_evidence(self) -> None:
+        self._validate_mutation(
+            "record-what-if-precheck-",
+            "record-what-if-skipped-",
+            "precheck must retain failure evidence",
+        )
+
+    def test_fails_when_temp_cleanup_is_removed(self) -> None:
+        self._validate_mutation(
+            "          trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT\n          set +e",
+            "          echo 'skip cleanup'\n          set +e",
+            "clean up raw temp output files",
+        )
+
     def test_contract_workflow_must_run_unittest(self) -> None:
         contract_text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("python3 -m unittest", contract_text)
@@ -156,6 +179,29 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
             path.write_text(mutated, encoding="utf-8")
             with self.assertRaisesRegex(AssertionError, "regression tests"):
+                target.validate_contract_workflow(path)
+
+    def test_contract_workflow_must_run_helper_tests(self) -> None:
+        contract_text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("test_emit_deploy_custody_record", contract_text)
+        mutated = contract_text.replace(
+            "          scripts.validation.tests.test_emit_deploy_custody_record\n",
+            "",
+            1,
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
+            path.write_text(mutated, encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "helper tests"):
+                target.validate_contract_workflow(path)
+
+    def test_contract_workflow_requires_contract_job_mapping(self) -> None:
+        contract_data = yaml.safe_load(CONTRACT_WORKFLOW.read_text(encoding="utf-8"))
+        contract_data["jobs"]["contract"] = []
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
+            path.write_text(yaml.safe_dump(contract_data, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "jobs.contract"):
                 target.validate_contract_workflow(path)
 
 
