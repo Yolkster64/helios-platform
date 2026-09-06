@@ -1,0 +1,2001 @@
+#Requires -Version 7
+<#
+.SYNOPSIS
+One-command NON-INTERACTIVE auto-login: repair every credential lane that can be
+repaired without a human, then export the provider keys the whole stack consumes into
+the CURRENT PowerShell session — az, gh, codex (OpenAI), claude (Anthropic),
+gh-models, and every SDK/REST consumer that reads the same env names. Zero prompts,
+ever: anything that would need a browser or MFA is reported as an owner action, never
+started.
+
+.DESCRIPTION
+The ACQUIRE-and-EXPORT companion of the report-only diagnostics
+(scripts/bootstrap/auth-doctor.ps1 reports; scripts/verify/rest-connect.ps1 probes the
+wire). This script deliberately MUTATES, in two well-defined places only:
+
+  1. The az CLI profile — by delegating to `auth-doctor.ps1 -Apply`, whose contract is
+     automatic NON-INTERACTIVE repair only (service principal from AZURE_CLIENT_ID/
+     AZURE_TENANT_ID + secret/certificate, or managed identity). Nothing interactive
+     is ever run; an MFA/device-code fix is only ever printed.
+  2. This session's environment variables — Key Vault secrets are exported into the
+     exact env names config/aihub.json declares, and a gh-derived token can light the
+     gh-models lane. Values land ONLY in process memory ($env:*), never on disk,
+     never in output.
+
+DOT-SOURCE IT so the exports outlive the script:
+
+    . scripts/bootstrap/auto-login.ps1
+
+Run normally it still works, but the exports die with the child process — the summary
+tells you which invocation you used. The whole implementation runs inside a function
+scope, so dot-sourcing does NOT change the caller's StrictMode or
+$ErrorActionPreference (review finding); on an internal failure a dot-sourced run
+RETHROWS so the caller can detect the partial setup, while a normal run exits 1.
+Scope hygiene: the helper symbols are removed from the caller's scope on every
+path; the one unavoidable residue is the PARAMETER bindings (-Json and
+-UseManagedIdentity), which overwrite (and cleanup then deletes) any caller
+variable named $Json/$json or $UseManagedIdentity — do not rely on those names
+surviving the call.
+
+Chain (reuse-first — this script orchestrates, it does not reimplement):
+  az lane        pwsh scripts/bootstrap/auth-doctor.ps1 -Apply -Json  → repaired/ready
+                 or needs-owner (the one-time `az login --tenant ...` MFA +
+                 setup-tenant.ps1 -OpsIdentity permanence path is printed verbatim).
+                 -UseManagedIdentity is forwarded (review finding): a classic
+                 IMDS-only VM exposes no IDENTITY_ENDPOINT / MSI_ENDPOINT, so the
+                 doctor tries `az login --identity` there only when told to.
+  Key Vault      only when the az lane is usable AND AZURE_KEY_VAULT_URI holds a real
+                 value (the vault provisioned by infra/main.bicep): openai-api-key →
+                 OPENAI_API_KEY (codex CLI + openai providers/SDKs), anthropic-api-key
+                 → ANTHROPIC_API_KEY (claude CLI + anthropic provider),
+                 github-models-token → GITHUB_MODELS_TOKEN (gh-models provider).
+                 Same secret names as scripts/bootstrap/load-env-from-keyvault.sh
+                 (the bash twin). Env vars carrying a NON-EMPTY value are never
+                 clobbered; an empty/whitespace value counts as unset (review
+                 finding — matching the bash twin's nonempty rule).
+  gh-models      for EVERY enabled provider of type github-models on the public
+                 endpoint whose configured apiKeyEnv (GITHUB_MODELS_TOKEN when
+                 unset) is still effectively unset — a custom-baseUrl provider
+                 never receives a GitHub credential: a raw GITHUB_TOKEN satisfies
+                 the provider only when the wire PROVES models:read (X-OAuth-Scopes);
+                 otherwise `gh auth token` is read env-cleared, probed the same way,
+                 and exported to each such target — a proven token retires that
+                 target's repairs, an unverifiable one (no scopes header, or an
+                 injecting transport) is exported with the scope/vault repair left
+                 standing, and a token proven to lack models:read (or rejected) is
+                 NOT exported at all. A transport that STRIPS Authorization (the
+                 authenticated probe answers 200 at the anonymous 60/hr cap) proves
+                 no token at all: nothing is exported or accepted, and one owner
+                 action names the transport — no other token repairs it. A provider with no apiKeySecretName whose
+                 variable is still unset gets a direct-key owner action. A variable
+                 shared by a public AND a custom-baseUrl provider is mixed-owned and
+                 never receives a GitHub credential either (the durable fix is
+                 distinct apiKeyEnv names). A GITHUB_TOKEN that an enabled consumer
+                 of ANOTHER credential family declares as its own apiKeyEnv holds that
+                 service's key (the vault stage may have exported it there): it is
+                 never probed against api.github.com, the hub's fallback to it is
+                 reported as the config defect it is, and the keyring rung still runs.
+  apiKeyEnv      read exactly as ProviderFactory reads it: the per-type default
+                 applies only when the property is absent/null; a declared-blank
+                 name means the hub reads NO variable for that entry (it resolves
+                 only its apiKeySecretName in-process; github-models then falls back
+                 to GITHUB_TOKEN alone), so nothing is exported for it, and a blank
+                 entry without any secret path is reported as an owner config fix.
+                 Any other declared name is used LITERALLY — surrounding whitespace
+                 included — because the factory hands the string untouched to
+                 Environment.GetEnvironmentVariable. Only the four keyed types
+                 (openai, anthropic, github-models, azure-openai) read a key at all;
+                 apiKeyEnv / apiKeySecretName on an ollama or azure-foundry-agent
+                 entry is ignored (nothing pulled, nothing exported). azure-openai's
+                 key is OPTIONAL: a vault secret that cannot be read leaves it on
+                 Entra ID (DefaultAzureCredential) and is not an owner action.
+                 A variable that enabled entries map to DIFFERENT Key Vault secrets
+                 is a conflict: nothing is pulled into it (declaration order must
+                 never choose a credential every sharer then reads) and the owner
+                 action names the split — and stands even when the variable is
+                 already set, since that value is exactly what every sharer would
+                 read (the same rule covers a variable read by consumers of
+                 different credential families). A profile with no providers section is a
+                 valid CLI-only profile (AIHubOptions.Providers starts empty), not a
+                 read failure; an active config the hub cannot load — the explicit
+                 AIHUB_CONFIG profile and the repo default alike — aborts before the
+                 az lane runs (there is no built-in fallback mapping).
+  summary        which env NAMES were set this run, which lanes remain owner-gated.
+
+Secrets policy (CLAUDE.md rule): secret values flow az → local variable → $env:NAME
+and die there; no value is ever printed, logged, or written to a file. Names only in
+every report line.
+
+.PARAMETER Json
+Emit one machine-readable rollup {script, generatedUtc, dotSourced, steps[],
+exportedNames[], ownerActions[], exitCode} instead of the human report.
+
+.PARAMETER UseManagedIdentity
+Forwarded to auth-doctor.ps1 -Apply as its -UseManagedIdentity opt-in: attempt
+`az login --identity` even when no IDENTITY_ENDPOINT / MSI_ENDPOINT is visible (a
+classic IMDS-only Azure VM exposes neither). Still non-interactive; without it the az
+lane on such a VM can only print the interactive login as an owner action, and the
+Key Vault stage stays blocked behind it.
+
+Exit contract: 0 = ran to completion (owner-gated lanes are reported, not failures);
+1 = internal failure. Dot-sourced, exit codes are not asserted (exiting would kill
+the caller's shell): completion is silent success and an internal failure RETHROWS.
+#>
+[CmdletBinding()]
+param(
+    [switch]$Json,
+
+    [switch]$UseManagedIdentity
+)
+
+# Everything lives in this function so StrictMode and ErrorActionPreference are
+# FUNCTION-scoped: dot-sourcing the script must never rewrite the caller's shell
+# preferences (review finding). Environment exports are process-wide, so they still
+# reach the dot-sourcing caller.
+function Invoke-HeliosAutoLogin {
+    param(
+        [switch]$Json,
+        [switch]$UseManagedIdentity,
+        [bool]$DotSourced,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+
+    $steps = [System.Collections.Generic.List[object]]::new()
+    $exportedNames = [System.Collections.Generic.List[string]]::new()
+    # Owner actions carry the env var whose satisfaction retires them (review
+    # finding): Env = the exact variable for actions this script composes ('' for
+    # actions no export can retire), $null for auth-doctor's imported free text,
+    # whose variable is recovered by an exact-identifier match at reconcile time.
+    $ownerActions = [System.Collections.Generic.List[object]]::new()
+    function Add-OwnerAction {
+        param([Parameter(Mandatory)][string]$Text, [AllowNull()][AllowEmptyString()][string]$Env = '', [switch]$Imported, [switch]$RepositorySecret)
+        $ownerActions.Add([pscustomobject]@{ Text = $Text.Trim(); Env = $(if ($RepositorySecret) { '' } elseif ($Imported) { $null } else { [string]$Env }) })
+    }
+
+    function Write-Report {
+        param([string]$Line = '')
+        if (-not $Json) { Write-Host $Line }
+    }
+
+    function Add-Step {
+        param(
+            [Parameter(Mandatory)][string]$Step,
+            [Parameter(Mandatory)][ValidateSet('ok', 'exported', 'skipped', 'needs-owner', 'unavailable')][string]$State,
+            [Parameter(Mandatory)][string]$Detail
+        )
+        $steps.Add([pscustomobject]@{ step = $Step; state = $State; detail = $Detail })
+        Write-Report ('  {0,-14} {1,-12} {2}' -f $Step, $State, $Detail)
+    }
+
+    # Empty or whitespace counts as unset (review finding): CI shells commonly define
+    # variables as '' — the bash twin (load-env-from-keyvault.sh) preserves only
+    # nonempty values, and this script matches that rule everywhere.
+    function Test-EnvValue {
+        param([Parameter(Mandatory)][string]$Name)
+        # .NET API, never the env: drive (review finding): a config-derived name such
+        # as API_* would be expanded as a wildcard by the provider, while the hub reads
+        # the literal name through Environment.GetEnvironmentVariable. Every read,
+        # export, and removal of a config-derived name below uses the same API.
+        return -not [string]::IsNullOrWhiteSpace([string][Environment]::GetEnvironmentVariable($Name))
+    }
+    # Environment-variable NAME semantics follow the OS (review finding): on Linux and
+    # macOS MODEL_KEY and model_key are two variables and ProviderFactory reads each
+    # literally; on Windows they are one. Every name comparison, set, and index below
+    # uses this comparer — never PowerShell's case-insensitive -eq / -contains /
+    # Group-Object / [ordered] hashtable, which would merge two Unix variables.
+    $envNameComparer = if ($IsWindows) { [System.StringComparer]::OrdinalIgnoreCase } else { [System.StringComparer]::Ordinal }
+    $envNameRegexOptions = if ($IsWindows) { [System.Text.RegularExpressions.RegexOptions]::IgnoreCase } else { [System.Text.RegularExpressions.RegexOptions]::None }
+    function Test-EnvNameEquals { param([string]$A, [string]$B) return $envNameComparer.Equals($A, $B) }
+    function New-EnvNameSet { return , [System.Collections.Generic.HashSet[string]]::new($envNameComparer) }
+    # Distinct names in first-seen order under the OS comparer (Select-Object -Unique
+    # is case-sensitive on every OS and would split one Windows variable in two).
+    function Get-UniqueEnvNames {
+        param([AllowEmptyCollection()][string[]]$Names = @())
+        $seen = New-EnvNameSet
+        $ordered = [System.Collections.Generic.List[string]]::new()
+        foreach ($n in @($Names)) { if ($seen.Add($n)) { $ordered.Add($n) } }
+        return $ordered.ToArray()
+    }
+
+    Write-Report '== HELIOS auto-login (non-interactive acquire + export; zero prompts) =='
+    if (-not $DotSourced) {
+        Write-Report '   NOTE: not dot-sourced — env exports die with this process. For your shell:  . scripts/bootstrap/auto-login.ps1'
+    }
+    Write-Report ''
+
+    # --- 0. The active hub config, parsed FIRST -------------------------------------
+    # AIHUB_CONFIG precedence (review finding): AIHubService.ResolveConfigPath gives
+    # the env var precedence over the repo default, so when a custom/cloud profile
+    # is selected these exports must follow it — otherwise auto-login configures a
+    # hub other than the one that will actually run. Parsed before the az lane
+    # (review finding): an explicitly selected profile the hub cannot load must
+    # abort before auth-doctor -Apply mutates anything on its behalf.
+    $aihubConfigExplicit = Test-EnvValue 'AIHUB_CONFIG'
+    # The value is used LITERALLY (review finding): AIHubService.ResolveConfigPath
+    # hands the environment string to File.OpenRead untouched, so a padded value is
+    # a different (and for the hub, missing) file — trimming here would inspect a
+    # profile the product never loads.
+    $aihubConfigPath = if ($aihubConfigExplicit) { [string]$env:AIHUB_CONFIG }
+    else { Join-Path $RepoRoot 'config/aihub.json' }
+    # The label auth-doctor uses for the same file, so shared action text dedupes.
+    $aihubConfigLabel = if ($aihubConfigExplicit) { 'AIHUB_CONFIG' } else { 'config/aihub.json' }
+    # Parse success is tracked apart from the providers table (review finding): a
+    # valid CLI-only profile may omit `providers` entirely — AIHubOptions.Providers
+    # starts as an empty dictionary, so the hub loads that profile and simply
+    # instantiates no API provider from it. An absent (or JSON null) section is
+    # therefore an EMPTY table, never a read failure; $aihubProviders stays $null
+    # only when the file itself is missing, unparseable, or not a JSON object (the
+    # hub binds the document to an object and fails the same way on anything else).
+    $aihubParseOk = $false
+    $aihubParsed = $null
+    $aihubProviders = $null
+    $aihubProvidersDeclared = $false
+    $aihubProvidersNull = $false
+    try {
+        $aihubParsed = Get-Content -LiteralPath $aihubConfigPath -Raw | ConvertFrom-Json
+        $aihubParseOk = ($aihubParsed -is [System.Management.Automation.PSCustomObject])
+    }
+    catch { }
+    $aihubProvidersShape = ''
+    if ($aihubParseOk) {
+        $providersProp = $aihubParsed.PSObject.Properties['providers']
+        # An EXPLICIT null is not an omitted section (review finding): System.Text.Json
+        # assigns null over AIHubOptions.Providers' initializer and CreateAll then fails
+        # enumerating it — the hub cannot start on that file, so neither may this run.
+        $aihubProvidersNull = [bool]($null -ne $providersProp -and $null -eq $providersProp.Value)
+        # Only a JSON OBJECT binds (review finding): AIHubOptions.Load deserializes the
+        # section as Dictionary<string, ProviderOptions>, so an array, string, or number
+        # there fails the hub exactly like null — and must abort here, before the az
+        # lane can mutate anything on behalf of a hub that cannot start.
+        if ($null -ne $providersProp -and $null -ne $providersProp.Value -and $providersProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+            $aihubProvidersShape = if ($providersProp.Value -is [System.Array]) { 'an array' } else { "a $($providersProp.Value.GetType().Name)" }
+        }
+        $aihubProvidersDeclared = [bool]($null -ne $providersProp -and $null -ne $providersProp.Value -and -not $aihubProvidersShape)
+        $aihubProviders = if ($aihubProvidersDeclared) { $aihubParsed.providers } else { [pscustomobject]@{} }
+    }
+    if ($aihubProvidersNull) {
+        throw "the active config ($aihubConfigPath) declares `"providers`": null — ProviderFactory.CreateAll cannot enumerate a null providers table and the hub fails to start; omit the section for a CLI-only profile or declare an object; aborting before any lane runs"
+    }
+    if ($aihubProvidersShape) {
+        throw "the active config ($aihubConfigPath) declares `"providers`" as $aihubProvidersShape, not a JSON object — AIHubOptions binds that section as a dictionary of providers and the hub fails to load the file; declare an object (or omit the section for a CLI-only profile); aborting before any lane runs"
+    }
+    # Shape and member helpers shared by every check below.
+    function Get-JsonShapeName {
+        param([AllowNull()]$Value)
+        if ($null -eq $Value) { return 'null' }
+        if ($Value -is [System.Array]) { return 'an array' }
+        if ($Value -is [System.Management.Automation.PSCustomObject]) { return 'an object' }
+        if ($Value -is [string]) { return 'a JSON string' }
+        if ($Value -is [bool]) { return 'a JSON boolean' }
+        return 'a JSON number'
+    }
+    # Typed MEMBERS bind too (review finding): System.Text.Json rejects a JSON string
+    # where AIHubOptions declares a bool or an int ("enabled": "false",
+    # "timeoutSeconds": "300"), a non-integer number for an int, and null for a
+    # non-nullable bool / int; a string member accepts a string or null, except the
+    # strings the hub dereferences without a fallback (review findings): provider
+    # type (CreateAll), learning.localPath (Load), an ENABLED cliAgents entry's name
+    # (the hub keys its provider map on it — a null key throws in the constructor)
+    # and its argsTemplate (CliProcessAgent.BuildArguments calls Contains / Split on
+    # it for the first routed request — review finding), and, when learning is
+    # enabled, learning.mode and learning.tableEndpointEnv
+    # (CreateLearningStore lowercases the mode and reads the endpoint variable by
+    # that name). A disabled entry / section is never constructed, so its strings
+    # stay nullable. Checked with the serializer's own contract — property names
+    # case-insensitive, unknown members ignored — before any repair.
+    $memberSchemas = @{
+        provider        = @{ type = 'string!'; enabled = 'bool'; model = 'string'; apiKeyEnv = 'string'; apiKeySecretName = 'string'; endpointEnv = 'string'; baseUrl = 'string' }
+        cliAgent        = @{ name = 'string'; enabled = 'bool'; command = 'string'; argsTemplate = 'string'; model = 'string'; timeoutSeconds = 'int' }
+        cliAgentEnabled = @{ name = 'string!'; enabled = 'bool'; command = 'string'; argsTemplate = 'string!'; model = 'string'; timeoutSeconds = 'seconds' }
+        learning        = @{ enabled = 'bool'; mode = 'string'; localPath = 'string!'; tableEndpointEnv = 'string'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+        learningEnabled = @{ enabled = 'bool'; mode = 'string!'; localPath = 'string!'; tableEndpointEnv = 'string!'; adaptiveRouting = 'bool'; historyWindow = 'int' }
+    }
+    # Enabled = the member is absent or exactly true (AIHubOptions defaults
+    # CliAgentOptions.Enabled to true and LearningOptions.Enabled to false; a
+    # non-bool value is caught by the schema itself).
+    function Test-JsonMemberEnabled {
+        param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][bool]$Default)
+        $enabledProp = $Object.PSObject.Properties['enabled']
+        if ($null -eq $enabledProp) { return $Default }
+        return ($enabledProp.Value -is [bool] -and $enabledProp.Value)
+    }
+    function Get-JsonMemberProblem {
+        param([Parameter(Mandatory)]$Object, [Parameter(Mandatory)][hashtable]$Schema, [Parameter(Mandatory)][string]$Path)
+        foreach ($member in $Object.PSObject.Properties) {
+            $kind = $Schema[$member.Name]   # hashtable keys compare case-insensitively, like the serializer
+            if (-not $kind) { continue }    # unknown members (e.g. $comment) are ignored by the serializer
+            $v = $member.Value
+            $ok = switch ($kind) {
+                'string' { ($null -eq $v) -or ($v -is [string]) }
+                'string!' { $v -is [string] }
+                'bool' { $v -is [bool] }
+                'int' { (($v -is [int]) -or ($v -is [long])) -and $v -ge [int]::MinValue -and $v -le [int]::MaxValue }
+                # An ENABLED entry's timeout is RANGE-checked (review finding): the hub
+                # binds any int, then CliProcessAgent.CancelAfter throws on a negative
+                # TimeSpan after the child process was already started, and a zero
+                # cancels every request before it answers.
+                'seconds' { (($v -is [int]) -or ($v -is [long])) -and $v -ge 1 -and $v -le 2147483 }
+            }
+            if (-not $ok) {
+                $expected = switch ($kind) { 'string' { 'a string' } 'string!' { 'a non-null string' } 'bool' { 'true or false' } 'int' { 'an integer' } 'seconds' { 'an integer from 1 to 2147483 (seconds — CliProcessAgent hands it to CancellationTokenSource.CancelAfter, which throws on a negative value and cancels a zero before the first byte; the child process is already running by then)' } }
+                return "$Path.$($member.Name) is $(Get-JsonShapeName $v), but AIHubOptions binds it as $expected"
+            }
+        }
+        return ''
+    }
+    function Get-JsonChainProblem {
+        # The raw array is taken untyped (a [object[]] parameter would reject a chain
+        # whose only element is null before the check could name it).
+        param([AllowNull()]$ChainValue, [Parameter(Mandatory)][string]$Path)
+        $chainIndex = 0
+        foreach ($element in @($ChainValue)) {
+            if ($element -isnot [string]) { return "$Path[$chainIndex] is $(Get-JsonShapeName $element), but every routing chain element is a provider name (string) the hub looks up" }
+            $chainIndex++
+        }
+        return ''
+    }
+    if ($aihubParseOk -and $aihubProvidersDeclared) {
+        # Every ENTRY must be an object too (review finding): the table binds as
+        # Dictionary<string, ProviderOptions>, a JSON null deserializes as a null
+        # entry, and ProviderFactory.CreateAll dereferences provider.Enabled on each —
+        # the hub crashes on such a file, so no lane may run (or repair) on its behalf.
+        foreach ($entryProp in $aihubProviders.PSObject.Properties) {
+            if ($null -eq $entryProp.Value -or $entryProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+                $entryShape = if ($null -eq $entryProp.Value) { 'null' } elseif ($entryProp.Value -is [System.Array]) { 'an array' } else { "a $($entryProp.Value.GetType().Name)" }
+                throw "the active config ($aihubConfigPath) declares providers.$($entryProp.Name) as $entryShape, not an object — ProviderFactory.CreateAll dereferences every provider entry and the hub fails to start; remove the entry or declare an object; aborting before any lane runs"
+            }
+            $memberProblem = Get-JsonMemberProblem -Object $entryProp.Value -Schema $memberSchemas.provider -Path "providers.$($entryProp.Name)"
+            if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
+        }
+    }
+    # The OTHER typed sections the hub binds (review finding): AIHubOptions declares
+    # cliAgents as List<CliAgentOptions>, routing as an object (defaultChain a string
+    # array, taskRouting an object of string arrays) and learning as an object.
+    # System.Text.Json rejects a wrong-shaped section outright (the file never loads),
+    # and an explicit null lands on the property: AIHubOptions.Load dereferences
+    # learning.localPath, the hub's constructor hands routing to its strategy and
+    # RoutingTableView reads defaultChain/taskRouting, and ProviderFactory.CreateAll
+    # enumerates cliAgents and dereferences every element — so each of those fails
+    # the hub too. Checked here, before the az lane can mutate anything on behalf of a
+    # hub that cannot start. An ABSENT section keeps its initializer and is fine.
+    if ($aihubParseOk) {
+        $sectionRules = @(
+            [pscustomobject]@{ Name = 'cliAgents'; Wanted = 'an array'; Binds = 'List<CliAgentOptions>'; Fails = 'ProviderFactory.CreateAll enumerates it' }
+            [pscustomobject]@{ Name = 'routing'; Wanted = 'an object'; Binds = 'RoutingOptions'; Fails = 'the hub builds its routing strategy and table from it' }
+            [pscustomobject]@{ Name = 'learning'; Wanted = 'an object'; Binds = 'LearningOptions'; Fails = 'AIHubOptions.Load dereferences learning.localPath' }
+        )
+        foreach ($rule in $sectionRules) {
+            $sectionProp = $aihubParsed.PSObject.Properties[$rule.Name]
+            if ($null -eq $sectionProp) { continue }
+            $sectionShape = Get-JsonShapeName $sectionProp.Value
+            if ($sectionShape -ne $rule.Wanted) {
+                throw "the active config ($aihubConfigPath) declares `"$($rule.Name)`" as $sectionShape, not $($rule.Wanted) — AIHubOptions binds that section as $($rule.Binds) and $($rule.Fails), so the hub fails to load or start on the file; declare $($rule.Wanted) (or omit the section for its defaults); aborting before any lane runs"
+            }
+        }
+        $cliAgentsProp = $aihubParsed.PSObject.Properties['cliAgents']
+        if ($null -ne $cliAgentsProp) {
+            $cliIndex = 0
+            foreach ($cliElement in @($cliAgentsProp.Value)) {
+                if ($null -eq $cliElement -or $cliElement -isnot [System.Management.Automation.PSCustomObject]) {
+                    throw "the active config ($aihubConfigPath) declares cliAgents[$cliIndex] as $(Get-JsonShapeName $cliElement), not an object — AIHubOptions binds each element as a CliAgentOptions object and ProviderFactory.CreateAll dereferences every one, so the hub fails to load or start on the file; remove the element or declare an object; aborting before any lane runs"
+                }
+                $cliSchema = if (Test-JsonMemberEnabled -Object $cliElement -Default $true) { $memberSchemas.cliAgentEnabled } else { $memberSchemas.cliAgent }
+                $memberProblem = Get-JsonMemberProblem -Object $cliElement -Schema $cliSchema -Path "cliAgents[$cliIndex]"
+                if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
+                $cliIndex++
+            }
+        }
+        $learningProp = $aihubParsed.PSObject.Properties['learning']
+        if ($null -ne $learningProp) {
+            $learningSchema = if (Test-JsonMemberEnabled -Object $learningProp.Value -Default $false) { $memberSchemas.learningEnabled } else { $memberSchemas.learning }
+            $memberProblem = Get-JsonMemberProblem -Object $learningProp.Value -Schema $learningSchema -Path 'learning'
+            if ($memberProblem) { throw "the active config ($aihubConfigPath) declares $memberProblem — AIHubOptions.Load (System.Text.Json) rejects the file and the hub cannot start; fix the value; aborting before any lane runs" }
+        }
+        $routingProp = $aihubParsed.PSObject.Properties['routing']
+        if ($null -ne $routingProp) {
+            $chainProp = $routingProp.Value.PSObject.Properties['defaultChain']
+            if ($null -ne $chainProp -and (Get-JsonShapeName $chainProp.Value) -ne 'an array') {
+                throw "the active config ($aihubConfigPath) declares routing.defaultChain as $(Get-JsonShapeName $chainProp.Value), not an array — AIHubOptions binds it as a list of provider names and RoutingTableView reads it, so the hub fails to load or start on the file; aborting before any lane runs"
+            }
+            if ($null -ne $chainProp) {
+                $chainProblem = Get-JsonChainProblem -ChainValue $chainProp.Value -Path 'routing.defaultChain'
+                if ($chainProblem) { throw "the active config ($aihubConfigPath) declares $chainProblem — AIHubOptions.Load (System.Text.Json) rejects a non-string, and a null name crashes the routing lookup; fix the value; aborting before any lane runs" }
+            }
+            $tableProp = $routingProp.Value.PSObject.Properties['taskRouting']
+            if ($null -ne $tableProp) {
+                if ((Get-JsonShapeName $tableProp.Value) -ne 'an object') {
+                    throw "the active config ($aihubConfigPath) declares routing.taskRouting as $(Get-JsonShapeName $tableProp.Value), not an object — AIHubOptions binds it as a dictionary of provider chains and RoutingTableView enumerates it, so the hub fails to load or start on the file; aborting before any lane runs"
+                }
+                foreach ($chainEntry in $tableProp.Value.PSObject.Properties) {
+                    if ((Get-JsonShapeName $chainEntry.Value) -ne 'an array') {
+                        throw "the active config ($aihubConfigPath) declares routing.taskRouting.$($chainEntry.Name) as $(Get-JsonShapeName $chainEntry.Value), not an array — every task type binds to a list of provider names and RoutingTableView reads each, so the hub fails to load or start on the file; aborting before any lane runs"
+                    }
+                    $chainProblem = Get-JsonChainProblem -ChainValue $chainEntry.Value -Path "routing.taskRouting.$($chainEntry.Name)"
+                    if ($chainProblem) { throw "the active config ($aihubConfigPath) declares $chainProblem — AIHubOptions.Load (System.Text.Json) rejects a non-string, and a null name crashes the routing lookup; fix the value; aborting before any lane runs" }
+                }
+            }
+        }
+    }
+    # An active config that cannot be read is an internal failure whichever way it
+    # was selected (review findings): AIHubService.ResolveConfigPath throws when
+    # config/aihub.json is missing and AIHubOptions.Load throws when it does not
+    # parse, so no hub can start from it — running auth-doctor -Apply on its behalf
+    # and exporting a built-in mapping would report success for a configuration that
+    # cannot run. There is no fallback mapping; the file is the contract.
+    if (-not $aihubParseOk) {
+        $selectedBy = if ($aihubConfigExplicit) { "AIHUB_CONFIG selects '$aihubConfigPath' but it" } else { "the repo default config ($aihubConfigPath; AIHUB_CONFIG unset)" }
+        $unsetHint = if ($aihubConfigExplicit) { ' or unset AIHUB_CONFIG' } else { '' }
+        throw "$selectedBy is missing, unparseable, or not a JSON object — the hub cannot load it either (AIHubOptions.Load); fix the file$unsetHint; aborting before any lane runs"
+    }
+    if ($aihubParseOk -and -not $aihubProvidersDeclared) {
+        Write-Report "  note: the active config ($aihubConfigPath) declares no providers section — the hub instantiates no API provider from it (CLI-only profile), so there is no credential to acquire for one"
+    }
+
+    # --- 1. az lane: delegate repair to auth-doctor -Apply (non-interactive only) ----
+    $azUsable = $false
+    $azLaneHadAction = $false
+    $doctorPath = Join-Path $RepoRoot 'scripts/bootstrap/auth-doctor.ps1'
+    if (Test-Path -LiteralPath $doctorPath) {
+        # stdout ONLY: the -Json contract puts the report there, and merging stderr
+        # (warnings, progress lines) would break the JSON parse (review finding —
+        # the same lesson learn-fleet.ps1's capture already encodes).
+        # The managed-identity opt-in is forwarded (review finding): on a classic
+        # IMDS-only VM neither IDENTITY_ENDPOINT nor MSI_ENDPOINT exists, so the doctor
+        # attempts `az login --identity` only when told to — without the switch the
+        # vault stage would sit blocked behind an interactive-login action while a
+        # non-interactive credential was available all along.
+        $doctorArgs = @('-Apply', '-Json')
+        if ($UseManagedIdentity) { $doctorArgs += '-UseManagedIdentity' }
+        # The PowerShell application, resolved (review finding): an unqualified `pwsh`
+        # fails when the host executable's directory is not on PATH and, in a
+        # dot-sourcing caller, could resolve to a caller-defined function or alias.
+        # setup-everything.ps1 pattern: the PATH application first, else this process.
+        $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
+        if (-not $pwshExe) { throw 'cannot locate a PowerShell 7 executable (pwsh not on PATH, host process path unknown) — the az lane cannot be established; aborting instead of reporting success' }
+        $doctorLines = @(& $pwshExe -NoProfile -File $doctorPath @doctorArgs 2>$null | ForEach-Object { "$_" })
+        $doctorExit = [int]$LASTEXITCODE
+        $doctorReport = $null
+        try { $doctorReport = ($doctorLines -join "`n") | ConvertFrom-Json } catch { }
+        $azLane = $null
+        if ($doctorReport -and $doctorReport.PSObject.Properties['lanes']) {
+            $azLane = @($doctorReport.lanes | Where-Object { $_.lane -eq 'az' }) | Select-Object -First 1
+        }
+        if ($null -ne $azLane) {
+            $azState = [string]$azLane.state
+            $azUsable = $azState -in @('ready', 'repaired')
+            # Carry the doctor's own detail through (review finding): 'unavailable'
+            # means az is not installed — collapsing that to needs-owner with a bare
+            # state name loses the installation guidance for both humans and JSON.
+            $azLaneDetail = if ($azLane.PSObject.Properties['detail']) { [string]$azLane.detail } else { '' }
+            $azDetail = "auth-doctor -Apply: az lane $azState" +
+                $(if ($azLaneDetail) { " — $azLaneDetail" } else { '' })
+            $azStepState = if ($azUsable) { 'ok' } elseif ($azState -eq 'unavailable') { 'unavailable' } else { 'needs-owner' }
+            if (-not $azUsable -and $azLane.PSObject.Properties['ownerAction'] -and "$($azLane.ownerAction)".Trim()) {
+                Add-OwnerAction -Text "$($azLane.ownerAction)" -Imported
+                $azLaneHadAction = $true
+            }
+            Add-Step -Step 'az' -State $azStepState -Detail $azDetail
+            # Surface the rest of the doctor's owner actions too — auto-login's summary
+            # is meant to be the single list of what still needs a human.
+            # A lane the doctor reports as 'disabled' (every consumer off in the active
+            # config) never carries an action, and even if one slipped through it must
+            # not be imported (review finding): the summary's contract is "only the
+            # steps that need a human", and nothing instantiates a disabled lane.
+            foreach ($lane in @($doctorReport.lanes)) {
+                $laneState = if ($lane.PSObject.Properties['state']) { [string]$lane.state } else { '' }
+                if ($lane.lane -ne 'az' -and $laneState -ne 'disabled' -and $lane.PSObject.Properties['ownerAction'] -and "$($lane.ownerAction)".Trim()) {
+                    # Repository-secret actions concern Actions storage, not the
+                    # process environment populated by this script. Never retire
+                    # them after an unrelated provider uses the same variable name.
+                    $repositorySecret = ([string]$lane.ownerAction -match '(?i)\bgh\s+secret\s+set\b') -or ($lane.lane -in @('slack', 'linear', 'github-admin', 'copilot-dispatch'))
+                    Add-OwnerAction -Text "$($lane.ownerAction)" -Imported -RepositorySecret:$repositorySecret
+                }
+            }
+        }
+        else {
+            # An unparseable/failed auth-doctor is an INTERNAL failure, not a lane
+            # state (review finding): converting it into an 'unavailable' step let
+            # the run finish with exitCode 0 — a dot-sourced caller then continued
+            # after a partial setup with neither the promised rethrow nor a
+            # failure status. Throw so the outer handler propagates it.
+            throw "auth-doctor -Apply produced no parseable az lane (exit $doctorExit) — az repair state unknown; aborting instead of reporting success"
+        }
+    }
+    else {
+        throw 'scripts/bootstrap/auth-doctor.ps1 not found in this checkout — the az lane cannot be established; aborting instead of reporting success'
+    }
+
+    # --- 2. Key Vault → env (the pwsh twin of load-env-from-keyvault.sh) ------------
+    # SecretName is a Key Vault secret IDENTIFIER (which secret to fetch), never a
+    # value — named so the code-checks security scanner's hardcoded-secret pattern
+    # (`secret =` followed by a literal) does not false-positive on identifiers.
+    # The pairs come from config/aihub.json (review finding): the hub's
+    # SecretResolver honors each provider's apiKeyEnv/apiKeySecretName, so this
+    # script reads the SAME source of truth — a hardcoded triplet would silently
+    # stop configuring a provider the moment an operator renames its mapping.
+    # Providers lacking either field are excluded on purpose (azure-openai, for
+    # example, declares no vault custody and needs its own endpoint wiring).
+    $vaultPairs = @()
+    # apiKeyEnv exactly as ProviderFactory reads it (review finding): the per-type
+    # default (`ApiKeyEnv ?? <default>`) applies ONLY when the property is absent or
+    # JSON null. An explicitly blank/whitespace name is passed through unchanged, and
+    # SecretResolver.Resolve reads NO environment variable for a blank name — only the
+    # entry's apiKeySecretName, in-process. Normalizing blank to the default would
+    # export into a variable the hub never reads and report the provider lit.
+    # Returns $null for "absent → default applies", '' for a declared-blank name, else
+    # the declared name EXACTLY as written (review finding): blank is detected with
+    # IsNullOrWhiteSpace — the one normalization the hub applies (SecretResolver.Resolve
+    # skips a blank name) — and anything else is handed by the factory to
+    # Environment.GetEnvironmentVariable untouched, so " MODEL_TOKEN " is a different
+    # variable from MODEL_TOKEN and an export into the trimmed name would light nothing.
+    function Get-DeclaredApiKeyEnv {
+        param([Parameter(Mandatory)]$Provider)
+        $prop = $Provider.PSObject.Properties['apiKeyEnv']
+        if ($null -eq $prop -or $null -eq $prop.Value) { return $null }
+        $declared = [string]$prop.Value
+        if ([string]::IsNullOrWhiteSpace($declared)) { return '' }
+        return $declared
+    }
+    # The public GitHub Models endpoint is exactly the canonical HTTPS origin of
+    # models.github.ai — default port included (review findings): the factory rejects
+    # a non-http(s) URL outright, an http:// origin would carry the exported credential
+    # in cleartext, and https://models.github.ai:444 is a different origin the client
+    # would actually send requests to — none may receive a GitHub token. Returns
+    # { Public; Note; Host } where Host carries a non-default port so the family label
+    # of such an origin differs from the public one.
+    function Test-PublicModelsOrigin {
+        param([AllowEmptyString()][string]$BaseUrl = '')
+        if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return [pscustomobject]@{ Public = $true; Note = ''; Host = 'models.github.ai' } }
+        $parsedOrigin = $null
+        if (-not [uri]::TryCreate($BaseUrl.Trim(), [System.UriKind]::Absolute, [ref]$parsedOrigin)) {
+            return [pscustomobject]@{ Public = $false; Note = 'not an absolute URL — ProviderFactory.CreateGitHubModels reports the provider unconfigured'; Host = '' }
+        }
+        $hostIsPublic = $parsedOrigin.Host.Equals('models.github.ai', [System.StringComparison]::OrdinalIgnoreCase)
+        $originHost = if ($parsedOrigin.IsDefaultPort) { $parsedOrigin.Host } else { "$($parsedOrigin.Host):$($parsedOrigin.Port)" }
+        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic -and $parsedOrigin.IsDefaultPort) { return [pscustomobject]@{ Public = $true; Note = ''; Host = $parsedOrigin.Host } }
+        if ($parsedOrigin.Scheme -eq 'https' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = "port $($parsedOrigin.Port) on the public host — a different origin from the public GitHub Models service (default port only), so no GitHub credential is exported for it"; Host = $originHost } }
+        if ($parsedOrigin.Scheme -eq 'http' -and $hostIsPublic) { return [pscustomobject]@{ Public = $false; Note = 'cleartext http:// origin of the public host — a GitHub credential must not travel over it'; Host = $originHost } }
+        if ($parsedOrigin.Scheme -notin 'http', 'https') { return [pscustomobject]@{ Public = $false; Note = "'$($parsedOrigin.Scheme)' scheme — ProviderFactory.CreateGitHubModels reports the provider unconfigured (not an absolute http(s) URL)"; Host = $originHost } }
+        return [pscustomobject]@{ Public = $false; Note = ''; Host = $originHost }
+    }
+    # Enabled CLI agents that read a FIXED variable (review findings): any enabled
+    # cliAgents entry whose command leaf is `codex` reads OPENAI_API_KEY, one running
+    # `claude` reads ANTHROPIC_API_KEY, and one running `copilot` or `gh` inherits
+    # GH_TOKEN / GITHUB_TOKEN as its GitHub credential (an entry without a command is
+    # unconfigured, whatever its name) — auth-doctor's discovery rule. The GitHub
+    # CLI readers make those two variables GitHub-family, so a provider of another
+    # family mapping a vault secret to them is an incompatible sharing and nothing is
+    # pulled into the variable the CLI process would inherit. Unreadable config → none.
+    function Get-CliOwnedEnvReaders {
+        $found = [System.Collections.Generic.List[object]]::new()
+        if (-not $aihubParseOk -or -not $aihubParsed.PSObject.Properties['cliAgents'] -or $null -eq $aihubParsed.cliAgents) { return $found.ToArray() }
+        foreach ($agent in @($aihubParsed.cliAgents)) {
+            if ($null -eq $agent) { continue }
+            if ($agent.PSObject.Properties['enabled'] -and $agent.enabled -eq $false) { continue }
+            # The configured COMMAND alone, untrimmed (review finding): CliProcessAgent
+            # runs options.Command as written and IsOnPath('') is false, so an entry
+            # without a command is unconfigured whatever its name says.
+            $cmd = if ($agent.PSObject.Properties['command'] -and $null -ne $agent.command) { [string]$agent.command } else { '' }
+            $leaf = ''
+            if ($cmd) { try { $leaf = [System.IO.Path]::GetFileNameWithoutExtension($cmd) } catch { $leaf = $cmd } }
+            $agentName = if ($agent.PSObject.Properties['name'] -and $null -ne $agent.name) { ([string]$agent.name).Trim() } else { '' }
+            $key = if ($leaf) { $leaf.ToLowerInvariant() } else { '' }
+            if ($key -eq 'codex') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'codex-cli'; Family = 'openai'; Env = 'OPENAI_API_KEY' }) }
+            elseif ($key -in 'claude', 'claude-cli') { $found.Add([pscustomobject]@{ Name = $agentName; Type = 'claude-cli'; Family = 'anthropic'; Env = 'ANTHROPIC_API_KEY' }) }
+            elseif ($key -in 'copilot', 'gh', 'gh-models') {
+                $cliType = if ($key -eq 'copilot') { 'copilot-cli' } else { 'gh-cli' }
+                foreach ($ghEnvName in @('GH_TOKEN', 'GITHUB_TOKEN')) { $found.Add([pscustomobject]@{ Name = $agentName; Type = $cliType; Family = 'github'; Env = $ghEnvName }) }
+            }
+        }
+        return $found.ToArray()
+    }
+    # The credential DefaultAzureCredential will select for the hub (review findings):
+    # the environment service principal (AZURE_CLIENT_ID + secret / certificate), then
+    # a workload identity, then a managed identity, and only then the az CLI cache the
+    # az lane established — and a configured credential that FAILS is not rescued by
+    # the next one. Names checked only.
+    # Raw IMDS (review finding): a VM's system-assigned or attached identity declares
+    # NEITHER IDENTITY_ENDPOINT nor MSI_ENDPOINT — ManagedIdentityCredential reaches it
+    # at http://169.254.169.254/metadata/identity/oauth2/token, and DefaultAzureCredential
+    # takes that token BEFORE it considers the az CLI cache, so the absence of the two
+    # variables proves nothing. IMDS is probed the way the SDK does it (Metadata: true,
+    # hard 2 s, never through a proxy, no redirects); a 200 carrying a token means the
+    # hub authenticates as that identity. The token is discarded, never stored; the
+    # result is cached for this run in a hashtable of the enclosing scope (no residue).
+    $hubProbeCache = @{}
+    # rest-connect's azure lane per selected credential kind, run once per auto-login.
+    $selectedCredentialProofCache = @{}
+    function Test-RawImdsManagedIdentity {
+        if ($hubProbeCache.ContainsKey('imds')) { return $hubProbeCache['imds'] }
+        $imdsHasIdentity = $false
+        try {
+            # AZURE_CLIENT_ID (when set) selects the user-assigned identity exactly as
+            # ManagedIdentityCredential does (review finding): without it IMDS answers for
+            # the system-assigned identity, a different principal. An identifier, not a secret.
+            $imdsProbeUrl = 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net'
+            if (Test-EnvValue 'AZURE_CLIENT_ID') { $imdsProbeUrl += "&client_id=$([uri]::EscapeDataString(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim()))" }
+            $imdsReply = Invoke-WebRequest -Uri $imdsProbeUrl -Headers @{ Metadata = 'true' } -TimeoutSec 2 -NoProxy -MaximumRedirection 0 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            if ([int]$imdsReply.StatusCode -eq 200) {
+                $imdsJson = $null
+                try { $imdsJson = ([string]$imdsReply.Content) | ConvertFrom-Json } catch { $imdsJson = $null }
+                $imdsHasIdentity = ($null -ne $imdsJson -and $imdsJson.PSObject.Properties['access_token'] -and -not [string]::IsNullOrWhiteSpace([string]$imdsJson.access_token))
+                $imdsJson = $null
+            }
+            $imdsReply = $null
+        }
+        catch { $imdsHasIdentity = $false }
+        $hubProbeCache['imds'] = $imdsHasIdentity
+        return $imdsHasIdentity
+    }
+    function Get-HubCredentialKind {
+        if ((Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID') -and ((Test-EnvValue 'AZURE_CLIENT_SECRET') -or (Test-EnvValue 'AZURE_CLIENT_CERTIFICATE_PATH'))) { return 'environment service principal' }
+        # All three names (review finding): WorkloadIdentityCredential needs AZURE_TENANT_ID as well — with only the client id and the token file DefaultAzureCredential skips the rung.
+        if ((Test-EnvValue 'AZURE_FEDERATED_TOKEN_FILE') -and (Test-EnvValue 'AZURE_CLIENT_ID') -and (Test-EnvValue 'AZURE_TENANT_ID')) { return 'workload identity' }
+        if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'managed identity' }
+        if (Test-RawImdsManagedIdentity) { return 'managed identity' }
+        return 'az-cli'
+    }
+    # Where a selected managed identity comes from, for the report text only.
+    function Get-HubManagedIdentitySource {
+        if ((Test-EnvValue 'IDENTITY_ENDPOINT') -or (Test-EnvValue 'MSI_ENDPOINT')) { return 'IDENTITY_ENDPOINT / MSI_ENDPOINT' }
+        return 'raw IMDS at 169.254.169.254 — a system-assigned or VM-attached identity, no endpoint variable'
+    }
+    # True when az is logged in as the very service principal the environment
+    # configures (auth-doctor -Apply's repair leaves it so): the az lane's success is
+    # then that credential's success. A managed identity can never be matched this way.
+    function Test-HubPrincipalIsAzLogin {
+        param([Parameter(Mandatory)][string]$Kind)
+        if ($Kind -eq 'managed identity' -or -not $azCmd) { return $false }
+        $accountLines = @(& $azCmd.Source account show --query '{type:user.type,name:user.name,tenantId:tenantId}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+        if ([int]$LASTEXITCODE -ne 0) { return $false }
+        $account = $null
+        try { $account = ($accountLines -join '') | ConvertFrom-Json } catch { return $false }
+        $accountType = if ($null -ne $account -and $account.PSObject.Properties['type'] -and $null -ne $account.type) { [string]$account.type } else { '' }
+        $accountName = if ($null -ne $account -and $account.PSObject.Properties['name'] -and $null -ne $account.name) { [string]$account.name } else { '' }
+        $accountTenant = if ($null -ne $account -and $account.PSObject.Properties['tenantId'] -and $null -ne $account.tenantId) { [string]$account.tenantId } else { '' }
+        return ($accountType -eq 'servicePrincipal') -and $accountName.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase) -and -not [string]::IsNullOrWhiteSpace($accountTenant) -and $accountTenant.Equals(([string][Environment]::GetEnvironmentVariable('AZURE_TENANT_ID')).Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    # A SELECTED credential is proven only by acquiring a token through it (review
+    # finding): a cached az identity whose client and tenant match AZURE_CLIENT_ID /
+    # AZURE_TENANT_ID proves that the principal exists and that az holds ITS session —
+    # not that the secret or federated assertion the hub will present is still
+    # accepted. After a rotation the metadata still matches while DefaultAzureCredential
+    # fails on the stale credential and never reaches the az cache. rest-connect.ps1
+    # performs the exchange the hub performs (secret / assertion posted once, the
+    # managed-identity endpoint queried once, tokens never echoed) and stops where the
+    # SDK stops, so its azure lane is the proof; it is run at most once per kind here.
+    function Invoke-RestConnectProbe {
+        $restConnectPath = Join-Path $RepoRoot 'scripts/verify/rest-connect.ps1'
+        if (-not (Test-Path -LiteralPath $restConnectPath -PathType Leaf)) { return $null }
+        $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
+        if (-not $pwshExe) { return $null }
+        $lines = @(& $pwshExe -NoProfile -File $restConnectPath -Json 2>$null | ForEach-Object { "$_" })
+        $text = $lines -join "`n"
+        $start = $text.IndexOf('{')
+        if ($start -lt 0) { return $null }
+        try { return ($text.Substring($start) | ConvertFrom-Json) } catch { return $null }
+    }
+    function Get-SelectedCredentialProof {
+        param([Parameter(Mandatory)][string]$Kind)
+        if ($selectedCredentialProofCache.ContainsKey($Kind)) { return $selectedCredentialProofCache[$Kind] }
+        $sourcePrefix = switch ($Kind) {
+            'environment service principal' { 'env-service-principal' }
+            'workload identity' { 'workload-identity' }
+            'managed identity' { 'managed-identity' }
+            default { '' }
+        }
+        $proof = [pscustomobject]@{ Proven = $false; State = 'unverifiable'; Source = ''; Detail = 'scripts/verify/rest-connect.ps1 could not be run or produced no report, so the selected credential was never exercised'; OwnerAction = '' }
+        $report = Invoke-RestConnectProbe
+        $lane = $null
+        if ($null -ne $report -and $report.PSObject.Properties['lanes'] -and $null -ne $report.lanes) {
+            $lane = @($report.lanes | Where-Object { $null -ne $_ -and $_.PSObject.Properties['lane'] -and [string]$_.lane -eq 'azure' }) | Select-Object -First 1
+        }
+        if ($null -ne $lane) {
+            $read = { param($Name) if ($lane.PSObject.Properties[$Name] -and $null -ne $lane.$Name) { [string]$lane.$Name } else { '' } }
+            $laneState = & $read 'state'
+            $laneSource = & $read 'source'
+            $proof = [pscustomobject]@{
+                Proven      = ($laneState -eq 'ready' -and $sourcePrefix -and $laneSource.StartsWith($sourcePrefix, [System.StringComparison]::Ordinal))
+                State       = $laneState
+                Source      = $laneSource
+                Detail      = (& $read 'detail')
+                OwnerAction = (& $read 'ownerAction')
+            }
+        }
+        $selectedCredentialProofCache[$Kind] = $proof
+        return $proof
+    }
+    # The gap between "az is logged in" and "the hub's credential works", as text plus
+    # the repair — empty when DefaultAzureCredential reaches the az cache (kind az-cli)
+    # or rest-connect proved the selected credential end to end.
+    function Get-HubPrincipalGap {
+        param([Parameter(Mandatory)][string]$Kind)
+        if ($Kind -eq 'az-cli') { return [pscustomobject]@{ Gap = ''; Action = '' } }
+        $selector = if ($Kind -eq 'managed identity') { " ($(Get-HubManagedIdentitySource))" } else { ' (AZURE_CLIENT_ID)' }
+        $proof = Get-SelectedCredentialProof -Kind $Kind
+        if ($proof.Proven) { return [pscustomobject]@{ Gap = ''; Action = '' } }
+        $cacheNote = if (Test-HubPrincipalIsAzLogin -Kind $Kind) { ' (az is logged in as that same principal, which proves the principal exists, not that the credential the hub presents is still accepted)' } else { '' }
+        $sourceNote = if ($proof.Source) { " ($($proof.Source))" } else { '' }
+        $gap = "the hub's DefaultAzureCredential authenticates as the $Kind$selector ahead of the az CLI cache, and a failure there is not rescued by the az login — scripts/verify/rest-connect.ps1 exercised that credential and reports it $($proof.State)${sourceNote}: $($proof.Detail)$cacheNote"
+        $action = if ($proof.OwnerAction) { $proof.OwnerAction }
+        else { "prove the hub's $Kind${selector}: run pwsh scripts/verify/rest-connect.ps1 -Json (its azure lane must report ready for that credential source) and repair what it names, or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established" }
+        return [pscustomobject]@{ Gap = $gap; Action = $action }
+    }
+    # The cached az identity's client id and tenant, as identifiers (never a secret);
+    # blanks when az is absent or the profile cannot be read.
+    function Get-CachedAzIdentity {
+        if (-not $azCmd) { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $acctLines = @(& $azCmd.Source account show --query '{name:user.name,tenantId:tenantId}' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+        if ([int]$LASTEXITCODE -ne 0) { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $acct = $null
+        try { $acct = ($acctLines -join '') | ConvertFrom-Json } catch { return [pscustomobject]@{ Name = ''; Tenant = '' } }
+        $read = { param($Prop) if ($null -ne $acct -and $acct.PSObject.Properties[$Prop] -and $null -ne $acct.$Prop) { ([string]$acct.$Prop).Trim() } else { '' } }
+        return [pscustomobject]@{ Name = (& $read 'name'); Tenant = (& $read 'tenantId') }
+    }
+    # '' when the cached identity IS the configured one (client id and, when
+    # AZURE_TENANT_ID is set, tenant); otherwise a description of what is cached.
+    function Test-AzIdentityMismatch {
+        param([AllowEmptyString()][string]$Name = '', [AllowEmptyString()][string]$Tenant = '')
+        if (-not $Name) { return '' }
+        $wantedClient = ([string][Environment]::GetEnvironmentVariable('AZURE_CLIENT_ID')).Trim()
+        $wantedTenant = ([string][Environment]::GetEnvironmentVariable('AZURE_TENANT_ID')).Trim()
+        if (-not $Name.Equals($wantedClient, [System.StringComparison]::OrdinalIgnoreCase)) { return "'$Name'" }
+        if ($wantedTenant -and -not $Tenant.Equals($wantedTenant, [System.StringComparison]::OrdinalIgnoreCase)) { return "'$Name' in tenant '$(if ($Tenant) { $Tenant } else { 'unknown' })'" }
+        return ''
+    }
+    # The Entra-fallback verdict for an azure-openai entry whose key is not set: the
+    # az lane feeds DefaultAzureCredential only for kind az-cli; any other kind must be
+    # proven by rest-connect (Get-HubPrincipalGap). Pure — every input is a parameter.
+    function Get-EntraFallbackOutcome {
+        param([Parameter(Mandatory)][string]$Kind, [Parameter(Mandatory)][bool]$AzUsable, [AllowEmptyString()][string]$AzState = '', [Parameter(Mandatory)][string]$Lights, [bool]$AzLaneHadAction = $false)
+        if ($Kind -eq 'az-cli') {
+            if ($AzUsable) { return [pscustomobject]@{ State = 'ok'; Detail = 'DefaultAzureCredential falls through to the az CLI login the az lane established; no owner action'; Action = '' } }
+            $azRef = if ($AzLaneHadAction) { 'the imported az-lane owner action is the repair' } else { "repair the az lane (auth-doctor -Apply reported '$AzState')" }
+            return [pscustomobject]@{ State = 'needs-owner'; Detail = "DefaultAzureCredential would fall through to the az CLI cache, but the az lane is $AzState — $azRef, then re-run auto-login (or store the API key instead)"; Action = $(if ($AzLaneHadAction) { '' } else { "repair the az lane (auth-doctor -Apply reported '$AzState') so DefaultAzureCredential can use the az CLI login for $Lights, or store its API key instead" }) }
+        }
+        $principal = Get-HubPrincipalGap -Kind $Kind
+        if (-not $principal.Gap) { return [pscustomobject]@{ State = 'ok'; Detail = "the $Kind was exercised end to end by scripts/verify/rest-connect.ps1 (token acquired, ARM answered; token never echoed) — DefaultAzureCredential uses it ahead of the az cache; no owner action"; Action = '' } }
+        return [pscustomobject]@{ State = 'needs-owner'; Detail = $principal.Gap; Action = $principal.Action }
+    }
+    # The canonical Key Vault ORIGIN only (review finding): SecretResolver builds its
+    # SecretClient from AZURE_KEY_VAULT_URI as written, so https://<vault>.vault.azure.net:444/
+    # or a URI carrying a path, query, fragment or userinfo is a different (unusable)
+    # endpoint for the hub even though its host names a real vault — deriving a vault
+    # name from it would prove a secret at an endpoint the hub never calls. Returns the
+    # vault name for https://<vault>.vault.<public or sovereign suffix>/ on the default
+    # port with no path beyond '/', else ''.
+    function Get-KeyVaultNameFromUri {
+        param([AllowEmptyString()][string]$Value)
+        $parsed = $null
+        if ([string]::IsNullOrWhiteSpace($Value) -or -not [uri]::TryCreate($Value.Trim(), [System.UriKind]::Absolute, [ref]$parsed)) { return '' }
+        if ($parsed.Scheme -ne 'https' -or -not $parsed.IsDefaultPort -or $parsed.UserInfo -or $parsed.Query -or $parsed.Fragment) { return '' }
+        if ($parsed.AbsolutePath -notin '', '/') { return '' }
+        if ($parsed.Host -notmatch '^(?<vault>[A-Za-z0-9-]{3,24})\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$') { return '' }
+        return $Matches['vault']
+    }
+    # The endpoint variable is validated on EVERY azure-openai outcome (review finding):
+    # CreateAzureOpenAi reads endpointEnv (AZURE_OPENAI_ENDPOINT by default) before it
+    # uses a key and reports the provider unconfigured unless the value is an absolute
+    # http(s) URL — so a successful vault pull lights nothing until the endpoint is
+    # usable too. Returns the problems (names checked, values never echoed) and records
+    # the owner action each one needs; empty for pairs without azure-openai members.
+    # A custom Models baseUrl the factory REJECTS (review finding): CreateGitHubModels
+    # returns an unconfigured agent for a baseUrl that is not an absolute http(s) URL,
+    # so a key exported for that entry lights nothing until the config is fixed — the
+    # repair is the baseUrl, named once (the text is shared by every path that meets
+    # the same entry so the summary dedupes). baseUrl is config, never a secret.
+    function Add-GitHubModelsBaseUrlAction {
+        param([Parameter(Mandatory)][string]$Name, [AllowEmptyString()][string]$BaseUrl = '', [AllowEmptyString()][string]$Note = '')
+        Add-OwnerAction -Text "fix providers.$Name.baseUrl in ${aihubConfigLabel}: '$BaseUrl' is $Note — set an absolute https URL (the public origin is https://models.github.ai/inference; omit baseUrl to use it)"
+    }
+    function Test-GitHubModelsOriginRejected {
+        param([AllowNull()]$Origin)
+        return ($null -ne $Origin -and -not $Origin.Public -and $Origin.Note -like '*ProviderFactory.CreateGitHubModels reports the provider unconfigured*')
+    }
+    function Get-GitHubModelsOriginProblems {
+        param([Parameter(Mandatory)]$Pair)
+        $problems = @()
+        foreach ($member in @($Pair.Members | Where-Object { $_.Type -eq 'github-models' })) {
+            $origin = Test-PublicModelsOrigin -BaseUrl $member.BaseUrl
+            if (Test-GitHubModelsOriginRejected $origin) {
+                $problems += "providers.$($member.Name).baseUrl is $($origin.Note)"
+                Add-GitHubModelsBaseUrlAction -Name $member.Name -BaseUrl $member.BaseUrl -Note $origin.Note
+            }
+        }
+        return $problems
+    }
+    function Get-AzureOpenAiEndpointProblems {
+        param([Parameter(Mandatory)]$Pair)
+        $problems = @()
+        foreach ($endpointName in @($Pair.EndpointEnvs)) {
+            if (-not $endpointName) {
+                $problems += 'an entry declares a blank endpointEnv, so the factory reads no endpoint variable at all'
+                Add-OwnerAction -Text "fix the azure-openai entry lighting $($Pair.Env) in ${aihubConfigLabel}: endpointEnv is declared blank — set it to a variable name, or remove the property to use AZURE_OPENAI_ENDPOINT"
+                continue
+            }
+            $endpointValue = [string][Environment]::GetEnvironmentVariable($endpointName)
+            if ([string]::IsNullOrWhiteSpace($endpointValue)) {
+                $problems += "$endpointName is unset"
+                Add-OwnerAction -Text "set $endpointName to the Azure OpenAI endpoint (absolute https://<resource>.openai.azure.com/ — infra output 'openAiEndpoint'; PowerShell: . .helios/azure.env.ps1, bash: source .helios/azure.env) for $($Pair.Lights); the API key is optional (Entra ID fallback)"
+                continue
+            }
+            $endpointUri = $null
+            if (-not [uri]::TryCreate($endpointValue.Trim(), [System.UriKind]::Absolute, [ref]$endpointUri) -or $endpointUri.Scheme -notin 'http', 'https') {
+                $problems += "$endpointName is not an absolute http(s) URL (value never echoed)"
+                Add-OwnerAction -Text "fix ${endpointName}: it is set but is not an absolute http(s) URL, so CreateAzureOpenAi reports $($Pair.Lights) unconfigured — use the resource endpoint https://<resource>.openai.azure.com/ (infra output 'openAiEndpoint')"
+            }
+            $endpointValue = ''
+        }
+        return $problems
+    }
+    # Entries whose apiKeyEnv is declared blank: no variable exists to export into,
+    # so they are reported (and, without a secret path, handed to the owner as the
+    # config defect they are) instead of being silently defaulted.
+    $blankEnvProviders = [System.Collections.Generic.List[object]]::new()
+    # Providers that read a key but declare NO apiKeySecretName (review finding): no
+    # vault path exists for them, so when their variable is still unset after every
+    # rung the only repair is to set it directly — and the summary must say so.
+    # azure-openai is deliberately not in this list: ProviderFactory falls back to
+    # Entra ID (DefaultAzureCredential) when its key is absent, so an unset key is a
+    # supported state there, not a defect — but a supported state still has to be
+    # VALIDATED (review finding): CreateAzureOpenAi reads the endpoint variable before
+    # any credential, and the fallback needs a credential that works, so every
+    # secretless azure-openai entry is collected here and judged in step 2.
+    $directKeyProviders = [System.Collections.Generic.List[object]]::new()
+    $secretlessAzureOpenAi = [System.Collections.Generic.List[object]]::new()
+    # Every enabled keyed entry that reads a variable, by variable (review finding):
+    # the GitHub-credential rule in step 3 must see readers of OTHER types too — an
+    # openai entry sharing a github-models entry's variable would receive the gh
+    # export through ProviderFactory.CreateAll exactly like a custom endpoint.
+    $envReaders = [System.Collections.Generic.Dictionary[string, object]]::new($envNameComparer)
+    # Variables that enabled entries map to DIFFERENT Key Vault secrets (see below).
+    $conflictingEnvs = @()
+    $conflictingEnvSet = New-EnvNameSet
+    # Variables read by consumers of DIFFERENT credential families (see below).
+    $incompatibleEnvSet = New-EnvNameSet
+    if ($null -ne $aihubProviders) {
+        # Keyed "<secret> -> <variable>" under the OS name comparer (review finding);
+        # Key Vault secret names are case-insensitive and are folded to lower case.
+        $pairIndex = [System.Collections.Generic.Dictionary[string, object]]::new($envNameComparer)
+        foreach ($provProp in $aihubProviders.PSObject.Properties) {
+            $prov = $provProp.Value
+            if ($null -eq $prov) { continue }
+            # ProviderFactory.CreateAll excludes disabled providers (review
+            # finding): a lane the hub will not instantiate must not have its
+            # credential pulled into the process.
+            if ($prov.PSObject.Properties['enabled'] -and $prov.enabled -eq $false) { continue }
+            # Exactly as ProviderFactory.Create dispatches (review finding): case-folded,
+            # never trimmed — " openai " is an UNKNOWN type the hub instantiates as an
+            # unconfigured agent that reads no key, so nothing may be pulled for it.
+            $provType = if ($prov.PSObject.Properties['type']) { ([string]$prov.type).ToLowerInvariant() } else { '' }
+            # Only the four keyed types read a key (review finding): ProviderFactory's
+            # ollama, azure-foundry-agent and unknown-type paths never call
+            # SecretResolver, so an incidental apiKeyEnv / apiKeySecretName on such an
+            # entry is dead config — it registers no reader (it cannot manufacture a
+            # cross-family conflict against a real keyed provider) and no vault pair
+            # (its secret would be pulled into the process for nothing and reported
+            # as lighting a provider that never reads it). Said once, then ignored.
+            if ($provType -notin 'openai', 'anthropic', 'github-models', 'azure-openai') {
+                if ($provType.Trim() -in 'openai', 'anthropic', 'github-models', 'azure-openai') {
+                    # A keyed type with surrounding whitespace is the one misconfiguration
+                    # here that looks intentional: name it as the config fix it is.
+                    Add-Step -Step "provider:$($provProp.Name)" -State 'needs-owner' -Detail "declares type '$([string]$prov.type)' with surrounding whitespace — ProviderFactory dispatches on the exact (case-folded) type, so the hub treats it as an unknown provider that reads no key; nothing is pulled or exported for it"
+                    Add-OwnerAction -Text "fix providers.$($provProp.Name).type in ${aihubConfigLabel}: '$([string]$prov.type)' has surrounding whitespace — ProviderFactory compares the type exactly (case-folded only), so the entry is an unknown provider until it reads '$($provType.Trim())'"
+                    continue
+                }
+                $incidentalFields = @()
+                if ($prov.PSObject.Properties['apiKeyEnv'] -and -not [string]::IsNullOrWhiteSpace([string]$prov.apiKeyEnv)) { $incidentalFields += 'apiKeyEnv' }
+                if ($prov.PSObject.Properties['apiKeySecretName'] -and -not [string]::IsNullOrWhiteSpace([string]$prov.apiKeySecretName)) { $incidentalFields += 'apiKeySecretName' }
+                if ($incidentalFields.Count -gt 0) {
+                    $typeLabel = if ($provType) { "type $provType" } else { 'no type' }
+                    Add-Step -Step "provider:$($provProp.Name)" -State 'skipped' -Detail "declares $($incidentalFields -join ' and ') but its $typeLabel reads no API key (ProviderFactory resolves a key only for openai, anthropic, github-models and azure-openai) — ignored: no variable is read or exported and no secret is pulled for it"
+                }
+                continue
+            }
+            $providerSecretName = ''
+            # Literal (review finding): SecretResolver.Resolve hands apiKeySecretName to
+            # GetSecret exactly as written, so a padded name is the invalid name the hub
+            # requests — reported as the config defect it is, never pulled under a
+            # trimmed name that would light the provider only through this export.
+            if ($prov.PSObject.Properties['apiKeySecretName'] -and $null -ne $prov.apiKeySecretName) { $providerSecretName = [string]$prov.apiKeySecretName }
+            $declaredEnv = Get-DeclaredApiKeyEnv $prov
+            # The factory's per-type default applies when an entry declares no
+            # apiKeyEnv (review finding): CreateOpenAi/AnthropicAgent/CreateGitHubModels/
+            # CreateAzureOpenAi each resolve `ApiKeyEnv ?? <default>` with the entry's
+            # apiKeySecretName, so a secret-only entry is still a live vault pair —
+            # but ONLY for an absent/null property, never for a declared-blank one.
+            $envName = if ($null -eq $declaredEnv) {
+                switch ($provType) {
+                    'openai' { 'OPENAI_API_KEY' }
+                    'anthropic' { 'ANTHROPIC_API_KEY' }
+                    'github-models' { 'GITHUB_MODELS_TOKEN' }
+                    'azure-openai' { 'AZURE_OPENAI_API_KEY' }
+                    default { '' }
+                }
+            }
+            else { $declaredEnv }
+            if ($null -ne $declaredEnv -and $declaredEnv -eq '') {
+                # Declared blank (review finding): reported below (github-models in step 3).
+                # The ORIGIN travels with the entry (review finding): a blank github-models
+                # entry pointed at a custom baseUrl must never be endorsed by GITHUB_TOKEN
+                # further down — CreateGitHubModels would hand that GitHub credential to the
+                # custom endpoint, which this script never allows for the keyed path either.
+                $blankBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+                $blankOrigin = if ($provType -eq 'github-models') { Test-PublicModelsOrigin -BaseUrl $blankBaseUrl } else { [pscustomobject]@{ Public = $true; Note = ''; Host = '' } }
+                $blankEndpointEnv = if ($prov.PSObject.Properties['endpointEnv'] -and $null -ne $prov.endpointEnv) { [string]$prov.endpointEnv } else { 'AZURE_OPENAI_ENDPOINT' }
+                $blankEnvProviders.Add([pscustomobject]@{ EndpointEnv = $blankEndpointEnv; Name = $provProp.Name; Type = $provType; SecretName = $providerSecretName; Public = $blankOrigin.Public; OriginHost = $blankOrigin.Host; BaseUrl = $blankBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $blankOrigin); OriginNote = $blankOrigin.Note })
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($envName)) { continue }   # guard only: every keyed type has a default
+            # Credential FAMILY (review finding): which service's key this reader expects —
+            # one per API type, 'github' for the public Models origin, one per custom host.
+            $provBaseUrl = if ($prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+            $readerFamily = if ($provType -eq 'github-models') {
+                $readerOrigin = Test-PublicModelsOrigin -BaseUrl $provBaseUrl
+                if ($readerOrigin.Public) { 'github' } else { "custom-endpoint:$($readerOrigin.Host)" }
+            }
+            else { $provType }
+            if (-not $envReaders.ContainsKey($envName)) { $envReaders[$envName] = [System.Collections.Generic.List[object]]::new() }
+            $envReaders[$envName].Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Family = $readerFamily })
+            if (-not [string]::IsNullOrWhiteSpace($providerSecretName) -and $providerSecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+                Add-Step -Step "provider:$($provProp.Name)" -State 'needs-owner' -Detail "declares apiKeySecretName '$providerSecretName', which is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it; no vault pull is attempted for $envName"
+                # Same wording as auth-doctor's hint, so a merged summary dedupes it.
+                Add-OwnerAction -Env $envName -Text "fix providers.$($provProp.Name).apiKeySecretName in ${aihubConfigLabel}: '$providerSecretName' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($providerSecretName)) {
+                if ($provType -in 'openai', 'anthropic', 'github-models' -and -not @($directKeyProviders | Where-Object { Test-EnvNameEquals $_.Env $envName }).Count) {
+                    $directKeyProviders.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; Env = $envName })
+                }
+                # A secretless azure-openai entry never reaches the vault loop, where a
+                # pair's endpoint and Entra fallback are validated (review finding) —
+                # it is judged after the az lane instead (see step 2), never skipped.
+                if ($provType -eq 'azure-openai') {
+                    $secretlessEndpointProp = $prov.PSObject.Properties['endpointEnv']
+                    $secretlessAzureOpenAi.Add([pscustomobject]@{
+                        Name        = $provProp.Name
+                        Env         = $envName
+                        EndpointEnv = $(if ($null -eq $secretlessEndpointProp -or $null -eq $secretlessEndpointProp.Value) { 'AZURE_OPENAI_ENDPOINT' } else { [string]$secretlessEndpointProp.Value })
+                    })
+                }
+                continue
+            }
+            $pairKey = "$($providerSecretName.ToLowerInvariant()) -> $envName"
+            if (-not $pairIndex.ContainsKey($pairKey)) {
+                $pairIndex[$pairKey] = [pscustomobject]@{
+                    SecretName = $providerSecretName
+                    Env        = $envName
+                    Consumers  = [System.Collections.Generic.List[string]]::new()
+                    # Per-consumer type and, for azure-openai, the endpoint variable the
+                    # factory reads (endpointEnv, AZURE_OPENAI_ENDPOINT when absent) —
+                    # the vault loop's Entra-fallback rule needs both.
+                    Members    = [System.Collections.Generic.List[object]]::new()
+                }
+            }
+            $pairIndex[$pairKey].Consumers.Add($provProp.Name)
+            $memberEndpointEnv = ''
+            if ($provType -eq 'azure-openai') {
+                $endpointProp = $prov.PSObject.Properties['endpointEnv']
+                $memberEndpointEnv = if ($null -eq $endpointProp -or $null -eq $endpointProp.Value) { 'AZURE_OPENAI_ENDPOINT' } else { [string]$endpointProp.Value }
+            }
+            # github-models members carry their baseUrl too (review finding): the export
+            # lights the entry only when CreateGitHubModels accepts that URL.
+            $memberBaseUrl = if ($provType -eq 'github-models' -and $prov.PSObject.Properties['baseUrl'] -and $null -ne $prov.baseUrl) { ([string]$prov.baseUrl).Trim() } else { '' }
+            $pairIndex[$pairKey].Members.Add([pscustomobject]@{ Name = $provProp.Name; Type = $provType; EndpointEnv = $memberEndpointEnv; BaseUrl = $memberBaseUrl })
+        }
+        # CLI-owned variables join the reader map (review findings): an enabled codex
+        # agent reads the fixed OPENAI_API_KEY, an enabled claude agent ANTHROPIC_API_KEY
+        # (auth-doctor's CLI-half rule), so a Models entry pointed at either name shares
+        # it with a non-GitHub consumer and never gets the gh export; an enabled copilot
+        # / gh agent inherits GH_TOKEN / GITHUB_TOKEN, so a non-GitHub provider mapping
+        # a vault secret to those names is an incompatible sharing and the pull is blocked.
+        foreach ($cliReader in @(Get-CliOwnedEnvReaders)) {
+            if (-not $envReaders.ContainsKey($cliReader.Env)) { $envReaders[$cliReader.Env] = [System.Collections.Generic.List[object]]::new() }
+            $envReaders[$cliReader.Env].Add([pscustomobject]@{ Name = $cliReader.Name; Type = $cliReader.Type; Family = $cliReader.Family })
+        }
+        # Incompatible sharing (review finding): a variable read by consumers of
+        # DIFFERENT credential families (OpenAI, Anthropic, Azure OpenAI, the public
+        # GitHub Models origin, each custom endpoint) can never hold one value valid for
+        # all of them — a vault export into it would hand one service's key to another
+        # through SecretResolver's environment-first rule, whatever the secret mappings
+        # say. Nothing is pulled or exported into such a variable; the repair is
+        # distinct names (worded like auth-doctor's action, so the summary dedupes).
+        foreach ($sharedEnv in @($envReaders.Keys)) {
+            $families = @($envReaders[$sharedEnv] | ForEach-Object { $_.Family } | Select-Object -Unique)
+            if ($families.Count -lt 2) { continue }
+            [void]$incompatibleEnvSet.Add($sharedEnv)
+            $readerText = (@($envReaders[$sharedEnv] | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
+            $readerNames = (@($envReaders[$sharedEnv] | ForEach-Object { $_.Name }) -join ',')
+            if (Test-EnvValue $sharedEnv) {
+                Add-Step -Step $sharedEnv -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: it is read by consumers of different credential families ($readerText), which cannot all accept one value — ProviderFactory hands this one value to every sharer, so give them distinct apiKeyEnv names"
+            }
+            else {
+                Add-Step -Step $sharedEnv -State 'needs-owner' -Detail "read by consumers of different credential families ($readerText) — no single value is valid for all of them, and an export would hand one service's credential to another through SecretResolver's environment-first rule; nothing is pulled or exported into it"
+            }
+            # The split action stands whether or not the variable is preset (review
+            # finding): a value already in the session is exactly the credential
+            # ProviderFactory then supplies to BOTH services, so satisfaction of the
+            # variable is not satisfaction of the defect — and the reconcile below
+            # never retires an action for an incompatible variable either.
+            Add-OwnerAction -Text "give the consumers sharing $sharedEnv distinct apiKeyEnv names in ${aihubConfigLabel} ($readerNames) — they read credentials for different services"
+        }
+        # Conflicting secret→variable mappings (review finding): two enabled entries
+        # naming DIFFERENT Key Vault secrets for the SAME variable would let
+        # declaration order choose the credential — the first pull populates the
+        # variable, the never-clobber rule skips the rest, and SecretResolver's
+        # environment-first rule then hands that one value to every sharer, which
+        # may send it to the wrong service. Nothing is pulled into such a variable;
+        # the repair is distinct apiKeyEnv names (or one shared secret). A variable
+        # already reported as incompatible is not reported twice.
+        # Group-Object is case-insensitive unless told otherwise — the OS rule applies
+        # to the variable names; secret names are folded (Key Vault ignores case).
+        $conflictGroups = @($pairIndex.Values | Group-Object -Property Env -CaseSensitive:(-not $IsWindows) |
+            Where-Object { @($_.Group | ForEach-Object { $_.SecretName.ToLowerInvariant() } | Select-Object -Unique).Count -gt 1 })
+        foreach ($conflict in $conflictGroups) {
+            if ($incompatibleEnvSet.Contains([string]$conflict.Name)) { continue }
+            $conflictingEnvs += [string]$conflict.Name
+            [void]$conflictingEnvSet.Add([string]$conflict.Name)
+            $mapping = (@($conflict.Group | ForEach-Object { "'$($_.SecretName)' <- $(@($_.Consumers) -join ', ')" }) -join ' vs ')
+            if (Test-EnvValue $conflict.Name) {
+                Add-Step -Step $conflict.Name -State 'skipped' -Detail "already holds a value in this session — never clobbered; note: enabled providers map DIFFERENT Key Vault secrets to it ($mapping), so every sharer reads this one value — give them distinct apiKeyEnv names"
+            }
+            else {
+                Add-Step -Step $conflict.Name -State 'needs-owner' -Detail "enabled providers map DIFFERENT Key Vault secrets to the same variable ($mapping) — SecretResolver prefers the environment, so whichever secret were pulled first would be handed to every sharer and could reach the wrong service; nothing was pulled into it"
+            }
+            # Same wording as auth-doctor's lane action (the step above carries the
+            # mapping), so the summary's unique filter collapses the two into one. Added
+            # on both branches (review finding): a preset value is the very credential
+            # every sharer then reads, so it never retires the config repair.
+            $conflictNames = @($conflict.Group | ForEach-Object { @($_.Consumers) } | Select-Object -Unique) -join ','
+            Add-OwnerAction -Text "give providers.{$conflictNames} distinct apiKeyEnv names in ${aihubConfigLabel} (or one shared apiKeySecretName)"
+        }
+        foreach ($entry in @($pairIndex.Values | Where-Object { -not $conflictingEnvSet.Contains($_.Env) -and -not $incompatibleEnvSet.Contains($_.Env) })) {
+            # The agent CLIs read two of these env names directly — that fact is
+            # not in config, so it rides along as a fixed hint.
+            $cliHint = switch ($entry.Env) {
+                'OPENAI_API_KEY' { ' + codex CLI' }
+                'ANTHROPIC_API_KEY' { ' + claude CLI' }
+                default { '' }
+            }
+            # Entra fallback (review finding): CreateAzureOpenAi builds its client on
+            # DefaultAzureCredential whenever no key resolves, so for a pair whose
+            # variable is read ONLY by azure-openai entries a secret that cannot be
+            # read is an optional pull, not a defect. Any reader of another type on
+            # that variable is a different credential family (or a conflicting
+            # mapping) and was already excluded above — the guard here keeps the
+            # rule explicit rather than implied by that ordering.
+            $entraMembers = @($entry.Members | Where-Object { $_.Type -eq 'azure-openai' })
+            $otherReadersOfEnv = @(if ($envReaders.ContainsKey($entry.Env)) { $envReaders[$entry.Env] | Where-Object { $_.Type -ne 'azure-openai' } })
+            $vaultPairs += [pscustomobject]@{
+                SecretName        = $entry.SecretName
+                Env               = $entry.Env
+                Lights            = (($entry.Consumers -join ', ') + $cliHint + ' — per config/aihub.json')
+                Members           = @($entry.Members)
+                EntraFallbackOnly = ($entraMembers.Count -gt 0 -and $otherReadersOfEnv.Count -eq 0)
+                EndpointEnvs      = @($entraMembers | ForEach-Object { $_.EndpointEnv } | Select-Object -Unique)
+            }
+        }
+        # Blank-apiKeyEnv entries of the vault-capable types (review finding). The
+        # github-models ones are settled in step 3 (GITHUB_TOKEN is the hub's only
+        # fallback for them); the rest are settled here: with an apiKeySecretName the
+        # hub resolves that secret itself, in-process, and azure-openai falls back to
+        # Entra ID either way — without any secret path the entry can never be
+        # configured, which only a config edit fixes, so it is an owner action.
+        foreach ($blank in @($blankEnvProviders | Where-Object { $_.Type -ne 'github-models' })) {
+            $blankStep = "provider:$($blank.Name)"
+            $blankWhy = "declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (the $($blank.Type) default applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it"
+            if ($blank.Type -eq 'azure-openai') {
+                $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair ([pscustomobject]@{
+                    Env = $blankStep; Lights = $blankStep; EndpointEnvs = @($blank.EndpointEnv)
+                }))
+                if ($endpointProblems.Count -gt 0) {
+                    Add-Step -Step "$blankStep`:endpoint" -State 'needs-owner' -Detail ($endpointProblems -join '; ')
+                }
+            }
+            if ($blank.SecretName -and $blank.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+                # An invalid NAME is a config defect before any vault question (review
+                # finding): the hub requests the string exactly as written.
+                Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy; its apiKeySecretName '$($blank.SecretName)' is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it, so the in-process path cannot light it either"
+                Add-OwnerAction -Text "fix providers.$($blank.Name).apiKeySecretName in ${aihubConfigLabel}: '$($blank.SecretName)' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+            }
+            elseif ($blank.SecretName) {
+                $vaultUriNote = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { '' } else { ' — AZURE_KEY_VAULT_URI is unset in this session, so that in-process pull cannot happen here' }
+                Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$vaultUriNote"
+            }
+            elseif ($blank.Type -eq 'azure-openai') {
+                Add-Step -Step $blankStep -State 'skipped' -Detail "$blankWhy; with no apiKeySecretName either, CreateAzureOpenAi uses Entra ID (DefaultAzureCredential) — a supported state, not a defect"
+            }
+            else {
+                Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy, and it declares no apiKeySecretName either — no credential path exists for it"
+                # Same wording and config label as auth-doctor's lane action, so the
+                # summary's unique filter collapses the two into one line.
+                $blankDefault = switch ($blank.Type) { 'openai' { 'OPENAI_API_KEY' } 'anthropic' { 'ANTHROPIC_API_KEY' } default { 'AZURE_OPENAI_API_KEY' } }
+                Add-OwnerAction -Text "fix providers.{$($blank.Name)}.apiKeyEnv in ${aihubConfigLabel}: set a variable name (or remove the property to use $blankDefault) and/or add apiKeySecretName"
+            }
+        }
+    }
+    # GITHUB_TOKEN's OWNERSHIP (review finding): CreateGitHubModels falls back to
+    # GITHUB_TOKEN for every public github-models entry, so that variable belongs to
+    # the GitHub credential family — yet an enabled consumer of ANOTHER family (an
+    # openai / anthropic / azure-openai entry, or a custom-endpoint Models entry) may
+    # declare it as ITS apiKeyEnv, and the Key Vault stage then legitimately exports
+    # that service's secret into it. Such a value is never a GitHub credential: the
+    # models rungs below must not probe it against api.github.com (that would hand the
+    # foreign key to GitHub), and the hub's own fallback to it is a config defect only
+    # the owner can split. rest-connect.ps1 screens the same variable the same way.
+    $ghTokenForeignReaders = @()
+    if ($envReaders.ContainsKey('GITHUB_TOKEN')) { $ghTokenForeignReaders = @($envReaders['GITHUB_TOKEN'] | Where-Object { $_.Family -ne 'github' }) }
+    $ghTokenForeignText = (@($ghTokenForeignReaders | ForEach-Object { "'$($_.Name)' ($($_.Type))" }) -join ', ')
+    $ghTokenForeignNames = (@($ghTokenForeignReaders | ForEach-Object { $_.Name }) -join ',')
+    # Never retired by an export (Env ''): the defect is the declaration, not a value.
+    $ghTokenSplitAction = "give the consumer(s) reading GITHUB_TOKEN as their apiKeyEnv ($ghTokenForeignNames) a distinct variable name in ${aihubConfigLabel} — CreateGitHubModels falls back to GITHUB_TOKEN for every public github-models provider, so its value must be a GitHub credential, never that service's key"
+    # No built-in fallback mapping (review finding): an unreadable config aborted in
+    # step 0 because the hub cannot load it either, so the parsed table is the only
+    # source of pairs here — and a parsed config that declares zero enabled
+    # vault-backed providers is a deliberate profile: pulling a built-in triplet for
+    # it would export credentials for lanes that hub never instantiates.
+    if (@($vaultPairs).Count -eq 0) {
+        Write-Report '  note: the active config declares no enabled vault-backed providers — nothing to pull from Key Vault'
+    }
+    # GitHub Models TARGETS (review findings): every enabled provider of TYPE
+    # github-models is one — ProviderFactory.CreateAll instantiates each entry,
+    # dispatching on provider.type, and CreateGitHubModels reads each entry's
+    # CONFIGURED apiKeyEnv (GITHUB_MODELS_TOKEN when unset), so a hardcoded name or a
+    # single "chosen" provider would leave a sibling unconfigured. A parsed config
+    # with no such provider yields no target (nothing to instantiate), and an
+    # unreadable config aborted in step 0, so there is no built-in target. A target whose baseUrl
+    # is a CUSTOM endpoint is kept for its Key Vault pull but never receives a
+    # GitHub credential (GITHUB_TOKEN / the gh keyring) — that would hand a GitHub
+    # token to a non-GitHub service. The per-target vault clause in repair guidance
+    # follows the entry's apiKeySecretName (a repair naming another secret can never
+    # light the lane; no secret name means no vault path and the clause is omitted).
+    $ghModelsTargets = [System.Collections.Generic.List[object]]::new()
+    # Pass 1 — one row per enabled github-models entry that reads a variable (a
+    # declared-blank apiKeyEnv has none to export into and is settled in step 3).
+    $ghModelsEntries = [System.Collections.Generic.List[object]]::new()
+    foreach ($ghProp in $aihubProviders.PSObject.Properties) {
+        $ghProv = $ghProp.Value
+        if ($null -eq $ghProv -or -not $ghProv.PSObject.Properties['type'] -or
+            -not ([string]$ghProv.type).Equals('github-models', [System.StringComparison]::OrdinalIgnoreCase)) { continue }   # untrimmed, like the factory
+        if ($ghProv.PSObject.Properties['enabled'] -and $ghProv.enabled -eq $false) { continue }
+        $ghDeclared = Get-DeclaredApiKeyEnv $ghProv
+        if ($null -ne $ghDeclared -and $ghDeclared -eq '') { continue }
+        $ghEnv = if ($null -eq $ghDeclared) { 'GITHUB_MODELS_TOKEN' } else { $ghDeclared }
+        $ghSecret = if ($ghProv.PSObject.Properties['apiKeySecretName'] -and $null -ne $ghProv.apiKeySecretName) { [string]$ghProv.apiKeySecretName } else { '' }   # literal (review finding)
+        $ghBaseUrl = if ($ghProv.PSObject.Properties['baseUrl']) { ([string]$ghProv.baseUrl).Trim() } else { '' }
+        # Public means the exact HTTPS origin (review finding) — Test-PublicModelsOrigin.
+        $ghOrigin = Test-PublicModelsOrigin -BaseUrl $ghBaseUrl
+        $ghModelsEntries.Add([pscustomobject]@{ Name = $ghProp.Name; Env = $ghEnv; SecretName = $ghSecret; Public = $ghOrigin.Public; Note = $ghOrigin.Note; BaseUrl = $ghBaseUrl; Rejected = (Test-GitHubModelsOriginRejected $ghOrigin) })
+    }
+    # Pass 2 — group by variable only AFTER every entry's endpoint ownership is
+    # known (review finding): a public entry listed before a custom-baseUrl entry
+    # sharing its apiKeyEnv used to win the dedupe, and the GitHub credential
+    # exported for the public one was then handed by ProviderFactory.CreateAll to
+    # the custom endpoint as well. A variable with MIXED ownership is one target
+    # that never receives a GitHub credential; only its Key Vault pull (or a
+    # direct export) applies, and the durable repair is distinct apiKeyEnv names.
+    foreach ($ghEnvName in @(Get-UniqueEnvNames -Names @($ghModelsEntries | ForEach-Object { $_.Env }))) {
+        $owners = @($ghModelsEntries | Where-Object { Test-EnvNameEquals $_.Env $ghEnvName })
+        $ownerNames = @($owners | ForEach-Object { $_.Name })
+        $publicOwners = @($owners | Where-Object { $_.Public } | ForEach-Object { $_.Name })
+        $customOwners = @($owners | Where-Object { -not $_.Public } | ForEach-Object { $_.Name })
+        # Readers of OTHER keyed types (review finding, same class as the custom
+        # endpoint): an openai/anthropic/azure-openai entry sharing the variable
+        # would receive the GitHub credential too; a variable with conflicting
+        # secret mappings is already a reported defect and gets nothing either.
+        $foreignReaders = @()
+        if ($envReaders.ContainsKey($ghEnvName)) {
+            $foreignReaders = @($envReaders[$ghEnvName] | Where-Object { $_.Type -ne 'github-models' } | ForEach-Object { "'$($_.Name)' (type $($_.Type))" })
+        }
+        $isConflict = $conflictingEnvSet.Contains($ghEnvName)
+        $isIncompatible = $incompatibleEnvSet.Contains($ghEnvName)
+        # The vault clause follows the first apiKeySecretName declared among the
+        # sharers (a repair naming another secret can never light the lane).
+        $targetSecret = @($owners | ForEach-Object { $_.SecretName } | Where-Object { $_ }) | Select-Object -First 1
+        if (-not $targetSecret) { $targetSecret = '' }
+        $quotedPublic = (@($publicOwners | ForEach-Object { "'$_'" }) -join ', ')
+        $quotedCustom = (@($customOwners | ForEach-Object { "'$_'" }) -join ', ')
+        $customNotes = @($owners | Where-Object { -not $_.Public -and $_.Note } | ForEach-Object { "'$($_.Name)': $($_.Note)" })
+        if ($customNotes.Count -gt 0) { $quotedCustom += " ($($customNotes -join '; '))" }
+        $otherReaders = @()
+        if ($customOwners.Count -gt 0) { $otherReaders += "custom-baseUrl github-models provider(s) $quotedCustom" }
+        if ($foreignReaders.Count -gt 0) { $otherReaders += "provider(s) $($foreignReaders -join ', ') of another type" }
+        if ($isConflict) { $otherReaders += 'entries with conflicting Key Vault secret mappings (see its step above)' }
+        if ($isIncompatible -and $foreignReaders.Count -eq 0 -and $customOwners.Count -eq 0) { $otherReaders += 'consumers of a different credential family (see its step above)' }
+        $isMixed = ($publicOwners.Count -gt 0 -and $otherReaders.Count -gt 0)
+        $isPublic = ($otherReaders.Count -eq 0)
+        $ghSkip = if ($isMixed) {
+            "$ghEnvName is read by public github-models provider(s) $quotedPublic and also by $($otherReaders -join '; ') — a GitHub credential exported into it would be handed by ProviderFactory.CreateAll to a non-GitHub endpoint too, so GITHUB_TOKEN and the gh keyring are never exported for it; only its Key Vault pull (or setting $ghEnvName directly) applies, and the durable fix is distinct apiKeyEnv names"
+        }
+        elseif (-not $isPublic) {
+            "provider(s) $quotedCustom (type github-models) point at a custom baseUrl — GITHUB_TOKEN and the gh keyring are GitHub credentials and are never exported for a non-GitHub endpoint; only its Key Vault pull (or setting $ghEnvName directly) applies"
+        }
+        else { '' }
+        $ghModelsTargets.Add([pscustomobject]@{ Name = $ownerNames[0]; Owners = $ownerNames; PublicOwners = $publicOwners; OtherReaders = $otherReaders; Env = $ghEnvName; SecretName = $targetSecret; Public = $isPublic; Mixed = $isMixed; SkipReason = $ghSkip; RejectedOwners = @($owners | Where-Object { $_.Rejected }) })
+    }
+    $ghModelsPublicTargets = @($ghModelsTargets | Where-Object { $_.Public })
+    $ghModelsPublicEnvs = @($ghModelsPublicTargets | ForEach-Object { $_.Env })
+    $ghModelsMixedEnvs = @($ghModelsTargets | Where-Object { $_.Mixed } | ForEach-Object { $_.Env })
+    # Membership under the OS name comparer (never -contains).
+    $ghModelsPublicEnvSet = New-EnvNameSet
+    foreach ($publicEnvName in $ghModelsPublicEnvs) { [void]$ghModelsPublicEnvSet.Add($publicEnvName) }
+    $ghModelsMixedEnvSet = New-EnvNameSet
+    foreach ($mixedEnvName in $ghModelsMixedEnvs) { [void]$ghModelsMixedEnvSet.Add($mixedEnvName) }
+    $vaultUri = if (Test-EnvValue 'AZURE_KEY_VAULT_URI') { ([string]$env:AZURE_KEY_VAULT_URI).Trim() } else { '' }
+    # -CommandType Application (review finding): a dot-sourcing caller may carry an
+    # `az` alias/function whose .Source is not an invocable path — resolve the real
+    # executable only, as the verifier and auth doctor do.
+    # First PATH hit only (see the gh lookup below for the duplicate-name failure).
+    $azCmd = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Unresolved pairs FIRST (review finding): when every configured provider env
+    # already holds a value, or the profile declares no enabled vault-backed
+    # providers, the vault stage has nothing to acquire — demanding a vault URI
+    # (and adding a human action for it) would leave the "only steps that need
+    # a human" list non-empty for an already-satisfied configuration.
+    $unresolvedPairs = @($vaultPairs | Where-Object { -not (Test-EnvValue $_.Env) })
+    # Pairs whose variable is ALREADY set are judged here (review finding): a preset
+    # key lights an azure-openai entry only with a usable endpoint and a github-models
+    # entry only with a baseUrl the factory accepts — CreateAzureOpenAi / CreateGitHubModels
+    # check those before the key — so "already holds a value" is never the whole
+    # verdict, and it is reached whatever the vault stage does next (nothing to pull,
+    # az down, no vault URI, every pair populated).
+    foreach ($presetPair in @($vaultPairs | Where-Object { Test-EnvValue $_.Env })) {
+        $presetProblems = @(Get-AzureOpenAiEndpointProblems -Pair $presetPair) + @(Get-GitHubModelsOriginProblems -Pair $presetPair)
+        if ($presetProblems.Count -gt 0) {
+            Add-Step -Step $presetPair.Env -State 'needs-owner' -Detail "already holds a value in this session (never clobbered), but the entries it lights stay unconfigured until this is fixed: $($presetProblems -join '; ')"
+        }
+        else {
+            Add-Step -Step $presetPair.Env -State 'skipped' -Detail 'already holds a value in this session — never clobbered'
+        }
+    }
+    if (@($unresolvedPairs).Count -eq 0) {
+        $nothingToPullWhy = if (@($vaultPairs).Count -eq 0) { 'the active config declares no enabled vault-backed providers' }
+        else { 'every configured provider env already holds a value in this session (never clobbered)' }
+        Add-Step -Step 'keyvault' -State 'skipped' -Detail "$nothingToPullWhy — nothing to pull, vault prerequisite not required"
+    }
+    elseif (-not $azUsable) {
+        # The prerequisite is an owner action in its own right (review finding): the
+        # doctor's az lane reports 'unavailable' with NO action when az is absent, so
+        # the consolidated list would otherwise omit the one step every pull needs
+        # while this step told the reader to look there. When the doctor DID supply
+        # an az repair (MFA re-login, service-principal switch), that imported action
+        # is the repair and is only referenced, never duplicated.
+        $pendingPullsText = (@($unresolvedPairs | ForEach-Object { "'$($_.SecretName)' -> $($_.Env)" }) -join ', ')
+        if ($azState -eq 'unavailable') {
+            $azInstallAction = "install the Azure CLI (bash scripts/bootstrap/cloud-shell-setup.sh, or https://aka.ms/azure-cli) and re-run auto-login — auth-doctor -Apply then repairs the az lane non-interactively where a service principal or certificate is configured (setup-tenant.ps1 -OpsIdentity), or prints the exact one-time az login command; until then the Key Vault pulls $pendingPullsText cannot run"
+            Add-Step -Step 'keyvault' -State 'unavailable' -Detail "az (Azure CLI) is not on PATH — the Key Vault pulls $pendingPullsText need an authenticated az; $azInstallAction"
+            Add-OwnerAction -Text $azInstallAction
+        }
+        else {
+            $azRepairRef = if ($azLaneHadAction) { "the imported az-lane owner action is the repair" } else { "repair the az lane first (auth-doctor -Apply reported '$azState')" }
+            Add-Step -Step 'keyvault' -State 'needs-owner' -Detail "az lane is $azState — the Key Vault pulls $pendingPullsText need an authenticated az; $azRepairRef, then re-run auto-login"
+            if (-not $azLaneHadAction) { Add-OwnerAction -Text "repair the az lane (auth-doctor -Apply reported '$azState': $azLaneDetail), then re-run auto-login so it can pull $pendingPullsText" }
+        }
+    }
+    elseif (-not $vaultUri) {
+        Add-Step -Step 'keyvault' -State 'skipped' -Detail ('AZURE_KEY_VAULT_URI is not set (name checked only) — provisioned by infra/main.bicep; ' +
+            'azure-up.sh writes .helios/azure.env (bash) and azure-up.ps1 writes .helios/azure.env.ps1 (PowerShell)')
+        # Both shells get a working remediation (review finding): this script is
+        # dot-sourced from PowerShell, where bash `source`/`export` do nothing.
+        Add-OwnerAction -Text 'set AZURE_KEY_VAULT_URI so auto-login can pull provider keys — PowerShell: . .helios/azure.env.ps1 (or $env:AZURE_KEY_VAULT_URI = "https://<vault>.vault.azure.net/"); bash: source .helios/azure.env'
+    }
+    elseif (-not $azCmd) {
+        Add-Step -Step 'keyvault' -State 'unavailable' -Detail 'az CLI not on PATH'
+    }
+    else {
+        # A malformed AZURE_KEY_VAULT_URI is a configuration problem, not an internal
+        # failure — the [uri] cast throws on scheme-less/garbage values (review
+        # finding), so it is guarded into a skipped step instead of aborting the run.
+        # Strict shape too (review finding): any parseable https host used to pass,
+        # so a stray value like https://example.com/ derived a vault named 'example',
+        # ran az against it, and told the owner to populate the WRONG vault. Only
+        # https plus a Key Vault hostname — <vault>.vault.<public or sovereign cloud
+        # suffix> — derives a name; anything else is reported as the URI problem it is.
+        $vaultName = Get-KeyVaultNameFromUri -Value $vaultUri
+        if (-not $vaultName) {
+            Add-Step -Step 'keyvault' -State 'skipped' -Detail 'AZURE_KEY_VAULT_URI is set but is not the canonical https://<vault>.vault.azure.net/ Key Vault origin (default port, no path, query, fragment or userinfo; sovereign suffixes azure.cn, usgovcloudapi.net, microsoftazure.de also accepted) — SecretResolver builds its client from the value as written, so fix it; nothing was pulled and no vault was contacted'
+            Add-OwnerAction -Text 'fix AZURE_KEY_VAULT_URI: it is set but is not the canonical https://<vault>.vault.azure.net/ (or sovereign-cloud) Key Vault origin — default port, no path, query, fragment or userinfo'
+        }
+        else {
+            # Identity pinning (review finding): auth-doctor -Apply returns ready on
+            # ANY healthy cached az login before reaching its service-principal
+            # repair, so a developer login can mask the configured workload identity —
+            # and the developer may lack the vault's RBAC grant that the ops service
+            # principal holds. The cached identity is an identifier, never a secret:
+            # detect the mismatch up front, and if a pull then fails, report the
+            # exact non-interactive switch command instead of a generic RBAC shrug.
+            $cachedAzIdentity = ''
+            $azIdentityMismatch = $false
+            if (Test-EnvValue 'AZURE_CLIENT_ID') {
+                # Client AND tenant (review finding): a multi-tenant app has one service
+                # principal per tenant under the same client id, so an az cache for
+                # tenant B matches AZURE_CLIENT_ID configured for tenant A by name alone
+                # and the identity-switch repair would be suppressed. Identifiers only.
+                $cachedAz = Get-CachedAzIdentity
+                $cachedAzIdentity = $cachedAz.Name
+                $mismatch = Test-AzIdentityMismatch -Name $cachedAz.Name -Tenant $cachedAz.Tenant
+                if ($mismatch) {
+                    $azIdentityMismatch = $true
+                    Add-Step -Step 'az-identity' -State 'ok' -Detail ("cached az login is $mismatch, not the configured AZURE_CLIENT_ID / AZURE_TENANT_ID workload identity — vault pulls proceed under the cached identity, whose Key Vault RBAC may differ")
+                }
+            }
+            $anyPullFailed = $false
+            foreach ($pair in $vaultPairs) {
+                # Reported (and endpoint-validated) once, before the stage.
+                if (Test-EnvValue $pair.Env) { continue }
+                # Value: az stdout → local → $env:NAME. It is never interpolated anywhere.
+                $secretValue = ''
+                $secretLines = @(& $azCmd.Source keyvault secret show --vault-name $vaultName --name $pair.SecretName --query value --output tsv --only-show-errors 2>$null)
+                $secretExit = [int]$LASTEXITCODE
+                if ($secretExit -eq 0) { $secretValue = (@($secretLines) -join '').Trim() }
+                if ($secretValue) {
+                    [Environment]::SetEnvironmentVariable($pair.Env, $secretValue)   # literal name (review finding)
+                    $secretValue = ''
+                    $exportedNames.Add($pair.Env)
+                    # A key alone lights no azure-openai entry (review finding): the
+                    # endpoint must be usable too, and its repair is an owner action.
+                    # The same for a github-models entry whose custom baseUrl the
+                    # factory rejects (review finding): the pull succeeded, the entry
+                    # stays unconfigured, and the baseUrl repair is the owner action.
+                    $exportedEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair) + @(Get-GitHubModelsOriginProblems -Pair $pair)
+                    if ($exportedEndpointProblems.Count -gt 0) {
+                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights); but ProviderFactory still reports an entry unconfigured because $($exportedEndpointProblems -join '; ') — the repair is recorded as an owner action"
+                    }
+                    else {
+                        Add-Step -Step $pair.Env -State 'exported' -Detail "from Key Vault secret '$($pair.SecretName)' — lights: $($pair.Lights)"
+                    }
+                }
+                elseif ($pair.EntraFallbackOnly) {
+                    # OPTIONAL for azure-openai (review findings): CreateAzureOpenAi
+                    # builds its client on DefaultAzureCredential whenever no key
+                    # resolves — the chain the az lane this run established feeds — so
+                    # a secret that cannot be read leaves the provider usable through
+                    # Entra ID, and a mandatory secret-repair action would demand a
+                    # credential the hub does not need. Optional ONLY with a usable
+                    # endpoint, though: the factory reads endpointEnv
+                    # (AZURE_OPENAI_ENDPOINT by default) and reports the provider
+                    # unconfigured unless the value is an absolute http(s) URL — the
+                    # same rule applied here by name and shape (value never echoed).
+                    # An unset, blank-declared or malformed endpoint is the repair the
+                    # owner actually needs, so it carries the owner action the key does
+                    # not; auto-login never exports an endpoint, so it is never retired.
+                    $endpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair $pair)
+                    # The az lane proves the fallback only when DefaultAzureCredential
+                    # would actually reach the az CLI cache (review finding): an
+                    # environment service principal, workload identity or managed
+                    # identity is selected AHEAD of it and a failure there is final. az
+                    # logged in as that same service principal (auth-doctor -Apply's
+                    # repair) is the one case where the lane's success is the
+                    # credential's; everything else is unverifiable from here.
+                    $hubCredentialKind = Get-HubCredentialKind
+                    # Proven by exercising the selected credential, never by matching the
+                    # cached az identity's metadata (review finding).
+                    $hubPrincipal = Get-HubPrincipalGap -Kind $hubCredentialKind
+                    $hubPrincipalGap = $hubPrincipal.Gap
+                    if ($endpointProblems.Count -eq 0 -and -not $hubPrincipalGap) {
+                        $fedBy = if ($hubCredentialKind -eq 'az-cli') { 'the az CLI login the az lane established' } else { "the $hubCredentialKind, which scripts/verify/rest-connect.ps1 exercised end to end (token acquired, ARM answered)" }
+                        Add-Step -Step $pair.Env -State 'ok' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — optional for $($pair.Lights): CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential, fed by $fedBy) when no key resolves, and its endpoint variable $($pair.EndpointEnvs -join ' / ') holds an absolute http(s) URL (name and shape checked only); no owner action"
+                    }
+                    elseif ($endpointProblems.Count -eq 0) {
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID) and its endpoint variable holds an absolute http(s) URL, but $hubPrincipalGap"
+                        Add-OwnerAction -Text $(if ($hubPrincipal.Action) { $hubPrincipal.Action } else { "prove the hub's Entra principal for $($pair.Lights): grant the $hubCredentialKind 'Cognitive Services OpenAI User' on the Azure OpenAI resource (az role assignment create — owner-gated); or unset the AZURE_CLIENT_* / AZURE_FEDERATED_TOKEN_FILE variables so DefaultAzureCredential falls through to the az login the lane established; or store the API key instead" })
+                    }
+                    else {
+                        Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the key is optional for $($pair.Lights) (CreateAzureOpenAi falls back to Entra ID), but only with a usable endpoint: $($endpointProblems -join '; ') — the provider stays unconfigured until that is fixed"
+                    }
+                }
+                else {
+                    # A FAILED read is not a 'skipped' (review finding): 'skipped'
+                    # is the intentional already-populated no-op, while this is an
+                    # unresolved acquisition — JSON consumers must be able to tell
+                    # them apart, and the run must leave an actionable remediation.
+                    Add-Step -Step $pair.Env -State 'needs-owner' -Detail "Key Vault secret '$($pair.SecretName)' could not be read (missing, empty, no RBAC grant, or transient; az exited $secretExit) — the consumers it lights stay unconfigured"
+                    # The action names the env var it lights (review finding): the
+                    # post-export reconcile filter recognizes a resolved action only
+                    # by that name, so a gh-fallback export can retire this one.
+                    Add-OwnerAction -Env $pair.Env -Text "store or authorize Key Vault secret '$($pair.SecretName)' in vault '$vaultName' — az keyvault secret set --vault-name $vaultName --name $($pair.SecretName) (owner supplies the value), or grant the running identity 'Key Vault Secrets User'; then re-run auto-login (lights $($pair.Env))"
+                    $anyPullFailed = $true
+                }
+            }
+            if ($anyPullFailed -and $azIdentityMismatch) {
+                # The switch is fully non-interactive — the operator (or automation)
+                # just has to run it; auto-login itself only mutates the az profile
+                # through auth-doctor -Apply, which stops at the first healthy cache.
+                Add-OwnerAction -Text 'Key Vault pull failed under the cached az identity while AZURE_CLIENT_ID declares a workload identity — switch non-interactively: az login --service-principal --username $env:AZURE_CLIENT_ID --tenant $env:AZURE_TENANT_ID --password $env:AZURE_CLIENT_SECRET (or --certificate $env:AZURE_CLIENT_CERTIFICATE_PATH), then re-run auto-login'
+            }
+        }
+    }
+
+    # Secretless azure-openai entries (review finding): judged here, after the az
+    # lane, with the rules the vault loop applies to a pair whose secret is missing —
+    # the endpoint first (CreateAzureOpenAi checks it before any credential), then
+    # either the key that IS set (name checked only) or the Entra fallback, which is
+    # proven only by exercising the credential DefaultAzureCredential would select.
+    foreach ($secretless in $secretlessAzureOpenAi) {
+        $secretlessStep = "provider:$($secretless.Name)"
+        $secretlessLights = "provider '$($secretless.Name)' (azure-openai, no apiKeySecretName — per $aihubConfigLabel)"
+        $secretlessEndpointProblems = @(Get-AzureOpenAiEndpointProblems -Pair ([pscustomobject]@{ Env = $secretless.Env; Lights = $secretlessLights; EndpointEnvs = @($secretless.EndpointEnv) }))
+        if ($secretlessEndpointProblems.Count -gt 0) {
+            Add-Step -Step $secretlessStep -State 'needs-owner' -Detail "declares no apiKeySecretName (no vault pull exists for $($secretless.Env)), and CreateAzureOpenAi reports it unconfigured before any credential is considered: $($secretlessEndpointProblems -join '; ')"
+            continue
+        }
+        if (Test-EnvValue $secretless.Env) {
+            Add-Step -Step $secretlessStep -State 'ok' -Detail "$($secretless.Env) holds a value (name checked only) and $($secretless.EndpointEnv) is an absolute http(s) URL — CreateAzureOpenAi uses the key; no vault path is declared and none is needed"
+            continue
+        }
+        $secretlessOutcome = Get-EntraFallbackOutcome -Kind (Get-HubCredentialKind) -AzUsable ([bool]$azUsable) -AzState ([string]$azState) -Lights $secretlessLights -AzLaneHadAction ([bool]$azLaneHadAction)
+        Add-Step -Step $secretlessStep -State $secretlessOutcome.State -Detail "$($secretless.Env) is unset and no apiKeySecretName is declared, so CreateAzureOpenAi falls back to Entra ID (DefaultAzureCredential) with $($secretless.EndpointEnv) usable — $($secretlessOutcome.Detail)"
+        if ($secretlessOutcome.Action) { Add-OwnerAction -Text $secretlessOutcome.Action }
+    }
+
+    # --- 3. gh-models from the gh CLI (connect-github.sh sourcing behavior) ----------
+    # Target envs are each public github-models target's CONFIGURED apiKeyEnv
+    # (review finding), not a hardcoded name; a disabled provider skips the
+    # fallback entirely.
+
+    # models:read PROOF for a raw GITHUB_TOKEN (review finding): non-emptiness is
+    # not usability — the github-models provider 403s on every call without
+    # models:read (connect-github.sh and setup-all.ps1 both treat it as required).
+    # Classic PATs expose their granted scopes in the X-OAuth-Scopes response
+    # header; fine-grained/Actions tokens do not, and an injecting transport makes
+    # per-token proof impossible (rest-connect.ps1 doctrine) — both read as
+    # 'unverifiable', never a false 'proven'. A transport that STRIPS the header
+    # instead (review finding) makes the credentialed request anonymous: GitHub
+    # answers a legitimate 200 AT the 60/hr anonymous cap, which proves nothing
+    # about the token and means every Models call from here would be
+    # unauthenticated too — rest-connect.ps1's per-candidate cap rule — so the
+    # authenticated rate.limit must be numeric and above 60 before any positive
+    # verdict; the at-cap case is the distinct 'stripped' verdict. The token value
+    # exists only in the request header and is never printed.
+    function Get-GitHubTokenModelsScope {
+        param([Parameter(Mandatory)][string]$EnvName)
+        $ghHeaders = @{ Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        try {
+            $anon = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $ghHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            if ([int]$anon.StatusCode -eq 200) {
+                $anonParsed = $null
+                try { $anonParsed = $anon.Content | ConvertFrom-Json } catch { }
+                $anonLimit = 0
+                if ($null -ne $anonParsed -and $anonParsed.PSObject.Properties['rate'] -and
+                    [int]::TryParse([string]$anonParsed.rate.limit, [ref]$anonLimit) -and $anonLimit -gt 60) {
+                    return 'unverifiable'   # injecting transport: any token would look valid
+                }
+            }
+            $authHeaders = $ghHeaders.Clone()
+            $authHeaders['Authorization'] = "Bearer $([string][Environment]::GetEnvironmentVariable($EnvName))"
+            $resp = Invoke-WebRequest -Uri 'https://api.github.com/rate_limit' -Headers $authHeaders -TimeoutSec 20 -SkipHttpErrorCheck -UserAgent 'helios-auto-login'
+            $authHeaders = $null
+            # Definitive rejection only on 401 (review finding): 429/5xx/anything else
+            # is transient and must not condemn a token — the gh rung would otherwise
+            # delete a freshly exported credential and demand a re-login over an outage.
+            if ([int]$resp.StatusCode -eq 401) { return 'invalid' }
+            if ([int]$resp.StatusCode -ne 200) { return 'unverifiable' }
+            # The authenticated payload must be a real rate-limit body with a numeric
+            # limit ABOVE the anonymous cap (review finding): every authenticated
+            # GitHub limit starts at 1000/hr, so a parseable 200 at 60/hr means the
+            # Authorization header never reached GitHub — stripped in transit, not a
+            # verdict on this token, and not a transport GitHub Models can use.
+            $authParsed = $null
+            try { $authParsed = $resp.Content | ConvertFrom-Json } catch { }
+            $authLimit = 0
+            if ($null -eq $authParsed -or -not $authParsed.PSObject.Properties['rate'] -or
+                -not [int]::TryParse([string]$authParsed.rate.limit, [ref]$authLimit)) { return 'unverifiable' }
+            if ($authLimit -le 60) { return 'stripped' }
+            $scopeKey = @($resp.Headers.Keys | Where-Object { $_ -ieq 'X-OAuth-Scopes' }) | Select-Object -First 1
+            $scopesText = if ($scopeKey) { (@($resp.Headers[$scopeKey]) -join ',') } else { '' }
+            if ([string]::IsNullOrWhiteSpace($scopesText)) { return 'unverifiable' }
+            if ($scopesText -match '(^|[,\s])models:read([,\s]|$)') { return 'proven' }
+            return 'missing-scope'
+        }
+        catch { return 'unverifiable' }
+    }
+
+    # True only when GITHUB_TOKEN's models:read is PROVEN — it satisfies every public
+    # target at once (ProviderFactory falls back to it for each of them). The
+    # reconcile filter retires the lane's scope/vault actions on proof, never on
+    # mere presence.
+    $ghModelsScopeProven = $false
+    # Per-target tracking for the gh-keyring export (review finding): the SAME stored
+    # token goes to every public target still unset, so its one verdict applies to
+    # each env it was exported to. A proven export retires that env's repairs; an
+    # unverifiable one is the best available credential but must not retire a
+    # repair action until a run proves it.
+    $ghModelsProvenEnvs = [System.Collections.Generic.List[string]]::new()
+    $ghModelsUnprovenExportEnvs = [System.Collections.Generic.List[string]]::new()
+    # Held values the wire REJECTED (401 or no models:read) — never satisfied, whatever
+    # they contain (review finding); the value itself is left untouched.
+    $ghModelsRejectedEnvs = [System.Collections.Generic.List[string]]::new()
+    $ghTokenVerdict = $null     # GITHUB_TOKEN is probed at most once per run
+    $ghKeyring = $null          # the gh keyring is read (env-cleared) and probed at most once per run
+    # One action for the stripping transport (review finding): the same intermediary
+    # sits in front of every GitHub Models call this shell makes, so the repair is
+    # the transport, never another token — stated once, retired by no export.
+    $ghStrippedAction = 'route api.github.com through a transport that forwards the Authorization header — the authenticated probe from this shell answered 200 at the anonymous 60/hr cap, so an intermediary (proxy / TLS-inspecting gateway) strips Authorization in transit; every GitHub Models call from here would be unauthenticated too, and no other token can repair that: exempt api.github.com (and models.github.ai) from the intermediary, or run the hub from a network that passes the header through'
+    foreach ($target in $ghModelsTargets) {
+        # Entries sharing one variable are one target; the label names them all.
+        $targetLabel = if (@($target.Owners).Count -gt 1) { 'providers ' + ((@($target.Owners | ForEach-Object { "'$_'" })) -join ', ') } else { "provider '" + $target.Name + "'" }
+        $vaultClause = if ($target.SecretName -and $target.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName)" }
+        elseif ($target.SecretName) { ", or fix its apiKeySecretName first ('$($target.SecretName)' is not a valid Key Vault secret name — see its provider step above)" }
+        else { '' }
+        $repairAction = "grant models:read to the GitHub credential feeding $($target.Env) — gh auth refresh -h github.com --scopes models:read, or a PAT that includes models:read$vaultClause"
+        # A HELD value shadows the vault (review finding): SecretResolver.Resolve prefers
+        # the non-blank variable, so storing the secret repairs nothing until the held
+        # value is unset — the held-value branch says so; the unset-target branches
+        # (GITHUB_TOKEN / keyring) keep the plain clause because their target is empty.
+        $heldVaultClause = if ($target.SecretName -and $target.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or unset $($target.Env) first and store Key Vault secret '$($target.SecretName)' (the configured apiKeySecretName) — the hub prefers the non-blank variable, so the held value would keep shadowing the vault" }
+        elseif ($target.SecretName) { ", or fix its apiKeySecretName first ('$($target.SecretName)' is not a valid Key Vault secret name — see its provider step above) and then unset $($target.Env) so the stored secret is read" }
+        else { '' }
+        $heldRepairAction = "grant models:read to the credential held by $($target.Env) — gh auth refresh -h github.com --scopes models:read (then re-export $($target.Env)), or a PAT that includes models:read$heldVaultClause"
+        if (-not $target.Public) {
+            # A rejected custom baseUrl is a config defect, not just a credential-family
+            # boundary (review finding): without this action auto-login could finish
+            # having named no repair for an entry the factory will never light.
+            foreach ($rejected in @($target.RejectedOwners)) { Add-GitHubModelsBaseUrlAction -Name $rejected.Name -BaseUrl $rejected.BaseUrl -Note $rejected.Note }
+            $rejectedText = if (@($target.RejectedOwners).Count -gt 0) { '; CreateGitHubModels reports ' + ((@($target.RejectedOwners | ForEach-Object { "'$($_.Name)'" })) -join ', ') + ' unconfigured until its baseUrl is fixed (owner action listed)' } else { '' }
+            Add-Step -Step $target.Env -State 'skipped' -Detail "$($target.SkipReason) — no GitHub token fetched or exported for it$rejectedText"
+            continue
+        }
+        if (Test-EnvValue $target.Env) {
+            # A preset or vault-pulled value is probed exactly like GITHUB_TOKEN and the
+            # gh keyring (review finding): non-emptiness is not usability, and the
+            # reconcile filter must never retire a repair on the strength of a revoked
+            # or scope-less token. The value is never clobbered — only judged.
+            $heldVerdict = Get-GitHubTokenModelsScope -EnvName $target.Env
+            $heldSource = 'already holds a value in this session (preset or pulled from Key Vault)'
+            switch ($heldVerdict) {
+                'proven' {
+                    $ghModelsProvenEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'ok' -Detail "$heldSource and X-OAuth-Scopes carries models:read — $targetLabel is satisfied; no GitHub-credential fallback needed"
+                }
+                'unverifiable' {
+                    $ghModelsUnprovenExportEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'ok' -Detail "$heldSource; its models:read permission is NOT verifiable here (no X-OAuth-Scopes header, or an injecting transport) — kept as-is and no fallback attempted, but any scope/vault repair stays listed until a run proves it"
+                }
+                'stripped' {
+                    # Not a verdict on the value (review finding): the header never
+                    # reached GitHub, so the value is left untouched, counts as unusable
+                    # for the reconcile filter, and the transport is the one repair.
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource, but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so $targetLabel would call GitHub Models unauthenticated from this shell; the value is left untouched (never clobbered) and no fallback is attempted (another token cannot repair the transport)"
+                    Add-OwnerAction -Text $ghStrippedAction
+                }
+                'missing-scope' {
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; the value is left untouched (never clobbered) and, while it is set, it shadows any Key Vault secret the hub could otherwise read"
+                    Add-OwnerAction -Env $target.Env -Text $heldRepairAction
+                }
+                default {
+                    $ghModelsRejectedEnvs.Add($target.Env)
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "$heldSource but api.github.com rejects it (401) — $targetLabel cannot use it; the value is left untouched (never clobbered)"
+                    Add-OwnerAction -Env $target.Env -Text "rotate the value held by $($target.Env) — api.github.com rejects it: replace it in the shell$vaultClause, or unset it so the GITHUB_TOKEN / gh-keyring fallback can apply on the next run (lights $($target.Env))"
+                }
+            }
+            continue
+        }
+        $needFallback = $true
+        if ((Test-EnvValue 'GITHUB_TOKEN') -and $ghTokenForeignReaders.Count -gt 0) {
+            # Owned by another family (review finding): the value is that service's
+            # key — never sent to api.github.com, never a verdict — and the hub's
+            # fallback to it is the defect the split action names. The keyring rung
+            # still runs: an export into $target.Env is what the factory reads first.
+            Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN holds a value but is read by $ghTokenForeignText as an API key of another credential family — it is that service's credential: NOT probed against api.github.com, and CreateGitHubModels' fallback to it would hand that credential to $targetLabel while $($target.Env) stays unset; trying the gh keyring next"
+            Add-OwnerAction -Text $ghTokenSplitAction
+        }
+        elseif (Test-EnvValue 'GITHUB_TOKEN') {
+            # ProviderFactory.CreateGitHubModels falls back to GITHUB_TOKEN when the
+            # configured env is unset (review finding) — the documented CI path — but
+            # only a token that actually carries models:read satisfies the provider.
+            if ($null -eq $ghTokenVerdict) { $ghTokenVerdict = Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN' }
+            switch ($ghTokenVerdict) {
+                'proven' {
+                    $ghModelsScopeProven = $true
+                    $needFallback = $false
+                    Add-Step -Step $target.Env -State 'ok' -Detail ("GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and ProviderFactory.CreateGitHubModels falls back to it — $targetLabel is satisfied without an export")
+                }
+                'unverifiable' {
+                    $needFallback = $false
+                    Add-Step -Step $target.Env -State 'ok' -Detail ("GITHUB_TOKEN holds a value and ProviderFactory.CreateGitHubModels falls back to it for $targetLabel, but its models:read " +
+                        'permission is NOT verifiable here (fine-grained/Actions token exposes no scopes, or an injecting transport) — any vault ' +
+                        'or direct-key repair stays listed as the deterministic path; if model calls 403, grant models: read')
+                }
+                'stripped' {
+                    # The fallback would be unauthenticated on the wire (review finding):
+                    # not satisfied, and the keyring rung below cannot help either — its
+                    # probe crosses the same transport and is refused the same way.
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN holds a value, but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so CreateGitHubModels' fallback to it would call GitHub Models unauthenticated for $targetLabel; not accepted (another token cannot repair the transport)"
+                    Add-OwnerAction -Text $ghStrippedAction
+                }
+                'missing-scope' {
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN is REST-valid but its X-OAuth-Scopes lack models:read — $targetLabel would 403 on every call; trying the gh keyring next"
+                    Add-OwnerAction -Env $target.Env -Text $repairAction
+                }
+                default {
+                    Add-Step -Step $target.Env -State 'needs-owner' -Detail "GITHUB_TOKEN was rejected by api.github.com — it cannot satisfy $targetLabel; trying the gh keyring next"
+                }
+            }
+        }
+        if (-not $needFallback) { continue }
+        if ($null -eq $ghKeyring) {
+            # First PATH hit only: Get-Command returns EVERY matching application when
+            # the name resolves more than once (a shim or a second install ahead of the
+            # real binary), and an array .Source would then be invoked as one bogus
+            # command name — measured as an internal failure, not a lane result.
+            $ghKeyring = [pscustomobject]@{ Cmd = (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1); Token = ''; Exit = -1; Verdict = $null }
+            if ($ghKeyring.Cmd) {
+                # --hostname github.com (review finding): never export a GitHub
+                # Enterprise credential (GH_HOST context) into the github.com models lane.
+                # Env-cleared (review finding): gh gives GH_TOKEN/GITHUB_TOKEN precedence
+                # over its keyring, so with a stale env token set this would export that
+                # dead value instead of the STORED login. The shadowing variables are
+                # removed for this one call and restored immediately (values move only
+                # between env slots in-process; rest-connect.ps1 does the same).
+                $savedGhToken = $env:GH_TOKEN
+                $savedGithubToken = $env:GITHUB_TOKEN
+                try {
+                    Remove-Item env:GH_TOKEN -ErrorAction SilentlyContinue
+                    Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+                    $ghLines = @(& $ghKeyring.Cmd.Source auth token --hostname github.com 2>$null)
+                    $ghKeyring.Exit = [int]$LASTEXITCODE
+                }
+                finally {
+                    if ($null -ne $savedGhToken) { $env:GH_TOKEN = $savedGhToken }
+                    if ($null -ne $savedGithubToken) { $env:GITHUB_TOKEN = $savedGithubToken }
+                    $savedGhToken = ''
+                    $savedGithubToken = ''
+                }
+                $ghKeyring.Token = (@($ghLines) -join '').Trim()
+                $ghLines = $null
+            }
+        }
+        if (-not $ghKeyring.Cmd) {
+            # Record the lane even when gh is absent — an unevaluated-looking steps
+            # list is ambiguous (review finding).
+            Add-Step -Step $target.Env -State 'unavailable' -Detail "gh CLI not on PATH and Key Vault did not provide the token for $targetLabel"
+            continue
+        }
+        if ($ghKeyring.Exit -ne 0 -or -not $ghKeyring.Token) {
+            Add-Step -Step $target.Env -State 'skipped' -Detail "gh CLI yielded no token (logged out or unavailable) and Key Vault did not provide one for $targetLabel"
+            continue
+        }
+        # Scope PROOF before the export counts (review finding): the stored gh login
+        # is probed exactly like GITHUB_TOKEN above, once — the verdict is the same
+        # for every target the same token reaches. A token the wire proves to lack
+        # models:read is not exported at all (the provider would 403 on every call)
+        # and the repair action stands; an unverifiable one is exported as the best
+        # available credential but leaves every scope/vault repair listed until a
+        # run proves it.
+        [Environment]::SetEnvironmentVariable($target.Env, $ghKeyring.Token)   # literal name (review finding)
+        if ($null -eq $ghKeyring.Verdict) { $ghKeyring.Verdict = Get-GitHubTokenModelsScope -EnvName $target.Env }
+        switch ($ghKeyring.Verdict) {
+            'proven' {
+                $ghModelsProvenEnvs.Add($target.Env)
+                $exportedNames.Add($target.Env)
+                Add-Step -Step $target.Env -State 'exported' -Detail "from `gh auth token` — X-OAuth-Scopes carries models:read; lights: $targetLabel"
+            }
+            'unverifiable' {
+                $ghModelsUnprovenExportEnvs.Add($target.Env)
+                $exportedNames.Add($target.Env)
+                Add-Step -Step $target.Env -State 'exported' `
+                    -Detail ("from `gh auth token` — exported as the best available credential for $targetLabel, but its models:read permission is NOT " +
+                        'verifiable here (no X-OAuth-Scopes header, or an injecting transport); any scope/vault repair stays listed ' +
+                        'until a run proves it; if model calls 403: gh auth refresh -h github.com --scopes models:read')
+            }
+            'missing-scope' {
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login is REST-valid but its X-OAuth-Scopes lack models:read — NOT exported ($targetLabel would 403 on every call)"
+                Add-OwnerAction -Env $target.Env -Text $repairAction
+            }
+            'stripped' {
+                # Nothing is retained (review finding): an export would put a credential
+                # into the hub that the transport turns into anonymous calls.
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login's probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so NOT exported for $targetLabel (GitHub Models calls from this shell would be unauthenticated; another token cannot repair the transport)"
+                Add-OwnerAction -Text $ghStrippedAction
+            }
+            default {
+                [Environment]::SetEnvironmentVariable($target.Env, $null)   # literal removal (review finding)
+                Add-Step -Step $target.Env -State 'needs-owner' -Detail "the stored gh login was rejected by api.github.com — NOT exported for $targetLabel"
+                Add-OwnerAction -Env $target.Env -Text "re-login gh with models:read — gh auth login --hostname github.com --web --scopes models:read$vaultClause (lights $($target.Env))"
+            }
+        }
+    }
+    if ($null -ne $ghKeyring) { $ghKeyring.Token = '' }
+
+    # Blank-apiKeyEnv github-models entries (review finding): the hub reads no
+    # variable for them, so there is nothing to export — CreateGitHubModels resolves
+    # the entry's apiKeySecretName in-process and otherwise falls back only to
+    # GITHUB_TOKEN, which is therefore the one credential this run can vouch for —
+    # unless the vault already holds that secret (review finding): presence is proven
+    # metadata-only (`az keyvault secret list` returns names, never values) under the
+    # az lane this run established, exactly as auth-doctor's Get-BlankVaultChecks does,
+    # and a listed, enabled secret makes the provider usable in-process with no export
+    # and no owner action.
+    $blankGhModels = @($blankEnvProviders | Where-Object { $_.Type -eq 'github-models' })
+    $blankSecretNames = @()
+    $blankSecretBlocker = ''
+    $blankSecretVault = ''
+    if (@($blankGhModels | Where-Object { $_.SecretName }).Count -gt 0) {
+        $blankSecretVault = Get-KeyVaultNameFromUri -Value $vaultUri
+        if (-not $vaultUri) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is unset, so the hub cannot reach any vault' }
+        elseif (-not $blankSecretVault) { $blankSecretBlocker = 'AZURE_KEY_VAULT_URI is not the canonical https://<vault>.vault.azure.net/ Key Vault origin (default port, no path, query, fragment or userinfo), so the hub cannot reach the vault' }
+        elseif (-not $azUsable) { $blankSecretBlocker = "the az lane is $azState, so the vault could not be inspected" }
+        elseif (-not $azCmd) { $blankSecretBlocker = 'az is not on PATH, so the vault could not be inspected' }
+        else {
+            $listLines = @(& $azCmd.Source keyvault secret list --vault-name $blankSecretVault --query '[?attributes.enabled].name' --output json --only-show-errors 2>$null | ForEach-Object { "$_" })
+            $listExit = [int]$LASTEXITCODE
+            $listed = $null
+            if ($listExit -eq 0) { try { $listed = @(($listLines -join "`n") | ConvertFrom-Json) } catch { $listed = $null } }
+            if ($listExit -ne 0 -or $null -eq $listed) { $blankSecretBlocker = "az keyvault secret list against vault '$blankSecretVault' failed (exit ${listExit}: no RBAC grant, network, or wrong vault; output never echoed)" }
+            else { $blankSecretNames = @($listed | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
+        }
+    }
+    # The principal that LISTED is not necessarily the principal that READS (review
+    # finding): SecretResolver builds its client on DefaultAzureCredential, which
+    # prefers the environment service principal (AZURE_CLIENT_ID + secret /
+    # certificate), then a workload identity, then a managed identity, and only
+    # then the az CLI cache this listing ran under. When the hub would authenticate
+    # as one of those and az is not logged in as that same principal, a listed name
+    # proves nothing about the hub's access, so presence is reported unverifiable.
+    $blankSecretPrincipalGap = ''
+    if (-not $blankSecretBlocker -and $blankSecretNames.Count -gt 0) {
+        $hubCredential = Get-HubCredentialKind
+        # Same proof as the Entra fallback (review finding): the selected credential
+        # must acquire a token, a matching cached az identity is not evidence.
+        $blankPrincipal = Get-HubPrincipalGap -Kind $hubCredential
+        if ($blankPrincipal.Gap) {
+            $blankSecretPrincipalGap = "listed for the cached az identity, but $($blankPrincipal.Gap)"
+            if ($blankPrincipal.Action) { Add-OwnerAction -Text $blankPrincipal.Action }
+        }
+    }
+    foreach ($blank in $blankGhModels) {
+        $blankStep = "provider:$($blank.Name)"
+        $blankWhy = 'declares an explicitly blank apiKeyEnv — ProviderFactory passes it through (GITHUB_MODELS_TOKEN applies only when the property is absent) and SecretResolver reads no environment variable for a blank name, so nothing auto-login exports can light it'
+        if ($blank.SecretName -and $blank.SecretName -notmatch '^[0-9A-Za-z-]{1,127}$') {
+            # An invalid NAME is a config defect before any vault question (review
+            # finding): the hub requests the string exactly as written.
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy; its apiKeySecretName '$($blank.SecretName)' is not a valid Key Vault secret name (letters, digits and hyphens, 1-127 characters; no surrounding whitespace) — SecretResolver requests it exactly as written and Key Vault rejects it, so the in-process path cannot light it either"
+            Add-OwnerAction -Text "fix providers.$($blank.Name).apiKeySecretName in ${aihubConfigLabel}: '$($blank.SecretName)' is not a valid Key Vault secret name — use letters, digits and hyphens only, no surrounding whitespace"
+            continue
+        }
+        $blankPresence = ''
+        $blankGetExit = 0
+        if ($blank.SecretName) {
+            $blankPresence = if ($blankSecretBlocker) { 'unverifiable' }
+            elseif ($blankSecretNames -contains $blank.SecretName.ToLowerInvariant()) { if ($blankSecretPrincipalGap) { 'unverifiable' } else { 'present' } }
+            else { 'absent' }
+        }
+        if ($blankPresence -eq 'present') {
+            # A listing proves the NAME, not the value (review finding): CreateGitHubModels
+            # calls SecretClient.GetSecret, which needs secrets/get. Non-outputting get:
+            # `--query id` yields the secret identifier URL only, never printed.
+            $blankIdLines = @(& $azCmd.Source keyvault secret show --vault-name $blankSecretVault --name $blank.SecretName --query id --output tsv --only-show-errors 2>$null | ForEach-Object { "$_" })
+            $blankGetExit = [int]$LASTEXITCODE
+            if ($blankGetExit -ne 0 -or -not (($blankIdLines -join '') -match '^https://')) { $blankPresence = 'unreadable' }
+            $blankIdLines = $null
+        }
+        $blankPresenceText = switch ($blankPresence) {
+            'present' { " (listed as enabled in vault '$blankSecretVault' and its value is readable by the az identity — non-outputting get, secret id only)" }
+            'unreadable' { " (listed as enabled in vault '$blankSecretVault' but its VALUE is not readable by the az identity — az keyvault secret show exited $blankGetExit, output never echoed; SecretClient.GetSecret needs secrets/get, so the in-process path cannot light it)" }
+            'absent' { " (NOT present, or disabled, in vault '$blankSecretVault')" }
+            'unverifiable' { " ($(if ($blankSecretBlocker) { $blankSecretBlocker } else { $blankSecretPrincipalGap }))" }
+            default { '' }
+        }
+        $blankVaultNote = if ($blank.SecretName) { "; the hub resolves Key Vault secret '$($blank.SecretName)' itself, in-process, under AZURE_KEY_VAULT_URI$blankPresenceText" } else { '' }
+        $blankSatisfied = $false
+        if ($blankPresence -eq 'unreadable') {
+            Add-OwnerAction -Text "grant the running identity 'Key Vault Secrets User' on vault '$blankSecretVault' so provider '$($blank.Name)' (type github-models) can read Key Vault secret '$($blank.SecretName)' in-process (az role assignment create — owner-gated), then re-run auto-login"
+        }
+        if ($blankPresence -eq 'present') {
+            $blankSatisfied = $true
+            Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote — CreateGitHubModels reads that secret in-process, so the provider is satisfied without an export"
+        }
+        elseif (-not $blank.Public) {
+            # A GitHub credential never reaches a custom Models endpoint (review finding):
+            # CreateGitHubModels falls back to GITHUB_TOKEN for this entry too, so marking
+            # it ok on that token would send it to the configured origin. Only its own
+            # vault secret or a directly-set variable can light it.
+            $blankCustomText = if ($blank.OriginHost) { "points at custom endpoint '$($blank.OriginHost)'" } else { 'points at a custom baseUrl' }
+            if ($blank.OriginNote) { $blankCustomText += " ($($blank.OriginNote))" }
+            # A rejected baseUrl gets its config repair here too (review finding).
+            if ($blank.Rejected) { Add-GitHubModelsBaseUrlAction -Name $blank.Name -BaseUrl $blank.BaseUrl -Note $blank.OriginNote }
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; the entry $blankCustomText, so GITHUB_TOKEN is NOT accepted as its fallback — a GitHub credential is never sent to a non-GitHub endpoint (the same rule the keyed path applies)$(if ($blank.Rejected) { '; CreateGitHubModels reports it unconfigured until its baseUrl is fixed (owner action listed)' })"
+        }
+        elseif ((Test-EnvValue 'GITHUB_TOKEN') -and $ghTokenForeignReaders.Count -gt 0) {
+            # Same ownership rule as the public targets (review finding): the hub's
+            # only fallback for this entry holds another service's key.
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, holds a value but is read by $ghTokenForeignText as an API key of another credential family — NOT probed against api.github.com, and the fallback would hand that credential to GitHub Models"
+            Add-OwnerAction -Text $ghTokenSplitAction
+        }
+        elseif (Test-EnvValue 'GITHUB_TOKEN') {
+            if ($null -eq $ghTokenVerdict) { $ghTokenVerdict = Get-GitHubTokenModelsScope -EnvName 'GITHUB_TOKEN' }
+            switch ($ghTokenVerdict) {
+                'proven' {
+                    $ghModelsScopeProven = $true
+                    $blankSatisfied = $true
+                    Add-Step -Step $blankStep -State 'ok' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN carries models:read (X-OAuth-Scopes) and CreateGitHubModels falls back to it — satisfied without an export"
+                }
+                'unverifiable' {
+                    Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN holds a value but its models:read permission is not verifiable here; the provider repair remains open until permission is proven"
+                }
+                'stripped' {
+                    # Never satisfied (review finding): the only fallback the hub has for
+                    # this entry would reach GitHub Models unauthenticated.
+                    Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, holds a value but the authenticated probe answered 200 at the anonymous cap (60/hr) — Authorization is stripped in transit, so the fallback would call GitHub Models unauthenticated; not accepted"
+                    Add-OwnerAction -Text $ghStrippedAction
+                }
+                'missing-scope' { Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, is REST-valid but its X-OAuth-Scopes lack models:read" }
+                default { Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, was rejected by api.github.com" }
+            }
+        }
+        else {
+            Add-Step -Step $blankStep -State 'needs-owner' -Detail "$blankWhy$blankVaultNote; GITHUB_TOKEN, the hub's only fallback for it, is unset"
+        }
+        if (-not $blankSatisfied) {
+            # The GITHUB_TOKEN alternative is offered only while that variable is the
+            # GitHub family's (review finding): owned by another consumer it is not one.
+            $ghTokenAlternative = if ($ghTokenForeignReaders.Count -gt 0 -or -not $blank.Public -or $ghTokenVerdict -eq 'stripped') { '' } else { ', or provide a GITHUB_TOKEN that carries models:read' }
+            if ($blankPresence -eq 'absent') {
+                # The configured vault path is the primary repair (review finding): the
+                # secret's absence, not the config, is what leaves the provider unlit.
+                Add-OwnerAction -Text "store Key Vault secret '$($blank.SecretName)' in vault '$blankSecretVault' for provider '$($blank.Name)' (type github-models) — az keyvault secret set --vault-name $blankSecretVault --name $($blank.SecretName)   # owner supplies the value; the hub then resolves it in-process (its apiKeyEnv is explicitly blank, so no variable applies)$ghTokenAlternative"
+            }
+            else {
+                Add-OwnerAction -Text "fix provider '$($blank.Name)' (type github-models) in ${aihubConfigPath}: its apiKeyEnv is explicitly blank, so the hub reads no variable for it$blankVaultNote — set apiKeyEnv to a variable name (or remove the property to use GITHUB_MODELS_TOKEN)$ghTokenAlternative"
+            }
+        }
+    }
+
+    # Mixed-ownership variables (review finding): still unset after every rung, the
+    # repair is the config split or a direct export — stated once here, in place of
+    # the generic direct-key action for the same variable.
+    foreach ($mixedTarget in @($ghModelsTargets | Where-Object { $_.Mixed })) {
+        if (Test-EnvValue $mixedTarget.Env) { continue }
+        if ($conflictingEnvSet.Contains($mixedTarget.Env) -or $incompatibleEnvSet.Contains($mixedTarget.Env)) { continue }   # the conflict / incompatible action above already names the split
+        $mixedVaultClause = if ($mixedTarget.SecretName -and $mixedTarget.SecretName -match '^[0-9A-Za-z-]{1,127}$') { ", or store Key Vault secret '$($mixedTarget.SecretName)' (the configured apiKeySecretName) for the next run" }
+        elseif ($mixedTarget.SecretName) { ", or fix its apiKeySecretName first ('$($mixedTarget.SecretName)' is not a valid Key Vault secret name — see its provider step above)" }
+        else { '' }
+        $mixedPublic = (@($mixedTarget.PublicOwners | ForEach-Object { "'$_'" }) -join ', ')
+        Add-OwnerAction -Env $mixedTarget.Env -Text "give the providers sharing $($mixedTarget.Env) distinct apiKeyEnv names in ${aihubConfigLabel} (public github-models: $mixedPublic; also read by: $($mixedTarget.OtherReaders -join '; ')) — no GitHub credential is exported into a variable a non-GitHub endpoint also reads, so until then set $($mixedTarget.Env) directly$mixedVaultClause (lights $($mixedTarget.Env))"
+    }
+
+    # Direct-key repairs (review finding): a provider that reads a key but declares
+    # no apiKeySecretName has no vault path, and a custom-endpoint github-models
+    # provider gets no GitHub credential either — when its variable is still unset
+    # after every rung, setting it directly is the only repair, and the summary must
+    # carry it instead of listing nothing. A public github-models target proven (or
+    # exported) through the GitHub credential is already served.
+    foreach ($direct in $directKeyProviders) {
+        if (Test-EnvValue $direct.Env) { continue }
+        if ($ghModelsMixedEnvSet.Contains($direct.Env) -or $incompatibleEnvSet.Contains($direct.Env)) { continue }   # the mixed-ownership / incompatible action above carries this variable's repair
+        if ($direct.Type -eq 'github-models' -and $ghModelsPublicEnvSet.Contains($direct.Env) -and ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($direct.Env))) { continue }
+        Add-OwnerAction -Env $direct.Env -Text "set $($direct.Env) directly for provider '$($direct.Name)' (type $($direct.Type)) — the active config declares no apiKeySecretName for it, so no Key Vault pull exists: export it in the shell, or add apiKeySecretName to that provider and store the secret (lights $($direct.Env))"
+    }
+
+    # Owner actions were collected BEFORE the export steps ran (review finding): the
+    # auth-doctor's provider-lane actions say things like "pull openai-api-key into
+    # OPENAI_API_KEY" — and when the Key Vault or gh rung supplies that exact env var
+    # later in this same run, the pre-export action is already satisfied. The
+    # summary's contract is "the only steps that need a human", so any action naming
+    # a provider env var that NOW holds a value is dropped, with the drop reported.
+    # Derived from the config-driven pairs, the public github-models targets, and the
+    # direct-key providers, so the reconcile filter tracks config/aihub.json the same
+    # way the pulls do.
+    $exportResolvableEnvNames = @(Get-UniqueEnvNames -Names @(@($vaultPairs | ForEach-Object { $_.Env }) + $ghModelsPublicEnvs + @($directKeyProviders | ForEach-Object { $_.Env })))
+    # A public github-models env counts as satisfied via the provider's documented
+    # GITHUB_TOKEN fallback too (review finding) — a run that ends with a working
+    # github-models lane must not still demand a vault repair — but never on the
+    # strength of an unproven gh-rung export (review finding): a stored token that
+    # also lacks models:read would otherwise retire the very repair it needs. A
+    # vault-pulled or pre-set value is the deterministic path and counts as before.
+    function Test-EnvSatisfied {
+        param([Parameter(Mandatory)][string]$Name)
+        # A conflicting or incompatible variable is never satisfied (review finding):
+        # a value in it — preset or pulled — is exactly what ProviderFactory hands to
+        # every sharer, so the split action (this script's, and the doctor's imported
+        # copy, which the direct-key list would otherwise match) must survive.
+        if ($incompatibleEnvSet.Contains($Name) -or $conflictingEnvSet.Contains($Name)) { return $false }
+        if ($ghModelsPublicEnvSet.Contains($Name)) {
+            if ($ghModelsRejectedEnvs.Contains($Name)) { return $false }
+            return ($ghModelsScopeProven -or $ghModelsProvenEnvs.Contains($Name) -or
+                ((Test-EnvValue $Name) -and -not $ghModelsUnprovenExportEnvs.Contains($Name)))
+        }
+        return (Test-EnvValue $Name)
+    }
+    $resolvedActionCount = 0
+    $remainingOwnerActions = [System.Collections.Generic.List[string]]::new()
+    foreach ($action in $ownerActions) {
+        # Structural match (review finding): every action this script composes carries
+        # the exact env var it retires on. A substring test let a satisfied 'API_KEY'
+        # retire the unrelated OPENAI_API_KEY repair under a custom profile. The
+        # auth-doctor's imported free-text actions carry no env, so the variables they
+        # name are recovered by an exact-identifier match (bounded by the [A-Za-z0-9_]
+        # class) — never a substring.
+        # Outer @() on purpose: an if-expression unrolls its output, so a single name
+        # would otherwise land as a scalar string and .Count would not exist.
+        $candidateEnvNames = @(if ($null -ne $action.Env) { @($action.Env | Where-Object { $_ }) }
+            else {
+                @($exportResolvableEnvNames | Where-Object {
+                    [regex]::IsMatch($action.Text, ('(^|[^A-Za-z0-9_])' + [regex]::Escape($_) + '([^A-Za-z0-9_]|$)'), $envNameRegexOptions) })
+            })
+        # ALL-variable semantics (review finding): an action is retired only when
+        # EVERY variable it names is satisfied — a compound doctor action covering
+        # KEY_A and KEY_B must survive the export of KEY_A alone, because KEY_B's
+        # provider stays unconfigured and that text is its only remaining repair.
+        $unsatisfied = @($candidateEnvNames | Where-Object { -not (Test-EnvSatisfied $_) })
+        $resolvedByExport = ($candidateEnvNames.Count -gt 0) -and ($unsatisfied.Count -eq 0)
+        if ($resolvedByExport) { $resolvedActionCount++ } else { $remainingOwnerActions.Add($action.Text) }
+    }
+    $uniqueOwnerActions = @($remainingOwnerActions | Select-Object -Unique)
+
+    Write-Report ''
+    if ($resolvedActionCount -gt 0) {
+        Write-Report ("{0} pre-export owner action(s) dropped — the provider env var each referenced was satisfied later in this run" -f $resolvedActionCount)
+    }
+    if ($exportedNames.Count -gt 0) {
+        Write-Report ('Exported this run (names only): ' + (@($exportedNames) -join ', '))
+        if (-not $DotSourced) { Write-Report 'These exports died with this process — dot-source the script to keep them.' }
+    }
+    else {
+        Write-Report 'Nothing newly exported this run.'
+    }
+    if ($uniqueOwnerActions.Count -gt 0) {
+        Write-Report ''
+        Write-Report '== OWNER ACTIONS (the only steps that need a human) =='
+        $i = 0
+        foreach ($action in $uniqueOwnerActions) { $i++; Write-Report ('  {0}. {1}' -f $i, $action) }
+    }
+
+    if ($Json) {
+        [ordered]@{
+            script        = 'scripts/bootstrap/auto-login.ps1'
+            generatedUtc  = (Get-Date).ToUniversalTime().ToString('o')
+            dotSourced    = $DotSourced
+            steps         = @($steps)
+            exportedNames = @($exportedNames)
+            ownerActions  = @($uniqueOwnerActions)
+            exitCode      = 0
+        } | ConvertTo-Json -Depth 4
+    }
+}
+
+# Dot-source hygiene (review finding): the documented contract mutates exactly
+# two surfaces (the az profile via auth-doctor -Apply, and process env vars), so
+# every helper symbol this file necessarily creates in a dot-sourcing caller's
+# scope is removed again on every path below. ONE class of residue is not
+# removable: PowerShell binds the -Json and -UseManagedIdentity parameters into
+# the calling scope BEFORE any code runs, so a caller variable named $Json/$json
+# or $UseManagedIdentity (names are case-insensitive) is overwritten by the
+# binding itself — cleanup deletes the symbols rather than restoring prior values.
+# Do not rely on those names surviving this call.
+function Remove-HeliosAutoLoginScopeResidue {
+    Remove-Item -Path function:Invoke-HeliosAutoLogin -ErrorAction SilentlyContinue
+    Remove-Item -Path variable:Json -ErrorAction SilentlyContinue
+    # Every PARAMETER binding is a residue, not only -Json (review finding): the
+    # -UseManagedIdentity switch lands in the caller's scope the same way.
+    Remove-Item -Path variable:UseManagedIdentity -ErrorAction SilentlyContinue
+    Remove-Item -Path variable:autoLoginDotSourced -ErrorAction SilentlyContinue
+    # Self-removal last: the already-loaded body keeps executing to completion.
+    Remove-Item -Path function:Remove-HeliosAutoLoginScopeResidue -ErrorAction SilentlyContinue
+}
+
+$autoLoginDotSourced = $MyInvocation.InvocationName -eq '.'
+try {
+    Invoke-HeliosAutoLogin -Json:$Json -UseManagedIdentity:$UseManagedIdentity -DotSourced $autoLoginDotSourced -RepoRoot (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
+    if (-not $autoLoginDotSourced) { exit 0 }
+    Remove-HeliosAutoLoginScopeResidue
+}
+catch {
+    [Console]::Error.WriteLine("auto-login: internal failure: $($_.Exception.Message)")
+    # Dot-sourced: rethrow so the caller can DETECT the partial setup (review
+    # finding) — exiting would kill their shell, and swallowing would fake
+    # success. Scope residue is removed first; `throw` rethrows $_ regardless.
+    if ($autoLoginDotSourced) {
+        Remove-HeliosAutoLoginScopeResidue
+        throw
+    }
+    exit 1
+}

@@ -5,7 +5,7 @@
     {
       "pr": 222,
       "title": "Add bounded XCore-9 evaluation service with F# analytics and stable contracts",
-      "status": "candidate",
+      "status": "absorbed",
       "epic": "E2",
       "why": "F# analytics service aligns with HELIOS.AIHub.Domain; evaluator contracts could back the fleet review pool.",
       "absorb": ["service contracts", "F# scoring modules"],
@@ -126,16 +126,18 @@
       "epic": "E5",
       "why": "MI-to-Key-Vault binding and custody discipline extend our OIDC + Key Vault stack.",
       "absorb": ["custody/audit pattern", "audience hardening checks"],
-      "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"]
+      "risks": ["assumes upstream deploy pipeline; adapt to helios-deploy.yml"],
+      "absorbedInto": "E5 tranche-1 deploy hardening (helios-deploy.yml + validate_deploy_custody.py)"
     },
     {
       "pr": 260,
       "title": "Complete governed Azure activation hardening",
-      "status": "candidate",
+      "status": "absorbed",
       "epic": "E5",
       "why": "Follow-up hardening on the same activation path; read together with #224.",
       "absorb": ["hardening checklist"],
-      "risks": ["same as #224"]
+      "risks": ["same as #224"],
+      "absorbedInto": "E5 tranche-1 deploy hardening (helios-deploy.yml + validate_deploy_custody.py)"
     },
     {
       "pr": 211,

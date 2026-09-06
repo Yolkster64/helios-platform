@@ -1,8 +1,13 @@
 name: Infra Validation
 
 on:
+  # No paths filter on pull_request (deliberate — required-check contract): the
+  # bicep-validate / arm-freshness / terraform-validate contexts are
+  # ruleset-required status checks, and a required check that never reports blocks
+  # that PR's merge forever. The workflow triggers on every PR; the `changes` job
+  # skips the heavy jobs on non-infra diffs — GitHub treats skipped required
+  # checks as satisfied.
   pull_request:
-    paths: ['infra/**']
   push:
     branches: [main]
     paths: ['infra/**']
@@ -11,8 +16,67 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect infra changes
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # --no-renames (review finding): default rename detection emits only the
+          # DESTINATION path, so renaming infra/main.bicep out of infra/ would read
+          # as irrelevant and skip all three required infra checks. With
+          # --no-renames a rename is a delete+add and both sides are matched.
+          # -z (review finding): the default output C-quotes pathnames that carry
+          # non-ASCII or special characters ("infra/r\303\251gion.bicep"), so the
+          # anchored pattern below would miss them and skip the required infra checks.
+          # NUL-terminated output is never quoted; tr turns it back into one path per line.
+          # NUL records all the way (review finding): a pathname may itself contain a
+          # newline, so turning the -z stream back into lines would split such a path
+          # and match (or miss) its fragments instead of the path. mapfile -d '' reads
+          # one NUL-terminated record per element; each record is matched whole, and
+          # the listing is printed with %q so an embedded newline stays visible.
+          # The diff's exit status is checked (review finding): a git failure inside a
+          # process substitution is invisible to mapfile, which would then classify an
+          # EMPTY list as "not relevant" and skip the required job — so the diff lands
+          # in a file first and a failure fails this step loudly instead.
+          diff_file="$(mktemp)"
+          if ! git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_file"; then
+            echo "::error::git diff $BASE_SHA..$HEAD_SHA failed — the PR cannot be classified, failing instead of skipping the required checks"
+            rm -f "$diff_file"
+            exit 1
+          fi
+          mapfile -d '' changed < "$diff_file"
+          rm -f "$diff_file"
+          printf '%q\n' "${changed[@]}"
+          # The workflow file itself is a relevant path (review finding): a PR that
+          # changes only this validator would otherwise skip all three required infra
+          # jobs, so a broken validator change would never be exercised before merge
+          # (the .NET detector includes its own workflow the same way).
+          # Whole-record match in the shell (review findings): no pipeline, so no
+          # SIGPIPE'd producer can flip the verdict under the runner's pipefail shell,
+          # and [[ =~ ]] anchors ^ and $ at the ends of the whole path, never at an
+          # embedded newline.
+          pattern='^(infra/|\.github/workflows/infra-validate\.yml$)'
+          relevant=false
+          for path in "${changed[@]}"; do
+            if [[ "$path" =~ $pattern ]]; then relevant=true; break; fi
+          done
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+
   bicep-validate:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +96,8 @@ jobs:
   # is stripped first so a toolchain version bump alone never turns the gate red.
   arm-freshness:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,6 +148,8 @@ jobs:
   # Bicep job. infra/terraform is an independent mirror of the stack (see infra/README.md).
   terraform-validate:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.relevant != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
