@@ -258,17 +258,18 @@ jobs:
       - name: Decide PR comment mode
         id: comment-guard
         run: |
-          head_repo="$(python3 - <<'PY'
+          head_repo_id="$(python3 - <<'PY'
           import json
           import os
 
           with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as handle:
               event = json.load(handle)
 
-          print((((event.get("pull_request") or {}).get("head") or {}).get("repo") or {}).get("full_name", ""))
+          repo = (((event.get("pull_request") or {}).get("head") or {}).get("repo") or {})
+          print(repo.get("id", ""))
           PY
           )"
-          if [ "$head_repo" = "$GITHUB_REPOSITORY" ]; then
+          if [ "$head_repo_id" = "$GITHUB_REPOSITORY_ID" ]; then
             echo "can_comment=true" >> "$GITHUB_OUTPUT"
           else
             echo "can_comment=false" >> "$GITHUB_OUTPUT"
