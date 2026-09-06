@@ -1,0 +1,92 @@
+name: HELIOS Fabric .NET
+
+on:
+  pull_request:
+    paths:
+      - 'src/fabric/**'
+      - 'tests/HELIOS.Fabric.Tests/**'
+      - 'config/fabric/**'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'config/providers/helios-model-providers.v1.json'
+      - 'config/devops/azure-devops-wif.v1.json'
+      - 'config/sharepoint/governance-publication.v1.json'
+      - 'config/collaboration/slack-linear-routing.v1.json'
+      - 'config/github/**'
+      - 'config/claude/helios-claude-policy.v1.json'
+      - '.github/workflows/helios-fabric-dotnet.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/fabric/**'
+      - 'tests/HELIOS.Fabric.Tests/**'
+      - 'config/fabric/**'
+      - 'config/connectors/helios-fabric.connections.v1.json'
+      - 'config/agents/helios-fabric-roles.v1.json'
+      - 'config/providers/helios-model-providers.v1.json'
+      - 'config/devops/azure-devops-wif.v1.json'
+      - 'config/sharepoint/governance-publication.v1.json'
+      - 'config/collaboration/slack-linear-routing.v1.json'
+      - 'config/github/**'
+      - 'config/claude/helios-claude-policy.v1.json'
+      - '.github/workflows/helios-fabric-dotnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-fabric-dotnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore tests/HELIOS.Fabric.Tests/HELIOS.Fabric.Tests.csproj
+      - name: Build
+        run: dotnet build tests/HELIOS.Fabric.Tests/HELIOS.Fabric.Tests.csproj --configuration Release --no-restore --nologo
+      - name: Test
+        run: >-
+          dotnet test tests/HELIOS.Fabric.Tests/HELIOS.Fabric.Tests.csproj
+          --configuration Release
+          --no-build
+          --nologo
+          --logger "trx;LogFileName=helios-fabric.trx"
+          --results-directory artifacts/test-results
+      - name: Validate contracts through C# CLI
+        run: |
+          dotnet run \
+            --project src/fabric/HELIOS.Fabric.Cli/HELIOS.Fabric.Cli.csproj \
+            --configuration Release \
+            -- validate "$GITHUB_WORKSPACE"
+      - name: Generate activation plan
+        run: |
+          mkdir -p artifacts/helios-fabric
+          dotnet run \
+            --project src/fabric/HELIOS.Fabric.Cli/HELIOS.Fabric.Cli.csproj \
+            --configuration Release \
+            -- plan "$GITHUB_WORKSPACE" \
+            > artifacts/helios-fabric/activation-plan.json
+      - name: Generate immutable evidence
+        run: |
+          dotnet run \
+            --project src/fabric/HELIOS.Fabric.Cli/HELIOS.Fabric.Cli.csproj \
+            --configuration Release \
+            -- evidence "$GITHUB_WORKSPACE" --output artifacts/helios-fabric
+          printf 'repository=%s\ncommit=%s\nworkflow=%s\nrun=%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_WORKFLOW" "$GITHUB_RUN_ID" \
+            > artifacts/helios-fabric/workflow-source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helios-fabric-dotnet-${{ github.sha }}
+          path: |
+            artifacts/helios-fabric
+            artifacts/test-results
+          if-no-files-found: error
+          retention-days: 30
