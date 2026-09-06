@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "routingId": "helios-collaboration-routing",
+  "githubAuthority": {
+    "currentRepository": "Yolkster64/helios-platform",
+    "targetRepository": "Yolkster64/helios-control"
+  },
+  "slack": {
+    "workspaceId": "T0BAFGSNY5P",
+    "conversationId": "D0BB80HRZFA",
+    "fallbackAllowed": false,
+    "eventTypes": [
+      "cutover-checkpoint",
+      "ci-result",
+      "review-required",
+      "what-if-ready",
+      "deployment-approved",
+      "deployment-result",
+      "rollback-event",
+      "incident"
+    ]
+  },
+  "linear": {
+    "project": "Helios Integration Fabric",
+    "coordinationIssue": "JOH-208",
+    "canonicalIssueRange": "HC-001..HC-028",
+    "firstEvent": "create-once",
+    "subsequentEvents": "update-or-comment"
+  },
+  "eventEnvelope": {
+    "required": [
+      "eventId",
+      "correlationId",
+      "idempotencyKey",
+      "eventType",
+      "classification",
+      "sourceRepository",
+      "sourceCommit",
+      "occurredAt",
+      "summary",
+      "evidenceLinks"
+    ],
+    "writeOnlyWhen": [
+      "destination-resolves",
+      "signature-or-oauth-valid",
+      "replay-window-valid",
+      "idempotency-key-not-consumed",
+      "payload-redacted",
+      "write-policy-allows-event"
+    ]
+  },
+  "authorityBoundaries": {
+    "slackCanApproveDeployment": false,
+    "linearCanApproveDeployment": false,
+    "collaborationCanReadSecrets": false,
+    "collaborationCanExecuteShell": false,
+    "collaborationCanMutateAzure": false
+  }
+}
