@@ -247,20 +247,35 @@ No owner action and no secrets beyond each developer's own `claude` login
 ## GitHub ↔ Linear and Slack
 
 `config/connectors.json` is the single routing table (env-var names and routing
-only — never values). Two Actions secrets switch the connections on; without
-them **both workflows skip green** and can never be the red check.
+only — never values). Each `enabled` flag controls its workflow. Disabled
+connectors skip; enabled connectors with missing credentials or failed delivery
+fail their own workflow so an unconnected integration cannot look ready.
 
 | Connection | Secret | Workflow | Fires when |
 |---|---|---|---|
-| Linear | `LINEAR_API_KEY` | `.github/workflows/linear-sync.yml` | Issue `opened`/`labeled`/`unlabeled`/`closed`/`reopened` **and** the issue carries a `linear.syncLabels` label (`bug`, `enhancement`, `infra`, `ai-hub`, `absorption`, `build-ci`); `unlabeled` also proceeds when the *last* sync label was just removed, so the mirror's labels empty instead of freezing |
+| Linear | `LINEAR_API_KEY` | `.github/workflows/linear-sync.yml` | Issue `opened`/`edited`/`labeled`/`unlabeled`/`closed`/`reopened` **and** the issue carries a `linear.syncLabels` label (`bug`, `enhancement`, `infra`, `ai-hub`, `absorption`, `build-ci`); `unlabeled` also proceeds when the *last* sync label was just removed, so the mirror's labels empty instead of freezing |
 | Slack | `SLACK_WEBHOOK_URL` | `.github/workflows/notify-slack.yml` | `workflow_run` completion of the six workflows listed in it, filtered by `slack.notifyOn` (`always` vs `failures-and-recovery`) |
 
 Linear sync is one-directional (GitHub is the source of truth): mirrored issues
 get a `[GH-<n>]` title prefix into team `JOH` (`linear.teamKey` — must match
-your Linear workspace's team key or the sync warns and exits), label mapping
+your Linear workspace's team key or the sync fails), label mapping
 per `githubLabelToLinear`, and close/reopen moves the Linear state. Enable
 with `gh secret set LINEAR_API_KEY` / `gh secret set SLACK_WEBHOOK_URL`;
-routing changes are edits to `config/connectors.json`, never to the workflows.
+notification policy and label mappings live in `config/connectors.json`.
+The configured env names must match the fixed Actions secret bindings.
+
+The incoming webhook posts to its Slack installation channel; the `channels`
+names and `SLACK_BOT_TOKEN` are reserved service metadata and do not redirect
+this webhook. `failures-and-recovery` compares the preceding run on the same
+workflow, branch, event, and source repository (or the previous rerun attempt).
+Routine successes stay quiet; a success following a failure sends a recovery.
+
+Linear reads current issue data before mutation, stops on GraphQL errors even
+with HTTP 200, and detects ambiguous mirrors in the configured team. Title and
+label changes update the existing mirror; state changes use current GitHub
+state. Repeated state events do not append duplicate comments. Full production
+worker idempotency and incident threading remain separate work in JOH-52.
+See [activation and verification](CONNECTOR_ACTIVATION.md).
 
 > **Owner action — disable Linear's own GitHub sync for team John.** Linear's
 > built-in GitHub integration must NOT also be linked to this repository for
