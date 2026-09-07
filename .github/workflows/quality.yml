@@ -167,15 +167,43 @@ jobs:
     if: always()
     needs: [powershell-lint, markdown-lint, json-validate, automation-validate, security-scan]
     runs-on: ubuntu-latest
+    # Required context (.github/rulesets/main.json): it must carry the real
+    # outcome of every job above. Results reach the shell through env (never
+    # interpolated into run:), and anything but success fails this job — a
+    # skipped or cancelled dependency is not a pass either.
+    env:
+      RESULT_POWERSHELL_LINT: ${{ needs.powershell-lint.result }}
+      RESULT_MARKDOWN_LINT: ${{ needs.markdown-lint.result }}
+      RESULT_JSON_VALIDATE: ${{ needs.json-validate.result }}
+      RESULT_AUTOMATION_VALIDATE: ${{ needs.automation-validate.result }}
+      RESULT_SECURITY_SCAN: ${{ needs.security-scan.result }}
     steps:
       - name: Report Status
+        shell: bash
         run: |
-          echo "## Code Quality Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- PowerShell Lint: ${{ needs.powershell-lint.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Markdown Lint: ${{ needs.markdown-lint.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- JSON Validation: ${{ needs.json-validate.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Automation Wiring Validation: ${{ needs.automation-validate.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Quality checks completed"
+          set -u
+          failed=0
+          {
+            echo "## Code Quality Results"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          for pair in \
+            "PowerShell Lint=$RESULT_POWERSHELL_LINT" \
+            "Markdown Lint=$RESULT_MARKDOWN_LINT" \
+            "JSON Validation=$RESULT_JSON_VALIDATE" \
+            "Automation Wiring Validation=$RESULT_AUTOMATION_VALIDATE" \
+            "Security Scan=$RESULT_SECURITY_SCAN"; do
+            name="${pair%%=*}"
+            result="${pair#*=}"
+            echo "- ${name}: ${result}" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} finished with result '${result}'"
+              failed=1
+            fi
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -ne 0 ]; then
+            echo "❌ Quality checks failed — see the job results above" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "✅ Quality checks completed" >> "$GITHUB_STEP_SUMMARY"
