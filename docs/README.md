@@ -15,6 +15,7 @@ Use this page to find the documents that reflect the current engineering contrac
 | Contributor setup, build, CLI, MCP | [PROJECT_SETUP.md](PROJECT_SETUP.md) |
 | Owner-only GitHub, Azure, and secret wiring | [OWNER_START_HERE.md](OWNER_START_HERE.md) |
 | Exact build, test, and smoke-run commands | [TEST_RUN_PLAYBOOK.md](TEST_RUN_PLAYBOOK.md) |
+| Absorption and learning program, from zero | [absorption/START_HERE.md](absorption/START_HERE.md) |
 | Product consolidation direction | [CONSOLIDATION_BLUEPRINT.md](CONSOLIDATION_BLUEPRINT.md) |
 | Current documentation map | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) |
 
@@ -45,6 +46,7 @@ For the current repository state, trust:
 - [architecture/HERMES_FLEET_AND_XCORE.md](architecture/HERMES_FLEET_AND_XCORE.md)
 - [architecture/ADR-0010-WINUI3-ONLY.md](architecture/ADR-0010-WINUI3-ONLY.md)
 - [architecture/CLAUDE-CODE-CANONICALIZATION.md](architecture/CLAUDE-CODE-CANONICALIZATION.md)
+- [absorption/EPICS_AND_LEARNINGS.md](absorption/EPICS_AND_LEARNINGS.md)
 
 ### Cutover and repository authority
 

@@ -1,5 +1,8 @@
 # Absorption pipeline — benchmarking the original repo's best PRs
 
+> New to the program? Start with `docs/absorption/START_HERE.md` (the beginner's guide
+> and the ten-minute path); this page is the design in the architecture's words.
+
 `Yolkster64/helios-platform` is authoritative. Its read-only upstream reference
 (`M0nado/helios-platform`) carries prior PR work — XCore9 evaluators, Hermes federation
 contracts, governance gates. Some of

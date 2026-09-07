@@ -267,5 +267,7 @@ least-privilege workflow → #208's `governance-apply.yml` and #104's split auth
   VS Code, Codex and Cursor, plus the Playwright browser server.
 - [`scripts/bootstrap/README.md`](../scripts/bootstrap/README.md) — every bring-up script and
   its contract.
+- [`docs/absorption/START_HERE.md`](absorption/START_HERE.md) — absorb the best of
+  upstream, safely: benchmark one watchlist PR in ten minutes; nothing auto-merges.
 - [`docs/OWNER_START_HERE.md`](OWNER_START_HERE.md) — the owner's day one.
 - [`.github/CODESPACES_GUIDE.md`](../.github/CODESPACES_GUIDE.md) — the zero-install path.
