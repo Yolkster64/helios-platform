@@ -76,3 +76,11 @@ Depth lives in `references/` — every claim there cites the repo file that grou
 - `references/testing.md` — test idioms: hand-rolled fakes over Moq,
   `WebApplicationFactory`, shipped-config drift tests, keyless determinism, TimeProvider
   injection.
+- `references/dotnet10-orchestration.md` — the hub's orchestration patterns as shipped,
+  each with a `path:line` exemplar: the one-facade/four-doors shape, unconfigured-is-a-
+  state, the provider boundary and parameterized fallback chain, `Task.WhenAll` fan-out,
+  learning-never-breaks-routing, the cross-process JSONL lock, subprocess and
+  `LibraryImport` boundaries, authorize-before-bind in the minimal API, the MCP host,
+  `Microsoft.Extensions.AI` as the common seam, the WinUI 3 view-model threading rule,
+  the review-caught traps, and which `config/aihub.json` chain each kind of C# work
+  routes to. System view: `docs/architecture/AIHUB_LANGUAGE_ROLES.md`.

@@ -206,10 +206,79 @@ chain in the same PR (see "Maintaining the table").
 
 Cheapest/fastest first, for when the task tolerates it: Copilot inline → small models via
 GitHub Models / `gpt-5-mini` → Ollama local (free, hardware-bound) → frontier models
-(Claude Opus/Sonnet 5, GPT-5-class) → agentic CLI sessions (highest token spend, highest capability).
+(`claude-opus-5`/`claude-sonnet-5`, GPT-5-class) → agentic CLI sessions (highest token spend, highest capability).
 The routing table encodes this: chains lead with the cheapest provider that usually
 succeeds and fall back upward. Budget guardrails: model `capacity` in Bicep bounds
 Azure spend structurally; per-provider circuit breakers stop retry storms.
+
+## Cost and the ideal combo
+
+Cost in this hub is **measured per outcome, not quoted per model**. Every routed or
+tandem call records `costUsd` = catalog rate × the tokens the provider reported
+(`src/ai/HELIOS.AIHub/AIHub.cs:688-709`, `Pricing.fs:47-49`), `0` when usage or a
+confident rate match is missing — which is every CLI agent, since `claude-cli`,
+`codex`, `copilot`, `gh-models`, and `hermes` report no usage
+(`Providers/CliProcessAgent.cs:97`). Read spend from `GET /v1/metrics`
+(`TotalCostUsd`, `AverageCostUsd`, `AverageLatencyMs`, `SuccessRate`; `TokensUsed`
+and `CostPerMillionTokens` are always `null` — `ApiModels.cs:113-117`) and per task
+type from `GET /v1/learning?taskType=…`. The catalog's per-million rates are the prior
+the learning loop refines, dated by the catalog's own `$comment`; the tier table above
+is the choosing discipline. Any per-model price beyond that is a proposal, not a fact
+(`.claude/skills/aihub-unity/references/model-strengths-and-cost.md`, "Pricing block
+proposal").
+
+The ideal combo is therefore a procedure, not a lookup — the same procedure whether you
+sit in Azure Cloud Shell, a Codespace, a local shell, or drive the hub from the WinUI 3
+shell, Claude Code, Codex, Copilot, or a Hermes lane, because they all reach the one
+`AIHubService` through the CLI, REST, MCP, and plugin contracts
+(`docs/architecture/AIHUB_LANGUAGE_ROLES.md`). The linear score behind `route` weighs
+success 0.55, quality 0.25, latency 0.10, cost 0.10 over organic outcomes with ≥ 5
+attempts (`RoutingPolicy.fs:48-52,87-97`); cost is a tie-breaker among providers that
+succeed, never the objective. The report-only `aihub-strategist` agent
+(`.claude/agents/aihub-strategist.md`) runs this procedure from the read-only commands
+and the learning endpoints; the operating knowledge is the `aihub-unity` skill.
+
+### Worked example 1 — a code-generation backlog item
+
+1. `helios-ai status` — `codex` Ready (CLI on PATH), `openai` Ready (`OPENAI_API_KEY`
+   set), `anthropic` Unconfigured with the hint naming `ANTHROPIC_API_KEY`. (A fresh
+   shell gets there with `pwsh scripts/bootstrap/connect-devices.ps1` — both device
+   codes on one screen, then the login chain — or with
+   `bash scripts/bootstrap/first-run.sh --connect`, which runs the same logins as
+   step 0: `scripts/bootstrap/connect-devices.ps1:4-5,33-52`, `first-run.sh:53,132-155`.)
+2. `helios-ai routing` — `code_generation: codex → openai-codex → openai → azure-openai
+   → anthropic` (`config/aihub.json:98-104`).
+3. `curl -s "http://localhost:5170/v1/learning?taskType=code_generation&limit=50"` —
+   twelve organic outcomes: `codex` 4/6 at a mean 47.7 s and recorded cost 0;
+   `openai-codex` 5/5 at a mean 10.0 s and mean cost 0.0163 USD; `openai` 1/1.
+4. Score (both confident): `codex` = 0.55·0.667 + 0.25·0.667 + 0.10·0 + 0.10·1 =
+   0.633; `openai-codex` = 0.55 + 0.25 + 0.10 + 0 = 0.900. Learned order would be
+   `openai-codex → codex → …`; with the shipped `adaptiveRouting: false` the configured
+   order still runs and `fleet-plan` reports the divergence
+   (`.claude/skills/aihub-unity/references/combo-calculus.md`, example A).
+5. Combo: `helios-ai route code_generation "<spec>"` for the draft (cheapest correct
+   token for boilerplate); reconcile against `csharp-orchestrator`; open the PR and let
+   the Copilot + Codex waves verify (`REVIEW_LOOP.md`). Reach for
+   `helios-ai tandem code_generation` only while `openai-codex` still has fewer than
+   five attempts — each tandem run costs every provider in the chain.
+
+### Worked example 2 — an architecture decision over a 250K-token slice
+
+1. Context first: at the catalog windows and `reserved = min(4096, window/4)`, a
+   250,000-token prompt fits `anthropic` (capacity 995,904) and `openai` (395,904) but
+   not `github-models` or `ollama` (123,904) — `FilterChainByContext` drops them before
+   any call (`AIHub.cs:341-390`; combo-calculus example D).
+2. `helios-ai route long_context_analysis "<the slice>: summarize the seams and
+   risks"` — `anthropic → anthropic-foundry → claude-cli`; one call at the XL tier
+   because excerpting to a cheaper tier turns a recall problem into a guessing problem.
+3. `helios-ai compare "Given that summary, per-provider or per-model circuit breakers?
+   Argue both." --providers anthropic,openai` — two calls, nothing recorded; divergence
+   is the signal.
+4. Cost: read `GET /v1/metrics` after the run for the recorded `TotalCostUsd` of the
+   `anthropic` outcome; the `compare` calls record nothing and must be counted by
+   hand from the stderr token line (`Program.cs:384-396`). Not worth it: `tandem` on
+   `long_context_analysis` (three XL-tier calls for one summary) or routing the slice
+   to `claude-cli` when a payload call suffices.
 
 ## Scaling — every knob in one place
 

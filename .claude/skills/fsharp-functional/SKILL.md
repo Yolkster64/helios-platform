@@ -102,7 +102,7 @@ Write custom `Arbitrary` instances for domain types so generated values satisfy 
 
 ## Spoke packaging and C# interop
 
-The project is a plain `net8.0` class library (`HELIOS.Domain.fsproj`) referenced directly by the orchestrator — no process boundary, no serialization. Public surface rules:
+The project is a plain `net10.0` class library (`HELIOS.AIHub.Domain.fsproj`) referenced directly by the orchestrator — no process boundary, no serialization. Public surface rules:
 
 - Never expose `FSharpList`, `FSharpOption`, `FSharpFunc`, or tuples in public APIs. Return `IReadOnlyList<'T>`, `'T` + `TryX` patterns or nullable, and `Task<'T>`.
 - `[<CLIMutable>]` on records that C# serializers/binders must materialize (parameterless ctor + settable props, F# still sees them as immutable):
@@ -130,6 +130,14 @@ type ProviderMetrics = { Name: string; LatencyMs: float; SuccessRate: float }
 `src/ai/HELIOS.AIHub.Domain/` (five modules): the Mtoken-based pricing measures actually
 in `Pricing.fs`, the `Running`/`observe` fold-and-prequential-replay patterns in
 `LearnerFusion.fs`, every C# call site of the interop surface, FsCheck property
-candidates (FsCheck itself is not in the repo), and the E38 growth path (GitHub issue
-#51). The `ktoken` and FsCheck snippets above are teaching sketches — when they disagree
+candidates (FsCheck itself is not in the repo), and the E38 growth path (GitHub
+issue #51). The `ktoken` and FsCheck snippets above are teaching sketches — when they disagree
 with the reference file, the reference file mirrors the real code and wins.
+
+`references/async-query-math-search.md` — the spoke's async posture (grep-verified: no
+`task`/`async` CEs ship; the hub owns the awaits), pipelines instead of `query { }`, the
+routing score and fusion formulas quoted from `RoutingPolicy.fs` and `LearnerFusion.fs`,
+the three search shapes (tuple-key ranking, cheapest-that-fits, splice-back
+reordering), units of measure at the seams, a worked reorder with the numbers, the
+review-caught traps, and which `config/aihub.json` chain each kind of F# work routes
+to. System view: `docs/architecture/AIHUB_LANGUAGE_ROLES.md`.
