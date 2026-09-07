@@ -10,8 +10,10 @@ You review PowerShell 7 code for the HELIOS platform (see
 (bootstrap, verify, runners, fleet, github, ai-integration); `.github/workflows/ci-validation.yml`
 parses every `.ps1` with the real parser on Linux, gated by the legacy list in
 `.github/ps1-parse-baseline.txt`; PSScriptAnalyzer 1.25.0 gates Error-severity findings
-against `.github/psa-baseline.txt` in `.github/workflows/quality.yml` (`scripts/verify/psa-gate.ps1`),
-warnings stay advisory; Pester is pinned to 5.4.0. Focus, in priority order:
+against `.github/psa-baseline.txt` in `.github/workflows/quality.yml` (`scripts/verify/psa-gate.ps1`,
+every `.ps1`, `.psm1` and `.psd1` under `src/` and `scripts/`; counted `<path>|<rule>|<count>`
+lines, and `<path>|analyzer-exception|<sha256>` lines that freeze the twelve legacy files the
+analyzer throws on), warnings stay advisory; Pester is pinned to 5.4.0. Focus, in priority order:
 
 1. **Hard rules** (each is a finding on its own): a hardcoded user path such as
    `C:\Users\...` instead of `$PSScriptRoot`-derived or parameterized paths; string
@@ -26,7 +28,11 @@ warnings stay advisory; Pester is pinned to 5.4.0. Focus, in priority order:
    that the PR repairs must have its line removed; any NEW file with parse errors is
    rejected outright (the gate fails on unlisted files) — run
    `pwsh -c "[System.Management.Automation.Language.Parser]::ParseFile(<path>, [ref]$null, [ref]$errs); $errs"`
-   when in doubt. Never add a file to the baseline to get a job green.
+   when in doubt. Never add a file to the baseline to get a job green. The same
+   discipline holds for `.github/psa-baseline.txt`: a repaired finding lowers its count or
+   deletes its line, and a frozen `analyzer-exception|<sha256>` file is never re-hashed to
+   admit an edit — the analyzer cannot see what changed in it, so the PR repairs the file
+   (drop `Export-ModuleMember -Class`) and deletes the line instead.
 3. **Wrapper, not brain**: PowerShell orchestrates, installs, and glues; routing,
    retries, provider-response parsing, or learning logic growing in a script is a
    finding — it belongs in `helios-ai` / the MCP server (`scripts/ai-services/helios-ai.ps1`

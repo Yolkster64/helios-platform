@@ -94,7 +94,10 @@ public sealed class FleetPlanService
                     // first and falls back to the language-less one when the scoped read
                     // holds nothing organic, mirroring AIHubService.ApplyLearningAsync;
                     // read verbatim it would score the orphan ("code_generation:fsharp",
-                    // no language) bucket nothing writes to. Every read goes through the
+                    // no language) bucket that nothing writes to while that qualified
+                    // chain is configured (the hub splits such a key before recording;
+                    // an UNCONFIGURED qualified key is recorded verbatim by the hub and
+                    // split here — see SplitPoolTaskType). Every read goes through the
                     // store's organic (taskType, language) key so the window is taken
                     // AFTER both scopings: neither another language's outcomes nor an
                     // advisory ingest — the fleet collector's own lane records land

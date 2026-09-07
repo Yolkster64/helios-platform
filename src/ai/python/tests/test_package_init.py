@@ -25,6 +25,19 @@ def test_importing_the_package_loads_no_submodule_and_no_numpy() -> None:
     assert loaded == {"analysis": False, "textwork": False, "numpy": False}
 
 
+def test_the_fleet_worker_entry_loads_no_analytics() -> None:
+    # The lane process the fleet starts once per worker is the cost that mattered: it
+    # must come up without the analytics stack. (`python -m helios_agents` — the C#
+    # orchestrator's JSON-over-stdio entry — imports all four modules on purpose; it is
+    # the one process that serves analysis requests.)
+    loaded = _probe(
+        "import json, sys; import helios_agents.fleet_worker; "
+        "print(json.dumps({'analysis': 'helios_agents.analysis' in sys.modules, "
+        "'numpy': 'numpy' in sys.modules, 'sklearn': 'sklearn' in sys.modules}))"
+    )
+    assert loaded == {"analysis": False, "numpy": False, "sklearn": False}
+
+
 def test_submodules_are_reachable_as_package_attributes_on_demand() -> None:
     loaded = _probe(
         "import json, sys; import helios_agents; m = helios_agents.engines; "

@@ -37,6 +37,33 @@ public sealed class AzureTableLearningStoreTests
     }
 
     [Fact]
+    public async Task GetRecentForLanguageAsync_TaskType_IsSanitizedForThePartition_AndEscapedInBothClauses()
+    {
+        // Table keys forbid / \ # ? (Sanitize maps them to '_'), so the partition clause
+        // carries the sanitized key while the TaskType clause carries the stored task
+        // type verbatim — both with the apostrophe doubled, or the OData literal ends
+        // early on a task type like "customer's-review".
+        const string taskType = "review/customer's#1";
+        var entity = new TableEntity("review_customer's_1", "0000000000000000000")
+        {
+            ["TaskType"] = taskType,
+            ["Provider"] = "p1",
+            ["Model"] = "fake-model",
+            ["Success"] = true,
+            ["LatencyMs"] = 100d,
+            ["CostUsd"] = 0d,
+            ["OccurredAt"] = DateTimeOffset.UnixEpoch,
+        };
+        var table = new FakeTableClient(entity);
+        var store = new AzureTableLearningStore(table);
+
+        var read = await store.GetRecentForLanguageAsync(taskType, language: null);
+
+        Assert.Equal("PartitionKey eq 'review_customer''s_1' and TaskType eq 'review/customer''s#1'", table.LastFilter);
+        Assert.Equal("p1", Assert.Single(read).Provider);
+    }
+
+    [Fact]
     public async Task GetRecentForLanguageAsync_LanguagelessKey_HasNoLanguageClause_AndKeepsOnlyRowsWithoutOne()
     {
         // An absent Language column is not "eq" anything server-side, so the

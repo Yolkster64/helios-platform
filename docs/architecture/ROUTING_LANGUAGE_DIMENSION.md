@@ -127,8 +127,11 @@ a `source` only), so neither another language's newest outcomes nor an advisory 
 fleet-lane records land under the very task type they describe — can crowd a route's own
 organic evidence out of the window. A window scoped afterwards
 (`GetRecentForLanguageAsync`, then `OrganicOnly`) would read a key whose newest `window`
-records are advisory as "no evidence" while older organic records exist; that plain read
-serves insights and telemetry only. `ChainReorderEngine.ForLanguage` and `OrganicOnly`
+records are advisory as "no evidence" while older organic records exist; that plain
+language-scoped read stays on the interface for advisory consumers (a per-language
+narrative that wants fleet-lane records too) and no routing or planning path calls it —
+`/v1/insights` and `/v1/metrics` read `GetRecentAsync` / `GetRecentAllAsync`.
+`ChainReorderEngine.ForLanguage` and `OrganicOnly`
 state the same two rules over an in-memory list (`LanguageScopedHistoryTests` pins the
 language one). The fleet planner reads the store the same way (`FleetPlanService`, pinned
 by `FleetPlanServiceTests`): a pool whose `taskTypes` names a bare task type is scored on
@@ -137,9 +140,13 @@ collector's own lane records — must not make its samples read as "no evidence"
 naming a qualified key (`code_generation:fsharp`, language part
 canonical) is scored on that (taskType, language) window first, falling back to the
 language-less window when the scoped read holds nothing organic — the hub's own two-step
-read — rather than on the orphan `code_generation:fsharp`-with-no-language bucket nothing
-writes to. Nothing here changes the advisory contract — recommendations are reported,
-never auto-executed.
+read — rather than on the orphan `code_generation:fsharp`-with-no-language bucket that
+nothing writes to while that qualified chain is configured. A pool may name a qualified
+key the routing table does not hold yet: the planner still splits it (it has no table to
+consult) and scores it on the parent's evidence through the fallback, while the hub, which
+treats an unconfigured key as a literal task type, records such a route verbatim — the
+two agree again the moment the chain is configured. Nothing here changes the advisory
+contract — recommendations are reported, never auto-executed.
 
 The Python spoke's `provider_summary` (behind `/v1/insights`) adds a `languages` map —
 per-language, per-provider aggregates — only when at least one outcome in the window
