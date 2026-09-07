@@ -155,3 +155,6 @@ azure-pipelines.yml
 ## writes LIVE credentials (.credentials, RSA params) into the target dir, and
 ## the default target sits inside the checkout — never committed
 actions-runner/
+
+# scripts/verify/psa-gate.ps1 writes its record list here (uploaded as a CI artifact)
+ps-analysis.txt

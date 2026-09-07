@@ -46,7 +46,9 @@ preinstalled — there is no actions/setup-powershell action), gated against the
 baseline `.github/ps1-parse-baseline.txt`: a parse error in any non-baseline file
 fails the job. PSScriptAnalyzer 1.25.0 runs in `quality.yml` through
 `scripts/verify/psa-gate.ps1`: an Error-severity finding or an analyzer failure beyond what
-`.github/psa-baseline.txt` tolerates (`<path>|<rule>|<count>`, legacy only) fails the job,
+`.github/psa-baseline.txt` tolerates (`<path>|<rule>|<count>`; unanalyzable legacy files are frozen
+by `<path>|analyzer-exception|<sha256>`) fails the job — every `.ps1`, `.psm1` and `.psd1` under
+`src/` and `scripts/` —,
 warnings are advisory (artifact + step summary); Pester is pinned to 5.4.0 in `code-checks.yml`.
 
 ## Reference material
