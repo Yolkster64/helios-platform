@@ -45,6 +45,8 @@ Hermes and XCore are planning, routing, simulation, evaluation, and redacted-mem
 
 The provider-neutral AIHub routes OpenAI, Azure/Foundry, Claude, Copilot, local models, Hermes, and XCore through typed task/result, capability, approval, redaction, tracing, and evidence contracts. Provider-specific business logic must not leak into the WinUI application.
 
+Routing accepts an optional language: a `<taskType>:<language>` key in `config/aihub.json` is tried before the bare task type, adaptive routing stays off by default, and every outcome is recorded either way (`docs/architecture/ROUTING_LANGUAGE_DIMENSION.md`). Self-hosted jobs use the single `runs-on: helios-runners` label.
+
 The local MCP server in `.mcp.json` exposes bounded `helios_*` tools. Consequential operations are separate request/approval flows. Project MCP configuration from an untrusted branch must never be loaded in a credential-bearing workflow.
 
 ## Authoritative references
@@ -52,6 +54,7 @@ The local MCP server in `.mcp.json` exposes bounded `helios_*` tools. Consequent
 - `CLAUDE.md`
 - `docs/architecture/ADR-0010-WINUI3-ONLY.md`
 - `docs/architecture/CLAUDE-CODE-CANONICALIZATION.md`
+- `docs/architecture/ROUTING_LANGUAGE_DIMENSION.md`
 - `docs/migration/yolkster-control-cutover/CURRENT-AUTHORITY.md`
 - `docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md`
 - `docs/migration/yolkster-control-cutover/CANONICAL-ISSUE-LEDGER.md`

@@ -16,6 +16,8 @@ python3 scripts/validation/validate_yolkster_cutover.py
 
 `HELIOS.sln` intentionally excludes the non-compiling legacy root/core project. The source-linked seams `Core/AI/Interfaces/IAgent.cs` and `Core/AI/Router/IRouter.cs` must remain dependency-free.
 
+Self-hosted jobs use the single `runs-on: helios-runners` label (the ARC scale-set name; `scripts/runners/register-runner.*` applies it to hand-registered runners).
+
 ## Binding architecture rules
 
 - **WinUI 3 is the only active desktop framework.** New desktop code uses C#/.NET 10, Windows App SDK, `Microsoft.UI.Xaml`, and `Microsoft.UI.Composition` under `src/gui`.
@@ -55,9 +57,12 @@ The Python spoke provides analytics and engine recommendations behind a bounded 
 
 The MCP server in `.mcp.json` exposes the governed `helios_*` tools for AI routing, status, providers, engines, infrastructure validation, absorption/fleet/auth status, Azure inventory, Foundry agents, and sanitized operator context. The Claude plugin under `plugins/helios-operator` uses the same MCP server and stores durable sanitized handoff state under the gitignored `.helios/operator` directory.
 
+`helios-ai route`, `POST /v1/route`, and `helios_ai_route` accept an optional language (`csharp`, `fsharp`, `cpp`, `python`, `powershell`, `bicep`, `yaml`, `json`); a `taskRouting` key of the form `<taskType>:<language>` in `config/aihub.json` is tried before the bare task type, then `routing.defaultChain`, and the normalized language is recorded with each outcome so learning keys on (taskType, language). Adaptive routing is off by default in both the shipped config and the C# default; recording still happens when it is off.
+
 ## Key architecture references
 
 - `docs/architecture/MULTI_LLM_INTEGRATION.md`
+- `docs/architecture/ROUTING_LANGUAGE_DIMENSION.md`
 - `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md`
 - `docs/architecture/HERMES_FLEET_AND_XCORE.md`
 - `docs/architecture/GUI_THEME_ANALYSIS.md`
