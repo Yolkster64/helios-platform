@@ -118,10 +118,9 @@ public sealed class AzureTableLearningStoreTests
     {
         // Advisory rows interleaved with organic ones, window of 2: the cap counts the
         // rows kept, not the rows seen, and once it is reached the read stops pulling
-        // pages — the double serves one page per row, so pages never requested are
-        // rows never served. A client-filtered read asks for full pages (the scan
-        // budget, capped at the service maximum) rather than pages of <limit>, so the
-        // budget costs two transactions instead of ten at the default window.
+        // pages — pages never requested are rows never served. A client-filtered read
+        // asks for pages of the scan budget (capped at the service maximum), so with a
+        // budget of 4 the first page holds exactly the rows that fill the window.
         var table = new FakeTableClient(
             Row("lane-1", language: null, source: "fleet-lane", at: 6),
             Row("p1", language: null, at: 5),
@@ -129,12 +128,13 @@ public sealed class AzureTableLearningStoreTests
             Row("p2", language: null, at: 3),
             Row("lane-3", language: null, source: "fleet-lane", at: 2),
             Row("p3", language: null, at: 1));
-        var store = new AzureTableLearningStore(table);
+        var store = new AzureTableLearningStore(table, scanBudget: 4);
 
         var window = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 2);
 
         Assert.Equal(new[] { "p1", "p2" }, window.Select(o => o.Provider));
-        Assert.Equal(1000, table.LastMaxPerPage);
+        Assert.Equal(4, table.LastMaxPerPage);
+        Assert.Equal(1, table.PagesServed);
         Assert.True(table.RowsServed < 6, $"the stream served {table.RowsServed} of 6 rows after the cap");
     }
 
@@ -195,7 +195,35 @@ public sealed class AzureTableLearningStoreTests
         var organic = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 1);
 
         Assert.Equal("organic", Assert.Single(organic).Provider);
-        Assert.Equal(6, table.RowsServed);
+        // One page of <budget> rows is fetched whole; the twenty late rows on the next
+        // page are never requested.
+        Assert.Equal(1, table.PagesServed);
+        Assert.Equal(10, table.RowsServed);
+    }
+
+    [Fact]
+    public async Task ScopedRead_PageCap_BoundsTransactions_WhenTheServiceReturnsShortSegments()
+    {
+        // A non-key filter (the TaskType clause) lets the service answer a page request
+        // with an empty segment and a continuation token — a partition polluted by a
+        // colliding task type. The entity budget never moves on such segments, so the
+        // read counts pages: after MaxPagesPerRead transactions it returns what it has,
+        // even though the rows behind the empty segments were never reached.
+        var table = new FakeTableClient(emptySegmentsFirst: 5, Row("p1", language: null));
+        var store = new AzureTableLearningStore(table);
+
+        var read = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 5);
+
+        Assert.Empty(read);
+        Assert.Equal(AzureTableLearningStore.MaxPagesPerRead, table.PagesServed);
+        Assert.Equal(0, table.RowsServed);
+
+        // The plain per-task read is bounded the same way.
+        var plain = new FakeTableClient(emptySegmentsFirst: 5, Row("p1", language: null));
+        var telemetry = await new AzureTableLearningStore(plain).GetRecentAsync(TaskTypeName, limit: 5);
+
+        Assert.Empty(telemetry);
+        Assert.Equal(AzureTableLearningStore.MaxPagesPerRead, plain.PagesServed);
     }
 
     [Fact]
@@ -256,9 +284,20 @@ public sealed class AzureTableLearningStoreTests
     private sealed class FakeTableClient : TableClient
     {
         private readonly IReadOnlyList<TableEntity> _rows;
+        private readonly int _emptySegmentsFirst;
 
         public FakeTableClient(params TableEntity[] rows)
+            : this(0, rows)
         {
+        }
+
+        /// <param name="emptySegmentsFirst">
+        /// Segments the service answers with no entity but a continuation token before
+        /// the rows — what a non-key filter produces under a partition collision.
+        /// </param>
+        public FakeTableClient(int emptySegmentsFirst, params TableEntity[] rows)
+        {
+            _emptySegmentsFirst = emptySegmentsFirst;
             _rows = rows;
         }
 
@@ -267,6 +306,8 @@ public sealed class AzureTableLearningStoreTests
         public int? LastMaxPerPage { get; private set; }
 
         public int RowsServed { get; private set; }
+
+        public int PagesServed { get; private set; }
 
         public List<TableEntity> Added { get; } = new();
 
@@ -284,15 +325,24 @@ public sealed class AzureTableLearningStoreTests
         {
             LastFilter = filter;
             LastMaxPerPage = maxPerPage;
-            return AsyncPageable<T>.FromPages(PagesOf<T>());
+            return AsyncPageable<T>.FromPages(PagesOf<T>(maxPerPage ?? 1000));
         }
 
-        private IEnumerable<Page<T>> PagesOf<T>()
+        /// <summary>Pages of <c>maxPerPage</c> rows, as the service serves them; pages never requested are rows never served.</summary>
+        private IEnumerable<Page<T>> PagesOf<T>(int pageSize)
         {
-            foreach (var row in _rows)
+            for (var i = 0; i < _emptySegmentsFirst; i++)
             {
-                RowsServed++;
-                yield return Page<T>.FromValues(new[] { (T)(object)row }, continuationToken: null, new StubResponse());
+                PagesServed++;
+                yield return Page<T>.FromValues(Array.Empty<T>(), continuationToken: "more", new StubResponse());
+            }
+            for (var offset = 0; offset < _rows.Count; offset += pageSize)
+            {
+                var chunk = _rows.Skip(offset).Take(pageSize).Select(row => (T)(object)row).ToArray();
+                PagesServed++;
+                RowsServed += chunk.Length;
+                var last = offset + pageSize >= _rows.Count;
+                yield return Page<T>.FromValues(chunk, continuationToken: last ? null : "more", new StubResponse());
             }
         }
     }

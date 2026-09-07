@@ -36,6 +36,17 @@ public sealed class AzureTableLearningStore : ILearningStore
     /// <summary>Table Storage serves at most this many entities per page.</summary>
     private const int ServiceMaxPageSize = 1000;
 
+    /// <summary>
+    /// Absolute cap on the service pages (transactions) one read fetches. The entity
+    /// budget alone does not bound transactions: the TaskType clause is a non-key
+    /// filter, so a partition polluted by another task type that Sanitize maps onto the
+    /// same key (<c>code/review</c> beside <c>code_review</c>) makes the service return
+    /// short or empty segments with continuation tokens, which the SDK would follow
+    /// transparently while the entity counter never moved. Pages are counted here, so
+    /// a read costs at most this many transactions whatever the service hands back.
+    /// </summary>
+    internal const int MaxPagesPerRead = 2;
+
     private readonly TableClient _table;
     private readonly int _scanBudget;
     private readonly SemaphoreSlim _initGate = new(1, 1);
@@ -128,13 +139,24 @@ public sealed class AzureTableLearningStore : ILearningStore
         var escapedTaskType = taskType.Replace("'", "''");
         var query = _table.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{escapedPartition}' and TaskType eq '{escapedTaskType}'",
-            maxPerPage: Math.Min(limit, 1000),
+            maxPerPage: Math.Min(limit, ServiceMaxPageSize),
             cancellationToken: cancellationToken);
 
-        await foreach (var entity in query.ConfigureAwait(false))
+        // Pages are counted (MaxPagesPerRead), not only entities: under a partition
+        // collision the service can answer with short segments and a continuation.
+        var pagesFetched = 0;
+        await foreach (var page in query.AsPages().ConfigureAwait(false))
         {
-            results.Add(ToOutcome(entity, fallbackTaskType: taskType));
-            if (results.Count >= limit)
+            pagesFetched++;
+            foreach (var entity in page.Values)
+            {
+                results.Add(ToOutcome(entity, fallbackTaskType: taskType));
+                if (results.Count >= limit)
+                {
+                    return results;
+                }
+            }
+            if (pagesFetched >= MaxPagesPerRead)
             {
                 break;
             }
@@ -195,21 +217,35 @@ public sealed class AzureTableLearningStore : ILearningStore
             maxPerPage: pageSize,
             cancellationToken: cancellationToken);
 
+        // Two independent caps: entities examined (the scan budget) and service pages
+        // fetched (MaxPagesPerRead). The second is the one that bounds transactions —
+        // AsPages() exposes each segment the service returns, short or empty ones
+        // included, where a flat enumeration would follow every continuation token
+        // without the entity counter moving.
         var examined = 0;
-        await foreach (var entity in query.ConfigureAwait(false))
+        var pagesFetched = 0;
+        await foreach (var page in query.AsPages().ConfigureAwait(false))
         {
-            examined++;
-            var outcome = ToOutcome(entity, fallbackTaskType: taskType);
-            if (string.Equals(outcome.Language, language, StringComparison.Ordinal)
-                && !(organicOnly && outcome.Source is not null))
+            pagesFetched++;
+            foreach (var entity in page.Values)
             {
-                results.Add(outcome);
-                if (results.Count >= limit)
+                examined++;
+                var outcome = ToOutcome(entity, fallbackTaskType: taskType);
+                if (string.Equals(outcome.Language, language, StringComparison.Ordinal)
+                    && !(organicOnly && outcome.Source is not null))
                 {
-                    break;
+                    results.Add(outcome);
+                    if (results.Count >= limit)
+                    {
+                        return results;
+                    }
+                }
+                if (examined >= _scanBudget)
+                {
+                    return results;
                 }
             }
-            if (examined >= _scanBudget)
+            if (pagesFetched >= MaxPagesPerRead)
             {
                 break;
             }
