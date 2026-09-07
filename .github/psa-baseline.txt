@@ -1,12 +1,14 @@
 # PSScriptAnalyzer baseline for scripts/verify/psa-gate.ps1 (quality.yml powershell-lint).
-# One line per tolerated legacy condition, "<path>|<rule>" for an Error-severity rule the
-# file already trips, "<path>|analyzer-exception" for a file PSScriptAnalyzer 1.25.0
-# cannot analyze (every one of those uses `Export-ModuleMember -Class`, a parameter the
-# cmdlet does not have). Anything not listed here fails the job. Repairing a file?
-# Delete its line — the gate prints a notice when a line no longer triggers. Adding new
-# lines for new code is not allowed; fix the finding instead.
+# One line per tolerated legacy condition: "<path>|<rule>|<count>" tolerates exactly
+# <count> Error-severity occurrences of that rule in that file (a missing count means 1;
+# one more occurrence fails the job with its line number), "<path>|analyzer-exception"
+# tolerates a file PSScriptAnalyzer 1.25.0 cannot analyze (every one of those uses
+# `Export-ModuleMember -Class`, a parameter the cmdlet does not have). Anything not
+# listed here fails the job. Repairing a finding? Lower the count or delete the line —
+# the gate prints a notice when a line tolerates more than the file still trips. Adding
+# new lines or raising a count for new code is not allowed; fix the finding instead.
 scripts/optimization/check-integration-health.ps1|PSAvoidAssignmentToAutomaticVariable
-scripts/microsoft-enterprise/azure/vm-orchestrator.ps1|PSAvoidUsingConvertToSecureStringWithPlainText
+scripts/microsoft-enterprise/azure/vm-orchestrator.ps1|PSAvoidUsingConvertToSecureStringWithPlainText|4
 scripts/cloud-orchestration/orchestrator/auto-failover.ps1|PSAvoidUsingComputerNameHardcoded
 scripts/cloud-orchestration/orchestrator/load-balancer.ps1|PSAvoidUsingComputerNameHardcoded
 scripts/cloud-orchestration/hybrid-identity/setup-hybrid-identity.ps1|PSAvoidUsingConvertToSecureStringWithPlainText

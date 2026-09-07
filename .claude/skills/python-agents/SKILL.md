@@ -97,7 +97,8 @@ Prefer `asyncio.TaskGroup` (3.11+) when partial failure should cancel siblings; 
 
 Annotate everything public. CI enforces pyright **standard** mode over the package
 (`src/ai/python/pyrightconfig.json`, `pythonVersion` 3.10 — the `requires-python`
-floor, so no 3.11+ syntax) as a blocking `python-spoke.yml` job; **strict** is the
+floor, so no 3.11+ syntax) as a blocking `quality.yml` job (`python-typecheck`, feeding the
+required `Quality Check Summary`; `python-spoke.yml` is path-filtered and keeps pytest); **strict** is the
 bar for new code, so run it locally before opening a PR and keep your diff clean
 under it. The shipped package is still some way from strict (185 diagnostics when
 the standard gate landed) and is tightened module by module — do not flip the

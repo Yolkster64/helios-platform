@@ -37,9 +37,11 @@ Two workflows carry PowerShell checks; each gates a different thing:
   (pinned) and runs `scripts/verify/psa-gate.ps1`, which analyzes `src/` and `scripts/`
   file by file (`Invoke-ScriptAnalyzer`'s `-Path` is a single string; the old step
   passed an array, never bound, and hid that behind `continue-on-error`). An
-  Error-severity finding, or a file the analyzer throws on, fails the job unless its
-  `<path>|<rule>` / `<path>|analyzer-exception` line is in `.github/psa-baseline.txt`
-  (legacy scripts only; the header forbids new lines). Warning-severity findings —
+  Error-severity finding, or a file the analyzer throws on, fails the job unless
+  `.github/psa-baseline.txt` tolerates it — `<path>|<rule>|<count>` for exactly that many
+  occurrences of a rule in a file (one more fails with its line), `<path>|analyzer-exception`
+  for a file the analyzer cannot process (legacy scripts only; the header forbids new lines
+  and raised counts). Warning-severity findings —
   thousands over the legacy corpus, `PSAvoidUsingWriteHost` above all — stay advisory:
   counted in the step summary and written to the `powershell-analysis` artifact. The
   job feeds the required `Quality Check Summary` context, so a new Error-severity

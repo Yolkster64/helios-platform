@@ -10,8 +10,9 @@ for the house rules). The Python spoke is `src/ai/python/helios_agents` — anal
 fleet-learning lane (`fleet_learning.py`, `fleet_worker.py`) — invoked by the C# hub as a
 subprocess through `src/ai/HELIOS.AIHub/Learning/PythonInsightsSpoke.cs` with one JSON
 request on stdin and one JSON response on stdout (`helios_agents/__main__.py`). Its CI
-is `.github/workflows/python-spoke.yml` (pytest bare + ml matrix, pyright over the
-package with `src/ai/python/pyrightconfig.json`). Focus, in priority order:
+is `.github/workflows/python-spoke.yml` (pytest bare + ml matrix; path-filtered) plus the
+`python-typecheck` job of `quality.yml` (pyright over the package with
+`src/ai/python/pyrightconfig.json`, feeding the required `Quality Check Summary`). Focus, in priority order:
 
 1. **The stdio contract**: nothing but the response JSON ever reaches stdout — a stray
    `print`, progress bar, or library chatter on stdout breaks the C# parser. Logs go

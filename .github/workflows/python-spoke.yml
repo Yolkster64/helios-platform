@@ -60,31 +60,6 @@ jobs:
           printf '%s' '{"op":"engine_catalog"}' | python -m helios_agents > response.json
           python -c 'import json; result=json.load(open("response.json", encoding="utf-8")); assert result["ok"] and result["result"]["implemented_count"] > 0'
 
-  typecheck:
-    name: pyright (helios_agents)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/ai/python
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # Type-check the spoke package only (src/ai/python/pyrightconfig.json:
-      # include helios_agents, standard mode, pythonVersion 3.10 = the package's
-      # requires-python floor). The ml extras are installed so the optional
-      # numpy/scikit-learn imports resolve instead of reading as missing
-      # modules; the bare path is still exercised by the pytest matrix above.
-      # Blocking: the package is clean at this pin, so any new finding fails
-      # the job. The tests/ tree is deliberately outside the include — it is
-      # loosely typed by design and stays covered by pytest.
-      - name: Install package and pyright
-        run: |
-          python -m pip install '.[ml]'
-          python -m pip install pyright==1.1.405
-
-      - name: Run pyright
-        run: python -m pyright
+  # The pyright type check moved to quality.yml (python-typecheck): this workflow is
+  # path-filtered, so a job here can neither be a required context nor feed the
+  # required Quality Check Summary.

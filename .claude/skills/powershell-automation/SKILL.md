@@ -45,9 +45,9 @@ if ($LASTEXITCODE -ne 0) { throw "AI routing failed" }
 preinstalled — there is no actions/setup-powershell action), gated against the legacy
 baseline `.github/ps1-parse-baseline.txt`: a parse error in any non-baseline file
 fails the job. PSScriptAnalyzer 1.25.0 runs in `quality.yml` through
-`scripts/verify/psa-gate.ps1`: an Error-severity finding or an analyzer failure outside
-`.github/psa-baseline.txt` fails the job, warnings are advisory (artifact + step
-summary); Pester is pinned to 5.4.0 in `code-checks.yml`.
+`scripts/verify/psa-gate.ps1`: an Error-severity finding or an analyzer failure beyond what
+`.github/psa-baseline.txt` tolerates (`<path>|<rule>|<count>`, legacy only) fails the job,
+warnings are advisory (artifact + step summary); Pester is pinned to 5.4.0 in `code-checks.yml`.
 
 ## Reference material
 
