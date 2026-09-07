@@ -16,14 +16,16 @@ public class FleetPlanServiceTests
 {
     private const string TaskTypeName = "code_review";
 
-    private static FleetTopology Topology(params string[] chain) => new()
+    private static FleetTopology Topology(params string[] chain) => Topology(TaskTypeName, chain);
+
+    private static FleetTopology Topology(string taskType, string[] chain) => new()
     {
         Pools = new[]
         {
             new FleetPool
             {
                 Name = "xcore-9-test",
-                TaskTypes = new[] { TaskTypeName },
+                TaskTypes = new[] { taskType },
                 ProviderChain = chain,
                 HermesFleet = new HermesFleetOptions { Board = "xcore-test", MaxConcurrentLanes = 2 },
             },
@@ -36,16 +38,16 @@ public class FleetPlanServiceTests
     /// learner's 12-sample minimum — so the result is the deterministic F# linear
     /// reorder whether or not the native library is present.
     /// </summary>
-    private static List<RoutingOutcome> ReorderingHistory()
+    private static List<RoutingOutcome> ReorderingHistory(string taskType = TaskTypeName)
     {
         var history = new List<RoutingOutcome>();
         for (var i = 0; i < 6; i++)
         {
-            history.Add(FakeLearningStore.Outcome(TaskTypeName, "flaky", success: false));
+            history.Add(FakeLearningStore.Outcome(taskType, "flaky", success: false));
         }
         for (var i = 0; i < 5; i++)
         {
-            history.Add(FakeLearningStore.Outcome(TaskTypeName, "reliable", success: true));
+            history.Add(FakeLearningStore.Outcome(taskType, "reliable", success: true));
         }
         return history;
     }
@@ -198,6 +200,91 @@ public class FleetPlanServiceTests
         Assert.Equal(11, entry.SampleCount); // the language-less samples, none of the python ones
         Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
         Assert.Equal("linear", entry.Engine);
+    }
+
+    [Fact]
+    public async Task PlanAsync_QualifiedPoolTaskType_IsScoredOnItsOwnLanguageBucket()
+    {
+        // A pool listing "code_generation:fsharp" names the (code_generation, fsharp)
+        // key the hub records under. Read verbatim it would score the orphan
+        // ("code_generation:fsharp", no language) bucket nothing writes to — 0 samples,
+        // engine none. And the 200 newest language-less outcomes (one whole window,
+        // favouring flaky) must not stand in for the 11 fsharp samples behind them: the
+        // scoped window is read first and it is not empty.
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 200; i++)
+        {
+            var flakyWins = i % 2 == 0;
+            history.Add(FakeLearningStore.Outcome("code_generation", flakyWins ? "flaky" : "reliable", success: flakyWins));
+        }
+        history.AddRange(ReorderingHistory("code_generation").Select(o => o with { Language = "fsharp" }));
+        var service = new FleetPlanService(new FakeLearningStore(history), historyWindow: 200);
+
+        var plan = await service.PlanAsync(Topology("code_generation:fsharp", new[] { "flaky", "reliable" }));
+
+        var entry = Assert.Single(plan);
+        Assert.Equal("code_generation:fsharp", entry.TaskType); // the pool's string, verbatim
+        Assert.Equal(11, entry.SampleCount); // the fsharp samples, none of the language-less ones
+        Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
+        Assert.Equal("linear", entry.Engine);
+    }
+
+    [Fact]
+    public async Task PlanAsync_QualifiedPoolTaskType_WithoutLanguageEvidence_FallsBackToLanguagelessEvidence()
+    {
+        // No fsharp outcome exists yet, so the pool is scored on the parent task type's
+        // language-less evidence — the hub's own fallback for a language-qualified route
+        // (AIHubService.ApplyLearningAsync) — rather than reporting "no evidence".
+        var service = new FleetPlanService(
+            new FakeLearningStore(ReorderingHistory("code_generation")), historyWindow: 200);
+
+        var plan = await service.PlanAsync(Topology("code_generation:fsharp", new[] { "flaky", "reliable" }));
+
+        var entry = Assert.Single(plan);
+        Assert.Equal("code_generation:fsharp", entry.TaskType);
+        Assert.Equal(11, entry.SampleCount);
+        Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
+        Assert.Equal("linear", entry.Engine);
+    }
+
+    [Fact]
+    public async Task PlanAsync_QualifiedLookingPoolTaskType_WithANonCanonicalLanguage_IsReadVerbatim()
+    {
+        // "code_generation:F#" is not a key the hub would ever split (its language part
+        // is not canonical), so the hub records such requests verbatim and the planner
+        // must read that literal key — splitting it would look for evidence under a
+        // language no record carries.
+        var service = new FleetPlanService(
+            new FakeLearningStore(ReorderingHistory("code_generation:F#")), historyWindow: 200);
+
+        var plan = await service.PlanAsync(Topology("code_generation:F#", new[] { "flaky", "reliable" }));
+
+        var entry = Assert.Single(plan);
+        Assert.Equal(11, entry.SampleCount);
+        Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SharedQualifiedTaskTypes_ReadsScopedAndFallbackWindowsOnce()
+    {
+        // Two pools sharing an empty qualified key cost two reads in total (the scoped
+        // window, then the language-less fallback), not two per pool: the cache keys on
+        // the pool's string, so the second pool reuses the first's evidence.
+        var store = new CountingLearningStore();
+        var service = new FleetPlanService(store, historyWindow: 200);
+        var topology = new FleetTopology
+        {
+            Pools = new[]
+            {
+                new FleetPool { Name = "p1", TaskTypes = new[] { "code_generation:fsharp" }, ProviderChain = new[] { "a", "b" } },
+                new FleetPool { Name = "p2", TaskTypes = new[] { "code_generation:fsharp" }, ProviderChain = new[] { "b", "a" } },
+            },
+        };
+
+        var plan = await service.PlanAsync(topology);
+
+        Assert.Equal(2, plan.Count);
+        Assert.Equal(2, store.Reads);
     }
 
     [Fact]

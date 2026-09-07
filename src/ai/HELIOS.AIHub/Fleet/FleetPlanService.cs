@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using HELIOS.AIHub.Learning;
+using HELIOS.AIHub.Routing;
 
 namespace HELIOS.AIHub.Fleet;
 
@@ -74,8 +75,9 @@ public sealed class FleetPlanService
         FleetTopology topology, CancellationToken cancellationToken = default)
     {
         var entries = new List<FleetPlanEntry>();
-        // One store read per task type, not per pool × task type: pools may share task
-        // types, and the store can be a network hop (Azure Table).
+        // One evidence read per pool task type (the string the topology writes), not
+        // per pool × task type: pools may share task types, and the store can be a
+        // network hop (Azure Table).
         var organicByTask = new Dictionary<string, IReadOnlyList<RoutingOutcome>>(StringComparer.Ordinal);
 
         foreach (var pool in topology.Pools)
@@ -84,21 +86,28 @@ public sealed class FleetPlanService
             {
                 if (!organicByTask.TryGetValue(taskType, out var organic))
                 {
-                    // Pools route by bare task type, so they are scored on the same
-                    // language-less evidence RouteAsync would use for that key —
-                    // language-qualified outcomes belong to their own chains. The
-                    // read goes through the store's (taskType, language: null) key so
-                    // the window is taken AFTER scoping: language-qualified outcomes
-                    // filling the newest historyWindow records can never crowd a
-                    // pool's own language-less samples out of the read and report
-                    // "no evidence" while evidence exists (the hub's RouteAsync had
-                    // the same defect and takes the same fix).
-                    organic = ChainReorderEngine.OrganicOnly(
-                        await GetRecentLanguagelessSafeAsync(taskType, cancellationToken).ConfigureAwait(false));
+                    // A pool is scored on the evidence RouteAsync would use for its key.
+                    // A bare task type reads the language-less records — its own chain's
+                    // outcomes; language-qualified outcomes belong to their own chains.
+                    // A qualified key (code_generation:fsharp) IS the (taskType,
+                    // language) the hub records under, so it reads that scoped window
+                    // first and falls back to the language-less one when the scoped read
+                    // holds nothing organic, mirroring AIHubService.ApplyLearningAsync;
+                    // read verbatim it would score the orphan ("code_generation:fsharp",
+                    // no language) bucket nothing writes to. Every read goes through the
+                    // store's (taskType, language) key so the window is taken AFTER
+                    // scoping: another language's outcomes filling the newest
+                    // historyWindow records can never crowd a pool's own samples out of
+                    // the read and report "no evidence" while evidence exists (the
+                    // hub's RouteAsync had the same defect and takes the same fix).
+                    organic = await GetOrganicEvidenceAsync(taskType, cancellationToken).ConfigureAwait(false);
                     organicByTask[taskType] = organic;
                 }
 
                 var configured = pool.ProviderChain;
+                // The pool's original string is also the hub's learning key for that
+                // evidence (ChainReorderEngine.LearningKey joins the split with the same
+                // separator), so the neural learner's per-key cache lines up with RouteAsync.
                 var (learned, engine) = organic.Count == 0 || configured.Count == 0
                     ? (configured, ChainReorderEngine.None)
                     : _reorderEngine.Reorder(taskType, configured, organic);
@@ -119,18 +128,59 @@ public sealed class FleetPlanService
     }
 
     /// <summary>
-    /// The newest <c>historyWindow</c> language-less outcomes of a task type — the
-    /// (taskType, null) key, scoped at the store so the cap applies after scoping.
-    /// Same degradation contract as AIHubService.ApplyLearningAsync: a store failure
-    /// reads as "no evidence" (engine none), never a crashed advisory report.
+    /// The organic evidence for one pool task type: the (taskType, language) window the
+    /// key names (<see cref="SplitPoolTaskType"/>), then — for a qualified key whose own
+    /// window holds nothing organic — the language-less window. This is the two-step
+    /// read AIHubService.ApplyLearningAsync performs for a language-qualified route, so
+    /// the plan predicts the policy the hub would actually apply.
     /// </summary>
-    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentLanguagelessSafeAsync(
-        string taskType, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<RoutingOutcome>> GetOrganicEvidenceAsync(
+        string poolTaskType, CancellationToken cancellationToken)
+    {
+        var (taskType, language) = SplitPoolTaskType(poolTaskType);
+        var organic = ChainReorderEngine.OrganicOnly(
+            await GetRecentSafeAsync(taskType, language, cancellationToken).ConfigureAwait(false));
+        if (organic.Count == 0 && language is not null)
+        {
+            organic = ChainReorderEngine.OrganicOnly(
+                await GetRecentSafeAsync(taskType, language: null, cancellationToken).ConfigureAwait(false));
+        }
+        return organic;
+    }
+
+    /// <summary>
+    /// The (taskType, language) a pool task type records under. A qualified routing key
+    /// whose language part is already canonical (<c>code_generation:fsharp</c>) splits;
+    /// a bare task type, or a key the hub itself would treat as a literal task type
+    /// (<c>code_generation:F#</c>, whose language part is not canonical), reads verbatim
+    /// with no language. The planner has no routing table to consult, so unlike
+    /// <see cref="TaskTypeRoutingStrategy.CanonicalizeTaskType"/> it does not require
+    /// the key to be configured: a pool may name a chain before the hub has one, and is
+    /// then scored on the parent task type's evidence through the fallback.
+    /// </summary>
+    private static (string TaskType, string? Language) SplitPoolTaskType(string poolTaskType)
+    {
+        var (taskType, language) = TaskTypeRoutingStrategy.SplitRoutingKey(poolTaskType);
+        return taskType.Length > 0
+               && language is not null
+               && string.Equals(TaskTypeRoutingStrategy.NormalizeLanguage(language), language, StringComparison.Ordinal)
+            ? (taskType, language)
+            : (poolTaskType, null);
+    }
+
+    /// <summary>
+    /// The newest <c>historyWindow</c> outcomes of one (taskType, language) key — scoped
+    /// at the store so the cap applies after scoping. Same degradation contract as
+    /// AIHubService.ApplyLearningAsync: a store failure reads as "no evidence" (engine
+    /// none), never a crashed advisory report.
+    /// </summary>
+    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentSafeAsync(
+        string taskType, string? language, CancellationToken cancellationToken)
     {
         try
         {
             return await _learning.GetRecentForLanguageAsync(
-                    taskType, language: null, _historyWindow, cancellationToken)
+                    taskType, language, _historyWindow, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (IOException)

@@ -25,20 +25,31 @@ before. The lookup lives in `TaskTypeRoutingStrategy.GetChain(taskType, language
 `helios_task_routing_get`, `/v1/routing`, and `helios-ai routing` list the table's keys
 verbatim, so a caller may send `code_generation:fsharp` as the *task type* with no
 language. `AIHubService.RouteAsync(HubRouteRequest)` canonicalizes such a request before
-the chain lookup, the outcome record, and the learning read: when the request carries no
-language, the task type contains the separator, `taskRouting` holds that exact key with a
-non-empty chain, and the language part is already canonical, it is split into
+the chain lookup, the outcome record, and the learning read: when the task type contains
+the separator, `taskRouting` holds that exact key with a non-empty chain, the language
+part is already canonical, and the request either carries no language or carries that
+same language (after normalization, so `F#` counts), it is split into
 (`code_generation`, `fsharp`). The chain served is the one the qualified key names, as
 before; what changes is the record — `taskType: code_generation, language: fsharp`, the
-same bucket a caller passing `language: fsharp` produces — instead of a task type
-`code_generation:fsharp` with no language, a second evidence bucket the
-(taskType, language) reads never see. Everything else passes through unchanged: a bare
-task type; a qualified-looking key the table does not hold (an ordinary unknown task
-type, served by `routing.defaultChain` and recorded verbatim); a key whose language part
-is not canonical (`code_generation:F#`, which `GetChain` on the split would not resolve);
-and a request that already carries a language. The rule is
-`TaskTypeRoutingStrategy.CanonicalizeTaskType`, pinned by `TaskTypeRoutingStrategyTests`
-and `AIHubServiceTests`; `tandem` takes a bare task type and is not canonicalized.
+same bucket a caller passing the bare task type with `language: fsharp` produces —
+instead of a task type `code_generation:fsharp` with no language, a second evidence
+bucket the (taskType, language) reads never see. Everything else passes through
+unchanged: a bare task type; a qualified-looking key the table does not hold (an ordinary
+unknown task type, served by `routing.defaultChain` and recorded verbatim); a key whose
+language part is not canonical (`code_generation:F#`, which `GetChain` on the split would
+not resolve); and a request whose language contradicts the key's
+(`code_generation:fsharp` with `language: cpp`) — the hub cannot tell which half the
+caller meant, so it neither guesses nor rejects, and the request is served and recorded
+exactly as sent (task type `code_generation:fsharp`, language `cpp`). When the resolved
+chain lists no registered provider, the error names the key that resolved
+(`code_generation:fsharp`), not the bare parent whose own chain may be healthy.
+
+`tandem` applies the same canonicalization to its task type: it takes no language, so
+only the no-language case arises. The chain it races is the qualified key's, every
+outcome it records lands in the same (taskType, language) bucket a routed request would
+write, and the result's `taskType` is the bare task type (the `/v1/tandem` payload gains
+no field). The rule is `TaskTypeRoutingStrategy.CanonicalizeTaskType`, pinned by
+`TaskTypeRoutingStrategyTests` and `AIHubServiceTests`.
 
 ## Language keys and normalization
 
@@ -82,7 +93,9 @@ bare parent, and run `dotnet test tests/HELIOS.AIHub.Tests`.
 | MCP | `helios_ai_route` optional `language` parameter |
 | Hub API | `AIHubService.RouteAsync(HubRouteRequest)`; the `(taskType, prompt, system)` overload is unchanged |
 
-`tandem` and `compare` are task-type-only today; they record language-less outcomes.
+`tandem` takes a task type and no language: a bare task type records language-less
+outcomes, and a qualified key is canonicalized (see above) so its outcomes carry the
+key's language. `compare` takes providers, not a task type, and records nothing.
 
 ## Outcomes and learning
 
@@ -97,9 +110,11 @@ in the C# default) keys its evidence on **(taskType, language)**:
 
 - a language-less route learns from language-less records only — the records its own
   chain produced, which is also every legacy record;
-- a language-qualified route learns from records tagged with that language; when none
-  exist yet it falls back to the parent task type's language-less records, never to
-  another language's.
+- a language-qualified route learns from records tagged with that language; when that
+  scoped window holds no *organic* record — none exist yet, or every record in it is
+  advisory (`source` set: absorption benchmarks, fork digests, fleet-lane outcomes) — it
+  falls back to the parent task type's language-less records, never to another
+  language's.
 
 The scoping happens at the store: `ILearningStore.GetRecentForLanguageAsync(taskType,
 language, window)` takes the history window *after* scoping (null language = language-less
@@ -108,10 +123,14 @@ newest outcomes can never crowd a route's own evidence out of the window; the
 advisory-record exclusion (`OrganicOnly`) that keeps source-tagged records out of routing
 is applied to the scoped read. `ChainReorderEngine.ForLanguage` states the same rule over
 an in-memory list and is pinned by `LanguageScopedHistoryTests`. The fleet planner reads
-the language-less key the same way (`FleetPlanService`, pinned by
-`FleetPlanServiceTests`): pools route by bare task type, and a window full of
-language-qualified outcomes must not make a pool's language-less samples read as "no
-evidence". Nothing here changes the advisory contract — recommendations are reported,
+the store the same way (`FleetPlanService`, pinned by `FleetPlanServiceTests`): a pool
+whose `taskTypes` names a bare task type is scored on the language-less key, and a
+window full of language-qualified outcomes must not make its samples read as "no
+evidence"; a pool naming a qualified key (`code_generation:fsharp`, language part
+canonical) is scored on that (taskType, language) window first, falling back to the
+language-less window when the scoped read holds nothing organic — the hub's own two-step
+read — rather than on the orphan `code_generation:fsharp`-with-no-language bucket nothing
+writes to. Nothing here changes the advisory contract — recommendations are reported,
 never auto-executed.
 
 The Python spoke's `provider_summary` (behind `/v1/insights`) adds a `languages` map —

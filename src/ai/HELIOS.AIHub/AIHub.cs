@@ -183,7 +183,13 @@ public sealed class AIHubService
     /// helios_task_routing_get, /v1/routing and helios-ai routing list them) is split into
     /// (<c>code_generation</c>, <c>fsharp</c>) before the chain lookup, the recording and
     /// the learning read, so all three use the one bucket a caller passing the language
-    /// explicitly would (<see cref="TaskTypeRoutingStrategy.CanonicalizeTaskType"/>).
+    /// explicitly would (<see cref="TaskTypeRoutingStrategy.CanonicalizeTaskType"/>). The
+    /// same split applies when the request's language, normalized, is the key's own
+    /// (<c>code_generation:fsharp</c> with <c>fsharp</c> is that request spelled twice,
+    /// not a third bucket). A language that contradicts the key's
+    /// (<c>code_generation:fsharp</c> with <c>cpp</c>) is left verbatim: the hub cannot
+    /// know which half the caller meant, so it neither guesses nor rejects — the request
+    /// is served and recorded exactly as sent.
     /// </summary>
     public async Task<ChatResult> RouteAsync(HubRouteRequest request, CancellationToken cancellationToken = default)
     {
@@ -191,20 +197,34 @@ public sealed class AIHubService
         var prompt = request.Prompt;
         var system = request.System;
         var language = TaskTypeRoutingStrategy.NormalizeLanguage(request.Language);
-        if (language is null && taskType is not null)
+        if (taskType is not null)
         {
             // Must precede the chain lookup, the outcome record and the learning read:
-            // all three key on the same (taskType, language).
-            (taskType, language) = _strategy.CanonicalizeTaskType(taskType);
+            // all three key on the same (taskType, language). The split is taken when
+            // the request carries no language or repeats the key's own; a language that
+            // contradicts the key's leaves the request as sent (see the summary).
+            var (bareTaskType, keyLanguage) = _strategy.CanonicalizeTaskType(taskType);
+            if (keyLanguage is not null
+                && (language is null || string.Equals(language, keyLanguage, StringComparison.Ordinal)))
+            {
+                (taskType, language) = (bareTaskType, keyLanguage);
+            }
         }
 
         var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
+            // Name the key the request resolved to: after the split above (or with an
+            // explicit language) that is the qualified key, and naming the bare task
+            // type would send the operator to a parent chain that may be perfectly
+            // healthy.
+            var routingKey = taskType is null || language is null
+                ? taskType
+                : TaskTypeRoutingStrategy.RoutingKey(taskType, language);
             return new ChatResult(false, null, "none", "", TimeSpan.Zero,
-                Error: taskType is null
+                Error: routingKey is null
                     ? "No providers in routing.defaultChain are registered."
-                    : $"No registered providers for task type '{taskType}' (chain empty). Check config/aihub.json.");
+                    : $"No registered providers for task type '{routingKey}' (chain empty). Check config/aihub.json.");
         }
 
         chain = FilterChainByContext(chain, prompt, system);
@@ -715,12 +735,25 @@ public sealed class AIHubService
     /// keeping whichever finishes correctly beats waiting out a slow one before trying
     /// the next. Every result is recorded to the learning store (when enabled), so tandem
     /// runs feed the same evidence RouteAsync draws on — usage across the tandem set
-    /// compounds into better single-shot routing over time.
+    /// compounds into better single-shot routing over time. For that to hold, a task
+    /// type that is itself one of the table's qualified keys (<c>code_generation:fsharp</c>)
+    /// is canonicalized exactly as a language-less RouteAsync request is — split into
+    /// (<c>code_generation</c>, <c>fsharp</c>) before the chain lookup, every record and
+    /// the learning read — so the evidence lands in the (taskType, language) bucket the
+    /// hub reads rather than under an orphan task type, and
+    /// <see cref="TandemResult.TaskType"/> reports the bare task type that resulted.
+    /// Tandem takes no language, so the contradictory-language case RouteAsync leaves
+    /// verbatim cannot arise here.
     /// </summary>
     public async Task<TandemResult> TandemAsync(
         string taskType, string prompt, string? system = null, CancellationToken cancellationToken = default)
     {
-        var chain = _strategy.GetChain(taskType).Where(name => _byProvider.ContainsKey(name)).ToList();
+        // Must precede the chain lookup, the outcome records and the learning read: all
+        // three key on the same (taskType, language), as in RouteAsync.
+        string? language;
+        (taskType, language) = _strategy.CanonicalizeTaskType(taskType);
+
+        var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
             return new TandemResult(taskType, Array.Empty<ChatResult>(), null);
@@ -728,11 +761,11 @@ public sealed class AIHubService
 
         chain = FilterChainByContext(chain, prompt, system);
 
-        var request = new ChatRequest(prompt, System: system, TaskType: taskType);
+        var request = new ChatRequest(prompt, System: system, TaskType: taskType, Language: language);
         var tasks = chain.Select(async name =>
         {
             var result = await _byProvider[name].ChatAsync(request, cancellationToken).ConfigureAwait(false);
-            await RecordOutcomeAsync(taskType, language: null, result, cancellationToken).ConfigureAwait(false);
+            await RecordOutcomeAsync(taskType, language, result, cancellationToken).ConfigureAwait(false);
             return result;
         });
 
@@ -740,7 +773,7 @@ public sealed class AIHubService
 
         // Prefer the reordered (learned) chain's first successful result; when nothing
         // succeeded there is no winner to report, only the failures to inspect.
-        var learnedOrder = await ApplyLearningAsync(taskType, language: null, chain, cancellationToken).ConfigureAwait(false);
+        var learnedOrder = await ApplyLearningAsync(taskType, language, chain, cancellationToken).ConfigureAwait(false);
         var byProviderResult = results.ToDictionary(r => r.Provider, StringComparer.OrdinalIgnoreCase);
         var winner = learnedOrder
             .Select(name => byProviderResult.GetValueOrDefault(name))
@@ -769,7 +802,12 @@ public sealed class AIHubService
             })
             .ToList();
 
-    /// <summary>Every provider's tandem result plus which one the learned policy currently favors.</summary>
+    /// <summary>
+    /// Every provider's tandem result plus which one the learned policy currently favors.
+    /// TaskType is the bare task type after canonicalization: a qualified key's language
+    /// part went into the records, not into this payload (its shape is the /v1/tandem
+    /// response contract and must not grow a field).
+    /// </summary>
     public sealed record TandemResult(string TaskType, IReadOnlyList<ChatResult> Results, ChatResult? Winner);
 
     public interface IRoutingTableView
