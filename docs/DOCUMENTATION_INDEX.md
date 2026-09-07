@@ -12,6 +12,7 @@ state.
 | Contributors | [PROJECT_SETUP.md](PROJECT_SETUP.md) | Toolchain, build, test, CLI, MCP |
 | Repository owner | [OWNER_START_HERE.md](OWNER_START_HERE.md) | GitHub settings, Azure OIDC, secrets, connectors |
 | Reviewers and operators | [TEST_RUN_PLAYBOOK.md](TEST_RUN_PLAYBOOK.md) | Exact validation and smoke-run commands |
+| Absorption and learning operators | [absorption/START_HERE.md](absorption/START_HERE.md) | Watchlist, hosted benchmark, ledger, fleet, dashboard — the ten-minute path |
 | Architects | [CONSOLIDATION_BLUEPRINT.md](CONSOLIDATION_BLUEPRINT.md) | Product consolidation direction |
 
 ## Current-status documents
@@ -36,6 +37,7 @@ state.
 - [architecture/GITHUB_ECOSYSTEM_DESIGN.md](architecture/GITHUB_ECOSYSTEM_DESIGN.md)
 - [architecture/HERMES_FLEET_AND_XCORE.md](architecture/HERMES_FLEET_AND_XCORE.md)
 - [architecture/ROADMAP_MULTI_LLM.md](architecture/ROADMAP_MULTI_LLM.md)
+- [absorption/README.md](absorption/README.md)
 
 ### MCP and client integration
 

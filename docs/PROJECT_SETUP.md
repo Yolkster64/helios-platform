@@ -52,6 +52,7 @@ dotnet test tests/HELIOS.AIHub.Tests -c Release
 cd src/ai/python && python3 -m pytest tests # Python spoke (dependency-free; [ml] extra optional)
 cd ../../..
 bicep build infra/main.bicep --stdout       # or: az bicep build --file infra/main.bicep
+python3 scripts/validation/validate_yolkster_cutover.py  # cutover contract (read-only)
 ```
 
 Expected outcomes for these commands — and smoke runs for every other surface (CLI, API,

@@ -9,7 +9,7 @@ benchmark provenance, never a write target.
 
 > **GitHub Issues**: enabled on `Yolkster64/helios-platform` (measured 2026-09-03,
 > `has_issues=true`). Every epic below IS a GitHub issue — **E-n is issue #(13+n)**, so
-> E1 = #14 … E40 = #53 (E24 #37, E32 #45 and E34 #47 are closed; the rest open). Issues
+> E1 = #14 … E40 = #53 (E1 #14, E5 #18, E24 #37, E32 #45 and E34 #47 are closed; the rest open). Issues
 > #54–#93 are `[GH-NN]` copies of #14–#53 created by Linear's GitHub integration looping
 > this repo's own Linear sync; #93 is closed and #54–#92 are being closed as duplicates
 > by `scripts/github/close-duplicate-issues.ps1` once the owner switches the Linear-side
@@ -18,12 +18,17 @@ benchmark provenance, never a write target.
 > wiki by `.github/workflows/wiki-generator.yml`.
 
 **Status legend** — per epic: `open` (not started), `tranche-1` (first integration pass
-landed or in flight), `audit-first` (safety carve-out; documentation before any code).
+landed or in flight), `audit-first` (safety carve-out; documentation before any code),
+`absorbed (PR #n)` (the epic's issue is closed; the PR that landed it).
 Per PR (watchlist): `candidate → benchmarked → absorbed | rejected`.
+
+> Beginner's guide and per-epic outcomes: `docs/absorption/START_HERE.md` and
+> `docs/absorption/EPICS_AND_LEARNINGS.md`. When an epic's issue closes, update its
+> status line here in the same PR as the watchlist change.
 
 ---
 
-## E1 — Unified `setup-all` control-fabric CLI (`enhancement`) — open
+## E1 — Unified `setup-all` control-fabric CLI (`enhancement`) — absorbed (PR #94)
 
 Ten upstream PRs circle one idea: a single `setup-all` entrypoint that brings the whole
 control fabric to readiness — inventory, hardened wrappers, persisted board config —
@@ -39,6 +44,10 @@ fleet topology, and board-setup scripts (PS7 wrapping the C# CLI, per repo conve
 - Extracts: one command surface; readiness inventory (dedupe with E14); persisted
   board-config artifact pattern
 - Risks: competing drafts — pick one shape, credit the rest; heavy tree divergence
+- Landed: `scripts/setup/setup-all.ps1` (PR #94) — one readiness entrypoint that wraps
+  `verify-readiness.ps1`, the connect scripts' verify-only mode, `setup-ai-clis.ps1`, the
+  fleet topology and `.mcp.json` into a single inventory table; issue #14 closed as
+  completed on 2026-09-06
 
 ## E2 — XCore9 evaluation service & runtime matrix (`ai-hub`) — open
 
@@ -78,7 +87,7 @@ fleet pools' tool allowlists (the review pool is read-only by design).
   too), the capability-backlog taxonomy as roadmap seed
 - Risks: security model differs; absorb taxonomy and validators, not the runtime
 
-## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — tranche-1
+## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — absorbed (PR #191)
 
 Managed-identity→Key-Vault secret binding, token audience hardening, and immutable
 plan/deploy custody — extending our OIDC + Key Vault stack with audit custody
@@ -95,6 +104,9 @@ discipline on the deploy path.
   and seals/upload artifacts even for failed attempts. Enforcement is in
   `scripts/validation/validate_deploy_custody.py` via
   `.github/workflows/deploy-hardening-contract.yml`.
+- Closed: issue #18 closed as completed on 2026-09-06 with PR #191; follow-ups #198
+  and #199 merged the same day, while #197, #196, #190 and #148 stay open for owner
+  decision (issue #229 has the triage table)
 
 ## E6 — Private Azure edge & segmented network (`infra`) — open
 
@@ -314,7 +326,7 @@ against the live fleet topology, not as new modules.
 - Extracts: x-tier module boundaries as context for E3's contracts
 - Risks: predates the Hermes/XCore contract era; likely superseded by E3
 
-## E24 — Workflow modernization & action-pin upgrades (`build-ci`) — open
+## E24 — Workflow modernization & action-pin upgrades (`build-ci`) — absorbed (PR #96)
 
 The early era's workflow hygiene: pipeline stabilization and linting, actions
 upgraded to v4, standardized CI/CD, an autonomous preflight workflow with
@@ -417,7 +429,7 @@ of the automation they guarded (E22).
 - Risks: the host automation is gone; port the rules into our logging/telemetry
   paths
 
-## E32 — Minimal-platform scorecard & API tests (`build-ci`) — open
+## E32 — Minimal-platform scorecard & API tests (`build-ci`) — absorbed (PR #97)
 
 A minimal-platform scorecard plus minimal API tests wired into a CI test step —
 lightweight platform-health signals predating the full test lanes; the scorecard

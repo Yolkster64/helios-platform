@@ -157,3 +157,10 @@ uv resolves and caches the environment on first run. Use this for agents under ~
   why the spoke never fans out itself (no asyncio/multiprocessing in it — verified),
   the worker-lane claim/lease protocol, the throttle layers, the learn-fleet tandem
   cycle, and an honest multi-modal readiness statement (declared today: nothing).
+- `references/agents-linux-libraries.md` — the agent shapes that exist (the op
+  dispatcher and its four-place extension checklist, the fleet worker as a Linux
+  process: signals, owned log sink, lockfile mutex, atomic saves, leases, exit codes),
+  DST-proof time handling in the collector, the Linux environments the spoke must run
+  in, the library policy as practiced, analytics and engine-advisory semantics with
+  numbers, the review-caught traps, and which `config/aihub.json` chain each kind of
+  Python work routes to. System view: `docs/architecture/AIHUB_LANGUAGE_ROLES.md`.

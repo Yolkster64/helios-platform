@@ -167,7 +167,8 @@ inventory says so.
 APIs only (azure-openai, azure-foundry, openai, anthropic, github-models), no ollama,
 no CLI subprocess agents, and the learning loop enabled from day one. Select it per
 shell with `AIHUB_CONFIG=config/aihub.cloud.json` (azure-up writes exactly that into
-`.helios/azure.env`), or per invocation with `--aihub-config`. After `azure-up.sh`,
+`.helios/azure.env`), or per invocation with `--config <path>` on `helios-ai` and
+`--aihub-config <path>` on `helios-ai-api`. After `azure-up.sh`,
 the `azure-openai` provider authenticates with your Entra ID login — no API key ever
 touches the machine.
 

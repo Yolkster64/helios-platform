@@ -257,6 +257,45 @@ Read one merged pull request per task before you write code: adding a provider �
 bootstrap script → #241 (`connect-github-app.ps1`) and #113 (`rest-connect.ps1`); a
 least-privilege workflow → #208's `governance-apply.yml` and #104's split authority.
 
+## An outside view
+
+Nothing here was written by someone who built HELIOS. On 2026-09-07 the Codex CLI
+(`codex exec -s read-only`, files only, no builds) was pointed at the repository with the
+prompt in [`scripts/wiki/outside-view-prompt.txt`](../scripts/wiki/outside-view-prompt.txt)
+and asked what a newcomer with a GitHub account and a ChatGPT login would see. Its answer,
+condensed, and what changed because of it:
+
+- **What it is.** An unfinished Windows-management and multi-AI platform whose usable centre
+  is the hub: prompts go in through the CLI, the REST API, or an MCP client, and a
+  configured provider chain answers. The desktop shell and the Azure infrastructure surround
+  that hub. The historical completion reports do not establish production readiness, and
+  the repository says so itself ([`README.md`](../README.md)).
+- **Shortest first answer.** A Codespace (`Code → Codespaces → Create codespace on main`),
+  then Path A above: build, `gh auth login … --scopes models:read`, `source
+  scripts/bootstrap/connect-github.sh`, `helios-ai ask … --provider github-models`. No Azure,
+  no ChatGPT credential involved ([`.github/CODESPACES_GUIDE.md`](../.github/CODESPACES_GUIDE.md)).
+- **Five newcomer mistakes it predicted**, each already answered somewhere in this guide:
+  expecting a ChatGPT login to light the `openai` API providers (they need `OPENAI_API_KEY`,
+  Path B); running the connection script with `bash` instead of `source`; reading
+  `Unconfigured` as broken or `Ready` as a successful answer; building the legacy root
+  project or adding the GUI to `HELIOS.sln`; following the owner checklist as if it were
+  contributor setup.
+- **Three defects it found in the docs, fixed in the same pull request as this section.**
+  `scripts/bootstrap/README.md` and the cloud profile's `$comment` advertised
+  `--aihub-config` as a `helios-ai` option; the CLI takes `--config <path>` and rejects
+  unknown options (`--aihub-config` is the REST host's switch). The "exactly what CI runs"
+  block in [`PROJECT_SETUP.md`](PROJECT_SETUP.md) omitted the cutover validator that
+  `CLAUDE.md` lists. [`src/gui/README.md`](../src/gui/README.md) said `global.json` pins SDK
+  10.0.400; it pins 10.0.100 with `rollForward: latestFeature`.
+- **Its biggest-risk verdict.** Mistaking documented ambition or green automation for
+  verified end-to-end readiness. That is the same warning as lesson 7 above, from someone
+  who had not read the lessons.
+
+Re-run it whenever the guide changes (`codex exec -s read-only "$(cat
+scripts/wiki/outside-view-prompt.txt)" < /dev/null`; the closed stdin matters, the CLI
+otherwise waits for input) and replace this section with what the fresh pass gets wrong or
+right. The point of the section is that the guide is graded by a reader, not by its authors.
+
 ## Where next
 
 - [`docs/PROJECT_SETUP.md`](PROJECT_SETUP.md) — the contributor guide: toolchain, tests,
@@ -267,5 +306,7 @@ least-privilege workflow → #208's `governance-apply.yml` and #104's split auth
   VS Code, Codex and Cursor, plus the Playwright browser server.
 - [`scripts/bootstrap/README.md`](../scripts/bootstrap/README.md) — every bring-up script and
   its contract.
+- [`docs/absorption/START_HERE.md`](absorption/START_HERE.md) — absorb the best of
+  upstream, safely: benchmark one watchlist PR in ten minutes; nothing auto-merges.
 - [`docs/OWNER_START_HERE.md`](OWNER_START_HERE.md) — the owner's day one.
 - [`.github/CODESPACES_GUIDE.md`](../.github/CODESPACES_GUIDE.md) — the zero-install path.

@@ -139,3 +139,11 @@ Depth lives in `references/` (index: `.claude/skills/README.md`):
   background engine (`docs/architecture/DYNAMIC_BACKGROUND_ENGINE.md`): SoA/AVX2
   update loops, GPU-resident sim with indirect draw, memory/network contracts, and
   the honest inventory of the recovered `docs/ui-xenoblade/Shaders/*.hlsl` fragments.
+- `references/cpu-memory-graphics-abi.md` — the shipped kernels' memory and CPU
+  discipline (caller-owned row-major buffers, stack scratch cap, auto-vectorizable
+  loops, double accumulation), the numerical and determinism rules the online-SGD
+  learner encodes, the flat C ABI end to end (status codes, ABI handshake,
+  `LibraryImport` signatures, csproj pickup, CI assert, degradation), the graphics
+  seams in order of preference, when a native path is justified, and which
+  `config/aihub.json` chain or fleet pool each kind of native work routes to.
+  System view: `docs/architecture/AIHUB_LANGUAGE_ROLES.md`.
