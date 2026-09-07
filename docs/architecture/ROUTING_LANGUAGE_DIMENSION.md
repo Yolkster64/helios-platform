@@ -131,6 +131,17 @@ records are advisory as "no evidence" while older organic records exist; that pl
 language-scoped read stays on the interface for advisory consumers (a per-language
 narrative that wants fleet-lane records too) and no routing or planning path calls it —
 `/v1/insights` and `/v1/metrics` read `GetRecentAsync` / `GetRecentAllAsync`.
+In Azure Table mode the language-less and the organic reads filter client-side (an
+absent `Language` or `Source` column cannot be selected by any OData comparison), so
+each scoped read examines at most `AzureTableLearningStore.DefaultScanBudget` (2 000)
+entities — two service pages — and returns what it found: a partition whose newest
+rows are all advisory, or all another language's (a cheap, persistent write path such
+as `POST /v1/learning` with the API key), costs a fixed number of pages per route and
+reads as thin or no evidence, in which case routing keeps its configured order. Rows
+recorded from now on carry an `Organic` boolean (true when `source` is null) so the
+organic read can move server-side once every row a deployment cares about has it —
+backfill, or wait for the pre-flag rows to age out of the window — because a filter on
+the new column would drop the legacy organic rows that lack it.
 `ChainReorderEngine.ForLanguage` and `OrganicOnly`
 state the same two rules over an in-memory list (`LanguageScopedHistoryTests` pins the
 language one). The fleet planner reads the store the same way (`FleetPlanService`, pinned

@@ -20,7 +20,18 @@ public sealed class AzureTableLearningStore : ILearningStore
 {
     private const string TableName = "aihubOutcomes";
 
+    /// <summary>
+    /// Absolute cap on the entities one scoped read examines, matches or not. The
+    /// language-less and the organic reads filter client-side (an absent column cannot
+    /// be filtered server-side), so without a cap a partition whose newest rows are all
+    /// advisory or all another language's would be walked to its end on every route —
+    /// a cheap, persistent write path (<c>POST /v1/learning</c> with the API key) turned
+    /// into Azure transaction load and route latency. Two service pages at most.
+    /// </summary>
+    internal const int DefaultScanBudget = 2_000;
+
     private readonly TableClient _table;
+    private readonly int _scanBudget;
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private bool _initialized;
 
@@ -36,9 +47,10 @@ public sealed class AzureTableLearningStore : ILearningStore
     /// reaches the service, the client-side scoping, the cap ending the stream — is
     /// pinned through a TableClient double (its members are virtual for exactly this).
     /// </summary>
-    internal AzureTableLearningStore(TableClient table)
+    internal AzureTableLearningStore(TableClient table, int scanBudget = DefaultScanBudget)
     {
         _table = table;
+        _scanBudget = scanBudget > 0 ? scanBudget : DefaultScanBudget;
     }
 
     private async Task EnsureTableAsync(CancellationToken cancellationToken)
@@ -82,6 +94,12 @@ public sealed class AzureTableLearningStore : ILearningStore
             ["Quality"] = outcome.Quality,
             ["Pool"] = outcome.Pool,
             ["Source"] = outcome.Source,
+            // Indexed discriminator for the organic read: a null Source is an ABSENT
+            // column, which no OData comparison can select, so the organic read filters
+            // client-side today. Rows written from here on carry the flag; once every
+            // row a deployment cares about has it (backfill, or the pre-flag rows aged
+            // out of the window), the read can push "Organic eq true" server-side.
+            ["Organic"] = outcome.Source is null,
             ["OccurredAt"] = outcome.Timestamp,
         };
 
@@ -146,7 +164,11 @@ public sealed class AzureTableLearningStore : ILearningStore
         // server-side "Source is absent" — an "eq" or "ne" on Source would drop the very
         // rows this read wants. Those cases stream the (server-filtered) partition
         // newest-first and keep the first <limit> rows that pass the client-side check
-        // — either way the cap applies after scoping, never before.
+        // — either way the cap applies after scoping, never before. The walk itself is
+        // bounded by the scan budget: after that many entities the read returns what it
+        // found, so a partition flooded with rows the client-side check rejects costs a
+        // fixed number of pages and reads as thin or no evidence (routing then keeps
+        // its configured order) instead of a partition-length scan per route.
         var filter = $"PartitionKey eq '{escapedPartition}' and TaskType eq '{escapedTaskType}'";
         if (language is not null)
         {
@@ -159,16 +181,21 @@ public sealed class AzureTableLearningStore : ILearningStore
             maxPerPage: Math.Min(limit, 1000),
             cancellationToken: cancellationToken);
 
+        var examined = 0;
         await foreach (var entity in query.ConfigureAwait(false))
         {
+            examined++;
             var outcome = ToOutcome(entity, fallbackTaskType: taskType);
-            if (!string.Equals(outcome.Language, language, StringComparison.Ordinal)
-                || (organicOnly && outcome.Source is not null))
+            if (string.Equals(outcome.Language, language, StringComparison.Ordinal)
+                && !(organicOnly && outcome.Source is not null))
             {
-                continue;
+                results.Add(outcome);
+                if (results.Count >= limit)
+                {
+                    break;
+                }
             }
-            results.Add(outcome);
-            if (results.Count >= limit)
+            if (examined >= _scanBudget)
             {
                 break;
             }

@@ -137,6 +137,66 @@ public sealed class AzureTableLearningStoreTests
     }
 
     /// <summary>A row as RecordAsync stores it: a null property is simply absent from the entity.</summary>
+    [Fact]
+    public async Task ScopedRead_ScanBudget_BoundsTheWalk_WhenEveryRowIsRejectedClientSide()
+    {
+        // A partition whose newest rows are all advisory cannot be filtered server-side
+        // (an organic row has no Source column); the organic read must stop after the
+        // scan budget and report what it found — here nothing — instead of walking the
+        // partition to its end on every route.
+        var rows = Enumerable.Range(0, 50).Select(i => Row($"adv{i}", language: null, source: "fleet-lane", at: 100 - i)).ToArray();
+        var table = new FakeTableClient(rows);
+        var store = new AzureTableLearningStore(table, scanBudget: 20);
+
+        var organic = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 5);
+
+        Assert.Empty(organic);
+        Assert.Equal(20, table.RowsServed);
+    }
+
+    [Fact]
+    public async Task ScopedRead_ScanBudget_KeepsTheOrganicRowsFoundWithinIt()
+    {
+        // The budget bounds the walk, it does not discard matches: organic rows met
+        // before the budget runs out are returned, and the cap still ends the stream.
+        var rows = Enumerable.Range(0, 5).Select(i => Row($"adv{i}", language: null, source: "fleet-lane", at: 100 - i))
+            .Append(Row("organic", language: null, source: null, at: 50))
+            .Concat(Enumerable.Range(0, 20).Select(i => Row($"late{i}", language: null, source: "fleet-lane", at: 40 - i)))
+            .ToArray();
+        var table = new FakeTableClient(rows);
+        var store = new AzureTableLearningStore(table, scanBudget: 10);
+
+        var organic = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 1);
+
+        Assert.Equal("organic", Assert.Single(organic).Provider);
+        Assert.Equal(6, table.RowsServed);
+    }
+
+    [Fact]
+    public async Task RecordAsync_WritesTheOrganicDiscriminator()
+    {
+        // New rows carry an indexed Organic flag (true when Source is null) so the
+        // organic read can move server-side once every row has it.
+        var table = new FakeTableClient();
+        var store = new AzureTableLearningStore(table);
+        var at = DateTimeOffset.UnixEpoch.AddSeconds(1);
+
+        await store.RecordAsync(new RoutingOutcome
+        {
+            TaskType = TaskTypeName, Provider = "p1", Model = "m", Success = true, LatencyMs = 10, CostUsd = 0, Timestamp = at,
+        });
+        await store.RecordAsync(new RoutingOutcome
+        {
+            TaskType = TaskTypeName, Provider = "p2", Model = "m", Success = true, LatencyMs = 10, CostUsd = 0, Timestamp = at, Source = "fleet-lane",
+        });
+
+        Assert.Equal(2, table.Added.Count);
+        Assert.True(table.Added[0].GetBoolean("Organic"));
+        Assert.Null(table.Added[0].GetString("Source"));
+        Assert.False(table.Added[1].GetBoolean("Organic"));
+        Assert.Equal("fleet-lane", table.Added[1].GetString("Source"));
+    }
+
     private static TableEntity Row(string provider, string? language, string? source = null, int at = 0)
     {
         var entity = new TableEntity(TaskTypeName, $"{at:D19}")
@@ -182,8 +242,16 @@ public sealed class AzureTableLearningStoreTests
 
         public int RowsServed { get; private set; }
 
+        public List<TableEntity> Added { get; } = new();
+
         public override Task<Response<TableItem>> CreateIfNotExistsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Response.FromValue(new TableItem("aihubOutcomes"), new StubResponse()));
+
+        public override Task<Response> AddEntityAsync<T>(T entity, CancellationToken cancellationToken = default)
+        {
+            Added.Add((TableEntity)(object)entity!);
+            return Task.FromResult<Response>(new StubResponse());
+        }
 
         public override AsyncPageable<T> QueryAsync<T>(
             string? filter, int? maxPerPage, IEnumerable<string>? select, CancellationToken cancellationToken)
