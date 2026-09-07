@@ -211,20 +211,19 @@ public sealed class AIHubService
             }
         }
 
-        var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
+        var (configured, resolvedKey) = _strategy.ResolveChain(taskType, language);
+        var chain = configured.Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
-            // Name the key the request resolved to: after the split above (or with an
-            // explicit language) that is the qualified key, and naming the bare task
-            // type would send the operator to a parent chain that may be perfectly
-            // healthy.
-            var routingKey = taskType is null || language is null
-                ? taskType
-                : TaskTypeRoutingStrategy.RoutingKey(taskType, language);
+            // Name the key the lookup actually stopped at — the qualified key when its
+            // chain is configured (after the split above or with an explicit language),
+            // the bare task type when the request fell through to the parent chain, and
+            // routing.defaultChain when neither is configured. Naming the key the caller
+            // asked for would send the operator to a chain the request never used.
             return new ChatResult(false, null, "none", "", TimeSpan.Zero,
-                Error: routingKey is null
+                Error: resolvedKey is null
                     ? "No providers in routing.defaultChain are registered."
-                    : $"No registered providers for task type '{routingKey}' (chain empty). Check config/aihub.json.");
+                    : $"No registered providers for task type '{resolvedKey}' (chain empty). Check config/aihub.json.");
         }
 
         chain = FilterChainByContext(chain, prompt, system);

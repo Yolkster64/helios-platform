@@ -18,7 +18,8 @@
       Fewer → notice to lower the count.
     - a file the analyzer throws on is tolerated only by a
       "<path>|analyzer-exception|<sha256>" line whose hash matches the file's current
-      content: the analyzer cannot see anything in such a file, so the only way to keep a
+      content (sha256 of the bytes with CRLF folded to LF, so an autocrlf checkout still
+      matches): the analyzer cannot see anything in such a file, so the only way to keep a
       new finding out of it is to freeze it — any edit changes the hash and fails the gate
       until the file is repaired (line deleted) or consciously re-baselined. A crash on an
       unlisted file fails (a tool failure is not a clean file).
@@ -28,9 +29,11 @@
     - a baseline line that no longer triggers → notice to delete it (never a failure)
 
   Exit codes: 0 gate passed, 1 new Error-severity finding or analyzer failure,
-  2 the pinned PSScriptAnalyzer version (-AnalyzerVersion, 1.25.0) is not installed. Writes the full record list to -OutputPath and a
-  short table to $GITHUB_STEP_SUMMARY when that variable is set; emits ::error
-  annotations under GitHub Actions.
+  2 the gate could not run (the pinned PSScriptAnalyzer version, -AnalyzerVersion
+  1.25.0, is not installed; -Root is not a directory; no PowerShell file under it).
+  Writes the full record list to -OutputPath and a short table to
+  $GITHUB_STEP_SUMMARY when that variable is set; emits ::error annotations under
+  GitHub Actions. A relative -Root resolves against the current location ($PWD).
 #>
 [CmdletBinding()]
 param(
@@ -47,7 +50,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 # A relative or forward-slash root must resolve to the same prefix the analyzer reports,
 # otherwise every relative path misses the baseline and the gate fails in the wrong direction.
-$Root = [IO.Path]::GetFullPath($Root)
+# Resolve against PowerShell's current location ($PWD): .NET's process directory does not
+# follow Set-Location, so the one-argument GetFullPath would silently point a relative
+# -Root at wherever pwsh was started.
+$Root = [IO.Path]::GetFullPath($Root, $PWD.ProviderPath)
+if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+    Write-Host "psa-gate: root '$Root' is not a directory"
+    exit 2
+}
 
 $analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq [version]$AnalyzerVersion }
 if (-not $analyzerModule) {
@@ -84,8 +94,23 @@ $files = foreach ($p in $Paths) {
     if (Test-Path -LiteralPath $dir) { Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' } }
 }
 $files = @($files | Sort-Object FullName)
+if ($files.Count -eq 0) {
+    # A root that holds no PowerShell at all is a wrong root, never a clean tree.
+    Write-Host "psa-gate: no .ps1/.psm1/.psd1 files under '$Root' ($($Paths -join ', '))"
+    exit 2
+}
 $rootPrefix = $Root.TrimEnd('/', '\') + [IO.Path]::DirectorySeparatorChar
 function Get-RelPath([string]$fullPath) { [IO.Path]::GetRelativePath($Root, $fullPath).Replace('\', '/') }
+# The freeze hash is taken over the file's bytes with CRLF folded to LF: a Windows checkout
+# under core.autocrlf rewrites every text file to CRLF, and hashing the raw bytes would fail
+# all frozen files there although nothing changed. Latin1 maps bytes 1:1, so the fold
+# touches nothing but the line endings. Baseline hashes were measured on LF content.
+function Get-FrozenContentHash([string]$fullPath) {
+    $bytes = [IO.File]::ReadAllBytes($fullPath)
+    $text = [Text.Encoding]::Latin1.GetString($bytes).Replace("`r`n", "`n")
+    $hash = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::Latin1.GetBytes($text))
+    return [Convert]::ToHexString($hash).ToLowerInvariant()
+}
 
 $records = New-Object System.Collections.Generic.List[object]
 $exceptions = New-Object System.Collections.Generic.List[string]
@@ -101,7 +126,7 @@ foreach ($f in $files) {
         $exceptions.Add("$rel : $first")
         if ($baseline.ContainsKey($key)) {
             $baseline[$key].Seen++
-            $actual = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $actual = Get-FrozenContentHash $f.FullName
             if ($actual -ne $baseline[$key].Hash) {
                 $failures.Add("$rel : changed since it was baselined as unanalyzable (sha256 $actual) — the analyzer cannot check the edit; repair the file and delete its baseline line, or re-baseline it deliberately")
                 if ($onActions) { Write-Host "::error file=$rel::baselined as unanalyzable but its content changed (sha256 $actual); repair it or re-baseline deliberately" }

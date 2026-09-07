@@ -165,7 +165,19 @@ public sealed class TaskTypeRoutingStrategy : IRoutingStrategy
     /// given, then <c>taskRouting[taskType]</c>, then <c>defaultChain</c>. The language
     /// is normalized here, so callers may pass it raw.
     /// </summary>
-    public IReadOnlyList<string> GetChain(string? taskType, string? language = null)
+    public IReadOnlyList<string> GetChain(string? taskType, string? language = null) =>
+        ResolveChain(taskType, language).Chain;
+
+    /// <summary>
+    /// The three-step lookup with the key it stopped at: the qualified key when a
+    /// non-empty <c>taskType:language</c> chain is configured, else the bare task type
+    /// when its chain is configured and non-empty, else null for
+    /// <c>routing.defaultChain</c>. Callers that report "chain empty" name this key, not
+    /// the key they asked for — an explicit language whose qualified chain does not
+    /// exist resolved to the parent, and blaming <c>taskType:language</c> would send the
+    /// operator to configure a chain the request never used.
+    /// </summary>
+    public (IReadOnlyList<string> Chain, string? ResolvedKey) ResolveChain(string? taskType, string? language = null)
     {
         if (taskType is not null)
         {
@@ -173,14 +185,14 @@ public sealed class TaskTypeRoutingStrategy : IRoutingStrategy
                 && _routing.TaskRouting.TryGetValue(RoutingKey(taskType, normalized), out var qualified)
                 && qualified.Count > 0)
             {
-                return qualified;
+                return (qualified, RoutingKey(taskType, normalized));
             }
             if (_routing.TaskRouting.TryGetValue(taskType, out var chain) && chain.Count > 0)
             {
-                return chain;
+                return (chain, taskType);
             }
         }
-        return _routing.DefaultChain;
+        return (_routing.DefaultChain, null);
     }
 
     private IReadOnlyList<string> ResolveChain(AgentRoutingRequest request)

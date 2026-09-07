@@ -41,8 +41,11 @@ not resolve); and a request whose language contradicts the key's
 (`code_generation:fsharp` with `language: cpp`) — the hub cannot tell which half the
 caller meant, so it neither guesses nor rejects, and the request is served and recorded
 exactly as sent (task type `code_generation:fsharp`, language `cpp`). When the resolved
-chain lists no registered provider, the error names the key that resolved
-(`code_generation:fsharp`), not the bare parent whose own chain may be healthy.
+chain lists no registered provider, the error names the key the lookup stopped at:
+`code_generation:fsharp` when that qualified chain is configured, the bare parent when an
+explicit language has no qualified chain and the request fell through to the parent's
+(naming `code_generation:cobol` there would send the operator to configure a chain the
+request never used), and `routing.defaultChain` when neither is configured.
 
 `tandem` applies the same canonicalization to its task type: it takes no language, so
 only the no-language case arises. The chain it races is the qualified key's, every

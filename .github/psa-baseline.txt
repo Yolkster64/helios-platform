@@ -1,10 +1,11 @@
 # PSScriptAnalyzer baseline for scripts/verify/psa-gate.ps1 (quality.yml powershell-lint).
 # One line per tolerated legacy condition: "<path>|<rule>|<count>" tolerates exactly
 # <count> Error-severity occurrences of that rule in that file (a missing count means 1;
-# one more occurrence fails the job with its line number), "<path>|analyzer-exception"
+# one more occurrence fails the job with its line number), "<path>|analyzer-exception|<sha256>"
 # tolerates a file PSScriptAnalyzer 1.25.0 cannot analyze at all (every one of those uses
 # `Export-ModuleMember -Class`, a parameter the cmdlet does not have) and freezes it: the
-# <sha256> is the file's current content hash, and any edit fails the gate until the file
+# <sha256> is the hash of the file's content with CRLF folded to LF (an autocrlf checkout
+# still matches), and any edit fails the gate until the file
 # is repaired (delete the line) or re-baselined deliberately — the analyzer cannot see a
 # finding added to such a file, so the freeze is what keeps one out. Covered files: every
 # .ps1, .psm1 and .psd1 under src/ and scripts/. Anything not listed here fails the job.

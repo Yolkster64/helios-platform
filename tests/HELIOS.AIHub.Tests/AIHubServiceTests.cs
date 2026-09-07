@@ -742,6 +742,45 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task RouteAsync_ExplicitLanguageWithoutAQualifiedChain_EmptyParentChain_NamesTheParentKey()
+    {
+        // No "echo_task:cobol" chain exists, so the cobol request resolved to the parent
+        // "echo_task" chain — whose only provider is unregistered. The error must name
+        // the chain that was actually empty ("echo_task"); naming "echo_task:cobol" would
+        // send the operator to configure a chain the request never used.
+        var options = LanguageEchoOptions();
+        options.Routing.TaskRouting["echo_task"] = new List<string> { "not-registered" };
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(options, learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "cobol"));
+
+        Assert.False(result.Success);
+        Assert.Contains("'echo_task'", result.Error);
+        Assert.DoesNotContain("echo_task:cobol", result.Error);
+        Assert.Empty(store.Recorded);
+    }
+
+    [Fact]
+    public async Task RouteAsync_ExplicitLanguageWithNoConfiguredChain_EmptyDefaultChain_NamesTheDefaultChain()
+    {
+        // Neither "other_task:fsharp" nor "other_task" is configured, so the request fell
+        // through to routing.defaultChain, which registers nothing: the error names the
+        // default chain, not a qualified key that never resolved.
+        var options = LanguageEchoOptions();
+        options.Routing.DefaultChain = new List<string> { "not-registered" };
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(options, learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("other_task", "ping", Language: "fsharp"));
+
+        Assert.False(result.Success);
+        Assert.Contains("routing.defaultChain", result.Error);
+        Assert.DoesNotContain("other_task", result.Error);
+        Assert.Empty(store.Recorded);
+    }
+
+    [Fact]
     public async Task TandemAsync_QualifiedKeyAsTaskType_IsCanonicalized_ForEveryRecordAndTheResult()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
