@@ -1,4 +1,5 @@
 {
+  "$schema": "./schemas/aihub.schema.json",
   "$comment": "Cloud-only AIHub profile: every provider is a hosted LLM API — no local runtimes (ollama) and no CLI subprocess agents. Select it with AIHUB_CONFIG=config/aihub.cloud.json (or --config <path> on helios-ai, --aihub-config <path> on helios-ai-api). No secrets live here — only env-var names (Key Vault secret names as fallback). scripts/bootstrap/azure-up.sh provisions the Azure side and prints the env wiring.",
   "providers": {
     "azure-openai": {

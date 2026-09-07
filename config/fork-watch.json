@@ -1,4 +1,5 @@
 {
+  "$schema": "./schemas/fork-watch.schema.json",
   "$comment": "Upstream repos watched by .github/workflows/fork-observation.yml (weekly, read-only). The digest is published as a workflow artifact + step summary — CI never pushes. All repos are public, fetched with the workflow GITHUB_TOKEN via plain REST. Design: docs/architecture/FORK_OBSERVATION.md.",
   "repos": [
     {

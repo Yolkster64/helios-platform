@@ -1,4 +1,5 @@
 {
+  "$schema": "../schemas/fleet-topology.schema.json",
   "$comment": "Declarative agent-fleet topology for HELIOS. Four specialized Xcore-9 pools, each with its own Hermes fleet, tool grants, and autoscaling policy. Sizing, specialization, and naming change here — never in code. Bring-up runbook: docs/architecture/HERMES_FLEET_AND_XCORE.md.",
   "version": 2,
   "defaults": {

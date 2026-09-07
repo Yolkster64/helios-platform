@@ -1,4 +1,5 @@
 {
+  "$schema": "../schemas/absorption-pr-watchlist.schema.json",
   "$comment": "Curated upstream PRs from the original repo worth benchmarking for absorption. scripts/absorption/absorb-pr.ps1 consumes this list: it fetches a PR head, trial-merges it onto our branch in a scratch worktree, runs the full local gate, writes a scored report, and records an advisory outcome (source: absorption-benchmark) via POST /v1/learning. status: candidate -> benchmarked -> absorbed | rejected. Humans flip status after reviewing the report; nothing here merges automatically. epic references the consolidated theme in docs/architecture/ABSORPTION_LEDGER.md (E1..E40), which mirrors the GitHub issues once Issues are enabled on the fork.",
   "upstream": "M0nado/helios-platform",
   "candidates": [

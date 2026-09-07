@@ -93,6 +93,18 @@ jobs:
             xargs -0 -n1 sh -c 'python3 -m json.tool "$1" >/dev/null 2>&1 || { echo "::error file=$1::invalid JSON: $1"; exit 255; }' _
           echo "✅ All JSON files valid"
 
+      # Shape, not just syntax: every manifest in config/schemas/manifests.json is
+      # validated against its JSON Schema (labels, milestones, connectors, fork-watch,
+      # absorption watchlist, fleet topology, aihub, model catalog, fabric contract, and
+      # the templates/ starters). Stdlib-only - the script's built-in engine runs when
+      # python-jsonschema is absent, as it is on ubuntu-latest - and blocking like the
+      # step above. Same check the helios_config_validate MCP tool performs.
+      - name: Validate config manifests against their schemas
+        run: python3 scripts/validation/validate_config_schemas.py
+
+      - name: Run schema validator tests
+        run: python3 -m unittest scripts.validation.tests.test_validate_config_schemas -v
+
   automation-validate:
     name: Automation Wiring Validation
     runs-on: ubuntu-latest

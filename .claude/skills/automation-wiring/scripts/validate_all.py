@@ -6,6 +6,11 @@ Exists because the failure modes that actually break pipelines are mechanical an
 Bicep name that changes every deploy). Catching them here is cheaper than catching them
 in a red pipeline or a duplicated resource group.
 
+Inside a HELIOS checkout it also validates every config manifest that
+config/schemas/manifests.json maps to a JSON Schema (shape, not just syntax), by
+delegating to scripts/validation/validate_config_schemas.py; elsewhere that step is
+skipped so the script stays portable.
+
 Usage:
     validate_all.py [paths...]      # defaults to the current directory
 
@@ -285,6 +290,56 @@ def check_terraform(dirs: set[Path], report: Report) -> None:
             report.warn(directory, "not initialized (.terraform missing); ran fmt only")
 
 
+def find_repo_root(start: Path) -> Path | None:
+    """Nearest ancestor (inclusive) carrying the HELIOS manifest -> schema map and its validator."""
+    resolved = start.resolve()
+    for candidate in [resolved, *resolved.parents]:
+        if (candidate / "config" / "schemas" / "manifests.json").is_file() \
+                and (candidate / "scripts" / "validation" / "validate_config_schemas.py").is_file():
+            return candidate
+    return None
+
+
+def check_config_schemas(roots: list[Path], report: Report) -> None:
+    """Shape, not just syntax: each manifest that config/schemas/manifests.json maps to a JSON
+    Schema is validated against it when it lies under one of the roots. Delegates to
+    scripts/validation/validate_config_schemas.py (python-jsonschema when importable, else its
+    built-in engine) so this sweep, the CI job and the helios_config_validate MCP tool agree.
+    Outside a HELIOS checkout there is nothing to do."""
+    import importlib.util
+
+    repo_roots = {root for root in (find_repo_root(path) for path in roots) if root is not None}
+    resolved_roots = [path.resolve() for path in roots]
+    for repo_root in sorted(repo_roots):
+        script = repo_root / "scripts" / "validation" / "validate_config_schemas.py"
+        spec = importlib.util.spec_from_file_location("helios_validate_config_schemas", script)
+        if spec is None or spec.loader is None:
+            report.warn(script, "could not load the config schema validator; schema check skipped")
+            continue
+        module = importlib.util.module_from_spec(spec)
+        # Register before executing: the module's frozen dataclasses resolve their own
+        # module through sys.modules at class-creation time.
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        try:
+            mappings = module.load_mappings(repo_root)
+        except (ValueError, OSError) as exc:
+            report.error(repo_root / "config" / "schemas" / "manifests.json", str(exc))
+            continue
+        for mapping in mappings:
+            manifest = repo_root / mapping.manifest
+            if not any(manifest == root or root in manifest.parents for root in resolved_roots):
+                continue
+            try:
+                result = module.validate_mapping(mapping, repo_root=repo_root)
+            except (module.SchemaError, ValueError, OSError) as exc:
+                report.error(manifest, f"schema {mapping.schema}: {exc}")
+                continue
+            report.checked += 1
+            for issue in result.issues:
+                report.error(manifest, f"schema {mapping.schema} ({result.engine}): {issue.path}: {issue.message}")
+
+
 def main(argv: list[str]) -> int:
     roots = [Path(a) for a in argv[1:]] or [Path(".")]
     for root in roots:
@@ -312,6 +367,7 @@ def main(argv: list[str]) -> int:
 
     check_bicep(bicep_files, report)
     check_terraform(terraform_dirs, report)
+    check_config_schemas(roots, report)
 
     for warning in report.warnings:
         print(f"WARN  {warning}")

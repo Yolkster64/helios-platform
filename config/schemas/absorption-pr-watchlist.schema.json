@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/absorption-pr-watchlist.schema.json",
+  "title": "HELIOS absorption watch list (config/absorption/pr-watchlist.json)",
+  "description": "Curated upstream PRs benchmarked for absorption. Bound by src/mcp/HELIOS.Mcp/HeliosStatusTools.cs and src/ai/HELIOS.AIHub.Cli/AbsorptionStatus.cs (pr / title / status / epic), read by scripts/absorption/absorb-pr.ps1 and scripts/fleet/seed-absorption-tasks.ps1 (status / epic filters). status moves candidate -> benchmarked -> absorbed | rejected and is flipped by humans after reading the report; nothing here merges automatically. The remaining fields are the review notes the ledger (docs/architecture/ABSORPTION_LEDGER.md) carries; entries are closed so a misspelled key cannot hide a note.",
+  "type": "object",
+  "required": ["upstream", "candidates"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "upstream": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "description": "owner/name of the repository the PR numbers refer to."
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/candidate" }
+    }
+  },
+  "$defs": {
+    "noteList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["pr", "title", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "pr": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["candidate", "benchmarked", "absorbed", "rejected"]
+        },
+        "epic": {
+          "type": "string",
+          "pattern": "^E[0-9]+$",
+          "description": "Consolidated theme in docs/architecture/ABSORPTION_LEDGER.md (E1..E40)."
+        },
+        "why": { "type": "string" },
+        "absorb": { "$ref": "#/$defs/noteList" },
+        "risks": { "$ref": "#/$defs/noteList" },
+        "absorbedInto": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where an absorbed candidate landed (tranche, workflow, script)."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-form disposition note (how or why it was absorbed or rejected)."
+        }
+      }
+    }
+  }
+}

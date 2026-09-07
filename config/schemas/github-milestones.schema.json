@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/github-milestones.schema.json",
+  "title": "HELIOS GitHub milestone manifest (config/github/milestones.json)",
+  "description": "The shape scripts/github/apply-milestones.ps1 reads: an object { $comment, milestones: [...] } or a bare array of entries. An entry carries exactly title / description / due_on - the script marks any other key (dueOn, state, descr) INVALID (exit 1) - so entries are closed here too. due_on is a calendar date (YYYY-MM-DD; the script sends noon UTC and compares by UTC date); omit it to leave the live due date unmanaged - the script never clears one. Do not add a $schema key to the manifest: the bare-array form cannot carry one and the object form is wired to this schema through .vscode/settings.json json.schemas instead.",
+  "anyOf": [
+    { "$ref": "#/$defs/manifest" },
+    { "$ref": "#/$defs/milestoneList" }
+  ],
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "required": ["milestones"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string", "minLength": 1 },
+        "$comment": { "type": "string" },
+        "milestones": { "$ref": "#/$defs/milestoneList" }
+      }
+    },
+    "milestoneList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/milestone" }
+    },
+    "milestone": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(.*\\S)?$",
+          "description": "Matched against live milestones case-insensitively; a PATCH never renames."
+        },
+        "description": { "type": "string" },
+        "due_on": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "description": "Calendar date YYYY-MM-DD (a real one: 2026-02-30 fails). Omit to leave the live due date unmanaged."
+        }
+      }
+    }
+  }
+}
