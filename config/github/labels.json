@@ -1,27 +1,155 @@
 {
   "$comment": "Label manifest for Yolkster64/helios-platform, applied by scripts/github/apply-labels.ps1 (GET-diff-then-apply, dry-run by default, never deletes). The first sixteen entries are the labels the repository already carried on 2026-09-02, colors kept verbatim so a first run only fills the blank descriptions; the last five are three automation contracts (automerge -> .github/workflows/auto-merge.yml, copilot -> .github/workflows/copilot-dispatch.yml, dependencies -> .github/dependabot.yml) plus two reserved conventions with no consumer yet (hygiene, absorption-candidate). Names match case-insensitively; description is capped at 100 characters by GitHub.",
   "labels": [
-    { "name": "absorption", "color": "ededed", "description": "Upstream absorption lane (docs/architecture/ABSORPTION_PIPELINE.md); never auto-merged" },
-    { "name": "ai-hub", "color": "ededed", "description": "Multi-LLM hub: src/ai, config/aihub.json, the MCP server and the Python spoke" },
-    { "name": "audit-first", "color": "ededed", "description": "Measure and record the live state before any mutation lands" },
-    { "name": "bug", "color": "d73a4a", "description": "Something isn't working" },
-    { "name": "build-ci", "color": "ededed", "description": "Build, CI workflows and validation gates" },
-    { "name": "documentation", "color": "0075ca", "description": "Improvements or additions to documentation" },
-    { "name": "duplicate", "color": "cfd3d7", "description": "This issue or pull request already exists" },
-    { "name": "enhancement", "color": "a2eeef", "description": "New feature or request" },
-    { "name": "Feature", "color": "ededed", "description": "New capability tracked as a feature issue" },
-    { "name": "good first issue", "color": "7057ff", "description": "Good for newcomers" },
-    { "name": "help wanted", "color": "008672", "description": "Extra attention is needed" },
-    { "name": "Improvement", "color": "ededed", "description": "Incremental improvement to an existing capability" },
-    { "name": "infra", "color": "ededed", "description": "Azure infrastructure: infra/ Bicep, deployment workflows, Key Vault and OIDC" },
-    { "name": "invalid", "color": "e4e669", "description": "This doesn't seem right" },
-    { "name": "question", "color": "d876e3", "description": "Further information is requested" },
-    { "name": "wontfix", "color": "ffffff", "description": "This will not be worked on" },
-    { "name": "automerge", "color": "0e8a16", "description": "Arm auto-merge for this PR (see auto-merge.yml); owner/write senders only" },
-    { "name": "copilot", "color": "8250df", "description": "Assign the Copilot coding agent to this issue (copilot-dispatch.yml)" },
-    { "name": "dependencies", "color": "0366d6", "description": "Dependency update PRs opened by Dependabot (.github/dependabot.yml)" },
-    { "name": "hygiene", "color": "fbca04", "description": "Branch and issue cleanup: prune-branches, duplicate closure, stale refs" },
-    { "name": "absorption-candidate", "color": "c5def5", "description": "Promising upstream item flagged by the absorption cadence for a benchmark" },
-    { "name": "triage", "color": "d4c5f9", "description": "Filed through an issue form; awaiting a first classification pass" }
+    {
+      "name": "absorption",
+      "color": "ededed",
+      "description": "Upstream absorption lane (docs/architecture/ABSORPTION_PIPELINE.md); never auto-merged"
+    },
+    {
+      "name": "ai-hub",
+      "color": "ededed",
+      "description": "Multi-LLM hub: src/ai, config/aihub.json, the MCP server and the Python spoke"
+    },
+    {
+      "name": "audit-first",
+      "color": "ededed",
+      "description": "Measure and record the live state before any mutation lands"
+    },
+    {
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
+    },
+    {
+      "name": "build-ci",
+      "color": "ededed",
+      "description": "Build, CI workflows and validation gates"
+    },
+    {
+      "name": "documentation",
+      "color": "0075ca",
+      "description": "Improvements or additions to documentation"
+    },
+    {
+      "name": "duplicate",
+      "color": "cfd3d7",
+      "description": "This issue or pull request already exists"
+    },
+    {
+      "name": "enhancement",
+      "color": "a2eeef",
+      "description": "New feature or request"
+    },
+    {
+      "name": "Feature",
+      "color": "ededed",
+      "description": "New capability tracked as a feature issue"
+    },
+    {
+      "name": "good first issue",
+      "color": "7057ff",
+      "description": "Good for newcomers"
+    },
+    {
+      "name": "help wanted",
+      "color": "008672",
+      "description": "Extra attention is needed"
+    },
+    {
+      "name": "Improvement",
+      "color": "ededed",
+      "description": "Incremental improvement to an existing capability"
+    },
+    {
+      "name": "infra",
+      "color": "ededed",
+      "description": "Azure infrastructure: infra/ Bicep, deployment workflows, Key Vault and OIDC"
+    },
+    {
+      "name": "invalid",
+      "color": "e4e669",
+      "description": "This doesn't seem right"
+    },
+    {
+      "name": "question",
+      "color": "d876e3",
+      "description": "Further information is requested"
+    },
+    {
+      "name": "wontfix",
+      "color": "ffffff",
+      "description": "This will not be worked on"
+    },
+    {
+      "name": "automerge",
+      "color": "0e8a16",
+      "description": "Arm auto-merge for this PR (see auto-merge.yml); owner/write senders only"
+    },
+    {
+      "name": "copilot",
+      "color": "8250df",
+      "description": "Assign the Copilot coding agent to this issue (copilot-dispatch.yml)"
+    },
+    {
+      "name": "dependencies",
+      "color": "0366d6",
+      "description": "Dependency update PRs opened by Dependabot (.github/dependabot.yml)"
+    },
+    {
+      "name": "hygiene",
+      "color": "fbca04",
+      "description": "Branch and issue cleanup: prune-branches, duplicate closure, stale refs"
+    },
+    {
+      "name": "absorption-candidate",
+      "color": "c5def5",
+      "description": "Promising upstream item flagged by the absorption cadence for a benchmark"
+    },
+    {
+      "name": "triage",
+      "color": "d4c5f9",
+      "description": "Filed through an issue form; awaiting a first classification pass"
+    },
+    {
+      "name": "epic",
+      "color": "5319e7",
+      "description": "Top-level program epic; every other issue is a native sub-issue of one"
+    },
+    {
+      "name": "priority:critical",
+      "color": "b60205",
+      "description": "Blocks the program; the owner is paged the same day"
+    },
+    {
+      "name": "priority:high",
+      "color": "d93f0b",
+      "description": "Next in line; on the current milestone"
+    },
+    {
+      "name": "priority:normal",
+      "color": "fef2c0",
+      "description": "Default; scheduled by milestone"
+    },
+    {
+      "name": "needs-owner",
+      "color": "fbca04",
+      "description": "A step only the repository owner can take (credential, click, tenant)"
+    },
+    {
+      "name": "blocked",
+      "color": "e11d21",
+      "description": "Waiting on a named dependency; the blocker is in the body"
+    },
+    {
+      "name": "escalated",
+      "color": "b60205",
+      "description": "Raised by automation (red required check, failed deploy, stalled PR); see the dashboard"
+    },
+    {
+      "name": "canonical-core",
+      "color": "ededed",
+      "description": "Canonical-core cutover surface (HC epics, migration contracts)"
+    }
   ]
 }
