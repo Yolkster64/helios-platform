@@ -1,0 +1,38 @@
+name: Azure deployment guard contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/helios-deploy.yml'
+      - '.github/workflows/azure-deployment-guard.yml'
+      - 'scripts/validation/azure_deployment_preview.sh'
+      - 'scripts/validation/tests/test_azure_deployment_guard.py'
+      - 'scripts/validation/tests/fixtures/azure-preview-az.py'
+      - 'docs/architecture/AZURE_DEPLOYMENT_GUARD.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/helios-deploy.yml'
+      - '.github/workflows/azure-deployment-guard.yml'
+      - 'scripts/validation/azure_deployment_preview.sh'
+      - 'scripts/validation/tests/test_azure_deployment_guard.py'
+      - 'scripts/validation/tests/fixtures/azure-preview-az.py'
+      - 'docs/architecture/AZURE_DEPLOYMENT_GUARD.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate shell syntax
+        run: bash -n scripts/validation/azure_deployment_preview.sh
+      - name: Exercise preview guard with inert Azure CLI
+        run: python3 -m unittest discover -s scripts/validation/tests -p 'test_azure_deployment_guard.py' -v
