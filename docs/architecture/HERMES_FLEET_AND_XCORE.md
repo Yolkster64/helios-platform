@@ -73,9 +73,11 @@ A pass reads the latest running run's manifest and boards (the same
 `.helios/fleet/<runId>/` contract fleet-status/stop-fleet use) and computes, for every
 pool with an autoscaling block (the pool's block merged over `defaults.autoscaling`):
 
-    queueDepth   = open tasks in the pool's lanes
-                   + claimed tasks whose 300s claim lease expired (crashed lanes)
-    desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```text
+queueDepth   = open tasks in the pool's lanes
+               + claimed tasks whose 300s claim lease expired (crashed lanes)
+desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```
 
 Scale-up spawns extra workers through start-fleet's spawn contract (same env vars, same
 launch mechanics) and records them in the run manifest, so fleet-status and stop-fleet
@@ -140,7 +142,7 @@ degrade with a warning, never a failure.
 
 **CI lane**: `.github/workflows/fleet-learning.yml` (**Fleet Learning
 (informational)**) runs one stub cycle weekly (Mondays 04:41 UTC) and on
-dispatch, with a runner choice — `ubuntu-latest` by default, `self-hosted` for
+dispatch, with a runner choice — `ubuntu-latest` by default, `helios-runners` for
 local-runner soak testing (pwsh + python3 assumed preinstalled). Informational
 by contract: never make it a required check.
 
@@ -154,10 +156,12 @@ provisions `infra/modules/learning-storage.bicep` — a storage account plus the
 **Honest boundaries.** Everything in this loop is advisory. Topology and
 provider chains are config (`config/fleet/fleet-topology.json`) and are never
 auto-mutated — `fleet-plan` / `helios_fleet_plan_get` only report. Fleet-lane
-records never steer provider chains: `ChainReorderEngine.OrganicOnly` filters
-the history the reorder engines see down to organic hub outcomes, so
+records never steer provider chains: routing and `fleet-plan` read the learning
+store's organic window (`ILearningStore.GetRecentOrganicForLanguageAsync`, which
+scopes source-tagged records out *before* taking the history window), so
 `pool:<name>` records — lane outcomes, not provider outcomes — cannot influence
-routing. And a green stub cycle proves the *wiring* (boards, claims,
+routing, and a burst of them under a task type cannot hide the older organic
+outcomes behind it either. And a green stub cycle proves the *wiring* (boards, claims,
 terminations, collection contract), never model quality or routing improvement.
 
 ## Cross-pool coordination

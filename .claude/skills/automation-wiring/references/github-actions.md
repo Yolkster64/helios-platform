@@ -175,6 +175,7 @@ jobs:
     needs: probe
     if: needs.probe.outputs.has-azure == 'true'
 ```
+
 Design rule: **validation runs offline for everyone; deployment gates on secrets.**
 
 ## Self-hosted runners (ARC)
@@ -187,7 +188,7 @@ githubConfigUrl: https://github.com/ORG/REPO   # or .../ORG for org-level
 githubConfigSecret: { github_token: "${GH_PAT}" }
 # GitHub App form (preferred): github_app_id, github_app_installation_id,
 #   github_app_private_key — or a plain string naming a pre-created k8s secret
-runnerScaleSetName: helios-linux    # THIS is the runs-on value
+runnerScaleSetName: helios-runners  # THIS is the runs-on value (infra/runners/arc-values.yaml)
 minRunners: 0                       # true scale-to-zero
 maxRunners: 20
 containerMode: { type: dind }       # dind | kubernetes | kubernetes-novolume
@@ -196,7 +197,7 @@ template:
     containers: [{ name: runner, image: ghcr.io/actions/actions-runner:latest }]
 ```
 
-- `runs-on: helios-linux` — the scale set name, singular. Scale sets do **not** match
+- `runs-on: helios-runners` — the scale set name, singular. Scale sets do **not** match
   `[self-hosted, linux, x64]` arrays; that is the older `RunnerDeployment` model.
 - `minRunners: 0` queues jobs ~20-40s for a cold pod. Use `1` when latency matters.
 - `dind` needs privileged but supports `services:` and container actions. `kubernetes` mode

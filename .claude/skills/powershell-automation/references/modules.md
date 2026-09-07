@@ -29,15 +29,25 @@ visible but non-gating today). Write all Pester code as v5:
   legacy shim with warnings and gaps; use the simple `-Path`/`-PassThru` form the
   workflow itself uses, or `New-PesterConfiguration` for anything advanced.
 
-## PSScriptAnalyzer — the honest gap
+## PSScriptAnalyzer — what gates and what does not
 
-Two workflows look like "the linter"; neither PSSA run gates anything:
+Two workflows carry PowerShell checks; each gates a different thing:
 
-- `.github/workflows/quality.yml` (`powershell-lint`) installs PSScriptAnalyzer
-  (unpinned) and runs `Invoke-ScriptAnalyzer -Path './src', './scripts' -Recurse
-  -Severity Error, Warning` — but the step is `continue-on-error: true` and results
-  only upload as the `powershell-analysis` artifact. **PSSA is advisory-only in CI.**
-- The *enforced* PowerShell gate is `.github/workflows/ci-validation.yml`
+- `.github/workflows/quality.yml` (`powershell-lint`) installs PSScriptAnalyzer 1.25.0
+  (pinned) and runs `scripts/verify/psa-gate.ps1`, which analyzes every `.ps1`, `.psm1` and
+  `.psd1` under `src/` and `scripts/` file by file (`Invoke-ScriptAnalyzer`'s `-Path` is a single string; the old step
+  passed an array, never bound, and hid that behind `continue-on-error`). An
+  Error-severity finding, or a file the analyzer throws on, fails the job unless
+  `.github/psa-baseline.txt` tolerates it — `<path>|<rule>|<count>` for exactly that many
+  occurrences of a rule in a file (one more fails with its line), `<path>|analyzer-exception|<sha256>`
+  for a file the analyzer cannot process at all — the hash freezes it, so any edit fails the
+  gate until the file is repaired, because the analyzer could not see a finding added to it
+  (legacy scripts only; the header forbids new lines, raised counts and refreshed hashes). Warning-severity findings —
+  thousands over the legacy corpus, `PSAvoidUsingWriteHost` above all — stay advisory:
+  counted in the step summary and written to the `powershell-analysis` artifact. The
+  job feeds the required `Quality Check Summary` context, so a new Error-severity
+  finding blocks the merge.
+- The *enforced syntax* gate is `.github/workflows/ci-validation.yml`
   (`syntax-check`): the real parser,
   `[System.Management.Automation.Language.Parser]::ParseFile`, over every `.ps1`,
   checked against the legacy baseline `.github/ps1-parse-baseline.txt`. A parse error
@@ -48,8 +58,9 @@ Two workflows look like "the linter"; neither PSSA run gates anything:
   regex-based security/registry/path checks — shallower than `Parser::ParseFile`;
   treat ci-validation as the source of parse truth.
 
-Practical rule: run `Invoke-ScriptAnalyzer` locally before pushing (CI will not force
-you to), but always confirm `Parser::ParseFile` reports zero errors — that one gates.
+Practical rule: run `pwsh scripts/verify/psa-gate.ps1` locally before pushing (exit 0
+= nothing new at Error severity, exit 2 = install the module first), read the warnings
+it lists for the files you touched, and confirm `Parser::ParseFile` reports zero errors.
 
 ## PSResourceGet vs Install-Module
 

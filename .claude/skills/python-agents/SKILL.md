@@ -95,12 +95,23 @@ Prefer `asyncio.TaskGroup` (3.11+) when partial failure should cancel siblings; 
 
 ## Typing and tests
 
-pyright strict is the bar; annotate everything public.
+Annotate everything public. CI enforces pyright **standard** mode over the package
+(`src/ai/python/pyrightconfig.json`, `pythonVersion` 3.10 — the `requires-python`
+floor, so no 3.11+ syntax) as a blocking `quality.yml` job (`python-typecheck`, feeding the
+required `Quality Check Summary`; `python-spoke.yml` is path-filtered and keeps pytest); **strict** is the
+bar for new code, so run it locally before opening a PR and keep your diff clean
+under it. The shipped package is still some way from strict (185 diagnostics when
+the standard gate landed) and is tightened module by module — do not flip the
+shipped config to strict in a feature PR.
 
-```toml
-[tool.pyright]
-typeCheckingMode = "strict"
-pythonVersion = "3.12"
+```jsonc
+// src/ai/python/pyrightconfig.json — what CI runs
+{ "include": ["helios_agents"], "pythonVersion": "3.10", "typeCheckingMode": "standard" }
+```
+
+```bash
+# the bar for new code (local): the same tree under strict
+cd src/ai/python && npx --yes pyright@1.1.405 --pythonversion 3.10 -p <(echo '{"include":["helios_agents"],"typeCheckingMode":"strict"}')
 ```
 
 pytest conventions: tests in `tests/`, named `test_<module>.py`; parametrize instead of copy-pasting cases; agent contract tests feed canned JSON through `main()` via `capsys`/`monkeypatch` on stdin and assert the stdout document parses as `AgentResponse`. No network in tests — the spoke has no network story anyway.

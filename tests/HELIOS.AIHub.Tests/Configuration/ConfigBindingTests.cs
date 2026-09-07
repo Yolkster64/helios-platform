@@ -1,4 +1,5 @@
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Routing;
 using Xunit;
 
 namespace HELIOS.AIHub.Tests.Configuration;
@@ -63,6 +64,44 @@ public class ConfigBindingTests
                 Assert.True(known.Contains(name), $"task '{taskType}' references unknown provider '{name}'");
             }
         }
+    }
+
+    [Fact]
+    public void ShippedConfig_LanguageQualifiedChains_AreWellFormedOverrides()
+    {
+        var options = LoadShippedConfig();
+        var qualified = options.Routing.TaskRouting.Keys
+            .Where(key => TaskTypeRoutingStrategy.SplitRoutingKey(key).Language is not null)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(
+            new[]
+            {
+                "code_generation:cpp", "code_generation:fsharp", "code_generation:python",
+                "code_review:bicep", "code_review:powershell",
+            },
+            qualified);
+        foreach (var key in qualified)
+        {
+            var (taskType, language) = TaskTypeRoutingStrategy.SplitRoutingKey(key);
+            Assert.True(options.Routing.TaskRouting.ContainsKey(taskType), $"'{key}' has no bare parent '{taskType}'");
+            // Keys are written in canonical form so a normalized request hits them.
+            Assert.Equal(TaskTypeRoutingStrategy.NormalizeLanguage(language), language);
+            // An override identical to its parent would be dead config.
+            Assert.NotEqual(options.Routing.TaskRouting[taskType], options.Routing.TaskRouting[key]);
+        }
+    }
+
+    [Fact]
+    public void ShippedConfig_AdaptiveRouting_MatchesTheCSharpDefault()
+    {
+        // The shipped file keeps adaptive routing off; a config that omits the key must
+        // not silently turn it on, so the C# default is pinned to the shipped value.
+        var options = LoadShippedConfig();
+
+        Assert.False(options.Learning.AdaptiveRouting);
+        Assert.Equal(options.Learning.AdaptiveRouting, new LearningOptions().AdaptiveRouting);
     }
 
     [Fact]

@@ -36,6 +36,110 @@ public class LocalJsonlLearningStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecentForLanguageAsync_TakesTheWindowAfterScoping()
+    {
+        // 30 language-less, then 50 fsharp, then 200 python (the newest = one whole
+        // window): a shared task-type window would hold python only, so scoping after
+        // the cap would leave the fsharp route with no evidence at all.
+        var store = new LocalJsonlLearningStore(_path);
+        var at = 1;
+        for (var i = 0; i < 30; i++)
+        {
+            await store.RecordAsync(Outcome("legacy", success: true, at: at++));
+        }
+        for (var i = 0; i < 50; i++)
+        {
+            await store.RecordAsync(Outcome("fsharp-prov", success: true, at: at++) with { Language = "fsharp" });
+        }
+        for (var i = 0; i < 200; i++)
+        {
+            await store.RecordAsync(Outcome("python-prov", success: true, at: at++) with { Language = "python" });
+        }
+
+        var shared = await store.GetRecentAsync("code_review", limit: 200);
+        var fsharp = await store.GetRecentForLanguageAsync("code_review", "fsharp", limit: 200);
+        var languageless = await store.GetRecentForLanguageAsync("code_review", language: null, limit: 200);
+        var cpp = await store.GetRecentForLanguageAsync("code_review", "cpp", limit: 200);
+
+        Assert.All(shared, o => Assert.Equal("python", o.Language));
+        Assert.Equal(50, fsharp.Count);
+        Assert.All(fsharp, o => Assert.Equal("fsharp-prov", o.Provider));
+        Assert.True(fsharp[0].Timestamp > fsharp[^1].Timestamp); // newest first
+        Assert.Equal(30, languageless.Count);
+        Assert.All(languageless, o => Assert.Null(o.Language));
+        Assert.Empty(cpp);
+    }
+
+    [Fact]
+    public async Task GetRecentForLanguageAsync_RespectsLimit_KeepingTheNewestOfThatLanguage()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        for (var i = 1; i <= 5; i++)
+        {
+            await store.RecordAsync(Outcome($"p{i}", success: true, at: i) with { Language = "python" });
+        }
+
+        var recent = await store.GetRecentForLanguageAsync("code_review", "python", limit: 2);
+
+        Assert.Equal(new[] { "p5", "p4" }, recent.Select(o => o.Provider));
+    }
+
+    [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_TakesTheWindowAfterScopingOutAdvisoryRecords()
+    {
+        // 11 organic outcomes, one organic fsharp outcome, then 200 fleet-lane records
+        // (the newest = one whole window) under the same (code_review, no language)
+        // key — what the fleet collector appends between two organic routes. The plain
+        // read's window holds the advisory flood only, so scoping it afterwards would
+        // leave routing with no evidence; the organic read scopes first and returns
+        // exactly the 11, and only those (the fsharp one belongs to another key).
+        var store = new LocalJsonlLearningStore(_path);
+        var at = 1;
+        for (var i = 0; i < 11; i++)
+        {
+            await store.RecordAsync(Outcome("organic-prov", success: true, at: at++));
+        }
+        await store.RecordAsync(Outcome("organic-fsharp", success: true, at: at++) with { Language = "fsharp" });
+        for (var i = 0; i < 200; i++)
+        {
+            await store.RecordAsync(
+                Outcome("pool:xcore-9-code", success: true, at: at++) with { Source = "fleet-lane" });
+        }
+
+        var plain = await store.GetRecentForLanguageAsync("code_review", language: null, limit: 200);
+        var organic = await store.GetRecentOrganicForLanguageAsync("code_review", language: null, limit: 200);
+
+        Assert.Equal(200, plain.Count);
+        Assert.All(plain, o => Assert.Equal("fleet-lane", o.Source));
+        Assert.Equal(11, organic.Count);
+        Assert.All(organic, o =>
+        {
+            Assert.Null(o.Source);
+            Assert.Null(o.Language);
+            Assert.Equal("organic-prov", o.Provider);
+        });
+        Assert.True(organic[0].Timestamp > organic[^1].Timestamp); // newest first
+    }
+
+    [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_RespectsLimit_KeepingTheNewestOrganicRecords()
+    {
+        // Advisory records interleaved with organic ones: the cap counts organic
+        // records only, and keeps the newest of them.
+        var store = new LocalJsonlLearningStore(_path);
+        for (var i = 1; i <= 5; i++)
+        {
+            await store.RecordAsync(Outcome($"p{i}", success: true, at: i * 2 - 1) with { Language = "python" });
+            await store.RecordAsync(
+                Outcome($"lane{i}", success: true, at: i * 2) with { Language = "python", Source = "fleet-lane" });
+        }
+
+        var recent = await store.GetRecentOrganicForLanguageAsync("code_review", "python", limit: 2);
+
+        Assert.Equal(new[] { "p5", "p4" }, recent.Select(o => o.Provider));
+    }
+
+    [Fact]
     public async Task GetRecentAsync_RespectsLimit()
     {
         var store = new LocalJsonlLearningStore(_path);
@@ -177,6 +281,47 @@ public class LocalJsonlLearningStoreTests : IDisposable
         }
 
         Assert.False(File.Exists(_path)); // no partial line was ever written
+    }
+
+    [Fact]
+    public async Task LegacyRecordWithoutLanguage_Deserializes_AsLanguageless()
+    {
+        // A line written before the language field existed: it must still load, and it
+        // must read as "no language" — the same value a language-less route records today.
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await File.WriteAllTextAsync(
+            _path,
+            """{"timestamp":"2025-01-01T00:00:00+00:00","taskType":"code_review","provider":"openai","model":"m","success":true,"latencyMs":10,"costUsd":0,"quality":null,"pool":null,"source":null}"""
+            + "\n");
+        var store = new LocalJsonlLearningStore(_path);
+
+        var recent = await store.GetRecentAsync("code_review");
+
+        var outcome = Assert.Single(recent);
+        Assert.Null(outcome.Language);
+        Assert.Equal("openai", outcome.Provider);
+        Assert.True(outcome.Success);
+    }
+
+    [Fact]
+    public async Task Language_RoundTrips_AndIsOmittedFromJson_WhenNull()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        await store.RecordAsync(Outcome("openai", success: true, at: 1) with { Language = "fsharp" });
+        await store.RecordAsync(Outcome("openai", success: true, at: 2));
+
+        var lines = await File.ReadAllLinesAsync(_path);
+        Assert.Contains("\"language\":\"fsharp\"", lines[0]);
+        // Language-less records keep their pre-language shape byte for byte: the exact
+        // line the store wrote before the field existed, property for property and in
+        // that order — not merely a line without the substring "language".
+        Assert.Equal(
+            """{"outcomeId":null,"timestamp":"1970-01-01T00:00:02+00:00","taskType":"code_review","provider":"openai","model":"test-model","success":true,"latencyMs":100,"costUsd":0.01,"quality":null,"pool":null,"source":null}""",
+            lines[1]);
+
+        var recent = await store.GetRecentAsync("code_review");
+        Assert.Null(recent[0].Language);          // at: 2, newest first
+        Assert.Equal("fsharp", recent[1].Language);
     }
 
     private static RoutingOutcome Outcome(string provider, bool success, int at, string taskType = "code_review") =>

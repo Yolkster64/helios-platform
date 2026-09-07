@@ -101,7 +101,7 @@ or Key Vault.
 | GitHub ↔ ChatGPT/Codex | Auto PR reviews, `@codex` commands | Nothing — connection lives at chatgpt.com (Codex settings) | None (`AGENTS.md` is read by Codex) |
 | GitHub ↔ Copilot | Inline/CLI agent, auto review requests, coding-agent assignment | `.github/workflows/copilot-dispatch.yml`, `config/aihub.json` `copilot` cliAgent, `.github/copilot-instructions.md` | Optional `COPILOT_DISPATCH_TOKEN` secret |
 | GitHub ↔ Claude | Claude Code sessions, `claude-cli` routing, MCP tools | `CLAUDE.md`, `.claude/skills/`, `config/aihub.json` `claude-cli` cliAgent, `.mcp.json` | None |
-| Self-hosted runners | `runs-on: [self-hosted, helios]` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
+| Self-hosted runners | `runs-on: helios-runners` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
 | GitHub ↔ Linear | Labeled issues mirrored to the Linear board | `.github/workflows/linear-sync.yml` + `config/connectors.json` | `LINEAR_API_KEY` secret |
 | GitHub ↔ Slack | CI/deploy outcomes posted to channels | `.github/workflows/notify-slack.yml` + `config/connectors.json` | `SLACK_WEBHOOK_URL` secret |
 | GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/` (custom fields, validation, and epic wiring via GraphQL; views/templates/automation are manual UI steps the scripts document) | User PAT with `project` scope (run-time param, never stored) |
@@ -212,13 +212,23 @@ No owner action and no secrets beyond each developer's own `claude` login
   (Linux/macOS) or `scripts/runners/register-runner.ps1` (adds Windows). They
   require an admin-authenticated `gh`, mint a single-use ~1h registration token
   (never echoed, never on disk), download the latest `actions/runner`, and
-  configure with labels **`helios,xcore`** — add pool labels via the
+  configure with labels **`helios-runners,helios,xcore`** (`helios-runners` is
+  the one canonical `runs-on:` label, shared with the ARC scale set) — add pool labels via the
   extra-labels parameter, e.g. `xcore-native` for the `xcore-9-native` pool's
   dedicated Windows-SDK/GPU box (`config/fleet/fleet-topology.json`). They
   print the `./run.sh` / service commands rather than auto-starting; both have
   a dry-run mode.
+- **Runners registered before `helios-runners` existed**: a runner's labels are
+  fixed at registration (`config.sh --labels …`), so a box registered with the
+  older `helios,xcore` set never matches `runs-on: helios-runners` — the smoke
+  job queues past it. Two fixes, either as repo admin: add the `helios-runners`
+  label in place (Settings → Actions → Runners → the runner → Labels; no
+  re-registration, no downtime), or re-register — mint a remove token and run
+  `./config.sh remove --token …` (the exact commands are in either register
+  script's header), then run `scripts/runners/register-runner.sh`/`.ps1` again.
+  Confirm with a `runner-smoke.yml` dispatch.
 - **Proof of life**: dispatch `.github/workflows/runner-smoke.yml`
-  (**Self-Hosted Runner Smoke**) — one job on `[self-hosted, helios]` that
+  (**Self-Hosted Runner Smoke**) — one job on `helios-runners` that
   prints the runner identity and exits green. It is `workflow_dispatch`-only
   on purpose: it can never queue forever and hang CI when no runner exists.
 - **Scale-out path**: runner scale sets via ARC (`gha-runner-scale-set`,
@@ -665,7 +675,7 @@ are `scripts/bootstrap/README.md` and `scripts/github/README.md`.
 | ChatGPT/Codex | Connect the repo in Codex settings at chatgpt.com | None in this repo | Open a PR (auto-review) or comment `@codex review` |
 | Copilot reviews + coding agent | Have Copilot enabled for the repo; optionally mint the PAT | Optional secret `COPILOT_DISPATCH_TOKEN` | Open a non-draft PR (review request appears); label an issue `copilot` (agent assigned) |
 | Claude | None | None (dev's own `claude` login; `ANTHROPIC_API_KEY` via aihub flow) | `/mcp` in Claude Code; `helios-ai providers` |
-| Self-hosted runners | Run `scripts/runners/register-runner.sh` (or `.ps1`) as repo admin, start the runner | Labels `helios,xcore` (+ pool extras, e.g. `xcore-native`) | `gh workflow run runner-smoke.yml`; runner listed in Settings → Actions → Runners |
+| Self-hosted runners | Run `scripts/runners/register-runner.sh` (or `.ps1`) as repo admin, start the runner; a runner registered before `helios-runners` existed needs the label added (Settings → Actions → Runners) or a re-registration | Labels `helios-runners,helios,xcore` (+ pool extras, e.g. `xcore-native`) | `gh workflow run runner-smoke.yml`; runner listed in Settings → Actions → Runners |
 | Linear | **First** switch Linear's own GitHub issue sync OFF for team John (loop warning above); create a Linear personal API key | Secret `LINEAR_API_KEY` (+ `linear.teamKey` in `config/connectors.json`); `provision-github-secrets.ps1 -Apply` or `gh secret set` | Label an issue `bug` (or another sync label) → `[GH-n]` issue appears in Linear; no new `[GH-` issue appears on GitHub afterwards |
 | Slack | Create an incoming webhook | Secret `SLACK_WEBHOOK_URL` (+ `slack.notifyOn` routing); `provision-github-secrets.ps1 -Apply` or `gh secret set` | Re-run any listed workflow; failure/`always` outcomes post to the channel |
 | Provider keys (Key Vault) | Run `pwsh scripts/bootstrap/set-provider-secrets.ps1` (dry run), then `-Apply` (masked prompt or `-FromEnv`) after `azure-up.sh` | Vault secrets `openai-api-key`, `anthropic-api-key`, `github-models-token` at `AZURE_KEY_VAULT_URI` (names from `config/aihub.json`) | `. scripts/bootstrap/auto-login.ps1` lights the providers; `helios-ai providers` |

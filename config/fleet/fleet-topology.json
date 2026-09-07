@@ -39,7 +39,7 @@
       "providerChain": ["codex", "openai", "azure-openai", "anthropic"],
       "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
       "skills": ["csharp-orchestrator", "fsharp-functional", "python-agents", "api-creator", "openai-codex", "github-copilot", "powershell-automation", "pipelines-config"],
-      "agents": ["codex-liaison"],
+      "agents": ["codex-liaison", "fsharp-reviewer", "python-reviewer"],
       "autoscaling": { "mode": "hybrid", "minLocalLanes": 2, "maxLocalLanes": 4, "maxBurstLanes": 5 }
     },
     {
@@ -55,7 +55,7 @@
       "providerChain": ["anthropic", "openai", "azure-openai"],
       "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
       "skills": ["automation-wiring", "iac-azure", "pipelines-config", "powershell-automation", "github-control", "microsoft-ecosystem"],
-      "agents": ["workflow-author", "bicep-arm-author", "terraform-author", "config-schema-author", "keyvault-secrets-agent", "identity-access-agent", "rest-api-wirer", "cloudshell-bootstrapper", "m365-admin", "auth-broker", "github-operator"],
+      "agents": ["workflow-author", "bicep-arm-author", "terraform-author", "config-schema-author", "keyvault-secrets-agent", "identity-access-agent", "rest-api-wirer", "cloudshell-bootstrapper", "m365-admin", "auth-broker", "github-operator", "powershell-reviewer"],
       "autoscaling": { "mode": "hybrid", "minLocalLanes": 1, "maxLocalLanes": 3, "maxBurstLanes": 6 }
     },
     {
@@ -71,7 +71,7 @@
       "providerChain": ["anthropic", "claude-cli", "openai"],
       "tools": ["Read", "Grep", "Glob", "Bash"],
       "skills": ["csharp-orchestrator", "automation-wiring"],
-      "agents": ["cpp-perf-reviewer", "winui3-reviewer", "ux-reviewer", "gui-perf-profiler"],
+      "agents": ["cpp-perf-reviewer", "fsharp-reviewer", "python-reviewer", "powershell-reviewer", "winui3-reviewer", "ux-reviewer", "gui-perf-profiler"],
       "autoscaling": {
         "mode": "hybrid",
         "minLocalLanes": 1,

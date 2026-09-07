@@ -13,16 +13,25 @@
 #      The token is SINGLE-USE and expires in ~1 hour. It is held in a shell
 #      variable only — never echoed, never written to disk, and this script
 #      never enables `set -x`;
-#   4. runs `./config.sh --url --token --name --labels helios,xcore[,extras]
+#   4. runs `./config.sh --url --token --name --labels helios-runners,helios,xcore[,extras]
 #      --unattended` (plus --ephemeral behind the -e/--ephemeral switch);
 #   5. prints the run command (`./run.sh`) and the systemd service hint —
 #      it deliberately does NOT auto-start the runner.
 #
-# Labels: every runner gets `helios,xcore`. Pools that need more add them with
+# Labels: every runner gets `helios-runners,helios,xcore`. `helios-runners` is
+# the ONE canonical `runs-on:` label — it is also the ARC scale-set name
+# (infra/runners/arc-values.yaml), so hand-registered runners and the ARC pool
+# answer the same workflows (runner-smoke.yml, fleet-learning.yml). Pools that need more add them with
 # --extra-labels — e.g. the fleet's xcore-9-native pool
 # (config/fleet/fleet-topology.json) wants a dedicated runner carrying
 # `xcore-native` before its autoscaling mode may leave "local":
 #     scripts/runners/register-runner.sh --extra-labels xcore-native
+#
+# Registered before helios-runners existed? Labels are fixed at registration,
+# so a runner carrying only the older `helios,xcore` set never matches
+# `runs-on: helios-runners`. Either add the label in place (Settings ->
+# Actions -> Runners -> the runner -> Labels; repo admin, no re-registration)
+# or re-register: run the remove sequence below, then this script again.
 #
 # Removing a runner later (mirror of step 3/4 — remove tokens are also
 # single-use, ~1h):
@@ -51,7 +60,7 @@ runner_name="$(hostname)-helios"
 extra_labels=""
 ephemeral=false
 dry_run=false
-base_labels="helios,xcore"
+base_labels="helios-runners,helios,xcore"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

@@ -168,31 +168,77 @@ public sealed class AIHubService
     }
 
     /// <summary>Route by task type through the configured chain with circuit-broken fallback.</summary>
-    public async Task<ChatResult> RouteAsync(
-        string? taskType, string prompt, string? system = null, CancellationToken cancellationToken = default)
+    public Task<ChatResult> RouteAsync(
+        string? taskType, string prompt, string? system = null, CancellationToken cancellationToken = default) =>
+        RouteAsync(new HubRouteRequest(taskType, prompt, system), cancellationToken);
+
+    /// <summary>
+    /// Route through the configured chain with circuit-broken fallback. The chain is the
+    /// first of <c>taskRouting["{taskType}:{language}"]</c>, <c>taskRouting[taskType]</c>,
+    /// and <c>routing.defaultChain</c> that exists; the normalized language rides along
+    /// on the provider request and is recorded with every outcome so learning can key
+    /// on (taskType, language). A request without a language behaves exactly like the
+    /// task-type-only overload, with one canonicalization: a task type that is itself one
+    /// of the table's qualified keys (<c>code_generation:fsharp</c>, as
+    /// helios_task_routing_get, /v1/routing and helios-ai routing list them) is split into
+    /// (<c>code_generation</c>, <c>fsharp</c>) before the chain lookup, the recording and
+    /// the learning read, so all three use the one bucket a caller passing the language
+    /// explicitly would (<see cref="TaskTypeRoutingStrategy.CanonicalizeTaskType"/>). The
+    /// same split applies when the request's language, normalized, is the key's own
+    /// (<c>code_generation:fsharp</c> with <c>fsharp</c> is that request spelled twice,
+    /// not a third bucket). A language that contradicts the key's
+    /// (<c>code_generation:fsharp</c> with <c>cpp</c>) is left verbatim: the hub cannot
+    /// know which half the caller meant, so it neither guesses nor rejects — the request
+    /// is served and recorded exactly as sent.
+    /// </summary>
+    public async Task<ChatResult> RouteAsync(HubRouteRequest request, CancellationToken cancellationToken = default)
     {
-        var chain = _strategy.GetChain(taskType).Where(name => _byProvider.ContainsKey(name)).ToList();
+        var taskType = request.TaskType;
+        var prompt = request.Prompt;
+        var system = request.System;
+        var language = TaskTypeRoutingStrategy.NormalizeLanguage(request.Language);
+        if (taskType is not null)
+        {
+            // Must precede the chain lookup, the outcome record and the learning read:
+            // all three key on the same (taskType, language). The split is taken when
+            // the request carries no language or repeats the key's own; a language that
+            // contradicts the key's leaves the request as sent (see the summary).
+            var (bareTaskType, keyLanguage) = _strategy.CanonicalizeTaskType(taskType);
+            if (keyLanguage is not null
+                && (language is null || string.Equals(language, keyLanguage, StringComparison.Ordinal)))
+            {
+                (taskType, language) = (bareTaskType, keyLanguage);
+            }
+        }
+
+        var (configured, resolvedKey) = _strategy.ResolveChain(taskType, language);
+        var chain = configured.Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
+            // Name the key the lookup actually stopped at — the qualified key when its
+            // chain is configured (after the split above or with an explicit language),
+            // the bare task type when the request fell through to the parent chain, and
+            // routing.defaultChain when neither is configured. Naming the key the caller
+            // asked for would send the operator to a chain the request never used.
             return new ChatResult(false, null, "none", "", TimeSpan.Zero,
-                Error: taskType is null
+                Error: resolvedKey is null
                     ? "No providers in routing.defaultChain are registered."
-                    : $"No registered providers for task type '{taskType}' (chain empty). Check config/aihub.json.");
+                    : $"No registered providers for task type '{resolvedKey}' (chain empty). Check config/aihub.json.");
         }
 
         chain = FilterChainByContext(chain, prompt, system);
-        chain = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
+        chain = await ApplyLearningAsync(taskType, language, chain, cancellationToken).ConfigureAwait(false);
 
-        var request = new ChatRequest(prompt, System: system, TaskType: taskType);
+        var chatRequest = new ChatRequest(prompt, System: system, TaskType: taskType, Language: language);
         try
         {
             return await _fallback.ExecuteAsync(
                 chain,
                 async providerName =>
                 {
-                    var result = await _byProvider[providerName].ChatAsync(request, cancellationToken)
+                    var result = await _byProvider[providerName].ChatAsync(chatRequest, cancellationToken)
                         .ConfigureAwait(false);
-                    await RecordOutcomeAsync(taskType, result, cancellationToken).ConfigureAwait(false);
+                    await RecordOutcomeAsync(taskType, language, result, cancellationToken).ConfigureAwait(false);
                     return result;
                 },
                 isSuccess: static result => result.Success,
@@ -213,7 +259,7 @@ public sealed class AIHubService
     /// configured order — learning must never be able to break routing, only improve it.
     /// </summary>
     private async Task<List<string>> ApplyLearningAsync(
-        string? taskType, List<string> configuredChain, CancellationToken cancellationToken)
+        string? taskType, string? language, List<string> configuredChain, CancellationToken cancellationToken)
     {
         if (!_options.Learning.Enabled || !_options.Learning.AdaptiveRouting || taskType is null)
         {
@@ -225,19 +271,32 @@ public sealed class AIHubService
             // Clamp: a zero/negative configured window would reach the store as an
             // invalid capacity and fail routing over a config typo.
             var window = Math.Max(1, _options.Learning.HistoryWindow);
-            var history = await _learning
-                .GetRecentAsync(taskType, window, cancellationToken)
+            // Evidence is keyed on (taskType, language) AND on organic-ness AT THE STORE:
+            // the window is taken after both scopings, so neither another language's
+            // newest outcomes nor an advisory ingest (Source != null: absorption
+            // benchmarks, fork digests, fleet-lane outcomes — they inform insights only;
+            // routing learns exclusively from the hub's own provider outcomes) can crowd
+            // a route's own organic history out of it. A language-qualified chain reads
+            // its own language first and, when that window holds nothing organic, falls
+            // back to the language-less records (the parent task type's, and every
+            // record written before the field existed); a language-less chain reads
+            // language-less records only.
+            var organic = await _learning
+                .GetRecentOrganicForLanguageAsync(taskType, language, window, cancellationToken)
                 .ConfigureAwait(false);
-            // Advisory records (Source != null: absorption benchmarks, fork digests,
-            // fleet-lane outcomes) inform insights only — routing must learn exclusively
-            // from the hub's own provider outcomes.
-            var organic = ChainReorderEngine.OrganicOnly(history);
+            if (organic.Count == 0 && language is not null)
+            {
+                organic = await _learning
+                    .GetRecentOrganicForLanguageAsync(taskType, language: null, window, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             if (organic.Count == 0)
             {
                 return configuredChain;
             }
 
-            var (reordered, _) = _reorderEngine.Reorder(taskType, configuredChain, organic);
+            var (reordered, _) = _reorderEngine.Reorder(
+                ChainReorderEngine.LearningKey(taskType, language), configuredChain, organic);
 
             return reordered.Where(_byProvider.ContainsKey).ToList() is { Count: > 0 } valid
                 ? valid
@@ -575,7 +634,7 @@ public sealed class AIHubService
     }
 
     private async Task RecordOutcomeAsync(
-        string? taskType, ChatResult result, CancellationToken cancellationToken)
+        string? taskType, string? language, ChatResult result, CancellationToken cancellationToken)
     {
         if (!_options.Learning.Enabled || taskType is null)
         {
@@ -589,6 +648,7 @@ public sealed class AIHubService
                 {
                     Timestamp = DateTimeOffset.UtcNow,
                     TaskType = taskType,
+                    Language = language,
                     Provider = result.Provider,
                     Model = result.Model,
                     Success = result.Success,
@@ -674,12 +734,25 @@ public sealed class AIHubService
     /// keeping whichever finishes correctly beats waiting out a slow one before trying
     /// the next. Every result is recorded to the learning store (when enabled), so tandem
     /// runs feed the same evidence RouteAsync draws on — usage across the tandem set
-    /// compounds into better single-shot routing over time.
+    /// compounds into better single-shot routing over time. For that to hold, a task
+    /// type that is itself one of the table's qualified keys (<c>code_generation:fsharp</c>)
+    /// is canonicalized exactly as a language-less RouteAsync request is — split into
+    /// (<c>code_generation</c>, <c>fsharp</c>) before the chain lookup, every record and
+    /// the learning read — so the evidence lands in the (taskType, language) bucket the
+    /// hub reads rather than under an orphan task type, and
+    /// <see cref="TandemResult.TaskType"/> reports the bare task type that resulted.
+    /// Tandem takes no language, so the contradictory-language case RouteAsync leaves
+    /// verbatim cannot arise here.
     /// </summary>
     public async Task<TandemResult> TandemAsync(
         string taskType, string prompt, string? system = null, CancellationToken cancellationToken = default)
     {
-        var chain = _strategy.GetChain(taskType).Where(name => _byProvider.ContainsKey(name)).ToList();
+        // Must precede the chain lookup, the outcome records and the learning read: all
+        // three key on the same (taskType, language), as in RouteAsync.
+        string? language;
+        (taskType, language) = _strategy.CanonicalizeTaskType(taskType);
+
+        var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
             return new TandemResult(taskType, Array.Empty<ChatResult>(), null);
@@ -687,11 +760,11 @@ public sealed class AIHubService
 
         chain = FilterChainByContext(chain, prompt, system);
 
-        var request = new ChatRequest(prompt, System: system, TaskType: taskType);
+        var request = new ChatRequest(prompt, System: system, TaskType: taskType, Language: language);
         var tasks = chain.Select(async name =>
         {
             var result = await _byProvider[name].ChatAsync(request, cancellationToken).ConfigureAwait(false);
-            await RecordOutcomeAsync(taskType, result, cancellationToken).ConfigureAwait(false);
+            await RecordOutcomeAsync(taskType, language, result, cancellationToken).ConfigureAwait(false);
             return result;
         });
 
@@ -699,7 +772,7 @@ public sealed class AIHubService
 
         // Prefer the reordered (learned) chain's first successful result; when nothing
         // succeeded there is no winner to report, only the failures to inspect.
-        var learnedOrder = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
+        var learnedOrder = await ApplyLearningAsync(taskType, language, chain, cancellationToken).ConfigureAwait(false);
         var byProviderResult = results.ToDictionary(r => r.Provider, StringComparer.OrdinalIgnoreCase);
         var winner = learnedOrder
             .Select(name => byProviderResult.GetValueOrDefault(name))
@@ -728,7 +801,12 @@ public sealed class AIHubService
             })
             .ToList();
 
-    /// <summary>Every provider's tandem result plus which one the learned policy currently favors.</summary>
+    /// <summary>
+    /// Every provider's tandem result plus which one the learned policy currently favors.
+    /// TaskType is the bare task type after canonicalization: a qualified key's language
+    /// part went into the records, not into this payload (its shape is the /v1/tandem
+    /// response contract and must not grow a field).
+    /// </summary>
     public sealed record TandemResult(string TaskType, IReadOnlyList<ChatResult> Results, ChatResult? Winner);
 
     public interface IRoutingTableView

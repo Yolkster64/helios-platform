@@ -282,7 +282,7 @@ public static class ApiEndpoints
             {
                 return Results.BadRequest(new ApiError("taskType and prompt are required."));
             }
-            var result = await hub.RouteAsync(request.TaskType, request.Prompt, request.System, ct);
+            var result = await hub.RouteAsync(request.ToHubRequest(), ct);
             return Results.Ok(ChatResponse.From(result));
         });
 

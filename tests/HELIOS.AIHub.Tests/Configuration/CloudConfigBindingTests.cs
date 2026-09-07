@@ -1,4 +1,5 @@
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Routing;
 using Xunit;
 
 namespace HELIOS.AIHub.Tests.Configuration;
@@ -64,11 +65,48 @@ public class CloudConfigBindingTests
     }
 
     [Fact]
+    public void CloudConfig_LanguageQualifiedChains_MirrorTheLocalProfile()
+    {
+        var cloud = LoadCloudConfig();
+        var local = AIHubOptions.Load(AIHubOptions.FindConfigFile(AppContext.BaseDirectory)!);
+
+        static List<string> Qualified(AIHubOptions options) => options.Routing.TaskRouting.Keys
+            .Where(key => TaskTypeRoutingStrategy.SplitRoutingKey(key).Language is not null)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        // Same language dimension in both profiles — a caller switching AIHUB_CONFIG
+        // keeps every language-qualified route, just over hosted providers.
+        Assert.Equal(Qualified(local), Qualified(cloud));
+        foreach (var key in Qualified(cloud))
+        {
+            var (taskType, language) = TaskTypeRoutingStrategy.SplitRoutingKey(key);
+            Assert.True(cloud.Routing.TaskRouting.ContainsKey(taskType), $"'{key}' has no bare parent '{taskType}'");
+            Assert.Equal(TaskTypeRoutingStrategy.NormalizeLanguage(language), language);
+            Assert.NotEqual(cloud.Routing.TaskRouting[taskType], cloud.Routing.TaskRouting[key]);
+        }
+    }
+
+    [Fact]
     public void CloudConfig_EnablesLearningLocally()
     {
         var options = LoadCloudConfig();
 
         Assert.True(options.Learning.Enabled);
         Assert.Equal("local", options.Learning.Mode);
+    }
+
+    [Fact]
+    public void CloudConfig_OptsIntoAdaptiveRouting_Explicitly()
+    {
+        // The C# default and the local profile keep adaptive routing OFF; the cloud
+        // profile opts in on purpose (every routed call there is a paid API call, so the
+        // learned reorder earns its keep immediately). Pinned so the opt-in can only
+        // change through a visible config edit — and so a profile that merely omitted
+        // the key would fail here instead of silently inheriting the off default.
+        var options = LoadCloudConfig();
+
+        Assert.True(options.Learning.AdaptiveRouting);
+        Assert.NotEqual(new LearningOptions().AdaptiveRouting, options.Learning.AdaptiveRouting);
     }
 }

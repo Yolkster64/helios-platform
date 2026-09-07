@@ -85,6 +85,7 @@
     }
   ],
   "routing": {
+    "$comment": "Keys of the form <taskType>:<language> are language-qualified chains: `helios-ai route <taskType> ... --language <language>` (and the language parameter of /v1/route and helios_ai_route) tries them before the bare task type, then routing.defaultChain. The language part is the normalized lower-case key (csharp, fsharp, cpp, python, powershell, bicep, yaml, json); outcomes record it so learning keys on (taskType, language). See docs/architecture/ROUTING_LANGUAGE_DIMENSION.md.",
     "defaultChain": [
       "azure-openai",
       "openai",
@@ -100,6 +101,27 @@
         "openai",
         "azure-openai",
         "anthropic"
+      ],
+      "code_generation:cpp": [
+        "codex",
+        "openai-codex",
+        "anthropic",
+        "anthropic-foundry",
+        "openai"
+      ],
+      "code_generation:fsharp": [
+        "anthropic",
+        "anthropic-foundry",
+        "codex",
+        "openai-codex",
+        "openai"
+      ],
+      "code_generation:python": [
+        "codex",
+        "openai-codex",
+        "openai",
+        "github-models",
+        "azure-openai"
       ],
       "code_refactoring": [
         "codex",
@@ -118,6 +140,19 @@
         "anthropic-foundry",
         "claude-cli",
         "openai"
+      ],
+      "code_review:bicep": [
+        "anthropic",
+        "anthropic-foundry",
+        "azure-openai",
+        "azure-foundry",
+        "openai"
+      ],
+      "code_review:powershell": [
+        "anthropic",
+        "anthropic-foundry",
+        "openai",
+        "github-models"
       ],
       "long_context_analysis": [
         "anthropic",

@@ -168,9 +168,14 @@ public sealed class LearningOptions
     [JsonPropertyName("tableEndpointEnv")]
     public string TableEndpointEnv { get; set; } = "AZURE_LEARNING_TABLE_ENDPOINT";
 
-    /// <summary>Reorder configured chains from recorded outcomes. Recording still happens when false.</summary>
+    /// <summary>
+    /// Reorder configured chains from recorded outcomes. Recording still happens when
+    /// false. Off by default — the same value config/aihub.json ships — so a hub built
+    /// from a config that omits the key behaves exactly like the shipped one and never
+    /// changes its own routing silently (ConfigBindingTests pins the two together).
+    /// </summary>
     [JsonPropertyName("adaptiveRouting")]
-    public bool AdaptiveRouting { get; set; } = true;
+    public bool AdaptiveRouting { get; set; }
 
     /// <summary>How many recent outcomes per task type feed a routing decision.</summary>
     [JsonPropertyName("historyWindow")]
@@ -184,7 +189,12 @@ public sealed class RoutingOptions
     [JsonPropertyName("defaultChain")]
     public List<string> DefaultChain { get; set; } = new();
 
-    /// <summary>Task type → ordered provider chain (first = primary, rest = fallbacks).</summary>
+    /// <summary>
+    /// Task type → ordered provider chain (first = primary, rest = fallbacks). A key of
+    /// the form <c>"{taskType}:{language}"</c> (e.g. <c>code_generation:fsharp</c>) is a
+    /// language-qualified chain, consulted before the bare task type when the request
+    /// carries that language; the language part is the normalized lower-case key.
+    /// </summary>
     [JsonPropertyName("taskRouting")]
     public Dictionary<string, List<string>> TaskRouting { get; set; } = new();
 }

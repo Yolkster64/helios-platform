@@ -32,6 +32,7 @@ state.
 
 - [architecture/README.md](architecture/README.md)
 - [architecture/MULTI_LLM_INTEGRATION.md](architecture/MULTI_LLM_INTEGRATION.md)
+- [architecture/ROUTING_LANGUAGE_DIMENSION.md](architecture/ROUTING_LANGUAGE_DIMENSION.md)
 - [architecture/GITHUB_ECOSYSTEM_DESIGN.md](architecture/GITHUB_ECOSYSTEM_DESIGN.md)
 - [architecture/HERMES_FLEET_AND_XCORE.md](architecture/HERMES_FLEET_AND_XCORE.md)
 - [architecture/ROADMAP_MULTI_LLM.md](architecture/ROADMAP_MULTI_LLM.md)

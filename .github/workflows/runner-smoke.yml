@@ -9,10 +9,14 @@ name: Self-Hosted Runner Smoke
 # self-hosted runner is online — e.g. on forks, or before the first runner is
 # registered. A job that only a human fires can never wedge CI.
 #
-# `runs-on` matches the base label set every register-runner registration
-# applies (helios,xcore + extras). Pool-specific labels (e.g. xcore-native,
-# see config/fleet/fleet-topology.json) are ON TOP of these, so this smoke
-# job can land on any HELIOS runner.
+# `runs-on: helios-runners` is the ONE canonical self-hosted label: it is the
+# ARC runner scale-set name (infra/runners/arc-values.yaml
+# runnerScaleSetName), which GitHub exposes as the label of every scale-set
+# runner, and register-runner.* applies the same label first
+# (helios-runners,helios,xcore + extras) to hand-registered runners — so this
+# smoke job can land on either kind. Pool-specific labels (e.g. xcore-native,
+# see config/fleet/fleet-topology.json) are ON TOP of these. Scale sets never
+# match `[self-hosted, ...]` label arrays, so do not reintroduce one here.
 
 on:
   workflow_dispatch:
@@ -23,7 +27,7 @@ permissions:
 jobs:
   smoke:
     name: Runner proof of life
-    runs-on: [self-hosted, helios]
+    runs-on: helios-runners
     # Belt and braces: if the job is picked up but the runner hangs, don't
     # occupy it for the default 360 minutes.
     timeout-minutes: 5
@@ -37,6 +41,6 @@ jobs:
           echo "runner name : ${{ runner.name }}"
           echo "runner os   : ${{ runner.os }} (${{ runner.arch }})"
           echo "environment : ${{ runner.environment }}"
-          echo "matched via : runs-on [self-hosted, helios] (labels are set at registration by scripts/runners/register-runner.*; the full set is in Settings -> Actions -> Runners)"
+          echo "matched via : runs-on helios-runners (the ARC scale-set name; register-runner.* applies the same label to hand-registered runners; the full set is in Settings -> Actions -> Runners)"
       - name: Exit green
         run: echo "Self-hosted runner is alive and accepting jobs."

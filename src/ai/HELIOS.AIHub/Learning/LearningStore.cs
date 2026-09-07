@@ -24,6 +24,18 @@ public sealed record RoutingOutcome
     [JsonPropertyName("taskType")]
     public string TaskType { get; init; } = "";
 
+    /// <summary>
+    /// Language dimension of the routed work (normalized lower-case key such as
+    /// csharp, fsharp, cpp, python, powershell, bicep). Null for language-less routes
+    /// and for every record written before the field existed — the property is
+    /// omitted from JSON when null, so language-less records serialize exactly as
+    /// they always did and old JSONL lines deserialize unchanged. Learning keys on
+    /// (taskType, language): see <see cref="ChainReorderEngine.ForLanguage"/>.
+    /// </summary>
+    [JsonPropertyName("language")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Language { get; init; }
+
     [JsonPropertyName("provider")]
     public string Provider { get; init; } = "";
 
@@ -64,10 +76,11 @@ public sealed record RoutingOutcome
 /// <summary>
 /// Where routing outcomes are recorded and read back.
 ///
-/// Deliberately narrow: append one outcome, read recent ones for a task type (what
-/// routing needs), or read recent ones across every task type (what /v1/metrics
-/// telemetry needs). Anything richer belongs in a real analytics store, and keeping
-/// this small is what lets the local and Azure backends stay interchangeable.
+/// Deliberately narrow: append one outcome, read recent ones for a task type, for one
+/// (task type, language) key — organic only, which is what routing needs — or across
+/// every task type (what /v1/metrics telemetry needs). Anything richer belongs in a
+/// real analytics store, and keeping this small is what lets the local and Azure
+/// backends stay interchangeable.
 /// </summary>
 public interface ILearningStore
 {
@@ -76,6 +89,32 @@ public interface ILearningStore
     /// <summary>Recent outcomes for a task type, newest first, capped by <paramref name="limit"/>.</summary>
     Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
         string taskType, int limit = 200, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recent outcomes for one (task type, language) key, newest first, capped by
+    /// <paramref name="limit"/> AFTER scoping: a null <paramref name="language"/> selects
+    /// language-less records only (every record written before the field existed
+    /// included); otherwise records whose <see cref="RoutingOutcome.Language"/> equals it
+    /// exactly. Routing takes its evidence window here rather than scoping a shared
+    /// task-type window afterwards, so another language's newest outcomes can never
+    /// crowd a qualified route's own history out of the window.
+    /// </summary>
+    Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The organic subset of <see cref="GetRecentForLanguageAsync"/>: recent outcomes of
+    /// one (task type, language) key whose <see cref="RoutingOutcome.Source"/> is null —
+    /// the hub's own provider outcomes — newest first, capped by <paramref name="limit"/>
+    /// AFTER both scopings. Routing and the fleet planner read here rather than
+    /// discarding advisory records from the plain window afterwards: an advisory ingest
+    /// (fleet-lane outcomes, absorption benchmarks, fork digests) that fills the newest
+    /// <paramref name="limit"/> records of a key would otherwise crowd the older organic
+    /// records out of the window and read as "no evidence" while evidence exists — the
+    /// same window-before-scoping defect the language read closed for the language axis.
+    /// </summary>
+    Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Recent outcomes across ALL task types, newest first, capped by
@@ -95,6 +134,14 @@ public sealed class NullLearningStore : ILearningStore
 
     public Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
         string taskType, int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
 
     public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
@@ -191,13 +238,29 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
         string taskType, int limit = 200, CancellationToken cancellationToken = default) =>
         ReadTailAsync(taskType, limit, cancellationToken);
 
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadTailAsync(taskType, limit, cancellationToken, scopeLanguage: true, language: language);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadTailAsync(taskType, limit, cancellationToken, scopeLanguage: true, language: language, organicOnly: true);
+
     public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
         int limit = 200, CancellationToken cancellationToken = default) =>
         ReadTailAsync(taskType: null, limit, cancellationToken);
 
-    /// <summary>Null <paramref name="taskType"/> means every task type (telemetry reads).</summary>
+    /// <summary>
+    /// Null <paramref name="taskType"/> means every task type (telemetry reads). With
+    /// <paramref name="scopeLanguage"/> the tail window holds only records whose language
+    /// equals <paramref name="language"/> (null = language-less), and with
+    /// <paramref name="organicOnly"/> only records without a <see cref="RoutingOutcome.Source"/>,
+    /// so the cap applies after scoping — a route's evidence is never displaced by
+    /// another language's outcomes or by an advisory ingest.
+    /// </summary>
     private async Task<IReadOnlyList<RoutingOutcome>> ReadTailAsync(
-        string? taskType, int limit, CancellationToken cancellationToken)
+        string? taskType, int limit, CancellationToken cancellationToken,
+        bool scopeLanguage = false, string? language = null, bool organicOnly = false)
     {
         if (!File.Exists(_path))
         {
@@ -238,7 +301,10 @@ public sealed class LocalJsonlLearningStore : ILearningStore, IDisposable
             {
                 continue; // A torn line from a crash must not poison the whole history.
             }
-            if (outcome is not null && (taskType is null || outcome.TaskType == taskType))
+            if (outcome is not null
+                && (taskType is null || outcome.TaskType == taskType)
+                && (!scopeLanguage || string.Equals(outcome.Language, language, StringComparison.Ordinal))
+                && (!organicOnly || outcome.Source is null))
             {
                 if (window.Count == limit)
                 {

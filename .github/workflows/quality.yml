@@ -19,25 +19,23 @@ jobs:
       - uses: actions/checkout@v4
 
       # pwsh ships preinstalled on ubuntu-latest; actions/setup-powershell does not exist.
+      # Pinned: an unpinned Install-Module made every run depend on whatever the
+      # gallery served that day.
       - name: Install PSScriptAnalyzer
         run: |
-          pwsh -Command "Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser"
-      
-      - name: Run PSScriptAnalyzer
+          pwsh -NoProfile -Command "Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser"
+
+      # Blocking. The previous step passed one array to Invoke-ScriptAnalyzer's
+      # string -Path parameter, failed to bind on every run, and sat behind
+      # continue-on-error — so the analyzer never ran and this job was green by
+      # construction. scripts/verify/psa-gate.ps1 analyzes file by file; an
+      # Error-severity finding or an analyzer failure outside the legacy
+      # baseline (.github/psa-baseline.txt) fails the job, warnings stay
+      # advisory in the artifact and the step summary.
+      - name: Run PSScriptAnalyzer gate
         run: |
-          pwsh -Command "
-          \$scriptsFound = Get-ChildItem -Path './src', './scripts' -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue
-          if (\$scriptsFound) {
-            Invoke-ScriptAnalyzer -Path './src', './scripts' -Recurse -Severity Error, Warning -OutVariable results
-            if (\$results) {
-              \$results | Tee-Object -FilePath ps-analysis.txt
-            }
-          } else {
-            Write-Host 'No PowerShell scripts found to analyze'
-          }
-          "
-        continue-on-error: true
-      
+          pwsh -NoProfile -File scripts/verify/psa-gate.ps1
+
       - name: Upload Analysis
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,8 +51,9 @@ jobs:
       - uses: actions/checkout@v4
       
       # Plain npm install instead of the Docker-based action — same rationale
-      # as ci-validation.yml: docker.io pulls flake on runners and the action's
-      # container build fails outside continue-on-error's reach.
+      # as ci-validation.yml: docker.io pulls flake on runners. Blocking: the
+      # curated list below is clean, and a regression in one of these documents
+      # must reach the required summary rather than hide behind continue-on-error.
       - name: Run Markdown Linter
         run: |
           npm install --global --no-fund --no-audit markdownlint-cli@0.33.0
@@ -73,7 +72,6 @@ jobs:
             docs/migration/yolkster-control-cutover/CUTOVER-RUNBOOK.md
           )
           markdownlint --config .markdownlint.json "${files[@]}"
-        continue-on-error: true
 
   json-validate:
     name: JSON Validation
@@ -94,6 +92,68 @@ jobs:
             -not -path './bin/*' -not -path './obj/*' -print0 |
             xargs -0 -n1 sh -c 'python3 -m json.tool "$1" >/dev/null 2>&1 || { echo "::error file=$1::invalid JSON: $1"; exit 255; }' _
           echo "✅ All JSON files valid"
+
+  automation-validate:
+    name: Automation Wiring Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The automation-wiring skill ships a validator that had no CI caller: it
+      # parses every JSON/YAML artifact, and for workflows flags disabled or
+      # stale actions, missing `permissions:`, attacker-controlled contexts
+      # interpolated into `run:`/github-script, a write-token PR trigger paired
+      # with a checkout, and jobs with neither `runs-on` nor `uses`; committed-credential
+      # patterns are checked in every file it reads. Blocking: exit 1 on any
+      # error; warnings (currently: three legacy workflows without a top-level
+      # permissions block, one stale setup-python pin, terraform CLI absent)
+      # print but pass. PyYAML is the validator's only dependency. Bicep and
+      # Terraform sub-checks run only when those CLIs are on PATH; the
+      # dedicated infra-validate.yml owns Bicep compilation, so this job does
+      # not install either.
+      - name: Validate workflows, config, editor, and infra artifacts
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml==6.0.2
+          python3 .claude/skills/automation-wiring/scripts/validate_all.py \
+            .github/workflows config .vscode .devcontainer infra
+
+  python-typecheck:
+    # Lives here, not in python-spoke.yml: that workflow is path-filtered, so its
+    # job can neither be a required context (it would never report on a PR that
+    # touches no Python) nor feed the required Quality Check Summary. This
+    # workflow runs on every PR, so a type error blocks the merge through the
+    # summary below. pytest stays in python-spoke.yml.
+    name: pyright (helios_agents)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ai/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Type-check the spoke package only (src/ai/python/pyrightconfig.json:
+      # include helios_agents, standard mode, pythonVersion 3.10 = the package's
+      # requires-python floor). The ml extras are installed so the optional
+      # numpy/scikit-learn imports resolve instead of reading as missing
+      # modules. Blocking: the package is clean at this pin, so any new finding
+      # fails the job. The tests/ tree is deliberately outside the include — it
+      # is loosely typed by design and stays covered by pytest.
+      - name: Install package and pyright
+        run: |
+          python -m pip install '.[ml]'
+          python -m pip install pyright==1.1.405
+
+      - name: Run pyright
+        run: python -m pyright
 
   security-scan:
     # "(quality)" suffix: ci-validation.yml publishes a job named "Security Scanning"
@@ -128,24 +188,60 @@ jobs:
           # rules file falls back to the bundled template).
           LINTER_RULES_PATH: .
           MARKDOWN_CONFIG_FILE: .markdownlint.json
-          VALIDATE_CSHARP: true
+          # The slim image carries no C# linter, so a VALIDATE_CSHARP flag here
+          # was inert; C# is gated by dotnet-build.yml (build + tests).
           VALIDATE_JSON: true
           VALIDATE_MARKDOWN: true
-        continue-on-error: true
+        # Blocking (no continue-on-error): the scan is scoped to the PR's own
+        # files, so a failure names a changed line, and it must reach the
+        # required summary below.
 
   quality-summary:
     name: Quality Check Summary
     if: always()
-    needs: [powershell-lint, markdown-lint, json-validate, security-scan]
+    needs: [powershell-lint, markdown-lint, json-validate, automation-validate, python-typecheck, security-scan]
     runs-on: ubuntu-latest
+    # Required context (.github/rulesets/main.json): it must carry the real
+    # outcome of every job above, and no step in this workflow uses
+    # continue-on-error any more, so a job result is its steps' real outcome.
+    # Results reach the shell through env (never interpolated into run:), and
+    # anything but success fails this job — a skipped or cancelled dependency
+    # is not a pass either. (Six jobs; none of them is path-filtered.)
+    env:
+      RESULT_POWERSHELL_LINT: ${{ needs.powershell-lint.result }}
+      RESULT_MARKDOWN_LINT: ${{ needs.markdown-lint.result }}
+      RESULT_JSON_VALIDATE: ${{ needs.json-validate.result }}
+      RESULT_AUTOMATION_VALIDATE: ${{ needs.automation-validate.result }}
+      RESULT_PYTHON_TYPECHECK: ${{ needs.python-typecheck.result }}
+      RESULT_SECURITY_SCAN: ${{ needs.security-scan.result }}
     steps:
       - name: Report Status
+        shell: bash
         run: |
-          echo "## Code Quality Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- PowerShell Lint: ${{ needs.powershell-lint.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Markdown Lint: ${{ needs.markdown-lint.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- JSON Validation: ${{ needs.json-validate.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Quality checks completed"
+          set -u
+          failed=0
+          {
+            echo "## Code Quality Results"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          for pair in \
+            "PowerShell Lint=$RESULT_POWERSHELL_LINT" \
+            "Markdown Lint=$RESULT_MARKDOWN_LINT" \
+            "JSON Validation=$RESULT_JSON_VALIDATE" \
+            "Automation Wiring Validation=$RESULT_AUTOMATION_VALIDATE" \
+            "Python typecheck (pyright)=$RESULT_PYTHON_TYPECHECK" \
+            "Security Scan=$RESULT_SECURITY_SCAN"; do
+            name="${pair%%=*}"
+            result="${pair#*=}"
+            echo "- ${name}: ${result}" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} finished with result '${result}'"
+              failed=1
+            fi
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -ne 0 ]; then
+            echo "❌ Quality checks failed — see the job results above" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "✅ Quality checks completed" >> "$GITHUB_STEP_SUMMARY"

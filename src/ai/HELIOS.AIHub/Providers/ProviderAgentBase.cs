@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HELIOS.AIHub.Abstractions;
+using HELIOS.AIHub.Routing;
 using HELIOS.Platform.Core.AI.Interfaces;
 
 namespace HELIOS.AIHub.Providers;
@@ -67,6 +68,11 @@ public abstract class ProviderAgentBase : IChatProviderAgent
             System: GetParameter<string>(request, "system"),
             Model: GetParameter<string>(request, "model"),
             TaskType: GetParameter<string>(request, "taskType"),
+            // The generic IAgent seam carries the language the router selected on as a
+            // parameter (the same key as the routing hint); without this mapping an
+            // adapter reached through AgentRouter saw ChatRequest.Language == null even
+            // when the language-qualified chain had been chosen.
+            Language: TaskTypeRoutingStrategy.NormalizeLanguage(GetParameter<string>(request, TaskTypeRoutingStrategy.LanguageHint)),
             MaxTokens: GetParameter<int?>(request, "maxTokens"),
             Temperature: GetParameter<double?>(request, "temperature"));
 
