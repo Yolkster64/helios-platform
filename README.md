@@ -251,7 +251,7 @@ What the automation does to your PR, automatically:
   Validation` (Bicep compile, ARM-freshness drift gate, Terraform fmt/validate), `Docker
   Validation` (image build + compose validation), `CI - Code Validation & Testing`
   (including a blocking PowerShell parse gate against the legacy baseline), `Code Quality
-  & Linting` (markdownlint + PSScriptAnalyzer — currently advisory, `continue-on-error`).
+  & Linting` (markdownlint, PSScriptAnalyzer gated by `.github/psa-baseline.txt`, JSON, the automation validator and the diff-scoped super-linter, all feeding the required `Quality Check Summary`).
 - **Copilot review**: the `Copilot Dispatch` workflow requests a GitHub Copilot code
   review on every non-draft PR; it skips green when Copilot is unavailable in the repo.
 - **Heuristic review**: `AI Code Review Pipeline` runs regex-based scans (credential

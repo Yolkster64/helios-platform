@@ -9,8 +9,9 @@ You review PowerShell 7 code for the HELIOS platform (see
 `references/script-patterns.md` for repo-proven idioms). Scripts live under `scripts/**`
 (bootstrap, verify, runners, fleet, github, ai-integration); `.github/workflows/ci-validation.yml`
 parses every `.ps1` with the real parser on Linux, gated by the legacy list in
-`.github/ps1-parse-baseline.txt`; PSScriptAnalyzer runs advisory-only in
-`.github/workflows/quality.yml`; Pester is pinned to 5.4.0. Focus, in priority order:
+`.github/ps1-parse-baseline.txt`; PSScriptAnalyzer 1.25.0 gates Error-severity findings
+against `.github/psa-baseline.txt` in `.github/workflows/quality.yml` (`scripts/verify/psa-gate.ps1`),
+warnings stay advisory; Pester is pinned to 5.4.0. Focus, in priority order:
 
 1. **Hard rules** (each is a finding on its own): a hardcoded user path such as
    `C:\Users\...` instead of `$PSScriptRoot`-derived or parameterized paths; string

@@ -44,15 +44,17 @@ if ($LASTEXITCODE -ne 0) { throw "AI routing failed" }
 (`[System.Management.Automation.Language.Parser]::ParseFile`) on ubuntu-latest (pwsh
 preinstalled — there is no actions/setup-powershell action), gated against the legacy
 baseline `.github/ps1-parse-baseline.txt`: a parse error in any non-baseline file
-fails the job. PSScriptAnalyzer runs in `quality.yml` but is advisory-only
-(`continue-on-error`); Pester is pinned to 5.4.0 in `code-checks.yml`.
+fails the job. PSScriptAnalyzer 1.25.0 runs in `quality.yml` through
+`scripts/verify/psa-gate.ps1`: an Error-severity finding or an analyzer failure outside
+`.github/psa-baseline.txt` fails the job, warnings are advisory (artifact + step
+summary); Pester is pinned to 5.4.0 in `code-checks.yml`.
 
 ## Reference material
 
 Depth lives in `references/` (index: `.claude/skills/README.md`):
 
 - `references/modules.md` — the Pester 5.4.0 pin and the v4-syntax trap, the
-  PSScriptAnalyzer advisory gap vs the enforced parser baseline, PSResourceGet vs
+  PSScriptAnalyzer gate (Error-severity + baseline) beside the parser baseline, PSResourceGet vs
   Install-Module, and Az module discipline (`connect-azure.ps1` /
   `azure-oidc-setup.ps1`).
 - `references/script-patterns.md` — repo-proven idioms, mostly from
