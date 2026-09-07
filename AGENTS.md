@@ -47,6 +47,8 @@ The provider-neutral AIHub routes OpenAI, Azure/Foundry, Claude, Copilot, local 
 
 Routing accepts an optional language: a `<taskType>:<language>` key in `config/aihub.json` is tried before the bare task type, adaptive routing stays off by default, and every outcome is recorded either way (`docs/architecture/ROUTING_LANGUAGE_DIMENSION.md`). Self-hosted jobs use the single `runs-on: helios-runners` label.
 
+The per-language reviewers (`fsharp-reviewer`, `python-reviewer`, `powershell-reviewer`) and the report-only `aihub-strategist` never route, edit configuration, or approve; model and tool choices are reasoned in the `aihub-unity` skill, and absorption stays advisory per `docs/absorption/START_HERE.md`.
+
 The local MCP server in `.mcp.json` exposes bounded `helios_*` tools. Consequential operations are separate request/approval flows. Project MCP configuration from an untrusted branch must never be loaded in a credential-bearing workflow.
 
 ## Authoritative references

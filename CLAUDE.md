@@ -59,10 +59,14 @@ The MCP server in `.mcp.json` exposes the governed `helios_*` tools for AI routi
 
 `helios-ai route`, `POST /v1/route`, and `helios_ai_route` accept an optional language (`csharp`, `fsharp`, `cpp`, `python`, `powershell`, `bicep`, `yaml`, `json`); a `taskRouting` key of the form `<taskType>:<language>` in `config/aihub.json` is tried before the bare task type, then `routing.defaultChain`, and the normalized language is recorded with each outcome so learning keys on (taskType, language). Adaptive routing is off by default in both the shipped config and the C# default; recording still happens when it is off.
 
+Model, provider and combination choices are reasoned in the `aihub-unity` skill and reported by the read-only `aihub-strategist` agent, grounded in `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md` and `docs/architecture/AIHUB_LANGUAGE_ROLES.md`; the absorption program's beginner path is `docs/absorption/START_HERE.md`.
+
 ## Key architecture references
 
 - `docs/architecture/MULTI_LLM_INTEGRATION.md`
 - `docs/architecture/ROUTING_LANGUAGE_DIMENSION.md`
+- `docs/architecture/AIHUB_LANGUAGE_ROLES.md`
+- `docs/architecture/LLM_STRENGTHS_PLAYBOOK.md`
 - `docs/architecture/GITHUB_ECOSYSTEM_DESIGN.md`
 - `docs/architecture/HERMES_FLEET_AND_XCORE.md`
 - `docs/architecture/GUI_THEME_ANALYSIS.md`
