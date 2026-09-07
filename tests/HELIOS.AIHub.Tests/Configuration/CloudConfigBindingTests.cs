@@ -95,4 +95,18 @@ public class CloudConfigBindingTests
         Assert.True(options.Learning.Enabled);
         Assert.Equal("local", options.Learning.Mode);
     }
+
+    [Fact]
+    public void CloudConfig_OptsIntoAdaptiveRouting_Explicitly()
+    {
+        // The C# default and the local profile keep adaptive routing OFF; the cloud
+        // profile opts in on purpose (every routed call there is a paid API call, so the
+        // learned reorder earns its keep immediately). Pinned so the opt-in can only
+        // change through a visible config edit — and so a profile that merely omitted
+        // the key would fail here instead of silently inheriting the off default.
+        var options = LoadCloudConfig();
+
+        Assert.True(options.Learning.AdaptiveRouting);
+        Assert.NotEqual(new LearningOptions().AdaptiveRouting, options.Learning.AdaptiveRouting);
+    }
 }

@@ -39,7 +39,11 @@ public static class HeliosAiTools
         [Description("Optional language of the work (csharp, fsharp, cpp, python, powershell, bicep, yaml, json, ...). Normalized to lower-case (aliases such as C#, F#, c++, ps1 fold to csharp, fsharp, cpp, powershell); when config/aihub.json defines a '<taskType>:<language>' chain it is tried before the bare task type, and the language is recorded with the routing outcome. Omit for the task type's default chain.")] string? language = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await hub.RouteAsync(new HubRouteRequest(taskType, prompt, system, language), cancellationToken);
+        // system and language are both optional strings: named arguments make a
+        // positional swap a compile error rather than a silently mis-keyed outcome.
+        var result = await hub.RouteAsync(
+            new HubRouteRequest(TaskType: taskType, Prompt: prompt, System: system, Language: language),
+            cancellationToken);
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 

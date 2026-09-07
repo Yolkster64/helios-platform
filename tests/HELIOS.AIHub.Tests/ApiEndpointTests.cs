@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HELIOS.AIHub.Api;
+using HELIOS.AIHub.Learning;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -305,6 +306,77 @@ public sealed class ApiEndpointTests : IClassFixture<IsolatedApiFactory>
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Equal(expectedChain, result.Provider);
+    }
+
+    [Fact]
+    public async Task Route_UnknownLanguage_WalksTheBareChain_AndRecordsTheNormalizedLanguage()
+    {
+        // No architecture_design:klingon chain exists, so the bare architecture_design
+        // chain (API providers only, so a box with agent CLIs installed still runs this)
+        // serves the request — and the outcome still carries the normalized language,
+        // which is what a future qualified chain would learn from. Observed through the
+        // store the test host uses (GET /v1/learning reads hub.Learning back).
+        const string taskType = "architecture_design";
+        var routing = await _client.GetFromJsonAsync<RoutingTableResponse>("/v1/routing", Json);
+        Assert.NotNull(routing);
+        var bareChain = routing.TaskRouting[taskType];
+        Assert.False(routing.TaskRouting.ContainsKey($"{taskType}:klingon"));
+        if (await AnyProviderReadyAsync(bareChain))
+        {
+            return; // a keyed developer box: skip rather than call a real provider
+        }
+
+        var response = await _client.PostAsJsonAsync(
+            "/v1/route", new RouteRequest(taskType, "hello", Language: " Klingon "), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ChatResponse>(Json);
+        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Equal(string.Join("→", bareChain), result.Provider);
+
+        var outcomes = await _client.GetFromJsonAsync<List<RoutingOutcome>>(
+            $"/v1/learning?taskType={taskType}&limit=500", Json);
+        Assert.NotNull(outcomes);
+        var recorded = outcomes.Where(o => o.Language == "klingon").ToList();
+        Assert.NotEmpty(recorded);
+        Assert.All(recorded, o => Assert.Equal(taskType, o.TaskType));
+        Assert.All(recorded, o => Assert.Contains(o.Provider, bareChain));
+    }
+
+    [Fact]
+    public async Task Route_BlankLanguage_RecordsNoLanguage()
+    {
+        // "" is "no language", exactly like an omitted field: the outcome must carry
+        // Language == null — never "" — so it lands in the language-less bucket the
+        // bare chain learns from. security_analysis is routed by no other test in this
+        // class, so every outcome under it here came from this request.
+        const string taskType = "security_analysis";
+        var routing = await _client.GetFromJsonAsync<RoutingTableResponse>("/v1/routing", Json);
+        Assert.NotNull(routing);
+        if (await AnyProviderReadyAsync(routing.TaskRouting[taskType]))
+        {
+            return; // a keyed developer box: skip rather than call a real provider
+        }
+
+        var response = await _client.PostAsJsonAsync(
+            "/v1/route", new RouteRequest(taskType, "hello", Language: ""), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var outcomes = await _client.GetFromJsonAsync<List<RoutingOutcome>>(
+            $"/v1/learning?taskType={taskType}&limit=500", Json);
+        Assert.NotNull(outcomes);
+        Assert.NotEmpty(outcomes);
+        Assert.All(outcomes, o => Assert.Null(o.Language));
+    }
+
+    /// <summary>True when any provider of <paramref name="chain"/> is Ready here.</summary>
+    private async Task<bool> AnyProviderReadyAsync(IEnumerable<string> chain)
+    {
+        var status = await _client.GetFromJsonAsync<List<ProviderStatusResponse>>("/v1/status", Json);
+        Assert.NotNull(status);
+        var providers = chain.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return status.Any(p => providers.Contains(p.Name) && p.Readiness == "Ready");
     }
 
     [Fact]

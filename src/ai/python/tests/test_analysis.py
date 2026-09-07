@@ -1,3 +1,5 @@
+import pytest
+
 from helios_agents import analysis
 
 
@@ -70,6 +72,44 @@ def test_provider_summary_omits_languages_for_legacy_records():
 def test_provider_summary_treats_null_language_as_languageless():
     result = analysis.provider_summary([dict(_outcome("openai", True), language=None)])
     assert "languages" not in result
+
+
+# Every value the C# rule reads as "no language" (whitespace or empty = none), plus
+# values a hand-written or foreign record could carry that are not strings at all.
+_NOT_A_LANGUAGE = [None, "", "   ", "\t\n", 42, 1.5, True, ["fsharp"], {"key": "fsharp"}]
+
+
+@pytest.mark.parametrize("language", _NOT_A_LANGUAGE)
+def test_provider_summary_language_less_values_never_raise_and_never_group(language):
+    outcomes = [dict(_outcome("openai", True), language=language), _outcome("openai", False)]
+    result = analysis.provider_summary(outcomes)
+    assert result["totalOutcomes"] == 2
+    assert result["providers"]["openai"]["attempts"] == 2
+    assert "languages" not in result
+
+
+def test_provider_summary_language_less_values_stay_out_of_the_language_map():
+    # Mixed with one real language: the map holds only that language, computed from
+    # its own outcome, while every record still counts in the top-level aggregate.
+    outcomes = [dict(_outcome("openai", True), language=value) for value in _NOT_A_LANGUAGE]
+    outcomes.append(_outcome("openai", True))  # key missing entirely
+    outcomes.append(dict(_outcome("anthropic", False), language="fsharp"))
+    result = analysis.provider_summary(outcomes)
+    assert result["totalOutcomes"] == len(_NOT_A_LANGUAGE) + 2
+    assert list(result["languages"]) == ["fsharp"]
+    assert result["languages"]["fsharp"]["totalOutcomes"] == 1
+    assert list(result["languages"]["fsharp"]["providers"]) == ["anthropic"]
+
+
+def test_provider_summary_language_key_is_exact_once_non_blank():
+    # The hub normalizes before recording; the spoke never re-normalizes, so a
+    # non-blank value groups under exactly the string recorded.
+    outcomes = [
+        dict(_outcome("openai", True), language="fsharp"),
+        dict(_outcome("openai", True), language="FSharp"),
+    ]
+    result = analysis.provider_summary(outcomes)
+    assert sorted(result["languages"]) == ["FSharp", "fsharp"]
 
 
 def test_provider_summary_groups_by_language_when_present():

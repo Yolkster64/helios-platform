@@ -86,11 +86,15 @@ public sealed class FleetPlanService
                 {
                     // Pools route by bare task type, so they are scored on the same
                     // language-less evidence RouteAsync would use for that key —
-                    // language-qualified outcomes belong to their own chains.
-                    organic = ChainReorderEngine.ForLanguage(
-                        ChainReorderEngine.OrganicOnly(
-                            await GetRecentSafeAsync(taskType, cancellationToken).ConfigureAwait(false)),
-                        language: null);
+                    // language-qualified outcomes belong to their own chains. The
+                    // read goes through the store's (taskType, language: null) key so
+                    // the window is taken AFTER scoping: language-qualified outcomes
+                    // filling the newest historyWindow records can never crowd a
+                    // pool's own language-less samples out of the read and report
+                    // "no evidence" while evidence exists (the hub's RouteAsync had
+                    // the same defect and takes the same fix).
+                    organic = ChainReorderEngine.OrganicOnly(
+                        await GetRecentLanguagelessSafeAsync(taskType, cancellationToken).ConfigureAwait(false));
                     organicByTask[taskType] = organic;
                 }
 
@@ -115,15 +119,18 @@ public sealed class FleetPlanService
     }
 
     /// <summary>
+    /// The newest <c>historyWindow</c> language-less outcomes of a task type — the
+    /// (taskType, null) key, scoped at the store so the cap applies after scoping.
     /// Same degradation contract as AIHubService.ApplyLearningAsync: a store failure
     /// reads as "no evidence" (engine none), never a crashed advisory report.
     /// </summary>
-    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentSafeAsync(
+    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentLanguagelessSafeAsync(
         string taskType, CancellationToken cancellationToken)
     {
         try
         {
-            return await _learning.GetRecentAsync(taskType, _historyWindow, cancellationToken)
+            return await _learning.GetRecentForLanguageAsync(
+                    taskType, language: null, _historyWindow, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (IOException)

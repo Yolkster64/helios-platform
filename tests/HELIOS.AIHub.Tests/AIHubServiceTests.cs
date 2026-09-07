@@ -558,6 +558,57 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task RouteAsync_QualifiedKeyAsTaskType_IsCanonicalized_BeforeChainLookupAndRecording()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // helios_task_routing_get, /v1/routing and helios-ai routing list the table's
+        // keys verbatim, so a caller may pass "echo_task:fsharp" as the task type with
+        // no language. Served as-is it would walk the qualified chain but record
+        // TaskType="echo_task:fsharp", Language=null — a second evidence bucket the
+        // (taskType, language) learning reads never see. It must split into
+        // ("echo_task", "fsharp") before the lookup, the record and the learning read.
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(LanguageEchoOptions(), learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("echo_task:fsharp", "ping"));
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("beta", result.Provider); // the fsharp-qualified chain, exactly as before
+        var outcome = Assert.Single(store.Recorded);
+        Assert.Equal("echo_task", outcome.TaskType);
+        Assert.Equal("fsharp", outcome.Language);
+    }
+
+    [Fact]
+    public async Task RouteAsync_QualifiedLookingTaskType_WithoutAMatchingKey_IsLeftAlone()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // No "echo_task:python" chain exists, so the string is an ordinary (unknown)
+        // task type: the default chain serves it and the outcome records it verbatim,
+        // exactly as before — canonicalization never invents a language.
+        var options = LanguageEchoOptions();
+        options.Routing.DefaultChain = new List<string> { "alpha" };
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(options, learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("echo_task:python", "ping"));
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("alpha", result.Provider);
+        var outcome = Assert.Single(store.Recorded);
+        Assert.Equal("echo_task:python", outcome.TaskType);
+        Assert.Null(outcome.Language);
+    }
+
+    [Fact]
     public async Task RouteAsync_AdaptiveRouting_LearnsOnlyFromMatchingLanguageHistory()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())

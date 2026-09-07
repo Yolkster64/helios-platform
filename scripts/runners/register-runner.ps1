@@ -32,6 +32,12 @@ leave "local":
 
     pwsh scripts/runners/register-runner.ps1 -ExtraLabels xcore-native
 
+Registered before helios-runners existed? Labels are fixed at registration, so a
+runner carrying only the older helios,xcore set never matches
+runs-on: helios-runners. Either add the label in place (Settings -> Actions ->
+Runners -> the runner -> Labels; repo admin, no re-registration) or re-register:
+run the remove sequence below, then this script again.
+
 Removing a runner later (remove tokens are also single-use, ~1h):
 
     $t = gh api -X POST repos/Yolkster64/helios-platform/actions/runners/remove-token --jq .token

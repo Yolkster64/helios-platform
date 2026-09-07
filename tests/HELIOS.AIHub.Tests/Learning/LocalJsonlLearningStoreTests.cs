@@ -257,8 +257,12 @@ public class LocalJsonlLearningStoreTests : IDisposable
 
         var lines = await File.ReadAllLinesAsync(_path);
         Assert.Contains("\"language\":\"fsharp\"", lines[0]);
-        // Language-less records keep their pre-language shape byte for byte.
-        Assert.DoesNotContain("language", lines[1]);
+        // Language-less records keep their pre-language shape byte for byte: the exact
+        // line the store wrote before the field existed, property for property and in
+        // that order — not merely a line without the substring "language".
+        Assert.Equal(
+            """{"outcomeId":null,"timestamp":"1970-01-01T00:00:02+00:00","taskType":"code_review","provider":"openai","model":"test-model","success":true,"latencyMs":100,"costUsd":0.01,"quality":null,"pool":null,"source":null}""",
+            lines[1]);
 
         var recent = await store.GetRecentAsync("code_review");
         Assert.Null(recent[0].Language);          // at: 2, newest first

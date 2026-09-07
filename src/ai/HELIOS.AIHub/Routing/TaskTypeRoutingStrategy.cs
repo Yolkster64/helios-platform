@@ -95,6 +95,36 @@ public sealed class TaskTypeRoutingStrategy : IRoutingStrategy
             : (key[..separator], key[(separator + 1)..]);
     }
 
+    /// <summary>
+    /// The canonical (taskType, language) for a route request that carries NO language.
+    /// The table's keys are public (helios_task_routing_get, /v1/routing, helios-ai
+    /// routing list them verbatim), so a caller may send <c>code_generation:fsharp</c> as
+    /// the task type; served as-is it would walk the qualified chain but record and learn
+    /// under TaskType "code_generation:fsharp" with no language — a second evidence
+    /// bucket the (taskType, language) reads never see. When the task type contains the
+    /// separator, the table holds that exact key with a non-empty chain, and the language
+    /// part is already canonical (so <see cref="GetChain"/> on the split resolves the very
+    /// same chain), it splits into (<c>code_generation</c>, <c>fsharp</c>). Anything else
+    /// — a bare task type, an unknown qualified key, a non-canonical spelling — comes
+    /// back unchanged with a null language and is treated as an ordinary task type.
+    /// </summary>
+    public (string TaskType, string? Language) CanonicalizeTaskType(string taskType)
+    {
+        if (taskType.IndexOf(LanguageSeparator) < 0
+            || !_routing.TaskRouting.TryGetValue(taskType, out var chain)
+            || chain.Count == 0)
+        {
+            return (taskType, null);
+        }
+
+        var (bareTaskType, language) = SplitRoutingKey(taskType);
+        return bareTaskType.Length > 0
+               && language is not null
+               && string.Equals(NormalizeLanguage(language), language, StringComparison.Ordinal)
+            ? (bareTaskType, language)
+            : (taskType, null);
+    }
+
     public IAgent? SelectAgent(AgentRoutingRequest request, IReadOnlyList<IAgent> availableAgents) =>
         SelectAgents(request, availableAgents, maxAgents: 1).FirstOrDefault();
 

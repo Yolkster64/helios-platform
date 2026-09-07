@@ -20,6 +20,26 @@ before. The lookup lives in `TaskTypeRoutingStrategy.GetChain(taskType, language
 (`src/ai/HELIOS.AIHub/Routing/TaskTypeRoutingStrategy.cs`) and is pinned by
 `tests/HELIOS.AIHub.Tests/Routing/TaskTypeRoutingStrategyTests.cs`.
 
+### A qualified key passed as the task type
+
+`helios_task_routing_get`, `/v1/routing`, and `helios-ai routing` list the table's keys
+verbatim, so a caller may send `code_generation:fsharp` as the *task type* with no
+language. `AIHubService.RouteAsync(HubRouteRequest)` canonicalizes such a request before
+the chain lookup, the outcome record, and the learning read: when the request carries no
+language, the task type contains the separator, `taskRouting` holds that exact key with a
+non-empty chain, and the language part is already canonical, it is split into
+(`code_generation`, `fsharp`). The chain served is the one the qualified key names, as
+before; what changes is the record — `taskType: code_generation, language: fsharp`, the
+same bucket a caller passing `language: fsharp` produces — instead of a task type
+`code_generation:fsharp` with no language, a second evidence bucket the
+(taskType, language) reads never see. Everything else passes through unchanged: a bare
+task type; a qualified-looking key the table does not hold (an ordinary unknown task
+type, served by `routing.defaultChain` and recorded verbatim); a key whose language part
+is not canonical (`code_generation:F#`, which `GetChain` on the split would not resolve);
+and a request that already carries a language. The rule is
+`TaskTypeRoutingStrategy.CanonicalizeTaskType`, pinned by `TaskTypeRoutingStrategyTests`
+and `AIHubServiceTests`; `tandem` takes a bare task type and is not canonicalized.
+
 ## Language keys and normalization
 
 Language values are normalized before lookup and before recording — trimmed,
@@ -81,10 +101,17 @@ in the C# default) keys its evidence on **(taskType, language)**:
   exist yet it falls back to the parent task type's language-less records, never to
   another language's.
 
-The scoping is `ChainReorderEngine.ForLanguage`, applied after the advisory-record
-exclusion (`OrganicOnly`) that keeps source-tagged records out of routing. The fleet
-planner scores pools on language-less evidence for the same reason: pools route by bare
-task type. Nothing here changes the advisory contract — recommendations are reported,
+The scoping happens at the store: `ILearningStore.GetRecentForLanguageAsync(taskType,
+language, window)` takes the history window *after* scoping (null language = language-less
+records only, otherwise an exact match on the normalized key), so another language's
+newest outcomes can never crowd a route's own evidence out of the window; the
+advisory-record exclusion (`OrganicOnly`) that keeps source-tagged records out of routing
+is applied to the scoped read. `ChainReorderEngine.ForLanguage` states the same rule over
+an in-memory list and is pinned by `LanguageScopedHistoryTests`. The fleet planner reads
+the language-less key the same way (`FleetPlanService`, pinned by
+`FleetPlanServiceTests`): pools route by bare task type, and a window full of
+language-qualified outcomes must not make a pool's language-less samples read as "no
+evidence". Nothing here changes the advisory contract — recommendations are reported,
 never auto-executed.
 
 The Python spoke's `provider_summary` (behind `/v1/insights`) adds a `languages` map —
@@ -97,4 +124,8 @@ carries a language; a window of legacy records summarizes byte-for-byte as befor
 - Old outcome records → deserialize with `Language = null` and count as language-less.
 - `helios_task_routing_get`, `/v1/routing`, and `helios-ai routing` return the whole
   table, qualified keys included; consumers that key on the bare task type can split on
-  the first `:` (`TaskTypeRoutingStrategy.SplitRoutingKey`).
+  the first `:` (`TaskTypeRoutingStrategy.SplitRoutingKey`), and a qualified key sent
+  back as the task type is canonicalized (see "A qualified key passed as the task type").
+- `helios-ai route` rejects an option it does not read (`--langauge`, `--provider`) with a
+  usage error and a non-zero exit, so a misspelled `--language` can never route silently
+  without the language.

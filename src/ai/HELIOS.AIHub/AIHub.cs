@@ -178,7 +178,12 @@ public sealed class AIHubService
     /// and <c>routing.defaultChain</c> that exists; the normalized language rides along
     /// on the provider request and is recorded with every outcome so learning can key
     /// on (taskType, language). A request without a language behaves exactly like the
-    /// task-type-only overload.
+    /// task-type-only overload, with one canonicalization: a task type that is itself one
+    /// of the table's qualified keys (<c>code_generation:fsharp</c>, as
+    /// helios_task_routing_get, /v1/routing and helios-ai routing list them) is split into
+    /// (<c>code_generation</c>, <c>fsharp</c>) before the chain lookup, the recording and
+    /// the learning read, so all three use the one bucket a caller passing the language
+    /// explicitly would (<see cref="TaskTypeRoutingStrategy.CanonicalizeTaskType"/>).
     /// </summary>
     public async Task<ChatResult> RouteAsync(HubRouteRequest request, CancellationToken cancellationToken = default)
     {
@@ -186,6 +191,12 @@ public sealed class AIHubService
         var prompt = request.Prompt;
         var system = request.System;
         var language = TaskTypeRoutingStrategy.NormalizeLanguage(request.Language);
+        if (language is null && taskType is not null)
+        {
+            // Must precede the chain lookup, the outcome record and the learning read:
+            // all three key on the same (taskType, language).
+            (taskType, language) = _strategy.CanonicalizeTaskType(taskType);
+        }
 
         var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)

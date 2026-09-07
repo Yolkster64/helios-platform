@@ -124,20 +124,47 @@ public class TaskTypeRoutingStrategyTests
         Assert.Equal(new[] { "openai", "anthropic" }, strategy.GetChain("code_generation", "   "));
     }
 
+    /// <summary>
+    /// One row per LanguageAliases entry (all 16), canonical keys passing through, and
+    /// the leading-dot path: dots are stripped before the alias lookup, so an extension
+    /// spelling (".ps1", ".yml") folds exactly like the bare alias, repeated leading dots
+    /// are all stripped, and trimming happens before the dot strip (" .Sh ").
+    /// </summary>
     [Theory]
     [InlineData("fsharp", "fsharp")]
     [InlineData("F#", "fsharp")]
     [InlineData("  FSharp  ", "fsharp")]
     [InlineData(".fs", "fsharp")]
+    [InlineData("fs", "fsharp")]
     [InlineData("C#", "csharp")]
+    [InlineData("cs", "csharp")]
+    [InlineData(".cs", "csharp")]
     [InlineData("c++", "cpp")]
     [InlineData("CXX", "cpp")]
-    [InlineData("ps1", "powershell")]
-    [InlineData("pwsh", "powershell")]
+    [InlineData("cc", "cpp")]
+    [InlineData("..cc", "cpp")]
     [InlineData("py", "python")]
+    [InlineData(".py", "python")]
+    [InlineData(".PY", "python")]
+    [InlineData("ps", "powershell")]
+    [InlineData("ps1", "powershell")]
+    [InlineData(".ps1", "powershell")]
+    [InlineData("pwsh", "powershell")]
     [InlineData("yml", "yaml")]
+    [InlineData(".yml", "yaml")]
+    [InlineData(".yaml", "yaml")]
+    [InlineData("ts", "typescript")]
+    [InlineData(".ts", "typescript")]
+    [InlineData("js", "javascript")]
+    [InlineData(".js", "javascript")]
+    [InlineData("sh", "bash")]
+    [InlineData(" .Sh ", "bash")]
+    [InlineData("shell", "bash")]
     [InlineData("Bicep", "bicep")]
+    [InlineData(".bicep", "bicep")]
     [InlineData("json", "json")]
+    [InlineData("typescript", "typescript")]
+    [InlineData("rust", "rust")]
     public void NormalizeLanguage_FoldsCaseWhitespaceDotsAndAliases(string input, string expected) =>
         Assert.Equal(expected, TaskTypeRoutingStrategy.NormalizeLanguage(input));
 
@@ -170,6 +197,46 @@ public class TaskTypeRoutingStrategyTests
         var selected = strategy.SelectAgent(request, agents);
 
         Assert.Equal("anthropic", ((IChatProviderAgent)selected!).Provider);
+    }
+
+    [Fact]
+    public void CanonicalizeTaskType_SplitsOnlyAQualifiedKeyTheTableHolds()
+    {
+        var strategy = new TaskTypeRoutingStrategy(LanguageRouting);
+
+        // A qualified key the table holds → its (taskType, language).
+        Assert.Equal(("code_generation", "fsharp"), strategy.CanonicalizeTaskType("code_generation:fsharp"));
+        // A bare task type, known or not → unchanged, no language.
+        Assert.Equal(("code_generation", null), strategy.CanonicalizeTaskType("code_generation"));
+        Assert.Equal(("no_such_task", null), strategy.CanonicalizeTaskType("no_such_task"));
+        // A qualified-looking key the table does not hold → unchanged: it is an ordinary
+        // (unknown) task type and must keep routing and recording exactly as before.
+        Assert.Equal(("code_generation:python", null), strategy.CanonicalizeTaskType("code_generation:python"));
+        Assert.Equal(("code_review:fsharp", null), strategy.CanonicalizeTaskType("code_review:fsharp"));
+    }
+
+    [Fact]
+    public void CanonicalizeTaskType_LeavesANonCanonicalOrEmptyKeyAlone()
+    {
+        // The split must resolve the SAME chain through GetChain(taskType, language);
+        // a key whose language part is not canonical ("F#") would not, so it stays a
+        // literal task type, and a key with no task-type part is not a qualified key.
+        var routing = new RoutingOptions
+        {
+            TaskRouting = new Dictionary<string, List<string>>
+            {
+                ["code_generation:F#"] = new() { "anthropic" },
+                [":fsharp"] = new() { "anthropic" },
+                ["code_generation:"] = new() { "anthropic" },
+                ["empty_chain:fsharp"] = new(),
+            },
+        };
+        var strategy = new TaskTypeRoutingStrategy(routing);
+
+        Assert.Equal(("code_generation:F#", null), strategy.CanonicalizeTaskType("code_generation:F#"));
+        Assert.Equal((":fsharp", null), strategy.CanonicalizeTaskType(":fsharp"));
+        Assert.Equal(("code_generation:", null), strategy.CanonicalizeTaskType("code_generation:"));
+        Assert.Equal(("empty_chain:fsharp", null), strategy.CanonicalizeTaskType("empty_chain:fsharp"));
     }
 
     [Fact]

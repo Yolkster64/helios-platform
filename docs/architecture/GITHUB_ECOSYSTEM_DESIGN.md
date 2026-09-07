@@ -93,24 +93,27 @@ fabric](CONNECTIONS_SETUP.md#control-fabric-governed-writes-from-main); per-scri
 ## Self-hosted runners (ARC)
 
 Runner scale sets via the actions-runner-controller fork (v0.14.2 charts), one scale set
-per workload class:
+per workload class. The values are `infra/runners/arc-values.yaml` — applied by hand with
+helm, never by CI — shown here without its comments and pod template:
 
 ```yaml
-# helm install helios-runners oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
-githubConfigUrl: https://github.com/Yolkster64/helios-platform   # or the org URL
-githubConfigSecret: helios-runners-app        # GitHub App: app id + installation id + private key (quoted strings)
-minRunners: 0                                  # scale-to-zero when idle
-maxRunners: 9                                  # matches the Xcore-9s ceiling; raise deliberately
-containerMode:
-  type: dind                                   # docker builds; use kubernetes mode + workVolumeClaim for k8s-native
-runnerScaleSetName: helios-runners              # the ONE runs-on label; mirrors infra/runners/arc-values.yaml
+# helm install helios-runners oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set -f infra/runners/arc-values.yaml
+githubConfigUrl: https://github.com/Yolkster64/helios-platform   # or https://github.com/Yolkster64 for an org-level pool
+githubConfigSecret: helios-runners-github-secret  # pre-created k8s secret (github_token, or the GitHub App id/installation id/private key); never in the file
+runnerScaleSetName: helios-runners                 # THE runs-on value; scale sets match this name only, never [self-hosted, ...] arrays
+minRunners: 0                                      # scale-to-zero when idle
+maxRunners: 4                                      # at most 4 concurrent jobs; raise deliberately
+# containerMode is deliberately unset: plain runner pods — no dind (no privileged
+# containers), no kubernetes container hooks. HELIOS CI is plain dotnet/python/bicep steps.
 ```
 
-Auth via a GitHub App (not PAT). GPU/Windows classes get their own scale set with
-`runnerGroup` + labels; workflows opt in with `runs-on: helios-runners` — the scale-set
-name, which is also the first base label `scripts/runners/register-runner.*` applies to
-hand-registered runners, so one label reaches both pools. The controller chart
-(`gha-runner-scale-set-controller`) installs once per cluster.
+Auth is the pre-created secret — a GitHub App (preferred for shared pools) or a runner
+PAT — created out of band in the release namespace, never a value in the file.
+GPU/Windows classes get their own scale set with `runnerGroup` + labels; workflows opt in
+with `runs-on: helios-runners` — the scale-set name, which is also the first base label
+`scripts/runners/register-runner.*` applies to hand-registered runners, so one label
+reaches both pools. The controller chart (`gha-runner-scale-set-controller`) installs
+once per cluster.
 
 ## Projects & wiki
 

@@ -173,6 +173,34 @@ public class FleetPlanServiceTests
     }
 
     [Fact]
+    public async Task PlanAsync_LanguageTaggedOutcomesFillingTheWindow_DoNotHideLanguagelessEvidence()
+    {
+        // The 200 newest outcomes (one whole history window) carry a language and favour
+        // flaky; the pool's own language-less evidence (reliable beats flaky) lies
+        // entirely behind them. Pools route by bare task type, so the planner must read
+        // the language-less key AT the store (window after scoping): a shared task-type
+        // window scoped afterwards would see no language-less record at all and report
+        // 0 samples / engine none / the configured order although 11 organic samples
+        // exist — the defect RouteAsync had in round 2, on the advisory path.
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 200; i++)
+        {
+            var flakyWins = i % 2 == 0;
+            history.Add(FakeLearningStore.Outcome(TaskTypeName, flakyWins ? "flaky" : "reliable", success: flakyWins)
+                with { Language = "python" });
+        }
+        history.AddRange(ReorderingHistory());
+        var service = new FleetPlanService(new FakeLearningStore(history), historyWindow: 200);
+
+        var plan = await service.PlanAsync(Topology("flaky", "reliable"));
+
+        var entry = Assert.Single(plan);
+        Assert.Equal(11, entry.SampleCount); // the language-less samples, none of the python ones
+        Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
+        Assert.Equal("linear", entry.Engine);
+    }
+
+    [Fact]
     public async Task PlanAsync_SharedTaskTypes_ReadsStoreOncePerTaskType()
     {
         var store = new CountingLearningStore();

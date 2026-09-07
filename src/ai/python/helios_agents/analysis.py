@@ -40,9 +40,15 @@ def _std(values: list[float]) -> float:
 
 
 def _language_of(outcome: dict) -> str | None:
-    """The outcome's language key, or None for language-less and legacy records."""
+    """The outcome's language key, or None for language-less and legacy records.
+
+    Same rule as the C# side (``TaskTypeRoutingStrategy.NormalizeLanguage``): a
+    missing key, ``None``, an empty or whitespace-only string, and any non-string
+    value all mean "no language". A non-empty string is used exactly as recorded —
+    the hub normalizes before it records, and this side never re-normalizes.
+    """
     language = outcome.get("language")
-    return language if isinstance(language, str) and language else None
+    return language if isinstance(language, str) and language.strip() else None
 
 
 def _provider_stats(outcomes: list[dict]) -> dict:

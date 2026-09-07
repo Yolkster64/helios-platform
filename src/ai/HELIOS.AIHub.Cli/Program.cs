@@ -84,6 +84,17 @@ public static class Program
                                 $"Task types: {string.Join(", ", BareTaskTypes(hub).OrderBy(k => k, StringComparer.Ordinal))}\n" +
                                 "Language-qualified chains (<task-type>:<language>) are listed by `helios-ai routing`.");
                 }
+                // A misspelled option (--langauge) used to be parsed, stored and never
+                // read, so the request silently routed without the language: unknown
+                // options are a usage error, as for engines/engine-plan/fleet-plan.
+                if (FindUnexpectedOption(options, "config", "system", "language") is { } unexpected)
+                {
+                    return Fail($"Unknown option '--{unexpected}' for route.\n" +
+                                "Usage: helios-ai route <task-type> \"<prompt>\" [--system S] [--language L]" +
+                                (string.Equals(unexpected, "provider", StringComparison.OrdinalIgnoreCase)
+                                    ? "\nA direct provider is `helios-ai ask \"<prompt>\" --provider P`; route always walks the task type's chain."
+                                    : ""));
+                }
                 if (options.TryGetValue("language", out var languageOption)
                     && string.IsNullOrWhiteSpace(languageOption))
                 {
