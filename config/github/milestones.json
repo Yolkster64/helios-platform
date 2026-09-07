@@ -1,10 +1,40 @@
 {
   "$comment": "Milestone manifest for Yolkster64/helios-platform, applied by scripts/github/apply-milestones.ps1 (GET-diff-then-apply, dry-run by default; matches by title, patches description and due date, never closes or deletes). due_on is a calendar date (YYYY-MM-DD); the script sends it as noon UTC so GitHub's Pacific-midnight normalization keeps the same date. The Projects board's DueDate custom field (scripts/board-setup/setup-custom-fields.ps1) is independent and is not synced from these dates.",
   "milestones": [
-    { "title": "Control fabric", "description": "Governance workflow, labels and milestones manifests, branch prune, issue hygiene, one-command bring-up (issue #109 / #98).", "due_on": "2026-09-06" },
-    { "title": "GUI train T5", "description": "WinUI 3 shell phases P3-P6: metrics cards, Routing page, Fleet page with the /v1/fleet twin, effects and settings page (issue #112).", "due_on": "2026-09-10" },
-    { "title": "Absorption tranche 5", "description": "Next absorption cadence tranche: watchlist benchmarks posted on the E-epics, absorption-candidate labels, governed Copilot dispatch.", "due_on": "2026-09-20" },
-    { "title": "Owner setup", "description": "Owner-only steps: HELIOS_ADMIN_TOKEN secret, Linear sync switch, first wiki page, Key Vault provider values, tenant sign-in.", "due_on": "2026-09-06" },
-    { "title": "Getting started", "description": "Onboarding foundation: every cross-LLM lane connected, docs/GETTING_STARTED.md on the README and the wiki, the getting-started issues on the board, the open-PR backlog triaged (epic issue #223).", "due_on": "2026-09-13" }
+    {
+      "title": "Control fabric",
+      "description": "Governance workflow, labels and milestones manifests, branch prune, issue hygiene, one-command bring-up (issue #109 / #98).",
+      "due_on": "2026-09-20"
+    },
+    {
+      "title": "GUI train T5",
+      "description": "WinUI 3 shell phases P3-P6: metrics cards, Routing page, Fleet page with the /v1/fleet twin, effects and settings page (issue #112).",
+      "due_on": "2026-09-27"
+    },
+    {
+      "title": "Absorption tranche 5",
+      "description": "Next absorption cadence tranche: watchlist benchmarks posted on the E-epics, absorption-candidate labels, governed Copilot dispatch.",
+      "due_on": "2026-09-27"
+    },
+    {
+      "title": "Owner setup",
+      "description": "Owner-only steps: HELIOS_ADMIN_TOKEN secret, Linear sync switch, first wiki page, Key Vault provider values, tenant sign-in.",
+      "due_on": "2026-09-13"
+    },
+    {
+      "title": "Getting started",
+      "description": "Onboarding foundation: every cross-LLM lane connected, docs/GETTING_STARTED.md on the README and the wiki, the getting-started issues on the board, the open-PR backlog triaged (epic issue #223).",
+      "due_on": "2026-09-13"
+    },
+    {
+      "title": "Fleet learning v2",
+      "description": "Cosmos DB vector learning store (ADR first) with a local twin, code-survey fleet tasks that rank and never delete, Docker / Windows Sandbox / VMSS targets, the fleet-learning workflow and dashboard sections, the CLI upgrade pass (epic #235; issue #242 addendum 6).",
+      "due_on": "2026-10-11"
+    },
+    {
+      "title": "Canonical cutover",
+      "description": "Canonical authority cutover and fork collapse, HC-001 to HC-028: helios-control and helios-gui as the active surface, disposition ledger, no rename, archive or force-push before evidence (epic #156).",
+      "due_on": "2026-10-25"
+    }
   ]
 }
