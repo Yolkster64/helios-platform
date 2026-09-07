@@ -16,12 +16,15 @@ What this does, in order:
      The token is SINGLE-USE and expires in ~1 hour. It is held in a local
      variable only — never echoed, never written to disk;
   4. runs ./config.sh (config.cmd on Windows) with
-     --url --token --name --labels helios,xcore[,extras] --unattended
+     --url --token --name --labels helios-runners,helios,xcore[,extras] --unattended
      (plus --ephemeral behind the -Ephemeral switch);
   5. prints the run command (./run.sh / .\run.cmd) and the service-install hint —
      it deliberately does NOT auto-start the runner.
 
-Labels: every runner gets helios,xcore. Pools that need more add them with
+Labels: every runner gets helios-runners,helios,xcore. helios-runners is the ONE
+canonical runs-on label - it is also the ARC scale-set name
+(infra/runners/arc-values.yaml), so hand-registered runners and the ARC pool
+answer the same workflows (runner-smoke.yml, fleet-learning.yml). Pools that need more add them with
 -ExtraLabels — e.g. the fleet's xcore-9-native pool
 (config/fleet/fleet-topology.json) wants a dedicated runner carrying
 xcore-native (Windows SDK + MSVC + GPU box) before its autoscaling mode may
@@ -54,7 +57,7 @@ credentials.
 Runner name shown in Settings -> Actions -> Runners. Default: <hostname>-helios.
 
 .PARAMETER ExtraLabels
-Comma-separated labels appended to the base helios,xcore set
+Comma-separated labels appended to the base helios-runners,helios,xcore set
 (e.g. xcore-native for the xcore-9-native pool).
 
 .PARAMETER Ephemeral
@@ -91,7 +94,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$baseLabels = 'helios,xcore'
+$baseLabels = 'helios-runners,helios,xcore'
 $labels = if ($ExtraLabels) { "$baseLabels,$ExtraLabels" } else { $baseLabels }
 
 # --- OS/arch -> actions/runner asset naming ---------------------------------------

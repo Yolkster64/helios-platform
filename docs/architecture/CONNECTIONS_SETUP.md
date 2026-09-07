@@ -101,7 +101,7 @@ or Key Vault.
 | GitHub ↔ ChatGPT/Codex | Auto PR reviews, `@codex` commands | Nothing — connection lives at chatgpt.com (Codex settings) | None (`AGENTS.md` is read by Codex) |
 | GitHub ↔ Copilot | Inline/CLI agent, auto review requests, coding-agent assignment | `.github/workflows/copilot-dispatch.yml`, `config/aihub.json` `copilot` cliAgent, `.github/copilot-instructions.md` | Optional `COPILOT_DISPATCH_TOKEN` secret |
 | GitHub ↔ Claude | Claude Code sessions, `claude-cli` routing, MCP tools | `CLAUDE.md`, `.claude/skills/`, `config/aihub.json` `claude-cli` cliAgent, `.mcp.json` | None |
-| Self-hosted runners | `runs-on: [self-hosted, helios]` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
+| Self-hosted runners | `runs-on: helios-runners` job execution | `scripts/runners/register-runner.sh`/`.ps1`, `.github/workflows/runner-smoke.yml` | Runner registration (repo admin) |
 | GitHub ↔ Linear | Labeled issues mirrored to the Linear board | `.github/workflows/linear-sync.yml` + `config/connectors.json` | `LINEAR_API_KEY` secret |
 | GitHub ↔ Slack | CI/deploy outcomes posted to channels | `.github/workflows/notify-slack.yml` + `config/connectors.json` | `SLACK_WEBHOOK_URL` secret |
 | GitHub Project board | Epic-level tracking board (Projects v2) | `scripts/board-setup/` (custom fields, validation, and epic wiring via GraphQL; views/templates/automation are manual UI steps the scripts document) | User PAT with `project` scope (run-time param, never stored) |
@@ -212,13 +212,14 @@ No owner action and no secrets beyond each developer's own `claude` login
   (Linux/macOS) or `scripts/runners/register-runner.ps1` (adds Windows). They
   require an admin-authenticated `gh`, mint a single-use ~1h registration token
   (never echoed, never on disk), download the latest `actions/runner`, and
-  configure with labels **`helios,xcore`** — add pool labels via the
+  configure with labels **`helios-runners,helios,xcore`** (`helios-runners` is
+  the one canonical `runs-on:` label, shared with the ARC scale set) — add pool labels via the
   extra-labels parameter, e.g. `xcore-native` for the `xcore-9-native` pool's
   dedicated Windows-SDK/GPU box (`config/fleet/fleet-topology.json`). They
   print the `./run.sh` / service commands rather than auto-starting; both have
   a dry-run mode.
 - **Proof of life**: dispatch `.github/workflows/runner-smoke.yml`
-  (**Self-Hosted Runner Smoke**) — one job on `[self-hosted, helios]` that
+  (**Self-Hosted Runner Smoke**) — one job on `helios-runners` that
   prints the runner identity and exits green. It is `workflow_dispatch`-only
   on purpose: it can never queue forever and hang CI when no runner exists.
 - **Scale-out path**: runner scale sets via ARC (`gha-runner-scale-set`,

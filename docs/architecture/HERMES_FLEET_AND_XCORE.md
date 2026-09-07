@@ -73,9 +73,11 @@ A pass reads the latest running run's manifest and boards (the same
 `.helios/fleet/<runId>/` contract fleet-status/stop-fleet use) and computes, for every
 pool with an autoscaling block (the pool's block merged over `defaults.autoscaling`):
 
-    queueDepth   = open tasks in the pool's lanes
-                   + claimed tasks whose 300s claim lease expired (crashed lanes)
-    desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```text
+queueDepth   = open tasks in the pool's lanes
+               + claimed tasks whose 300s claim lease expired (crashed lanes)
+desiredLocal = clamp(minLocalLanes, ceil(queueDepth / scaleUpQueueDepth), maxLocalLanes)
+```
 
 Scale-up spawns extra workers through start-fleet's spawn contract (same env vars, same
 launch mechanics) and records them in the run manifest, so fleet-status and stop-fleet
@@ -140,7 +142,7 @@ degrade with a warning, never a failure.
 
 **CI lane**: `.github/workflows/fleet-learning.yml` (**Fleet Learning
 (informational)**) runs one stub cycle weekly (Mondays 04:41 UTC) and on
-dispatch, with a runner choice — `ubuntu-latest` by default, `self-hosted` for
+dispatch, with a runner choice — `ubuntu-latest` by default, `helios-runners` for
 local-runner soak testing (pwsh + python3 assumed preinstalled). Informational
 by contract: never make it a required check.
 

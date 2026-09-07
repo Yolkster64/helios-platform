@@ -15,9 +15,10 @@
 #
 # Runner option: ubuntu-latest works out of the box (pwsh, python3, and the
 # .NET SDK setup below are all it needs - the Python spoke is dependency-free
-# and nothing here touches the network or needs a secret). The self-hosted
-# choice exists for local-runner soak testing and assumes pwsh + python3 are
-# preinstalled on the runner.
+# and nothing here touches the network or needs a secret). The helios-runners
+# choice (the canonical self-hosted label — ARC scale-set name and
+# register-runner.* base label alike) exists for local-runner soak testing and
+# assumes pwsh + python3 are preinstalled on the runner.
 name: Fleet Learning (informational)
 
 on:
@@ -29,11 +30,11 @@ on:
         required: false
         default: '12'
       runner:
-        description: 'Runner (self-hosted assumes pwsh + python3 preinstalled)'
+        description: 'Runner (helios-runners = self-hosted pool; assumes pwsh + python3 preinstalled)'
         type: choice
         options:
           - ubuntu-latest
-          - self-hosted
+          - helios-runners
         default: ubuntu-latest
   schedule:
     # Weekly wiring exercise at a quiet hour (Mondays 04:41 UTC, off the :00

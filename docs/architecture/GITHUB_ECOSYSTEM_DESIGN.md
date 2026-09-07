@@ -103,11 +103,13 @@ minRunners: 0                                  # scale-to-zero when idle
 maxRunners: 9                                  # matches the Xcore-9s ceiling; raise deliberately
 containerMode:
   type: dind                                   # docker builds; use kubernetes mode + workVolumeClaim for k8s-native
-runnerScaleSetName: helios-x64
+runnerScaleSetName: helios-runners              # the ONE runs-on label; mirrors infra/runners/arc-values.yaml
 ```
 
 Auth via a GitHub App (not PAT). GPU/Windows classes get their own scale set with
-`runnerGroup` + labels; workflows opt in with `runs-on: helios-x64`. The controller chart
+`runnerGroup` + labels; workflows opt in with `runs-on: helios-runners` — the scale-set
+name, which is also the first base label `scripts/runners/register-runner.*` applies to
+hand-registered runners, so one label reaches both pools. The controller chart
 (`gha-runner-scale-set-controller`) installs once per cluster.
 
 ## Projects & wiki
