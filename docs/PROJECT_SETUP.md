@@ -90,6 +90,40 @@ variable *names*; values come from your shell or Azure Key Vault.
   `source scripts/bootstrap/load-env-from-keyvault.sh` pulls provider keys from
   the Key Vault at `AZURE_KEY_VAULT_URI` into the matching env vars.
 
+## Authoring config and workflows
+
+Every manifest the scripts, workflows and binders consume (`config/github/*.json`,
+`config/connectors.json`, `config/fork-watch.json`, `config/absorption/*.json`,
+`config/fleet/*.json`, `config/aihub*.json`, the model catalog and the Fabric
+contract) has a JSON Schema (draft 2020-12) under `config/schemas/`, and
+`config/schemas/manifests.json` is the one map from manifest to schema. Three
+consumers read that map, so the check is the same everywhere:
+
+- **Editor.** `.vscode/settings.json` binds each manifest to its schema
+  (`json.schemas`) and `.github/workflows/*.yml` to the SchemaStore workflow schema
+  (`yaml.schemas`, through the recommended `redhat.vscode-yaml` extension), so
+  errors and completions appear as you type. `config/github/labels.json` and
+  `config/github/milestones.json` carry no `$schema` key on purpose — their apply
+  scripts also accept a bare array, which cannot hold one — so their binding lives
+  only in the workspace settings; the other manifests carry a relative `$schema`
+  too, for editors that honour it.
+- **Command line and CI.** `python3 scripts/validation/validate_config_schemas.py`
+  validates every mapped manifest (or one path, or a draft with `--schema`), using
+  `python-jsonschema` when installed and its built-in engine otherwise, so it runs
+  on a bare runner. The `quality.yml` JSON job runs it, and
+  `.claude/skills/automation-wiring/scripts/validate_all.py` folds the same check
+  into its JSON/YAML/Bicep/Actions sweep.
+- **MCP.** `helios_config_validate` (tool list in
+  [`mcp/CLIENT_SETUP.md`](mcp/CLIENT_SETUP.md)) returns
+  `{ path, schema, valid, errors }` for a repo-relative manifest, read-only.
+
+Starters for the files people author most often — a workflow skeleton with every
+guard explained (`permissions: {}` plus per-job opt-ins, the `env:` idiom for
+`${{ }}` values, pinned action majors, `concurrency`, `workflow_dispatch` inputs)
+and the labels / milestones manifests — live in
+[`templates/`](../templates/README.md). Copy, edit, validate; on `main` the control
+fabric (`governance-apply.yml`) applies the manifests.
+
 ## CLI quick tour
 
 `helios-ai` is `src/ai/HELIOS.AIHub.Cli`. Run it from the repo root:

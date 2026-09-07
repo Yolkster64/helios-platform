@@ -1,0 +1,14 @@
+{
+  "$comment": "Starter for config/github/milestones.json, the manifest scripts/github/apply-milestones.ps1 reconciles (dry-run by default; -Apply creates missing milestones and patches description/due date on open ones; never closes, reopens or deletes). An entry carries EXACTLY title / description / due_on: any other key (dueOn, state) marks it INVALID. due_on is a calendar date YYYY-MM-DD - the script sends noon UTC so GitHub's Pacific-midnight normalization keeps the date - and omitting it leaves the live due date unmanaged. No $schema key here on purpose (the script also accepts a bare array); VS Code binds this file and config/github/milestones.json to config/schemas/github-milestones.schema.json through .vscode/settings.json, and CI validates both with scripts/validation/validate_config_schemas.py. Replace the examples before applying.",
+  "milestones": [
+    {
+      "title": "Example train T1",
+      "description": "Replace: what lands in this train and the issue that tracks it.",
+      "due_on": "2026-12-31"
+    },
+    {
+      "title": "Example backlog",
+      "description": "Replace: a milestone without a managed due date - omit due_on and the script never touches the live one."
+    }
+  ]
+}

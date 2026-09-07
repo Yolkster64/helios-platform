@@ -1,0 +1,122 @@
+# templates/workflow.yml - skeleton for a new GitHub Actions workflow.
+#
+# Copy it to .github/workflows/<name>.yml (a workflow anywhere else never runs),
+# rename `name:`, keep the guards, and validate before opening the PR:
+#
+#   python3 .claude/skills/automation-wiring/scripts/validate_all.py .github/workflows
+#
+# Each comment explains one guard. Delete the comments, not the guards.
+name: Example Workflow
+
+on:
+  # Path filters keep unrelated PRs off this runner: list what the workflow reads
+  # (its own file included, so edits to it are exercised). Drop the filters only for
+  # a repo-wide check.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - '.github/workflows/example.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - '.github/workflows/example.yml'
+  # Manual runs. Inputs are typed, defaulted, and read as ${{ inputs.<name> }} -
+  # only ever through `env:` (see the first step), never pasted into `run:`.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Repo-relative path to validate'
+        required: false
+        default: 'config'
+        type: string
+      dry_run:
+        description: 'Plan only; change nothing'
+        required: false
+        default: true
+        type: boolean
+
+# Least privilege, declared twice on purpose: the empty top-level grant means a job
+# added later starts with NO scopes, and each job opts in to exactly what it needs.
+# `id-token: write` belongs only on a job that does OIDC federation.
+permissions: {}
+
+# One live run per ref: a newer push cancels the run it supersedes instead of queueing
+# behind it. Deploy workflows use `cancel-in-progress: false` so an apply is never cut off.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    # A runaway step blocks the queue for six hours by default; say how long is normal.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Actions pinned to a MAJOR tag the publisher still moves (v4). upload/download-
+      # artifact@v3 is disabled by GitHub; actions/setup-powershell does not exist -
+      # pwsh is preinstalled, use `shell: pwsh`.
+      - uses: actions/checkout@v4
+
+      # The env: idiom. Anything a contributor can influence (PR titles, branch names,
+      # issue bodies, dispatch inputs) is handed to the step as an environment variable
+      # and read by the shell as "$VAR". Interpolating ${{ }} straight into `run:`
+      # executes attacker text as shell (validate_all.py flags exactly that).
+      - name: Show the request
+        env:
+          TARGET: ${{ inputs.target || 'config' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          echo "target=$TARGET dry_run=${DRY_RUN:-true} ref=$HEAD_REF"
+
+      # Shape, not just syntax: every manifest in config/schemas/manifests.json against
+      # its JSON Schema. Fails fast; nothing after it runs on a broken manifest.
+      - name: Validate config manifests
+        run: python3 scripts/validation/validate_config_schemas.py
+
+      # Secrets: referenced by NAME, delivered only through env:, never echoed. A step
+      # that needs one skips cleanly when it is absent so forks and PRs stay green.
+      - name: Optional step that needs a credential
+        env:
+          EXAMPLE_API_KEY: ${{ secrets.EXAMPLE_API_KEY }}
+        run: |
+          if [ -z "$EXAMPLE_API_KEY" ]; then
+            echo "EXAMPLE_API_KEY is not configured - skipping."
+            exit 0
+          fi
+          echo "credential present; the call would go here (its value is never printed)"
+
+      # Evidence survives the run even when a step fails: `if: always()` plus a
+      # tolerant `if-no-files-found`.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation-report.txt
+          if-no-files-found: ignore
+
+  build:
+    name: Build
+    # Serialize on the cheap gate: no point compiling on top of a broken manifest.
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Always the solution, never a bare `dotnet build` at the repo root: HELIOS.sln
+      # holds exactly the projects that compile on a Linux runner.
+      - name: Build
+        run: dotnet build HELIOS.sln -c Release
