@@ -295,3 +295,65 @@ class CliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ValidateAllDelegationTests(unittest.TestCase):
+    """validate_all.py (the automation-wiring skill) delegates the schema check to THIS
+    checkout's validator only; a scanned HELIOS-shaped tree is data, never code."""
+
+    VALIDATE_ALL = ROOT / ".claude" / "skills" / "automation-wiring" / "scripts" / "validate_all.py"
+
+    def _load_validate_all(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("helios_validate_all_under_test", self.VALIDATE_ALL)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        import sys
+        sys.modules[spec.name] = module  # its dataclasses resolve their module at class creation
+        spec.loader.exec_module(module)
+        return module
+
+    def test_trusted_validator_is_this_checkout(self) -> None:
+        va = self._load_validate_all()
+        self.assertEqual(va.trusted_validator(), ROOT / "scripts" / "validation" / "validate_config_schemas.py")
+
+    def test_scanned_tree_validator_is_never_imported(self) -> None:
+        """A crafted tree carries the two markers find_repo_root looks for plus a booby-trapped
+        validator; the sweep must validate the tree's manifest as data with the trusted engine
+        and never execute the tree's script."""
+        import sys
+        va = self._load_validate_all()
+        with tempfile.TemporaryDirectory() as temp:
+            tree = pathlib.Path(temp) / "crafted"
+            (tree / "config" / "schemas").mkdir(parents=True)
+            (tree / "scripts" / "validation").mkdir(parents=True)
+            sentinel = pathlib.Path(temp) / "executed.txt"
+            (tree / "scripts" / "validation" / "validate_config_schemas.py").write_text(
+                f"open({str(sentinel)!r}, 'w').write('ran')\nraise RuntimeError('crafted validator executed')\n",
+                encoding="utf-8")
+            (tree / "config" / "schemas" / "manifests.json").write_text(json.dumps({
+                "$comment": "crafted", "mappings": [{"manifest": "config/thing.json", "schema": "config/schemas/thing.schema.json"}]}),
+                encoding="utf-8")
+            (tree / "config" / "schemas" / "thing.schema.json").write_text(json.dumps({
+                "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+                "required": ["name"], "additionalProperties": False, "properties": {"name": {"type": "string"}}}),
+                encoding="utf-8")
+            (tree / "config" / "thing.json").write_text(json.dumps({"nam": "typo"}), encoding="utf-8")
+            report = va.Report()
+            va.check_config_schemas([tree], report)
+            self.assertFalse(sentinel.exists(), "the scanned tree's validator was executed")
+            self.assertEqual(report.checked, 1)
+            self.assertTrue(any("config/thing.json" in e or "thing.json" in e for e in report.errors), report.errors)
+            self.assertTrue(any("'name' is a required property" in e or "name" in e for e in report.errors), report.errors)
+            loaded = sys.modules.get("helios_validate_config_schemas")
+            self.assertIsNotNone(loaded)
+            self.assertEqual(pathlib.Path(loaded.__file__).resolve(),
+                             (ROOT / "scripts" / "validation" / "validate_config_schemas.py").resolve())
+
+    def test_real_checkout_config_manifests_are_checked(self) -> None:
+        va = self._load_validate_all()
+        report = va.Report()
+        va.check_config_schemas([ROOT / "config"], report)
+        expected = sum(1 for m in target.load_mappings(ROOT) if m.manifest.startswith("config/"))
+        self.assertEqual(report.checked, expected)
+        self.assertEqual(report.errors, [])

@@ -8,8 +8,10 @@ in a red pipeline or a duplicated resource group.
 
 Inside a HELIOS checkout it also validates every config manifest that
 config/schemas/manifests.json maps to a JSON Schema (shape, not just syntax), by
-delegating to scripts/validation/validate_config_schemas.py; elsewhere that step is
-skipped so the script stays portable.
+delegating to scripts/validation/validate_config_schemas.py — always the copy in the
+checkout THIS script lives in, never one found under a scanned path: manifests and
+schemas in a scanned tree are read as data only. When this script is used outside a
+HELIOS checkout that step is skipped so it stays portable.
 
 Usage:
     validate_all.py [paths...]      # defaults to the current directory
@@ -291,36 +293,57 @@ def check_terraform(dirs: set[Path], report: Report) -> None:
 
 
 def find_repo_root(start: Path) -> Path | None:
-    """Nearest ancestor (inclusive) carrying the HELIOS manifest -> schema map and its validator."""
+    """Nearest ancestor (inclusive) carrying a HELIOS manifest -> schema map. Such a tree is a
+    DATA source for the schema check (its manifests and schemas are read as JSON); nothing in it
+    is ever imported or executed."""
     resolved = start.resolve()
     for candidate in [resolved, *resolved.parents]:
-        if (candidate / "config" / "schemas" / "manifests.json").is_file() \
-                and (candidate / "scripts" / "validation" / "validate_config_schemas.py").is_file():
+        if (candidate / "config" / "schemas" / "manifests.json").is_file():
             return candidate
     return None
 
 
+def trusted_validator() -> Path | None:
+    """The config-schema validator of the checkout this script belongs to
+    (<root>/.claude/skills/automation-wiring/scripts/validate_all.py -> <root>), or None when the
+    skill was copied elsewhere. This is the ONLY validator ever imported: a scanned path may lie in
+    an attacker-shaped tree that carries its own manifests.json and validate_config_schemas.py,
+    and importing that copy would run its code with the reviewer's identity and environment."""
+    root = Path(__file__).resolve().parents[4]
+    script = root / "scripts" / "validation" / "validate_config_schemas.py"
+    return script if script.is_file() and (root / "config" / "schemas" / "manifests.json").is_file() else None
+
+
 def check_config_schemas(roots: list[Path], report: Report) -> None:
-    """Shape, not just syntax: each manifest that config/schemas/manifests.json maps to a JSON
-    Schema is validated against it when it lies under one of the roots. Delegates to
-    scripts/validation/validate_config_schemas.py (python-jsonschema when importable, else its
-    built-in engine) so this sweep, the CI job and the helios_config_validate MCP tool agree.
-    Outside a HELIOS checkout there is nothing to do."""
+    """Shape, not just syntax: each manifest that a config/schemas/manifests.json maps to a JSON
+    Schema is validated against it when it lies under one of the roots. The engine is
+    scripts/validation/validate_config_schemas.py from THIS checkout (python-jsonschema when
+    importable, else its built-in engine), so this sweep, the CI job and the helios_config_validate
+    MCP tool agree; a scanned tree's own manifests.json, manifests and schemas are consumed as
+    data only. With the skill copied outside a HELIOS checkout there is nothing to do."""
     import importlib.util
 
     repo_roots = {root for root in (find_repo_root(path) for path in roots) if root is not None}
+    if not repo_roots:
+        return
+    script = trusted_validator()
+    if script is None:
+        for repo_root in sorted(repo_roots):
+            report.warn(repo_root / "config" / "schemas" / "manifests.json",
+                        "schema check skipped: validate_all.py runs outside a HELIOS checkout and never "
+                        "imports a validator from the scanned tree")
+        return
+    spec = importlib.util.spec_from_file_location("helios_validate_config_schemas", script)
+    if spec is None or spec.loader is None:
+        report.warn(script, "could not load the config schema validator; schema check skipped")
+        return
+    module = importlib.util.module_from_spec(spec)
+    # Register before executing: the module's frozen dataclasses resolve their own
+    # module through sys.modules at class-creation time.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
     resolved_roots = [path.resolve() for path in roots]
     for repo_root in sorted(repo_roots):
-        script = repo_root / "scripts" / "validation" / "validate_config_schemas.py"
-        spec = importlib.util.spec_from_file_location("helios_validate_config_schemas", script)
-        if spec is None or spec.loader is None:
-            report.warn(script, "could not load the config schema validator; schema check skipped")
-            continue
-        module = importlib.util.module_from_spec(spec)
-        # Register before executing: the module's frozen dataclasses resolve their own
-        # module through sys.modules at class-creation time.
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
         try:
             mappings = module.load_mappings(repo_root)
         except (ValueError, OSError) as exc:

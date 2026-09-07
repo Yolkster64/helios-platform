@@ -68,8 +68,10 @@ compiles Bicep, checks Terraform formatting/validity, and lints Actions workflow
 failure modes that actually bite: nonexistent actions, deprecated versions, missing
 `permissions`, and shell-injection through `${{ }}` interpolation. Inside the HELIOS
 checkout it also validates every manifest listed in `config/schemas/manifests.json`
-against its JSON Schema (delegating to `scripts/validation/validate_config_schemas.py`,
-the same check CI and the `helios_config_validate` MCP tool run).
+against its JSON Schema (delegating to `scripts/validation/validate_config_schemas.py`
+from this checkout only — a scanned tree's manifests and schemas are read as data and its
+scripts are never imported — the same check CI and the `helios_config_validate` MCP tool
+run).
 
 ```bash
 python .claude/skills/automation-wiring/scripts/validate_all.py            # whole repo
