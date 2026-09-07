@@ -429,6 +429,128 @@ public class AIHubServiceTests
         Assert.Equal("alpha", tandem.Winner!.Provider);
     }
 
+    /// <summary>Two echo agents; the fsharp-qualified chain reverses the bare order.</summary>
+    private static AIHubOptions LanguageEchoOptions() => new()
+    {
+        CliAgents = new List<CliAgentOptions>
+        {
+            new() { Name = "alpha", Command = "echo", ArgsTemplate = "{prompt}", TimeoutSeconds = 10 },
+            new() { Name = "beta", Command = "echo", ArgsTemplate = "{prompt}", TimeoutSeconds = 10 },
+        },
+        Routing = new RoutingOptions
+        {
+            TaskRouting = new Dictionary<string, List<string>>
+            {
+                ["echo_task"] = new() { "alpha", "beta" },
+                ["echo_task:fsharp"] = new() { "beta", "alpha" },
+            },
+        },
+        Learning = new LearningOptions { Enabled = true },
+    };
+
+    [Fact]
+    public async Task RouteAsync_WithLanguage_UsesQualifiedChain_AndRecordsNormalizedLanguage()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(LanguageEchoOptions(), learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: " F# "));
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("beta", result.Provider);
+        var outcome = Assert.Single(store.Recorded);
+        Assert.Equal("echo_task", outcome.TaskType);
+        Assert.Equal("fsharp", outcome.Language);
+    }
+
+    [Fact]
+    public async Task RouteAsync_WithoutLanguage_UsesBareChain_AndRecordsNoLanguage()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(LanguageEchoOptions(), learning: store);
+
+        // The pre-language overload: identical chain, identical record shape.
+        var result = await hub.RouteAsync("echo_task", "ping");
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("alpha", result.Provider);
+        var outcome = Assert.Single(store.Recorded);
+        Assert.Null(outcome.Language);
+    }
+
+    [Fact]
+    public async Task RouteAsync_LanguageWithoutQualifiedChain_FallsBackToBareChain_ButStillRecordsLanguage()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var store = new FakeLearningStore();
+        var hub = new AIHubService(LanguageEchoOptions(), learning: store);
+
+        var result = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "python"));
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("alpha", result.Provider);
+        // The evidence belongs to the (echo_task, python) key even though the bare chain
+        // served it — that is what a future echo_task:python chain will learn from.
+        Assert.Equal("python", Assert.Single(store.Recorded).Language);
+    }
+
+    [Fact]
+    public async Task RouteAsync_AdaptiveRouting_LearnsOnlyFromMatchingLanguageHistory()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // The beta-favoring signal tagged language=fsharp reorders an fsharp route …
+        var history = HistoryFavoringBeta(source: null).Select(o => o with { Language = "fsharp" }).ToList();
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: new FakeLearningStore(history));
+
+        var fsharp = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "fsharp"));
+        Assert.True(fsharp.Success, fsharp.Error);
+        Assert.Equal("beta", fsharp.Provider);
+
+        // … but neither a language-less route nor another language's route: with no
+        // matching (or language-less) evidence the configured order stands.
+        var bare = await hub.RouteAsync("echo_task", "ping");
+        Assert.Equal("alpha", bare.Provider);
+        var python = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "python"));
+        Assert.Equal("alpha", python.Provider);
+    }
+
+    [Fact]
+    public async Task TandemAsync_AdaptiveRouting_IgnoresLanguageTaggedHistory()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Tandem is language-less: the same signal tagged fsharp must not steer it, so
+        // the configured order (alpha first) decides the winner.
+        var history = HistoryFavoringBeta(source: null).Select(o => o with { Language = "fsharp" }).ToList();
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: new FakeLearningStore(history));
+
+        var tandem = await hub.TandemAsync("echo_task", "ping");
+
+        Assert.NotNull(tandem.Winner);
+        Assert.Equal("alpha", tandem.Winner!.Provider);
+    }
+
     [Fact]
     public void ShippedConfig_BuildsHub_WithAllProvidersRegistered()
     {

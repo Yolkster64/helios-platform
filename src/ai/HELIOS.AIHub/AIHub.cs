@@ -168,10 +168,26 @@ public sealed class AIHubService
     }
 
     /// <summary>Route by task type through the configured chain with circuit-broken fallback.</summary>
-    public async Task<ChatResult> RouteAsync(
-        string? taskType, string prompt, string? system = null, CancellationToken cancellationToken = default)
+    public Task<ChatResult> RouteAsync(
+        string? taskType, string prompt, string? system = null, CancellationToken cancellationToken = default) =>
+        RouteAsync(new HubRouteRequest(taskType, prompt, system), cancellationToken);
+
+    /// <summary>
+    /// Route through the configured chain with circuit-broken fallback. The chain is the
+    /// first of <c>taskRouting["{taskType}:{language}"]</c>, <c>taskRouting[taskType]</c>,
+    /// and <c>routing.defaultChain</c> that exists; the normalized language rides along
+    /// on the provider request and is recorded with every outcome so learning can key
+    /// on (taskType, language). A request without a language behaves exactly like the
+    /// task-type-only overload.
+    /// </summary>
+    public async Task<ChatResult> RouteAsync(HubRouteRequest request, CancellationToken cancellationToken = default)
     {
-        var chain = _strategy.GetChain(taskType).Where(name => _byProvider.ContainsKey(name)).ToList();
+        var taskType = request.TaskType;
+        var prompt = request.Prompt;
+        var system = request.System;
+        var language = TaskTypeRoutingStrategy.NormalizeLanguage(request.Language);
+
+        var chain = _strategy.GetChain(taskType, language).Where(name => _byProvider.ContainsKey(name)).ToList();
         if (chain.Count == 0)
         {
             return new ChatResult(false, null, "none", "", TimeSpan.Zero,
@@ -181,18 +197,18 @@ public sealed class AIHubService
         }
 
         chain = FilterChainByContext(chain, prompt, system);
-        chain = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
+        chain = await ApplyLearningAsync(taskType, language, chain, cancellationToken).ConfigureAwait(false);
 
-        var request = new ChatRequest(prompt, System: system, TaskType: taskType);
+        var chatRequest = new ChatRequest(prompt, System: system, TaskType: taskType, Language: language);
         try
         {
             return await _fallback.ExecuteAsync(
                 chain,
                 async providerName =>
                 {
-                    var result = await _byProvider[providerName].ChatAsync(request, cancellationToken)
+                    var result = await _byProvider[providerName].ChatAsync(chatRequest, cancellationToken)
                         .ConfigureAwait(false);
-                    await RecordOutcomeAsync(taskType, result, cancellationToken).ConfigureAwait(false);
+                    await RecordOutcomeAsync(taskType, language, result, cancellationToken).ConfigureAwait(false);
                     return result;
                 },
                 isSuccess: static result => result.Success,
@@ -213,7 +229,7 @@ public sealed class AIHubService
     /// configured order — learning must never be able to break routing, only improve it.
     /// </summary>
     private async Task<List<string>> ApplyLearningAsync(
-        string? taskType, List<string> configuredChain, CancellationToken cancellationToken)
+        string? taskType, string? language, List<string> configuredChain, CancellationToken cancellationToken)
     {
         if (!_options.Learning.Enabled || !_options.Learning.AdaptiveRouting || taskType is null)
         {
@@ -230,14 +246,18 @@ public sealed class AIHubService
                 .ConfigureAwait(false);
             // Advisory records (Source != null: absorption benchmarks, fork digests,
             // fleet-lane outcomes) inform insights only — routing must learn exclusively
-            // from the hub's own provider outcomes.
-            var organic = ChainReorderEngine.OrganicOnly(history);
+            // from the hub's own provider outcomes. Evidence is then keyed on
+            // (taskType, language): a language-qualified chain learns from its own
+            // outcomes (falling back to the parent task type's language-less ones),
+            // a language-less chain from language-less outcomes only.
+            var organic = ChainReorderEngine.ForLanguage(ChainReorderEngine.OrganicOnly(history), language);
             if (organic.Count == 0)
             {
                 return configuredChain;
             }
 
-            var (reordered, _) = _reorderEngine.Reorder(taskType, configuredChain, organic);
+            var (reordered, _) = _reorderEngine.Reorder(
+                ChainReorderEngine.LearningKey(taskType, language), configuredChain, organic);
 
             return reordered.Where(_byProvider.ContainsKey).ToList() is { Count: > 0 } valid
                 ? valid
@@ -575,7 +595,7 @@ public sealed class AIHubService
     }
 
     private async Task RecordOutcomeAsync(
-        string? taskType, ChatResult result, CancellationToken cancellationToken)
+        string? taskType, string? language, ChatResult result, CancellationToken cancellationToken)
     {
         if (!_options.Learning.Enabled || taskType is null)
         {
@@ -589,6 +609,7 @@ public sealed class AIHubService
                 {
                     Timestamp = DateTimeOffset.UtcNow,
                     TaskType = taskType,
+                    Language = language,
                     Provider = result.Provider,
                     Model = result.Model,
                     Success = result.Success,
@@ -691,7 +712,7 @@ public sealed class AIHubService
         var tasks = chain.Select(async name =>
         {
             var result = await _byProvider[name].ChatAsync(request, cancellationToken).ConfigureAwait(false);
-            await RecordOutcomeAsync(taskType, result, cancellationToken).ConfigureAwait(false);
+            await RecordOutcomeAsync(taskType, language: null, result, cancellationToken).ConfigureAwait(false);
             return result;
         });
 
@@ -699,7 +720,7 @@ public sealed class AIHubService
 
         // Prefer the reordered (learned) chain's first successful result; when nothing
         // succeeded there is no winner to report, only the failures to inspect.
-        var learnedOrder = await ApplyLearningAsync(taskType, chain, cancellationToken).ConfigureAwait(false);
+        var learnedOrder = await ApplyLearningAsync(taskType, language: null, chain, cancellationToken).ConfigureAwait(false);
         var byProviderResult = results.ToDictionary(r => r.Provider, StringComparer.OrdinalIgnoreCase);
         var winner = learnedOrder
             .Select(name => byProviderResult.GetValueOrDefault(name))

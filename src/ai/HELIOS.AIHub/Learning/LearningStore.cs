@@ -24,6 +24,18 @@ public sealed record RoutingOutcome
     [JsonPropertyName("taskType")]
     public string TaskType { get; init; } = "";
 
+    /// <summary>
+    /// Language dimension of the routed work (normalized lower-case key such as
+    /// csharp, fsharp, cpp, python, powershell, bicep). Null for language-less routes
+    /// and for every record written before the field existed — the property is
+    /// omitted from JSON when null, so language-less records serialize exactly as
+    /// they always did and old JSONL lines deserialize unchanged. Learning keys on
+    /// (taskType, language): see <see cref="ChainReorderEngine.ForLanguage"/>.
+    /// </summary>
+    [JsonPropertyName("language")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Language { get; init; }
+
     [JsonPropertyName("provider")]
     public string Provider { get; init; } = "";
 

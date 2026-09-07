@@ -179,6 +179,43 @@ public class LocalJsonlLearningStoreTests : IDisposable
         Assert.False(File.Exists(_path)); // no partial line was ever written
     }
 
+    [Fact]
+    public async Task LegacyRecordWithoutLanguage_Deserializes_AsLanguageless()
+    {
+        // A line written before the language field existed: it must still load, and it
+        // must read as "no language" — the same value a language-less route records today.
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await File.WriteAllTextAsync(
+            _path,
+            """{"timestamp":"2025-01-01T00:00:00+00:00","taskType":"code_review","provider":"openai","model":"m","success":true,"latencyMs":10,"costUsd":0,"quality":null,"pool":null,"source":null}"""
+            + "\n");
+        var store = new LocalJsonlLearningStore(_path);
+
+        var recent = await store.GetRecentAsync("code_review");
+
+        var outcome = Assert.Single(recent);
+        Assert.Null(outcome.Language);
+        Assert.Equal("openai", outcome.Provider);
+        Assert.True(outcome.Success);
+    }
+
+    [Fact]
+    public async Task Language_RoundTrips_AndIsOmittedFromJson_WhenNull()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        await store.RecordAsync(Outcome("openai", success: true, at: 1) with { Language = "fsharp" });
+        await store.RecordAsync(Outcome("openai", success: true, at: 2));
+
+        var lines = await File.ReadAllLinesAsync(_path);
+        Assert.Contains("\"language\":\"fsharp\"", lines[0]);
+        // Language-less records keep their pre-language shape byte for byte.
+        Assert.DoesNotContain("language", lines[1]);
+
+        var recent = await store.GetRecentAsync("code_review");
+        Assert.Null(recent[0].Language);          // at: 2, newest first
+        Assert.Equal("fsharp", recent[1].Language);
+    }
+
     private static RoutingOutcome Outcome(string provider, bool success, int at, string taskType = "code_review") =>
         new()
         {

@@ -2,7 +2,9 @@
 
 Pure functions over outcome dicts shaped like the C# ``RoutingOutcome``:
 ``{"provider": str, "success": bool, "latencyMs": float, "costUsd": float,
-"quality": float | None}`` in chronological order (oldest first).
+"quality": float | None, "language": str | None}`` in chronological order
+(oldest first). ``language`` is optional — the hub omits it for language-less
+routes and it is absent from every record written before the field existed.
 
 numpy is used when installed; the pure-Python paths keep the spoke working on
 any box with a bare interpreter.
@@ -37,8 +39,14 @@ def _std(values: list[float]) -> float:
     return (sum((v - mu) ** 2 for v in values) / len(values)) ** 0.5
 
 
-def provider_summary(outcomes: list[dict]) -> dict:
-    """Per-provider stats plus a recent-window success rate for trend reading."""
+def _language_of(outcome: dict) -> str | None:
+    """The outcome's language key, or None for language-less and legacy records."""
+    language = outcome.get("language")
+    return language if isinstance(language, str) and language else None
+
+
+def _provider_stats(outcomes: list[dict]) -> dict:
+    """Per-provider aggregates over one slice of outcomes (all, or one language)."""
     by_provider: dict[str, list[dict]] = {}
     for outcome in outcomes:
         by_provider.setdefault(outcome["provider"], []).append(outcome)
@@ -60,12 +68,35 @@ def provider_summary(outcomes: list[dict]) -> dict:
             "totalCostUsd": round(sum(costs), 6),
             "avgQuality": round(_mean(qualities), 4) if qualities else None,
         }
+    return providers
 
-    return {
+
+def provider_summary(outcomes: list[dict]) -> dict:
+    """Per-provider stats plus a recent-window success rate for trend reading.
+
+    When any outcome carries a ``language``, a ``languages`` map adds the same
+    per-provider stats keyed on (taskType, language) — one entry per language,
+    computed from that language's outcomes only. Language-less outcomes stay in
+    the top-level aggregate and never appear under ``languages``, so a history
+    recorded before the language dimension existed summarizes exactly as before.
+    """
+    summary = {
         "totalOutcomes": len(outcomes),
-        "providers": providers,
+        "providers": _provider_stats(outcomes),
         "backend": "numpy" if _np is not None else "pure-python",
     }
+
+    by_language: dict[str, list[dict]] = {}
+    for outcome in outcomes:
+        language = _language_of(outcome)
+        if language is not None:
+            by_language.setdefault(language, []).append(outcome)
+    if by_language:
+        summary["languages"] = {
+            language: {"totalOutcomes": len(rows), "providers": _provider_stats(rows)}
+            for language, rows in sorted(by_language.items())
+        }
+    return summary
 
 
 def detect_drift(outcomes: list[dict]) -> dict:

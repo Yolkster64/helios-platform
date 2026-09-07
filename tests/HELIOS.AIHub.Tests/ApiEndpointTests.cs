@@ -283,6 +283,31 @@ public sealed class ApiEndpointTests : IClassFixture<IsolatedApiFactory>
     }
 
     [Fact]
+    public async Task Route_AcceptsLanguage_AndWalksTheQualifiedChain()
+    {
+        // code_review:bicep is the only chain that reaches azure-foundry. Keyless, every
+        // provider soft-fails, so the exhausted-chain result names the chain it walked —
+        // which is how the language reaching the hub is observable over HTTP.
+        const string expectedChain = "anthropic→anthropic-foundry→azure-openai→azure-foundry→openai";
+        var status = await _client.GetFromJsonAsync<List<ProviderStatusResponse>>("/v1/status", Json);
+        Assert.NotNull(status);
+        var chainProviders = expectedChain.Split('→').ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (status.Any(p => chainProviders.Contains(p.Name) && p.Readiness == "Ready"))
+        {
+            return; // a keyed developer box: skip rather than call a real provider
+        }
+
+        var response = await _client.PostAsJsonAsync(
+            "/v1/route", new RouteRequest("code_review", "hello", Language: " Bicep "), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ChatResponse>(Json);
+        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Equal(expectedChain, result.Provider);
+    }
+
+    [Fact]
     public async Task Tandem_RejectsMissingTaskType()
     {
         var response = await _client.PostAsJsonAsync(

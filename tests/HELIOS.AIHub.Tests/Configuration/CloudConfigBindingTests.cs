@@ -1,4 +1,5 @@
 using HELIOS.AIHub.Configuration;
+using HELIOS.AIHub.Routing;
 using Xunit;
 
 namespace HELIOS.AIHub.Tests.Configuration;
@@ -61,6 +62,29 @@ public class CloudConfigBindingTests
         Assert.False(options.Routing.TaskRouting.ContainsKey("agent_fleet_dispatch"), "fleet dispatch is CLI-only");
         Assert.True(options.Routing.TaskRouting.ContainsKey("enterprise_data"));
         Assert.True(options.Routing.TaskRouting.ContainsKey("code_generation"));
+    }
+
+    [Fact]
+    public void CloudConfig_LanguageQualifiedChains_MirrorTheLocalProfile()
+    {
+        var cloud = LoadCloudConfig();
+        var local = AIHubOptions.Load(AIHubOptions.FindConfigFile(AppContext.BaseDirectory)!);
+
+        static List<string> Qualified(AIHubOptions options) => options.Routing.TaskRouting.Keys
+            .Where(key => TaskTypeRoutingStrategy.SplitRoutingKey(key).Language is not null)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+        // Same language dimension in both profiles — a caller switching AIHUB_CONFIG
+        // keeps every language-qualified route, just over hosted providers.
+        Assert.Equal(Qualified(local), Qualified(cloud));
+        foreach (var key in Qualified(cloud))
+        {
+            var (taskType, language) = TaskTypeRoutingStrategy.SplitRoutingKey(key);
+            Assert.True(cloud.Routing.TaskRouting.ContainsKey(taskType), $"'{key}' has no bare parent '{taskType}'");
+            Assert.Equal(TaskTypeRoutingStrategy.NormalizeLanguage(language), language);
+            Assert.NotEqual(cloud.Routing.TaskRouting[taskType], cloud.Routing.TaskRouting[key]);
+        }
     }
 
     [Fact]

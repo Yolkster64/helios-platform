@@ -11,9 +11,9 @@ Each appended JSONL line mirrors the C# ``RoutingOutcome`` record
 (src/ai/HELIOS.AIHub/Learning/LearningStore.cs) field for field, using its
 exact ``JsonPropertyName`` names and casing::
 
-    {"outcomeId": ..., "timestamp": ..., "taskType": ..., "provider": ...,
-     "model": "", "success": ..., "latencyMs": ..., "costUsd": 0.0,
-     "quality": null, "pool": ..., "source": "fleet-lane"}
+    {"outcomeId": ..., "timestamp": ..., "taskType": ..., "language": null,
+     "provider": ..., "model": "", "success": ..., "latencyMs": ...,
+     "costUsd": 0.0, "quality": null, "pool": ..., "source": "fleet-lane"}
 
 - ``outcomeId`` is a deterministic UUIDv5 of ``runId``, board, and task id,
   so retries and dual-store fan-out see the same stable identity.
@@ -23,6 +23,8 @@ exact ``JsonPropertyName`` names and casing::
   its own board name.
 - ``taskType`` is the task's lane (``lane`` falling back to ``taskType`` —
   the same aliasing the fleet worker honors).
+- ``language`` is null: pools route by bare task type, so lane outcomes carry
+  no language dimension (the hub records one only for language-qualified routes).
 - ``success`` is ``status == "done"`` (``kanban_complete``); a ``blocked``
   task (``kanban_block``) records ``false``.
 - ``latencyMs`` is the claim->resolve wall time. Boards DO record both ends:
@@ -147,6 +149,7 @@ def _record(task: dict[str, Any], pool: str, outcome_id: str) -> dict[str, Any]:
         "outcomeId": outcome_id,
         "timestamp": timestamp,
         "taskType": _lane_of(task),
+        "language": None,
         "provider": POOL_PROVIDER_PREFIX + pool,
         "model": "",
         "success": str(task.get("status")) == "done",

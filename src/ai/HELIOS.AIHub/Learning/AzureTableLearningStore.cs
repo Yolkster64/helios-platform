@@ -62,6 +62,7 @@ public sealed class AzureTableLearningStore : ILearningStore
         {
             ["OutcomeId"] = outcome.OutcomeId,
             ["TaskType"] = outcome.TaskType,
+            ["Language"] = outcome.Language,
             ["Provider"] = outcome.Provider,
             ["Model"] = outcome.Model,
             ["Success"] = outcome.Success,
@@ -146,6 +147,9 @@ public sealed class AzureTableLearningStore : ILearningStore
         OutcomeId = entity.GetString("OutcomeId"),
         Timestamp = entity.GetDateTimeOffset("OccurredAt") ?? entity.Timestamp ?? DateTimeOffset.MinValue,
         TaskType = entity.GetString("TaskType") ?? fallbackTaskType,
+        // Absent on rows written before the language dimension existed: null, the
+        // same "no language" value a language-less route records today.
+        Language = entity.GetString("Language"),
         Provider = entity.GetString("Provider") ?? "",
         Model = entity.GetString("Model") ?? "",
         Success = entity.GetBoolean("Success") ?? false,
@@ -249,7 +253,7 @@ public sealed class HybridLearningStore : ILearningStore
     private static object MergeDedupKey(RoutingOutcome o) =>
         o.OutcomeId is { Length: > 0 } id
             ? id
-            : (o.Timestamp, o.TaskType, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source);
+            : (o.Timestamp, o.TaskType, o.Language, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source);
 
     public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
         int limit = 200, CancellationToken cancellationToken = default)

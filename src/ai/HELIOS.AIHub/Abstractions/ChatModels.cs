@@ -3,13 +3,33 @@ using HELIOS.Platform.Core.AI.Interfaces;
 namespace HELIOS.AIHub.Abstractions;
 
 /// <summary>A single chat-style request routed to any provider.</summary>
+/// <param name="Language">
+/// Optional language dimension of the work (normalized lower-case key such as
+/// csharp, fsharp, cpp, python, powershell, bicep, yaml, json). Carried for
+/// provider adapters and outcome recording; null when the caller gave none.
+/// </param>
 public sealed record ChatRequest(
     string Prompt,
     string? System = null,
     string? Model = null,
     string? TaskType = null,
     int? MaxTokens = null,
-    double? Temperature = null);
+    double? Temperature = null,
+    string? Language = null);
+
+/// <summary>
+/// A routed request: the task type selects the provider chain, and the optional
+/// <paramref name="Language"/> refines it — the hub tries the chain configured under
+/// <c>taskRouting["{taskType}:{language}"]</c> first, then <c>taskRouting[taskType]</c>,
+/// then <c>routing.defaultChain</c>. Language values are normalized before lookup
+/// (see <c>TaskTypeRoutingStrategy.NormalizeLanguage</c>), so callers may pass
+/// "F#", " cpp " or "ps1" and still hit the fsharp / cpp / powershell chains.
+/// </summary>
+public sealed record HubRouteRequest(
+    string? TaskType,
+    string Prompt,
+    string? System = null,
+    string? Language = null);
 
 /// <summary>Normalized result from any provider.</summary>
 /// <param name="DuplicateOfProvider">

@@ -5,6 +5,7 @@ using HELIOS.AIHub.Configuration;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using HELIOS.AIHub;
+using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Learning;
 
 namespace HELIOS.Mcp;
@@ -35,9 +36,10 @@ public static class HeliosAiTools
         [Description("Task type key, e.g. code_generation, code_review, long_context_analysis, security_analysis, enterprise_data, offline.")] string taskType,
         [Description("The prompt to send.")] string prompt,
         [Description("Optional system prompt.")] string? system = null,
+        [Description("Optional language of the work (csharp, fsharp, cpp, python, powershell, bicep, yaml, json, ...). Normalized to lower-case (aliases such as C#, F#, c++, ps1 fold to csharp, fsharp, cpp, powershell); when config/aihub.json defines a '<taskType>:<language>' chain it is tried before the bare task type, and the language is recorded with the routing outcome. Omit for the task type's default chain.")] string? language = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await hub.RouteAsync(taskType, prompt, system, cancellationToken);
+        var result = await hub.RouteAsync(new HubRouteRequest(taskType, prompt, system, language), cancellationToken);
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 

@@ -6,7 +6,20 @@ namespace HELIOS.AIHub.Api;
 public sealed record AskRequest(
     string? Prompt, string? Provider = null, string? Model = null, string? System = null);
 
-public sealed record RouteRequest(string? TaskType, string? Prompt, string? System = null);
+/// <summary>
+/// Wire shape of a routed request. <c>Language</c> is optional: when present the hub
+/// consults <c>taskRouting["{taskType}:{language}"]</c> before the bare task type and
+/// records it with the outcome (see docs/architecture/ROUTING_LANGUAGE_DIMENSION.md).
+/// </summary>
+public sealed record RouteRequest(
+    string? TaskType, string? Prompt, string? System = null, string? Language = null)
+{
+    /// <summary>
+    /// The hub-level request. Callers validate <c>TaskType</c>/<c>Prompt</c> before
+    /// mapping, so an empty prompt here is a programming error rather than a 400.
+    /// </summary>
+    public HubRouteRequest ToHubRequest() => new(TaskType, Prompt ?? "", System, Language);
+}
 
 public sealed record CompareRequest(
     string? Prompt, IReadOnlyList<string>? Providers = null, string? System = null);

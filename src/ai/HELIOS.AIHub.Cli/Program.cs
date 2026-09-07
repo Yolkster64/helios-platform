@@ -4,6 +4,7 @@ using HELIOS.AIHub;
 using HELIOS.AIHub.Abstractions;
 using HELIOS.AIHub.Fleet;
 using HELIOS.AIHub.Learning;
+using HELIOS.AIHub.Routing;
 
 namespace HELIOS.AIHub.Cli;
 
@@ -79,10 +80,18 @@ public static class Program
             {
                 if (positionals.Count < 2)
                 {
-                    return Fail("Usage: helios-ai route <task-type> \"<prompt>\" [--system S]\n" +
-                                $"Task types: {string.Join(", ", hub.RoutingTable.TaskRouting.Keys.OrderBy(k => k))}");
+                    return Fail("Usage: helios-ai route <task-type> \"<prompt>\" [--system S] [--language L]\n" +
+                                $"Task types: {string.Join(", ", BareTaskTypes(hub).OrderBy(k => k, StringComparer.Ordinal))}\n" +
+                                "Language-qualified chains (<task-type>:<language>) are listed by `helios-ai routing`.");
                 }
-                var result = await hub.RouteAsync(positionals[0], positionals[1], options.GetValueOrDefault("system"));
+                if (options.TryGetValue("language", out var languageOption)
+                    && string.IsNullOrWhiteSpace(languageOption))
+                {
+                    return Fail("--language requires a value (e.g. csharp, fsharp, cpp, python, powershell, bicep).");
+                }
+                var result = await hub.RouteAsync(
+                    new HubRouteRequest(
+                        positionals[0], positionals[1], options.GetValueOrDefault("system"), languageOption));
                 return PrintResult(result);
             }
 
@@ -155,9 +164,23 @@ public static class Program
             case "routing":
             {
                 Console.WriteLine($"default: {string.Join(" → ", hub.RoutingTable.DefaultChain)}");
-                foreach (var (taskType, chain) in hub.RoutingTable.TaskRouting.OrderBy(kv => kv.Key))
+                // Ordinal order keeps every "<task>:<language>" key directly under its
+                // bare task type, so the language-qualified overrides read as a group.
+                var qualified = 0;
+                foreach (var (key, chain) in hub.RoutingTable.TaskRouting.OrderBy(kv => kv.Key, StringComparer.Ordinal))
                 {
-                    Console.WriteLine($"{taskType,-24} {string.Join(" → ", chain)}");
+                    var (_, language) = TaskTypeRoutingStrategy.SplitRoutingKey(key);
+                    if (language is not null)
+                    {
+                        qualified++;
+                    }
+                    Console.WriteLine($"{(language is null ? " " : "+")} {key,-28} {string.Join(" → ", chain)}");
+                }
+                if (qualified > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine($"+ = language-qualified chain (<task-type>:<language>, {qualified} configured): " +
+                                      "used by `route <task-type> ... --language <language>` before the bare task type.");
                 }
                 return 0;
             }
@@ -342,6 +365,11 @@ public static class Program
         }
     }
 
+    /// <summary>Task types without a language qualifier — the keys a caller can name directly.</summary>
+    private static IEnumerable<string> BareTaskTypes(AIHubService hub) =>
+        hub.RoutingTable.TaskRouting.Keys
+            .Where(key => TaskTypeRoutingStrategy.SplitRoutingKey(key).Language is null);
+
     private static int PrintResult(ChatResult result)
     {
         if (result.Success)
@@ -369,7 +397,7 @@ public static class Program
 
             Commands:
               ask "<prompt>" [--provider P] [--model M] [--system S]   Ask one provider (default: routed chain)
-              route <task-type> "<prompt>" [--system S]                Route by task type with fallback
+              route <task-type> "<prompt>" [--system S] [--language L]  Route by task type (and optional language) with fallback
               tandem <task-type> "<prompt>" [--system S]               Run the whole chain concurrently (e.g. ChatGPT+Codex), report the learned winner
               compare "<prompt>" [--providers a,b,c]                   Fan out to several providers in parallel
               status                                                    Provider readiness (no network calls)

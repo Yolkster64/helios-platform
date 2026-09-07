@@ -84,8 +84,13 @@ public sealed class FleetPlanService
             {
                 if (!organicByTask.TryGetValue(taskType, out var organic))
                 {
-                    organic = ChainReorderEngine.OrganicOnly(
-                        await GetRecentSafeAsync(taskType, cancellationToken).ConfigureAwait(false));
+                    // Pools route by bare task type, so they are scored on the same
+                    // language-less evidence RouteAsync would use for that key —
+                    // language-qualified outcomes belong to their own chains.
+                    organic = ChainReorderEngine.ForLanguage(
+                        ChainReorderEngine.OrganicOnly(
+                            await GetRecentSafeAsync(taskType, cancellationToken).ConfigureAwait(false)),
+                        language: null);
                     organicByTask[taskType] = organic;
                 }
 
