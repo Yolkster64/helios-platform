@@ -36,6 +36,55 @@ public class LocalJsonlLearningStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecentForLanguageAsync_TakesTheWindowAfterScoping()
+    {
+        // 30 language-less, then 50 fsharp, then 200 python (the newest = one whole
+        // window): a shared task-type window would hold python only, so scoping after
+        // the cap would leave the fsharp route with no evidence at all.
+        var store = new LocalJsonlLearningStore(_path);
+        var at = 1;
+        for (var i = 0; i < 30; i++)
+        {
+            await store.RecordAsync(Outcome("legacy", success: true, at: at++));
+        }
+        for (var i = 0; i < 50; i++)
+        {
+            await store.RecordAsync(Outcome("fsharp-prov", success: true, at: at++) with { Language = "fsharp" });
+        }
+        for (var i = 0; i < 200; i++)
+        {
+            await store.RecordAsync(Outcome("python-prov", success: true, at: at++) with { Language = "python" });
+        }
+
+        var shared = await store.GetRecentAsync("code_review", limit: 200);
+        var fsharp = await store.GetRecentForLanguageAsync("code_review", "fsharp", limit: 200);
+        var languageless = await store.GetRecentForLanguageAsync("code_review", language: null, limit: 200);
+        var cpp = await store.GetRecentForLanguageAsync("code_review", "cpp", limit: 200);
+
+        Assert.All(shared, o => Assert.Equal("python", o.Language));
+        Assert.Equal(50, fsharp.Count);
+        Assert.All(fsharp, o => Assert.Equal("fsharp-prov", o.Provider));
+        Assert.True(fsharp[0].Timestamp > fsharp[^1].Timestamp); // newest first
+        Assert.Equal(30, languageless.Count);
+        Assert.All(languageless, o => Assert.Null(o.Language));
+        Assert.Empty(cpp);
+    }
+
+    [Fact]
+    public async Task GetRecentForLanguageAsync_RespectsLimit_KeepingTheNewestOfThatLanguage()
+    {
+        var store = new LocalJsonlLearningStore(_path);
+        for (var i = 1; i <= 5; i++)
+        {
+            await store.RecordAsync(Outcome($"p{i}", success: true, at: i) with { Language = "python" });
+        }
+
+        var recent = await store.GetRecentForLanguageAsync("code_review", "python", limit: 2);
+
+        Assert.Equal(new[] { "p5", "p4" }, recent.Select(o => o.Provider));
+    }
+
+    [Fact]
     public async Task GetRecentAsync_RespectsLimit()
     {
         var store = new LocalJsonlLearningStore(_path);

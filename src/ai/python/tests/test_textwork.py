@@ -1,3 +1,5 @@
+import sys
+
 from helios_agents import textwork
 
 
@@ -44,3 +46,16 @@ def test_group_similar_is_transitive_across_chains():
     texts = ["alpha beta", "beta gamma", "gamma delta"]
     result = textwork.group_similar(texts, threshold=0.3)
     assert result["groups"] == [[0, 1, 2]]
+
+
+def test_group_similar_falls_back_when_sklearn_is_discoverable_but_broken(monkeypatch):
+    # find_spec says sklearn exists, but importing the estimators fails (an incomplete
+    # install or a missing transitive dependency): the Jaccard fallback must still answer.
+    monkeypatch.setattr(textwork, "_HAVE_SKLEARN", True)
+    monkeypatch.setitem(sys.modules, "sklearn.feature_extraction.text", None)
+    monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", None)
+
+    result = textwork.group_similar(["alpha beta gamma", "alpha beta gamma delta"], threshold=0.5)
+
+    assert result["backend"] == "jaccard"
+    assert result["groups"] == [[0, 1]]

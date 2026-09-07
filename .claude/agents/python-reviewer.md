@@ -15,9 +15,13 @@ package with `src/ai/python/pyrightconfig.json`). Focus, in priority order:
 
 1. **The stdio contract**: nothing but the response JSON ever reaches stdout — a stray
    `print`, progress bar, or library chatter on stdout breaks the C# parser. Logs go
-   to stderr. Exactly one response document; non-zero exit only when no JSON response
-   could be produced. New ops must be registered in `_OPS` and answered as
-   `{"ok": true, "result": ...}` / `{"ok": false, "error": ...}`.
+   to stderr. Exactly one response document, and the exit code follows the envelope
+   the way `helios_agents/__main__.py` implements and documents it: `{"ok": true,
+   "result": ...}` with exit 0, `{"ok": false, "error": ...}` with exit 1 for a
+   rejected or failed request — an error envelope paired with a non-zero exit is the
+   contract, not a defect. Only a non-zero exit with nothing parseable on stdout is a
+   crash to the C# reader. New ops must be registered in `_OPS` and answered in that
+   shape.
 2. **Spoke boundary**: the spoke never calls providers, cloud services, databases, other
    spokes, or the network, and never accepts secrets or connection targets as input —
    the hub performs those calls and passes data in. Any `requests`/`httpx`/`urllib`

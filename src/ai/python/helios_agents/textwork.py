@@ -50,15 +50,21 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 
 def _similarity_matrix(texts: list[str]) -> tuple[list[list[float]], str]:
     if _HAVE_SKLEARN and len(texts) > 1:
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.metrics.pairwise import cosine_similarity
-
         try:
-            matrix = TfidfVectorizer(token_pattern=_TOKEN.pattern).fit_transform(
-                [t.lower() for t in texts])
-            return cosine_similarity(matrix).tolist(), "sklearn"
-        except ValueError:
-            pass  # empty vocabulary (no token >= 2 chars) — fall back to Jaccard
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+        except ImportError:
+            # find_spec only proves the package is discoverable: an incomplete install
+            # or a missing transitive dependency (scipy, numpy) still raises here, and
+            # the advertised fallback must hold in that case too.
+            pass
+        else:
+            try:
+                matrix = TfidfVectorizer(token_pattern=_TOKEN.pattern).fit_transform(
+                    [t.lower() for t in texts])
+                return cosine_similarity(matrix).tolist(), "sklearn"
+            except ValueError:
+                pass  # empty vocabulary (no token >= 2 chars) — fall back to Jaccard
     token_sets = [set(_tokens(t)) for t in texts]
     return [[_jaccard(a, b) for b in token_sets] for a in token_sets], "jaccard"
 

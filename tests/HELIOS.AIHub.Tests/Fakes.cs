@@ -55,6 +55,14 @@ public sealed class FakeLearningStore : ILearningStore
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(
             _history.Where(h => h.TaskType == taskType).Take(limit).ToList());
 
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(
+            _history
+                .Where(h => h.TaskType == taskType && string.Equals(h.Language, language, StringComparison.Ordinal))
+                .Take(limit)
+                .ToList());
+
     public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
         int limit = 200, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(_history.Take(limit).ToList());

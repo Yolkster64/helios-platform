@@ -410,6 +410,55 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task RouteAsync_AdaptiveRouting_LanguageEvidence_SurvivesAnotherLanguageFloodingTheWindow()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // The 200 newest outcomes (one whole history window) are python and favour
+        // alpha; the fsharp evidence favouring beta lies entirely outside that shared
+        // window. Because the store scopes before it caps, the fsharp route still
+        // learns beta first — a shared window scoped afterwards would see no fsharp
+        // evidence and keep the configured order (alpha).
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 200; i++)
+        {
+            var alphaWins = i % 2 == 0;
+            history.Add(FakeLearningStore.Outcome("echo_task", alphaWins ? "alpha" : "beta", success: alphaWins)
+                with { Language = "python" });
+        }
+        history.AddRange(HistoryFavoringBeta(source: null).Select(o => o with { Language = "fsharp" }));
+        var store = new FakeLearningStore(history);
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: store);
+
+        var routed = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "fsharp"));
+
+        Assert.True(routed.Success, routed.Error);
+        Assert.Equal("beta", routed.Provider);
+    }
+
+    [Fact]
+    public async Task RouteAsync_AdaptiveRouting_LanguagelessRoute_IgnoresOtherLanguagesEvidence()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Every record carries a language, so a language-less route has no evidence of
+        // its own and keeps the configured order — it never borrows another language's.
+        var history = HistoryFavoringBeta(source: null).Select(o => o with { Language = "fsharp" }).ToList();
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: new FakeLearningStore(history));
+
+        var routed = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping"));
+
+        Assert.True(routed.Success, routed.Error);
+        Assert.Equal("alpha", routed.Provider);
+    }
+
+    [Fact]
     public async Task TandemAsync_AdaptiveRouting_IgnoresFleetLaneRecords()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())

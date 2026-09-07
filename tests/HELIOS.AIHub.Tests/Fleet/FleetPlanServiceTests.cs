@@ -223,6 +223,13 @@ public class FleetPlanServiceTests
             return Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
         }
 
+        public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+            string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+        }
+
         public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
             int limit = 200, CancellationToken cancellationToken = default)
         {

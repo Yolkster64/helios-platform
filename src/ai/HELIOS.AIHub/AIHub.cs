@@ -241,16 +241,25 @@ public sealed class AIHubService
             // Clamp: a zero/negative configured window would reach the store as an
             // invalid capacity and fail routing over a config typo.
             var window = Math.Max(1, _options.Learning.HistoryWindow);
-            var history = await _learning
-                .GetRecentAsync(taskType, window, cancellationToken)
-                .ConfigureAwait(false);
-            // Advisory records (Source != null: absorption benchmarks, fork digests,
-            // fleet-lane outcomes) inform insights only — routing must learn exclusively
-            // from the hub's own provider outcomes. Evidence is then keyed on
-            // (taskType, language): a language-qualified chain learns from its own
-            // outcomes (falling back to the parent task type's language-less ones),
-            // a language-less chain from language-less outcomes only.
-            var organic = ChainReorderEngine.ForLanguage(ChainReorderEngine.OrganicOnly(history), language);
+            // Evidence is keyed on (taskType, language) AT THE STORE: the window is taken
+            // after scoping, so another language's newest outcomes can never crowd a
+            // qualified route's own history out of it. A language-qualified chain reads
+            // its own language first and falls back to the language-less records (the
+            // parent task type's, and every record written before the field existed); a
+            // language-less chain reads language-less records only. Advisory records
+            // (Source != null: absorption benchmarks, fork digests, fleet-lane outcomes)
+            // inform insights only — routing learns exclusively from the hub's own
+            // provider outcomes, so the fallback also fires when the scoped window holds
+            // nothing organic.
+            var organic = ChainReorderEngine.OrganicOnly(
+                await _learning.GetRecentForLanguageAsync(taskType, language, window, cancellationToken)
+                    .ConfigureAwait(false));
+            if (organic.Count == 0 && language is not null)
+            {
+                organic = ChainReorderEngine.OrganicOnly(
+                    await _learning.GetRecentForLanguageAsync(taskType, language: null, window, cancellationToken)
+                        .ConfigureAwait(false));
+            }
             if (organic.Count == 0)
             {
                 return configuredChain;

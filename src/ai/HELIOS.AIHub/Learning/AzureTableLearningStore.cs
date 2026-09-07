@@ -108,6 +108,47 @@ public sealed class AzureTableLearningStore : ILearningStore
         return results;
     }
 
+    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
+    {
+        await EnsureTableAsync(cancellationToken).ConfigureAwait(false);
+
+        var escapedPartition = Sanitize(taskType).Replace("'", "''");
+        var escapedTaskType = taskType.Replace("'", "''");
+        // A qualified language is pushed into the OData filter. The language-less key
+        // cannot be: a null property is simply absent from the entity, and Table
+        // Storage evaluates a comparison against an absent property as false. That case
+        // streams the partition newest-first and keeps the first <limit> language-less
+        // rows — either way the cap applies after scoping, never before.
+        var filter = $"PartitionKey eq '{escapedPartition}' and TaskType eq '{escapedTaskType}'";
+        if (language is not null)
+        {
+            filter += $" and Language eq '{language.Replace("'", "''")}'";
+        }
+
+        var results = new List<RoutingOutcome>(limit);
+        var query = _table.QueryAsync<TableEntity>(
+            filter: filter,
+            maxPerPage: Math.Min(limit, 1000),
+            cancellationToken: cancellationToken);
+
+        await foreach (var entity in query.ConfigureAwait(false))
+        {
+            var outcome = ToOutcome(entity, fallbackTaskType: taskType);
+            if (!string.Equals(outcome.Language, language, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            results.Add(outcome);
+            if (results.Count >= limit)
+            {
+                break;
+            }
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
         int limit = 200, CancellationToken cancellationToken = default)
     {
@@ -236,6 +277,33 @@ public sealed class HybridLearningStore : ILearningStore
         }
 
         var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
+
+        return remote.Concat(local)
+            .DistinctBy(MergeDedupKey)
+            .OrderByDescending(o => o.Timestamp)
+            .Take(limit)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
+    {
+        // Same merge-never-prefer rule as GetRecentAsync, on the language-scoped reads.
+        IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
+        try
+        {
+            remote = await _remote.GetRecentForLanguageAsync(taskType, language, limit, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (RequestFailedException)
+        {
+        }
+        catch (AuthenticationFailedException)
+        {
+        }
+
+        var local = await _local.GetRecentForLanguageAsync(taskType, language, limit, cancellationToken)
+            .ConfigureAwait(false);
 
         return remote.Concat(local)
             .DistinctBy(MergeDedupKey)
