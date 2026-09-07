@@ -47,12 +47,19 @@ Permit modifying an EXISTING file (append or replace the helios table, as above)
 .PARAMETER Apply
 Write the file. Without it the script is a dry run.
 
+.PARAMETER SkipPlaywright
+Render only the helios table. By default the block also carries
+[mcp_servers.playwright] (the pinned @playwright/mcp package via npx), the same
+browser-automation server .mcp.json and .vscode/mcp.json register for Claude Code and
+Copilot, so all three clients drive the same browser tool.
+
 .PARAMETER Json
 Emit ONE object and nothing else on stdout:
-  {script, generatedUtc, mode, path, repoRoot, mcpProject, fileExists, action, written,
-   message, exitCode}
+  {script, generatedUtc, mode, path, repoRoot, mcpProject, playwright, fileExists, action,
+   written, message, exitCode}
 action is one of create | append-section | replace-section | unchanged | refused |
-precondition-failed.
+precondition-failed. playwright is the pinned @playwright/mcp package rendered next to
+the helios table, or null when -SkipPlaywright was given.
 
 .EXAMPLE
 pwsh scripts/bootstrap/write-codex-config.ps1
@@ -88,13 +95,21 @@ param(
 
     [switch]$Apply,
 
-    [switch]$Json
+    [switch]$Json,
+
+    [switch]$SkipPlaywright
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $mode = if ($Apply) { 'apply' } else { 'dry-run' }
+# The Playwright MCP server (browser automation) is rendered in the same managed block,
+# right after the helios table, so one re-render keeps both current. Pinned: a floating
+# tag would turn someone else's release into a changed tool surface. On Windows Codex
+# spawns the command directly, so the npm shim needs its .cmd extension there.
+$playwrightPackage = '@playwright/mcp@0.0.80'
+$npxCommand = if ($IsWindows) { 'npx.cmd' } else { 'npx' }
 
 # -Json promises one object and nothing else on stdout (auth-doctor convention), so every
 # progress line is gated on -not $Json.
@@ -128,6 +143,7 @@ function Complete-Run {
             path         = $Path
             repoRoot     = $RepoRoot
             mcpProject   = 'src/mcp/HELIOS.Mcp'
+            playwright   = $(if ($SkipPlaywright) { $null } else { $playwrightPackage })
             fileExists   = $FileExists
             action       = $Action
             written      = $Written
@@ -183,6 +199,18 @@ $rendered = @(
     ('args = ["run", "--project", {0}, "-c", "Release"]' -f (ConvertTo-TomlBasicString $mcpProjectDir)),
     ('env = {{ HELIOS_REPO_ROOT = {0} }}' -f (ConvertTo-TomlBasicString $RepoRoot))
 )
+if (-not $SkipPlaywright) {
+    $rendered += @(
+        '',
+        '[mcp_servers.playwright]',
+        '# Rendered by scripts/bootstrap/write-codex-config.ps1 (HELIOS): the same Playwright MCP',
+        '# server Claude Code (.mcp.json) and Copilot (.vscode/mcp.json) use. Headed by default;',
+        '# add "--headless" for a display-less host. Its browser profile is persistent, so a',
+        '# site you log into stays logged in for the next session - use --isolated to avoid that.',
+        ('command = "{0}"' -f $npxCommand),
+        ('args = ["-y", {0}]' -f (ConvertTo-TomlBasicString $playwrightPackage))
+    )
+}
 
 # --- Inspect the existing file ------------------------------------------------------------
 $fileExists = Test-Path -LiteralPath $Path -PathType Leaf
@@ -199,7 +227,9 @@ for ($i = 0; $i -lt $existing.Count; $i++) {
 }
 if ($start -ge 0) {
     for ($i = $start + 1; $i -lt $existing.Count; $i++) {
-        if ($existing[$i] -match '^\s*\[' -and $existing[$i] -notmatch '^\s*\[mcp_servers\.helios\.') { $end = $i; break }
+        # Our block is the helios table, its sub-tables, and the playwright table that this
+        # script renders right after it; the next foreign header ends the block.
+        if ($existing[$i] -match '^\s*\[' -and $existing[$i] -notmatch '^\s*\[mcp_servers\.(helios\.|playwright(\]|\.))') { $end = $i; break }
     }
     while ($end - 1 -gt $start -and [string]::IsNullOrWhiteSpace($existing[$end - 1])) { $end-- }
 }
@@ -231,7 +261,7 @@ $why = switch ($action) {
 }
 
 Write-Report ''
-Write-Report '-- rendered [mcp_servers.helios] --'
+Write-Report ('-- rendered [mcp_servers.helios]{0} --' -f $(if ($SkipPlaywright) { '' } else { ' + [mcp_servers.playwright]' }))
 foreach ($line in $rendered) { Write-Report "  $line" }
 Write-Report ''
 Write-Report '-- plan --'
@@ -293,5 +323,5 @@ catch {
     Complete-Run -ExitCode 1 -Action $action -FileExists $fileExists -Message "write-codex-config: FAILED - could not write $Path ($($_.Exception.Message)). Replay: $replayCommand"
 }
 
-Complete-Run -ExitCode 0 -Action $action -Written $true -FileExists $true -Message ("write-codex-config: $action complete - $Path now registers the helios MCP server. " +
+Complete-Run -ExitCode 0 -Action $action -Written $true -FileExists $true -Message ("write-codex-config: $action complete - $Path now registers the helios MCP server$(if ($SkipPlaywright) { '' } else { ' and the playwright MCP server' }). " +
     'Verify from Codex with: codex mcp list   (or open a codex session and check the tool list).')

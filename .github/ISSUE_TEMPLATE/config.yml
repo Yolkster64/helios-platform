@@ -2,6 +2,9 @@
 # one of the links below for docs/planning questions.
 blank_issues_enabled: false
 contact_links:
+  - name: "Getting started guide"
+    url: "https://github.com/Yolkster64/helios-platform/blob/main/docs/GETTING_STARTED.md"
+    about: "Five minutes to a working helios-ai ask - read before filing a setup question."
   - name: "HELIOS wiki (architecture docs)"
     url: "https://github.com/Yolkster64/helios-platform/wiki"
     about: "Published from docs/ by wiki-generator.yml - read before filing design questions."

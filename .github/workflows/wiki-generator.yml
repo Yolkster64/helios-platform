@@ -2,6 +2,7 @@ name: Wiki Sync
 
 # Mirrors curated docs into the GitHub wiki (Yolkster64/helios-platform.wiki.git)
 # with a flattened naming scheme:
+#   docs/GETTING_STARTED.md     -> Getting-Started.md
 #   docs/architecture/<NAME>.md -> Architecture-<NAME>.md
 #   docs/mcp/<NAME>.md          -> Mcp-<NAME>.md
 # plus a generated _Sidebar.md. Commit-if-changed, so re-runs are no-ops.
@@ -57,26 +58,32 @@ jobs:
 
       - name: Flatten docs into wiki pages
         if: steps.clone.outputs.exists == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
           # Remove previously synced pages first so renames/deletions in docs/
           # do not leave stale wiki pages. Hand-written pages (Home.md, etc.)
           # are untouched.
-          rm -f wiki/Architecture-*.md wiki/Mcp-*.md wiki/_Sidebar.md
+          rm -f wiki/Getting-Started.md wiki/Architecture-*.md wiki/Mcp-*.md wiki/_Sidebar.md
 
-          for f in docs/architecture/*.md; do
-            [ -e "$f" ] || continue
-            cp "$f" "wiki/Architecture-$(basename "$f")"
-          done
-          for f in docs/mcp/*.md; do
-            [ -e "$f" ] || continue
-            cp "$f" "wiki/Mcp-$(basename "$f")"
-          done
+          # Every published page is rewritten by scripts/wiki/rewrite_links.py: a
+          # relative link to another published page becomes that page's name, a
+          # link to any other repository file becomes an absolute GitHub URL, and a
+          # target that does not exist in the checkout is left as written and
+          # reported as a warning. The repository copies keep their relative links.
+          python3 scripts/wiki/rewrite_links.py --self-test
+          python3 scripts/wiki/rewrite_links.py --repo "$REPO" --ref "$REF" --out wiki \
+            docs/GETTING_STARTED.md docs/architecture/*.md docs/mcp/*.md
 
           # _Sidebar.md — wiki links are [[Page-Name]] (file name minus .md).
           {
             echo '## HELIOS docs'
+            echo
+            echo '### Start here'
+            [ -e wiki/Getting-Started.md ] && echo '- [[Getting-Started]]'
             echo
             echo '### Architecture'
             for f in wiki/Architecture-*.md; do

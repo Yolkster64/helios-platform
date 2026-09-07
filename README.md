@@ -15,7 +15,19 @@ cd helios-platform
 pwsh scripts/setup/setup-all.ps1 -Fix        # one-command readiness (details below)
 dotnet build HELIOS.sln -c Release           # expect: 0 Error(s)
 dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release -- status
+
+# No Azure, no paid key: a GitHub login is enough for the first answer
+gh auth login --hostname github.com --web --scopes models:read
+source scripts/bootstrap/connect-github.sh   # exports GITHUB_MODELS_TOKEN -> github-models: Ready
+dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release -- ask "Say hello" --provider github-models
+
+# Owner: both device codes (gh + az) in one sitting, then the GitHub App and the rest
+pwsh scripts/bootstrap/connect-devices.ps1
 ```
+
+New here? [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) is the five-minute path for
+three kinds of reader (GitHub only, ChatGPT/Codex, the owner with Azure) and says what not
+to expect without keys.
 
 `setup-all.ps1` is the fully automated setup entrypoint. It inventories five things —
 build/test toolchain, GitHub/Azure auth state (read-only probes), the AI agent CLIs
@@ -65,11 +77,12 @@ engineering contract.
 | Absorption program | `config/absorption/pr-watchlist.json` → the keyless `Absorption Benchmark` workflow (or `pwsh scripts/absorption/absorb-pr.ps1 -PrNumber <N>` locally — it executes the candidate's build code, so reserve that for reviewed PRs on credential-free hosts) → `helios-ai absorb-status` | [ABSORPTION_PIPELINE.md](docs/architecture/ABSORPTION_PIPELINE.md), [ABSORPTION_LEDGER.md](docs/architecture/ABSORPTION_LEDGER.md) |
 | Infrastructure | `infra/main.bicep` (source of truth) + `infra/arm/` (generated) + `infra/terraform/` (mirror) | [infra/README.md](infra/README.md) |
 | GUI shell (**Windows-only**) | `dotnet build src/gui/HELIOS.Shell.sln -c Debug -p:Platform=x64` on Windows | [src/gui/README.md](src/gui/README.md), [GUI_THEME_ANALYSIS.md](docs/architecture/GUI_THEME_ANALYSIS.md) |
-| Setup & bootstrap | `pwsh scripts/setup/setup-all.ps1` + `scripts/bootstrap/` | [scripts/bootstrap/README.md](scripts/bootstrap/README.md), [OWNER_START_HERE.md](docs/OWNER_START_HERE.md) |
+| Setup & bootstrap | `pwsh scripts/setup/setup-all.ps1` + `scripts/bootstrap/` (`connect-devices.ps1` for the logins) | [GETTING_STARTED.md](docs/GETTING_STARTED.md), [scripts/bootstrap/README.md](scripts/bootstrap/README.md), [OWNER_START_HERE.md](docs/OWNER_START_HERE.md) |
+| Codespaces (zero install) | **Code → Codespaces → Create**; the devcontainer builds the hub and symlinks `helios-ai` | [.github/CODESPACES_GUIDE.md](.github/CODESPACES_GUIDE.md) |
 
 ## Prerequisites
 
-- .NET SDK 8
+- .NET SDK 10 (`global.json` pins 10.0.100)
 - PowerShell 7 (`pwsh`) for the automation layer under `scripts/`
 - Python 3.10 or newer
 - Git
@@ -252,8 +265,9 @@ What the automation does to your PR, automatically:
 - **Hand work to an agent**: adding the `copilot` label to an issue assigns the GitHub
   Copilot coding agent, which opens a draft PR (requires Issues enabled on the repo and a
   Copilot subscription; degrades to a notice otherwise).
-- **After merge to `main`**: the Wiki Sync workflow publishes `docs/**` to the GitHub
-  wiki (`docs/architecture/X.md` → `Architecture-X`).
+- **After merge to `main`**: the Wiki Sync workflow publishes `docs/GETTING_STARTED.md`,
+  `docs/architecture/**` and `docs/mcp/**` to the GitHub wiki (`Getting-Started`,
+  `Architecture-X`, `Mcp-X`); the rest of `docs/` stays repository-only.
 
 GUI contributions build on Windows against `src/gui/HELIOS.Shell.sln` — the Linux CI
 cannot compile them, so build locally before the PR and read
