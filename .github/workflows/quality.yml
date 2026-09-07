@@ -95,6 +95,35 @@ jobs:
             xargs -0 -n1 sh -c 'python3 -m json.tool "$1" >/dev/null 2>&1 || { echo "::error file=$1::invalid JSON: $1"; exit 255; }' _
           echo "✅ All JSON files valid"
 
+  automation-validate:
+    name: Automation Wiring Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The automation-wiring skill ships a validator that had no CI caller: it
+      # parses every JSON/YAML artifact, and for workflows flags disabled or
+      # stale actions, missing `permissions:`, attacker-controlled contexts
+      # interpolated into `run:`/github-script, a write-token PR trigger paired
+      # with a checkout, and jobs with neither `runs-on` nor `uses`; committed-credential
+      # patterns are checked in every file it reads. Blocking: exit 1 on any
+      # error; warnings (currently: three legacy workflows without a top-level
+      # permissions block, one stale setup-python pin, terraform CLI absent)
+      # print but pass. PyYAML is the validator's only dependency. Bicep and
+      # Terraform sub-checks run only when those CLIs are on PATH; the
+      # dedicated infra-validate.yml owns Bicep compilation, so this job does
+      # not install either.
+      - name: Validate workflows, config, editor, and infra artifacts
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml==6.0.2
+          python3 .claude/skills/automation-wiring/scripts/validate_all.py \
+            .github/workflows config .vscode .devcontainer infra
+
   security-scan:
     # "(quality)" suffix: ci-validation.yml publishes a job named "Security Scanning"
     # too, and two checks sharing one name are indistinguishable in the PR checks
@@ -136,7 +165,7 @@ jobs:
   quality-summary:
     name: Quality Check Summary
     if: always()
-    needs: [powershell-lint, markdown-lint, json-validate, security-scan]
+    needs: [powershell-lint, markdown-lint, json-validate, automation-validate, security-scan]
     runs-on: ubuntu-latest
     steps:
       - name: Report Status
@@ -146,6 +175,7 @@ jobs:
           echo "- PowerShell Lint: ${{ needs.powershell-lint.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Markdown Lint: ${{ needs.markdown-lint.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- JSON Validation: ${{ needs.json-validate.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Automation Wiring Validation: ${{ needs.automation-validate.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Quality checks completed"

@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from importlib.util import find_spec
 
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-    _HAVE_SKLEARN = True
-except ImportError:  # pragma: no cover - exercised on bare interpreters
-    _HAVE_SKLEARN = False
+# Presence probe only: the estimators are imported at the single use site below, so
+# no name is left "possibly unbound" on a bare interpreter (pyright) and the import
+# cost is paid only when a similarity matrix is actually requested.
+_HAVE_SKLEARN = find_spec("sklearn") is not None
 
 _TOKEN = re.compile(r"[a-z0-9_]{2,}")
 _STOPWORDS = frozenset(
@@ -51,6 +50,9 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 
 def _similarity_matrix(texts: list[str]) -> tuple[list[list[float]], str]:
     if _HAVE_SKLEARN and len(texts) > 1:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+
         try:
             matrix = TfidfVectorizer(token_pattern=_TOKEN.pattern).fit_transform(
                 [t.lower() for t in texts])
