@@ -28,7 +28,7 @@
     - a baseline line that no longer triggers → notice to delete it (never a failure)
 
   Exit codes: 0 gate passed, 1 new Error-severity finding or analyzer failure,
-  2 PSScriptAnalyzer not importable. Writes the full record list to -OutputPath and a
+  2 the pinned PSScriptAnalyzer version (-AnalyzerVersion, 1.25.0) is not installed. Writes the full record list to -OutputPath and a
   short table to $GITHUB_STEP_SUMMARY when that variable is set; emits ::error
   annotations under GitHub Actions.
 #>
@@ -37,7 +37,11 @@ param(
     [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path,
     [string[]]$Paths = @('src', 'scripts'),
     [string]$BaselinePath = '.github/psa-baseline.txt',
-    [string]$OutputPath = 'ps-analysis.txt'
+    [string]$OutputPath = 'ps-analysis.txt',
+    # The version the baseline was measured with (quality.yml installs exactly this one).
+    # A newer PSScriptAnalyzer that happens to sit beside it on a runner would be loaded
+    # by an unqualified Import-Module and judge the baseline with different rules.
+    [string]$AnalyzerVersion = '1.25.0'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -45,11 +49,14 @@ $ErrorActionPreference = 'Stop'
 # otherwise every relative path misses the baseline and the gate fails in the wrong direction.
 $Root = [IO.Path]::GetFullPath($Root)
 
-if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-    Write-Host 'PSScriptAnalyzer is not installed: Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force'
+$analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq [version]$AnalyzerVersion }
+if (-not $analyzerModule) {
+    $present = @(Get-Module -ListAvailable -Name PSScriptAnalyzer | ForEach-Object { $_.Version.ToString() })
+    $presentText = if ($present.Count -gt 0) { " (installed: $($present -join ', '))" } else { '' }
+    Write-Host "PSScriptAnalyzer $AnalyzerVersion is not installed$presentText`: Install-Module -Name PSScriptAnalyzer -RequiredVersion $AnalyzerVersion -Scope CurrentUser -Force"
     exit 2
 }
-Import-Module PSScriptAnalyzer
+Import-Module PSScriptAnalyzer -RequiredVersion $AnalyzerVersion
 $onActions = [bool]$env:GITHUB_ACTIONS
 
 $baselineFile = if ([IO.Path]::IsPathRooted($BaselinePath)) { $BaselinePath } else { Join-Path $Root $BaselinePath }
