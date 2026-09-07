@@ -306,7 +306,8 @@ the `fleet-operator` agent; absorption seeding through `absorption-analyst`.
 
 - **Today**: repo targets **net10.0** (the current LTS, Nov 2025) everywhere except
   `src/gui`, which stays `net8.0-windows10.0.19041.0` until the pinned Windows App SDK
-  line documents net10 support. `global.json` pins SDK 10.0.400.
+  line documents net10 support. `global.json` pins SDK 10.0.100 with
+  `rollForward: latestFeature`, so any newer 10.0.x feature band satisfies it.
 - **The net8.0 → net10.0 retarget has landed** (roadmap PR6): all projects, package
   pins, and `dotnet-version: 10.0.x` workflow bumps in one change-set.
 - **.NET 11**: **preview only** (ships Nov 2026). An allowed-to-fail `net11-preview`
