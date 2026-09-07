@@ -26,9 +26,15 @@ public sealed class AzureTableLearningStore : ILearningStore
     /// be filtered server-side), so without a cap a partition whose newest rows are all
     /// advisory or all another language's would be walked to its end on every route —
     /// a cheap, persistent write path (<c>POST /v1/learning</c> with the API key) turned
-    /// into Azure transaction load and route latency. Two service pages at most.
+    /// into Azure transaction load and route latency. A client-filtered read requests
+    /// pages of <c>min(budget, 1000)</c> entities (the service maximum), so the budget
+    /// costs at most two transactions; a fully server-filtered read keeps pages of
+    /// <c>limit</c>, since every row it receives is one it keeps.
     /// </summary>
     internal const int DefaultScanBudget = 2_000;
+
+    /// <summary>Table Storage serves at most this many entities per page.</summary>
+    private const int ServiceMaxPageSize = 1000;
 
     private readonly TableClient _table;
     private readonly int _scanBudget;
@@ -175,10 +181,18 @@ public sealed class AzureTableLearningStore : ILearningStore
             filter += $" and Language eq '{language.Replace("'", "''")}'";
         }
 
+        // Page size follows what the client may have to skip: a read the service filters
+        // completely (qualified language, advisory rows welcome) keeps every row it
+        // receives, so pages of <limit> are exact; a read that rejects rows client-side
+        // (language-less, or organic) may have to look past the whole budget, and pages
+        // of <limit> would turn a 2 000-entity budget into ten transactions at the
+        // default window — it requests full pages instead, so the budget is two.
+        var clientFiltered = language is null || organicOnly;
+        var pageSize = Math.Min(clientFiltered ? _scanBudget : limit, ServiceMaxPageSize);
         var results = new List<RoutingOutcome>(limit);
         var query = _table.QueryAsync<TableEntity>(
             filter: filter,
-            maxPerPage: Math.Min(limit, 1000),
+            maxPerPage: pageSize,
             cancellationToken: cancellationToken);
 
         var examined = 0;

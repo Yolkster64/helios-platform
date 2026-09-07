@@ -134,7 +134,9 @@ narrative that wants fleet-lane records too) and no routing or planning path cal
 In Azure Table mode the language-less and the organic reads filter client-side (an
 absent `Language` or `Source` column cannot be selected by any OData comparison), so
 each scoped read examines at most `AzureTableLearningStore.DefaultScanBudget` (2 000)
-entities — two service pages — and returns what it found: a partition whose newest
+entities, requested as full pages (the budget capped at the service maximum of 1 000,
+so two transactions; a read the service filters completely keeps pages of `limit`),
+and returns what it found: a partition whose newest
 rows are all advisory, or all another language's (a cheap, persistent write path such
 as `POST /v1/learning` with the API key), costs a fixed number of pages per route and
 reads as thin or no evidence, in which case routing keeps its configured order. Rows

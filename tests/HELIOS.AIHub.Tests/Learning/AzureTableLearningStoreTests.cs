@@ -119,7 +119,9 @@ public sealed class AzureTableLearningStoreTests
         // Advisory rows interleaved with organic ones, window of 2: the cap counts the
         // rows kept, not the rows seen, and once it is reached the read stops pulling
         // pages — the double serves one page per row, so pages never requested are
-        // rows never served.
+        // rows never served. A client-filtered read asks for full pages (the scan
+        // budget, capped at the service maximum) rather than pages of <limit>, so the
+        // budget costs two transactions instead of ten at the default window.
         var table = new FakeTableClient(
             Row("lane-1", language: null, source: "fleet-lane", at: 6),
             Row("p1", language: null, at: 5),
@@ -132,8 +134,32 @@ public sealed class AzureTableLearningStoreTests
         var window = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 2);
 
         Assert.Equal(new[] { "p1", "p2" }, window.Select(o => o.Provider));
-        Assert.Equal(2, table.LastMaxPerPage);
+        Assert.Equal(1000, table.LastMaxPerPage);
         Assert.True(table.RowsServed < 6, $"the stream served {table.RowsServed} of 6 rows after the cap");
+    }
+
+    [Fact]
+    public async Task ScopedRead_PageSize_FollowsWhatTheClientMayHaveToSkip()
+    {
+        // Server-filtered (qualified language, advisory rows kept): pages of <limit>,
+        // every received row is a kept row. Client-filtered (language-less or organic):
+        // full pages of min(budget, 1000), so a flooded partition costs two
+        // transactions, not ten; a small budget bounds the page too.
+        var table = new FakeTableClient(Row("p1", language: "fsharp"));
+        var store = new AzureTableLearningStore(table);
+
+        await store.GetRecentForLanguageAsync(TaskTypeName, "fsharp", limit: 200);
+        Assert.Equal(200, table.LastMaxPerPage);
+
+        await store.GetRecentOrganicForLanguageAsync(TaskTypeName, "fsharp", limit: 200);
+        Assert.Equal(1000, table.LastMaxPerPage);
+
+        await store.GetRecentForLanguageAsync(TaskTypeName, language: null, limit: 200);
+        Assert.Equal(1000, table.LastMaxPerPage);
+
+        var small = new FakeTableClient(Row("p1", language: null));
+        await new AzureTableLearningStore(small, scanBudget: 20).GetRecentOrganicForLanguageAsync(TaskTypeName, language: null, limit: 200);
+        Assert.Equal(20, small.LastMaxPerPage);
     }
 
     /// <summary>A row as RecordAsync stores it: a null property is simply absent from the entity.</summary>
