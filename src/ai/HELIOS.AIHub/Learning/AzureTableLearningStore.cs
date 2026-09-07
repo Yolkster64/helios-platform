@@ -26,8 +26,19 @@ public sealed class AzureTableLearningStore : ILearningStore
 
     /// <param name="endpoint">Table service endpoint, e.g. https://acct.table.core.windows.net.</param>
     public AzureTableLearningStore(Uri endpoint)
+        : this(new TableClient(endpoint, TableName, new DefaultAzureCredential()))
     {
-        _table = new TableClient(endpoint, TableName, new DefaultAzureCredential());
+    }
+
+    /// <summary>
+    /// Test seam. The public constructor binds a DefaultAzureCredential client that no
+    /// offline test can exercise, so the shape of every read — the OData filter that
+    /// reaches the service, the client-side scoping, the cap ending the stream — is
+    /// pinned through a TableClient double (its members are virtual for exactly this).
+    /// </summary>
+    internal AzureTableLearningStore(TableClient table)
+    {
+        _table = table;
     }
 
     private async Task EnsureTableAsync(CancellationToken cancellationToken)
@@ -108,18 +119,34 @@ public sealed class AzureTableLearningStore : ILearningStore
         return results;
     }
 
-    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
-        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadScopedAsync(taskType, language, limit, organicOnly: false, cancellationToken);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        ReadScopedAsync(taskType, language, limit, organicOnly: true, cancellationToken);
+
+    /// <summary>
+    /// The (taskType, language) window, optionally organic only, capped at
+    /// <paramref name="limit"/> after scoping. What is pushed server-side and what is
+    /// not follows one Table Storage rule: a null property is simply absent from the
+    /// entity, and a comparison against an absent property evaluates to false.
+    /// </summary>
+    private async Task<IReadOnlyList<RoutingOutcome>> ReadScopedAsync(
+        string taskType, string? language, int limit, bool organicOnly, CancellationToken cancellationToken)
     {
         await EnsureTableAsync(cancellationToken).ConfigureAwait(false);
 
         var escapedPartition = Sanitize(taskType).Replace("'", "''");
         var escapedTaskType = taskType.Replace("'", "''");
         // A qualified language is pushed into the OData filter. The language-less key
-        // cannot be: a null property is simply absent from the entity, and Table
-        // Storage evaluates a comparison against an absent property as false. That case
-        // streams the partition newest-first and keeps the first <limit> language-less
-        // rows — either way the cap applies after scoping, never before.
+        // cannot be (an absent Language column is not "eq" anything), and neither can
+        // organic-ness: an organic row has no Source column at all, so there is no
+        // server-side "Source is absent" — an "eq" or "ne" on Source would drop the very
+        // rows this read wants. Those cases stream the (server-filtered) partition
+        // newest-first and keep the first <limit> rows that pass the client-side check
+        // — either way the cap applies after scoping, never before.
         var filter = $"PartitionKey eq '{escapedPartition}' and TaskType eq '{escapedTaskType}'";
         if (language is not null)
         {
@@ -135,7 +162,8 @@ public sealed class AzureTableLearningStore : ILearningStore
         await foreach (var entity in query.ConfigureAwait(false))
         {
             var outcome = ToOutcome(entity, fallbackTaskType: taskType);
-            if (!string.Equals(outcome.Language, language, StringComparison.Ordinal))
+            if (!string.Equals(outcome.Language, language, StringComparison.Ordinal)
+                || (organicOnly && outcome.Source is not null))
             {
                 continue;
             }
@@ -257,17 +285,42 @@ public sealed class HybridLearningStore : ILearningStore
         }
     }
 
-    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
-        string taskType, int limit = 200, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAsync(
+        string taskType, int limit = 200, CancellationToken cancellationToken = default) =>
+        MergeAsync(store => store.GetRecentAsync(taskType, limit, cancellationToken), limit);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        MergeAsync(
+            store => store.GetRecentForLanguageAsync(taskType, language, limit, cancellationToken), limit);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        // Each side scopes organic-ness before its own cap, so the merged window is
+        // organic evidence only — never a window an advisory ingest on either side has
+        // already consumed.
+        MergeAsync(
+            store => store.GetRecentOrganicForLanguageAsync(taskType, language, limit, cancellationToken), limit);
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
+        int limit = 200, CancellationToken cancellationToken = default) =>
+        MergeAsync(store => store.GetRecentAllAsync(limit, cancellationToken), limit);
+
+    /// <summary>
+    /// Merge, never prefer: local writes always land first and remote writes are
+    /// best-effort, so after an Azure outage the local store holds outcomes the table
+    /// never saw — returning a non-empty remote result alone would serve stale history
+    /// until some external reconciliation ran. Every read goes through here so the rule
+    /// (and the outage degradation: a failed remote read is an empty remote side, never
+    /// a failed call) cannot drift between the reads.
+    /// </summary>
+    private async Task<IReadOnlyList<RoutingOutcome>> MergeAsync(
+        Func<ILearningStore, Task<IReadOnlyList<RoutingOutcome>>> read, int limit)
     {
-        // Merge, never prefer: local writes always land first and remote writes are
-        // best-effort, so after an Azure outage the local store holds outcomes the
-        // table never saw — returning a non-empty remote result alone would serve
-        // stale history until some external reconciliation ran.
         IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
         try
         {
-            remote = await _remote.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
+            remote = await read(_remote).ConfigureAwait(false);
         }
         catch (RequestFailedException)
         {
@@ -276,34 +329,7 @@ public sealed class HybridLearningStore : ILearningStore
         {
         }
 
-        var local = await _local.GetRecentAsync(taskType, limit, cancellationToken).ConfigureAwait(false);
-
-        return remote.Concat(local)
-            .DistinctBy(MergeDedupKey)
-            .OrderByDescending(o => o.Timestamp)
-            .Take(limit)
-            .ToList();
-    }
-
-    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
-        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
-    {
-        // Same merge-never-prefer rule as GetRecentAsync, on the language-scoped reads.
-        IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
-        try
-        {
-            remote = await _remote.GetRecentForLanguageAsync(taskType, language, limit, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (RequestFailedException)
-        {
-        }
-        catch (AuthenticationFailedException)
-        {
-        }
-
-        var local = await _local.GetRecentForLanguageAsync(taskType, language, limit, cancellationToken)
-            .ConfigureAwait(false);
+        var local = await read(_local).ConfigureAwait(false);
 
         return remote.Concat(local)
             .DistinctBy(MergeDedupKey)
@@ -322,30 +348,4 @@ public sealed class HybridLearningStore : ILearningStore
         o.OutcomeId is { Length: > 0 } id
             ? id
             : (o.Timestamp, o.TaskType, o.Language, o.Provider, o.Model, o.Success, o.LatencyMs, o.Source);
-
-    public async Task<IReadOnlyList<RoutingOutcome>> GetRecentAllAsync(
-        int limit = 200, CancellationToken cancellationToken = default)
-    {
-        // Same merge-never-prefer rule as GetRecentAsync: local writes always land
-        // first and remote writes are best-effort, so neither side alone is complete.
-        IReadOnlyList<RoutingOutcome> remote = Array.Empty<RoutingOutcome>();
-        try
-        {
-            remote = await _remote.GetRecentAllAsync(limit, cancellationToken).ConfigureAwait(false);
-        }
-        catch (RequestFailedException)
-        {
-        }
-        catch (AuthenticationFailedException)
-        {
-        }
-
-        var local = await _local.GetRecentAllAsync(limit, cancellationToken).ConfigureAwait(false);
-
-        return remote.Concat(local)
-            .DistinctBy(MergeDedupKey)
-            .OrderByDescending(o => o.Timestamp)
-            .Take(limit)
-            .ToList();
-    }
 }

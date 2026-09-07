@@ -29,9 +29,10 @@ public sealed class FakeProviderAgent : ProviderAgentBase
 }
 
 /// <summary>
-/// Scripted learning store: GetRecentAsync always answers from the canned history
-/// (newest first, per the store contract); appends are collected into
-/// <see cref="Recorded"/> and never replayed, so tests stay deterministic.
+/// Scripted learning store: every read answers from the canned history (newest first,
+/// per the store contract), and the scoped reads scope before they cap, as the real
+/// stores do; appends are collected into <see cref="Recorded"/> and never replayed, so
+/// tests stay deterministic.
 /// </summary>
 public sealed class FakeLearningStore : ILearningStore
 {
@@ -60,6 +61,16 @@ public sealed class FakeLearningStore : ILearningStore
         Task.FromResult<IReadOnlyList<RoutingOutcome>>(
             _history
                 .Where(h => h.TaskType == taskType && string.Equals(h.Language, language, StringComparison.Ordinal))
+                .Take(limit)
+                .ToList());
+
+    public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
+        string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RoutingOutcome>>(
+            _history
+                .Where(h => h.TaskType == taskType
+                            && string.Equals(h.Language, language, StringComparison.Ordinal)
+                            && h.Source is null)
                 .Take(limit)
                 .ToList());
 

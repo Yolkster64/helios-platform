@@ -85,6 +85,61 @@ public class LocalJsonlLearningStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_TakesTheWindowAfterScopingOutAdvisoryRecords()
+    {
+        // 11 organic outcomes, one organic fsharp outcome, then 200 fleet-lane records
+        // (the newest = one whole window) under the same (code_review, no language)
+        // key — what the fleet collector appends between two organic routes. The plain
+        // read's window holds the advisory flood only, so scoping it afterwards would
+        // leave routing with no evidence; the organic read scopes first and returns
+        // exactly the 11, and only those (the fsharp one belongs to another key).
+        var store = new LocalJsonlLearningStore(_path);
+        var at = 1;
+        for (var i = 0; i < 11; i++)
+        {
+            await store.RecordAsync(Outcome("organic-prov", success: true, at: at++));
+        }
+        await store.RecordAsync(Outcome("organic-fsharp", success: true, at: at++) with { Language = "fsharp" });
+        for (var i = 0; i < 200; i++)
+        {
+            await store.RecordAsync(
+                Outcome("pool:xcore-9-code", success: true, at: at++) with { Source = "fleet-lane" });
+        }
+
+        var plain = await store.GetRecentForLanguageAsync("code_review", language: null, limit: 200);
+        var organic = await store.GetRecentOrganicForLanguageAsync("code_review", language: null, limit: 200);
+
+        Assert.Equal(200, plain.Count);
+        Assert.All(plain, o => Assert.Equal("fleet-lane", o.Source));
+        Assert.Equal(11, organic.Count);
+        Assert.All(organic, o =>
+        {
+            Assert.Null(o.Source);
+            Assert.Null(o.Language);
+            Assert.Equal("organic-prov", o.Provider);
+        });
+        Assert.True(organic[0].Timestamp > organic[^1].Timestamp); // newest first
+    }
+
+    [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_RespectsLimit_KeepingTheNewestOrganicRecords()
+    {
+        // Advisory records interleaved with organic ones: the cap counts organic
+        // records only, and keeps the newest of them.
+        var store = new LocalJsonlLearningStore(_path);
+        for (var i = 1; i <= 5; i++)
+        {
+            await store.RecordAsync(Outcome($"p{i}", success: true, at: i * 2 - 1) with { Language = "python" });
+            await store.RecordAsync(
+                Outcome($"lane{i}", success: true, at: i * 2) with { Language = "python", Source = "fleet-lane" });
+        }
+
+        var recent = await store.GetRecentOrganicForLanguageAsync("code_review", "python", limit: 2);
+
+        Assert.Equal(new[] { "p5", "p4" }, recent.Select(o => o.Provider));
+    }
+
+    [Fact]
     public async Task GetRecentAsync_RespectsLimit()
     {
         var store = new LocalJsonlLearningStore(_path);

@@ -156,10 +156,12 @@ provisions `infra/modules/learning-storage.bicep` — a storage account plus the
 **Honest boundaries.** Everything in this loop is advisory. Topology and
 provider chains are config (`config/fleet/fleet-topology.json`) and are never
 auto-mutated — `fleet-plan` / `helios_fleet_plan_get` only report. Fleet-lane
-records never steer provider chains: `ChainReorderEngine.OrganicOnly` filters
-the history the reorder engines see down to organic hub outcomes, so
+records never steer provider chains: routing and `fleet-plan` read the learning
+store's organic window (`ILearningStore.GetRecentOrganicForLanguageAsync`, which
+scopes source-tagged records out *before* taking the history window), so
 `pool:<name>` records — lane outcomes, not provider outcomes — cannot influence
-routing. And a green stub cycle proves the *wiring* (boards, claims,
+routing, and a burst of them under a task type cannot hide the older organic
+outcomes behind it either. And a green stub cycle proves the *wiring* (boards, claims,
 terminations, collection contract), never model quality or routing improvement.
 
 ## Cross-pool coordination

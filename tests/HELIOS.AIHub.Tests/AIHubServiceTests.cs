@@ -440,6 +440,74 @@ public class AIHubServiceTests
     }
 
     [Fact]
+    public async Task RouteAsync_AdaptiveRouting_OrganicEvidence_SurvivesAnAdvisoryFloodOfTheWindow()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // The 200 newest records of the route's own (echo_task, no language) key — one
+        // whole history window — are fleet-lane records favouring alpha, which is what
+        // the fleet collector writes under a task type between two organic routes; the
+        // organic evidence favouring beta lies entirely behind them. Because the store
+        // scopes organic-ness before it caps, the route still learns beta first. A
+        // window scoped afterwards would hold advisory records only, read as "no
+        // evidence" and keep the configured order (alpha); a leak of the advisory
+        // records into the reorder would pick alpha too.
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 200; i++)
+        {
+            var alphaWins = i % 2 == 0;
+            history.Add(FakeLearningStore.Outcome(
+                "echo_task", alphaWins ? "alpha" : "beta", success: alphaWins, source: "fleet-lane"));
+        }
+        history.AddRange(HistoryFavoringBeta(source: null));
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: new FakeLearningStore(history));
+
+        var routed = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping"));
+
+        Assert.True(routed.Success, routed.Error);
+        Assert.Equal("beta", routed.Provider);
+    }
+
+    [Fact]
+    public async Task RouteAsync_AdaptiveRouting_QualifiedWindowOfAdvisoryRecordsOnly_FallsBackToLanguagelessEvidence()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Every fsharp record is advisory (fleet-lane, favouring alpha); the organic
+        // evidence favouring beta is language-less. The fsharp route's own window holds
+        // nothing organic, so it learns from the parent task type's language-less
+        // records — beta first — and still records its own outcome under
+        // (echo_task, fsharp). Without the fallback the configured order (alpha) would
+        // stand; a leak of the advisory fsharp records would pick alpha too.
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 20; i++)
+        {
+            history.Add(FakeLearningStore.Outcome("echo_task", "alpha", success: true, source: "fleet-lane")
+                with { Language = "fsharp" });
+            history.Add(FakeLearningStore.Outcome("echo_task", "beta", success: false, source: "fleet-lane")
+                with { Language = "fsharp" });
+        }
+        history.AddRange(HistoryFavoringBeta(source: null));
+        var store = new FakeLearningStore(history);
+        var hub = new AIHubService(AdaptiveEchoOptions(), learning: store);
+
+        var routed = await hub.RouteAsync(new HubRouteRequest("echo_task", "ping", Language: "fsharp"));
+
+        Assert.True(routed.Success, routed.Error);
+        Assert.Equal("beta", routed.Provider);
+        var recorded = Assert.Single(store.Recorded);
+        Assert.Equal("echo_task", recorded.TaskType);
+        Assert.Equal("fsharp", recorded.Language);
+        Assert.Null(recorded.Source);
+    }
+
+    [Fact]
     public async Task RouteAsync_AdaptiveRouting_LanguagelessRoute_IgnoresOtherLanguagesEvidence()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())

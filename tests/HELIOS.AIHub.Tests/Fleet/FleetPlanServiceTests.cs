@@ -203,6 +203,35 @@ public class FleetPlanServiceTests
     }
 
     [Fact]
+    public async Task PlanAsync_FleetLaneRecordsFillingTheWindow_DoNotHideOlderOrganicEvidence()
+    {
+        // The 200 newest outcomes of the pool's task type (one whole history window)
+        // are fleet-lane records — exactly what the collector writes under a task type
+        // between two organic routes — and they favour flaky; the organic evidence
+        // (reliable beats flaky) lies entirely behind them. The planner reads the
+        // organic key AT the store (window after scoping): a plain window scoped
+        // afterwards would hold lane records only and report 0 samples / engine none /
+        // the configured order although 11 organic samples exist — the advisory-axis
+        // twin of the language defect above.
+        var history = new List<RoutingOutcome>();
+        for (var i = 0; i < 200; i++)
+        {
+            var flakyWins = i % 2 == 0;
+            history.Add(FakeLearningStore.Outcome(
+                TaskTypeName, flakyWins ? "flaky" : "reliable", success: flakyWins, source: "fleet-lane"));
+        }
+        history.AddRange(ReorderingHistory());
+        var service = new FleetPlanService(new FakeLearningStore(history), historyWindow: 200);
+
+        var plan = await service.PlanAsync(Topology("flaky", "reliable"));
+
+        var entry = Assert.Single(plan);
+        Assert.Equal(11, entry.SampleCount); // the organic samples, none of the lane records
+        Assert.Equal(new[] { "reliable", "flaky" }, entry.LearnedChain);
+        Assert.Equal("linear", entry.Engine);
+    }
+
+    [Fact]
     public async Task PlanAsync_QualifiedPoolTaskType_IsScoredOnItsOwnLanguageBucket()
     {
         // A pool listing "code_generation:fsharp" names the (code_generation, fsharp)
@@ -339,6 +368,13 @@ public class FleetPlanServiceTests
         }
 
         public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+            string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return Task.FromResult<IReadOnlyList<RoutingOutcome>>(Array.Empty<RoutingOutcome>());
+        }
+
+        public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
             string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default)
         {
             Reads++;

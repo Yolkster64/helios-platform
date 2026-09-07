@@ -27,7 +27,11 @@ internal sealed class ChainReorderEngine
     /// an ADVISORY ingest (absorption-benchmark, fork-observation, fleet-lane, …) whose
     /// "provider" may not even be a provider — fleet-lane records carry lane names like
     /// "pool:xcore-9-code". Chains learn from organic hub history only, so external
-    /// signals can never steer provider order.
+    /// signals can never steer provider order. Routing and the fleet planner no longer
+    /// apply this to a window they already read: the stores enforce the same rule before
+    /// their cap (<see cref="ILearningStore.GetRecentOrganicForLanguageAsync"/>), where
+    /// an advisory flood cannot crowd older organic records out first. This states the
+    /// rule over an in-memory list, as <see cref="ForLanguage"/> does for the language axis.
     /// </summary>
     public static IReadOnlyList<RoutingOutcome> OrganicOnly(IReadOnlyList<RoutingOutcome> history) =>
         history.Where(h => h.Source is null).ToList();
@@ -69,9 +73,10 @@ internal sealed class ChainReorderEngine
     /// Reorder <paramref name="configuredChain"/> from organic history (newest first, as
     /// the learning store returns it), reporting which engine produced the order: neural
     /// when the native MLP had enough evidence to speak, linear otherwise. Callers pass
-    /// pre-filtered organic history (<see cref="OrganicOnly"/>) and handle the empty
-    /// case themselves — an empty history is "no evidence" (<see cref="None"/>), not a
-    /// reorder.
+    /// organic history only (the store's
+    /// <see cref="ILearningStore.GetRecentOrganicForLanguageAsync"/> read, or a list
+    /// filtered by <see cref="OrganicOnly"/>) and handle the empty case themselves — an
+    /// empty history is "no evidence" (<see cref="None"/>), not a reorder.
     /// </summary>
     public (IReadOnlyList<string> Chain, string Engine) Reorder(
         string taskType, IReadOnlyList<string> configuredChain, IReadOnlyList<RoutingOutcome> history)

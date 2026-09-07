@@ -7,14 +7,15 @@ namespace HELIOS.AIHub.Tests.Learning;
 /// <summary>
 /// The language dimension across the hybrid local+remote merge: two records that differ
 /// only by language are two outcomes (the fallback dedup tuple carries Language), and
-/// the (taskType, language) read scopes BOTH sides before the window, on the same
-/// merge-never-prefer rule as the task-type read.
+/// the (taskType, language) reads — plain and organic — scope BOTH sides before the
+/// window, on the same merge-never-prefer rule as the task-type read.
 /// </summary>
 public sealed class HybridLearningStoreTests
 {
     private const string TaskTypeName = "code_generation";
 
-    private static RoutingOutcome Outcome(string provider, string? language, string? outcomeId = null, int at = 0) =>
+    private static RoutingOutcome Outcome(
+        string provider, string? language, string? outcomeId = null, int at = 0, string? source = null) =>
         new()
         {
             OutcomeId = outcomeId,
@@ -26,6 +27,7 @@ public sealed class HybridLearningStoreTests
             Success = true,
             LatencyMs = 100,
             CostUsd = 0,
+            Source = source,
         };
 
     [Fact]
@@ -117,6 +119,54 @@ public sealed class HybridLearningStoreTests
         Assert.Equal("local-fsharp", Assert.Single(scoped).Provider);
     }
 
+    [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_ScopesBothSides_BeforeTheWindow()
+    {
+        // Each side's two newest fsharp records are advisory — a whole window of 2 —
+        // with one organic fsharp record behind them. The organic read returns the two
+        // organic records, one per side, newest first: advisory rows are scoped out on
+        // each side BEFORE its cap, so they never consume the window (a side capped
+        // first would hand the merge two advisory rows and nothing organic), and
+        // neither the python nor the language-less organic row leaks in.
+        var local = new FakeLearningStore(new[]
+        {
+            Outcome("local-lane-1", "fsharp", outcomeId: "l1", at: 9, source: "fleet-lane"),
+            Outcome("local-lane-2", "fsharp", outcomeId: "l2", at: 8, source: "fleet-lane"),
+            Outcome("local-python", "python", outcomeId: "l3", at: 7),
+            Outcome("local-organic", "fsharp", outcomeId: "l4", at: 4),
+        });
+        var remote = new FakeLearningStore(new[]
+        {
+            Outcome("remote-lane-1", "fsharp", outcomeId: "r1", at: 6, source: "absorption-benchmark"),
+            Outcome("remote-lane-2", "fsharp", outcomeId: "r2", at: 5, source: "absorption-benchmark"),
+            Outcome("remote-organic", "fsharp", outcomeId: "r3", at: 3),
+            Outcome("remote-legacy", language: null, outcomeId: "r4", at: 2),
+        });
+        var store = new HybridLearningStore(local, remote);
+
+        var organic = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, "fsharp", limit: 2);
+
+        Assert.Equal(new[] { "local-organic", "remote-organic" }, organic.Select(o => o.Provider));
+        Assert.All(organic, o => Assert.Null(o.Source));
+    }
+
+    [Fact]
+    public async Task GetRecentOrganicForLanguageAsync_RemoteOutage_ServesTheLocalOrganicRead()
+    {
+        // Same degradation as the other reads: an Azure failure on the remote side
+        // never hides the local organic evidence and never surfaces as a routing failure.
+        var local = new FakeLearningStore(new[]
+        {
+            Outcome("local-lane", "fsharp", outcomeId: "l1", at: 2, source: "fleet-lane"),
+            Outcome("local-organic", "fsharp", outcomeId: "l2", at: 1),
+        });
+        var store = new HybridLearningStore(local, new OutageLearningStore());
+
+        var organic = await store.GetRecentOrganicForLanguageAsync(TaskTypeName, "fsharp");
+
+        Assert.Equal("local-organic", Assert.Single(organic).Provider);
+    }
+
     /// <summary>A remote store whose every read fails the way Azure Table does during an outage.</summary>
     private sealed class OutageLearningStore : ILearningStore
     {
@@ -128,6 +178,10 @@ public sealed class HybridLearningStoreTests
             throw new RequestFailedException("simulated table outage");
 
         public Task<IReadOnlyList<RoutingOutcome>> GetRecentForLanguageAsync(
+            string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
+            throw new RequestFailedException("simulated table outage");
+
+        public Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicForLanguageAsync(
             string taskType, string? language, int limit = 200, CancellationToken cancellationToken = default) =>
             throw new RequestFailedException("simulated table outage");
 

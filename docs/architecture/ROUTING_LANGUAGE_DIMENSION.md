@@ -116,17 +116,22 @@ in the C# default) keys its evidence on **(taskType, language)**:
   falls back to the parent task type's language-less records, never to another
   language's.
 
-The scoping happens at the store: `ILearningStore.GetRecentForLanguageAsync(taskType,
-language, window)` takes the history window *after* scoping (null language = language-less
-records only, otherwise an exact match on the normalized key), so another language's
-newest outcomes can never crowd a route's own evidence out of the window; the
-advisory-record exclusion (`OrganicOnly`) that keeps source-tagged records out of routing
-is applied to the scoped read. `ChainReorderEngine.ForLanguage` states the same rule over
-an in-memory list and is pinned by `LanguageScopedHistoryTests`. The fleet planner reads
-the store the same way (`FleetPlanService`, pinned by `FleetPlanServiceTests`): a pool
-whose `taskTypes` names a bare task type is scored on the language-less key, and a
-window full of language-qualified outcomes must not make its samples read as "no
-evidence"; a pool naming a qualified key (`code_generation:fsharp`, language part
+The scoping happens at the store, on both axes: routing reads
+`ILearningStore.GetRecentOrganicForLanguageAsync(taskType, language, window)`, which takes
+the history window *after* scoping by language (null language = language-less records
+only, otherwise an exact match on the normalized key) *and* by provenance (records without
+a `source` only), so neither another language's newest outcomes nor an advisory ingest —
+fleet-lane records land under the very task type they describe — can crowd a route's own
+organic evidence out of the window. A window scoped afterwards
+(`GetRecentForLanguageAsync`, then `OrganicOnly`) would read a key whose newest `window`
+records are advisory as "no evidence" while older organic records exist; that plain read
+serves insights and telemetry only. `ChainReorderEngine.ForLanguage` and `OrganicOnly`
+state the same two rules over an in-memory list (`LanguageScopedHistoryTests` pins the
+language one). The fleet planner reads the store the same way (`FleetPlanService`, pinned
+by `FleetPlanServiceTests`): a pool whose `taskTypes` names a bare task type is scored on
+the language-less key, and a window full of language-qualified outcomes — or of the fleet
+collector's own lane records — must not make its samples read as "no evidence"; a pool
+naming a qualified key (`code_generation:fsharp`, language part
 canonical) is scored on that (taskType, language) window first, falling back to the
 language-less window when the scoped read holds nothing organic — the hub's own two-step
 read — rather than on the orphan `code_generation:fsharp`-with-no-language bucket nothing

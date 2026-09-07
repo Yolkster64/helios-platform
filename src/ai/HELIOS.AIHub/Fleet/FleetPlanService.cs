@@ -95,11 +95,13 @@ public sealed class FleetPlanService
                     // holds nothing organic, mirroring AIHubService.ApplyLearningAsync;
                     // read verbatim it would score the orphan ("code_generation:fsharp",
                     // no language) bucket nothing writes to. Every read goes through the
-                    // store's (taskType, language) key so the window is taken AFTER
-                    // scoping: another language's outcomes filling the newest
-                    // historyWindow records can never crowd a pool's own samples out of
-                    // the read and report "no evidence" while evidence exists (the
-                    // hub's RouteAsync had the same defect and takes the same fix).
+                    // store's organic (taskType, language) key so the window is taken
+                    // AFTER both scopings: neither another language's outcomes nor an
+                    // advisory ingest — the fleet collector's own lane records land
+                    // under the pool's task type — filling the newest historyWindow
+                    // records can crowd a pool's organic samples out of the read and
+                    // report "no evidence" while evidence exists (the hub's RouteAsync
+                    // had the same defect on both axes and takes the same fix).
                     organic = await GetOrganicEvidenceAsync(taskType, cancellationToken).ConfigureAwait(false);
                     organicByTask[taskType] = organic;
                 }
@@ -128,22 +130,24 @@ public sealed class FleetPlanService
     }
 
     /// <summary>
-    /// The organic evidence for one pool task type: the (taskType, language) window the
-    /// key names (<see cref="SplitPoolTaskType"/>), then — for a qualified key whose own
-    /// window holds nothing organic — the language-less window. This is the two-step
-    /// read AIHubService.ApplyLearningAsync performs for a language-qualified route, so
-    /// the plan predicts the policy the hub would actually apply.
+    /// The organic evidence for one pool task type: the organic (taskType, language)
+    /// window the key names (<see cref="SplitPoolTaskType"/>), then — for a qualified
+    /// key whose own window holds nothing organic — the organic language-less window.
+    /// This is the two-step read AIHubService.ApplyLearningAsync performs for a
+    /// language-qualified route, so the plan predicts the policy the hub would actually
+    /// apply. Organic-ness is scoped by the store, before its cap (see
+    /// <see cref="ILearningStore.GetRecentOrganicForLanguageAsync"/>); nothing here
+    /// filters afterwards.
     /// </summary>
     private async Task<IReadOnlyList<RoutingOutcome>> GetOrganicEvidenceAsync(
         string poolTaskType, CancellationToken cancellationToken)
     {
         var (taskType, language) = SplitPoolTaskType(poolTaskType);
-        var organic = ChainReorderEngine.OrganicOnly(
-            await GetRecentSafeAsync(taskType, language, cancellationToken).ConfigureAwait(false));
+        var organic = await GetRecentOrganicSafeAsync(taskType, language, cancellationToken).ConfigureAwait(false);
         if (organic.Count == 0 && language is not null)
         {
-            organic = ChainReorderEngine.OrganicOnly(
-                await GetRecentSafeAsync(taskType, language: null, cancellationToken).ConfigureAwait(false));
+            organic = await GetRecentOrganicSafeAsync(taskType, language: null, cancellationToken)
+                .ConfigureAwait(false);
         }
         return organic;
     }
@@ -169,17 +173,17 @@ public sealed class FleetPlanService
     }
 
     /// <summary>
-    /// The newest <c>historyWindow</c> outcomes of one (taskType, language) key — scoped
-    /// at the store so the cap applies after scoping. Same degradation contract as
-    /// AIHubService.ApplyLearningAsync: a store failure reads as "no evidence" (engine
-    /// none), never a crashed advisory report.
+    /// The newest <c>historyWindow</c> organic outcomes of one (taskType, language) key
+    /// — both scoped at the store so the cap applies after scoping. Same degradation
+    /// contract as AIHubService.ApplyLearningAsync: a store failure reads as "no
+    /// evidence" (engine none), never a crashed advisory report.
     /// </summary>
-    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentSafeAsync(
+    private async Task<IReadOnlyList<RoutingOutcome>> GetRecentOrganicSafeAsync(
         string taskType, string? language, CancellationToken cancellationToken)
     {
         try
         {
-            return await _learning.GetRecentForLanguageAsync(
+            return await _learning.GetRecentOrganicForLanguageAsync(
                     taskType, language, _historyWindow, cancellationToken)
                 .ConfigureAwait(false);
         }
