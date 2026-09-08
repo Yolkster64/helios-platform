@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -86,6 +87,14 @@ public static class HeliosConfigTools
         {
             // A manifest that is not JSON is an invalid manifest, not a broken call.
             errors.Add(new JsonSchemaLite.Issue("$", $"invalid JSON: {ex.Message}"));
+        }
+        catch (Exception ex) when (ex is JsonSchemaLite.SchemaException or InvalidOperationException
+                                   or FormatException or ArgumentException or RegexMatchTimeoutException)
+        {
+            // The schema self-check catches unknown keywords; a $ref cycle, a keyword with a value
+            // of the wrong shape or a pattern that cannot run surfaces only while validating.
+            // Still the schema's fault, still an actionable error rather than a raw exception.
+            throw new McpException($"Schema '{schemaRelative}' is not usable: {ex.Message}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -204,6 +213,28 @@ public static class HeliosConfigTools
         if (!full.StartsWith(prefix, StringComparison.Ordinal))
         {
             throw new McpException($"{parameterName} '{relative}' resolves outside the checkout '{rootFull}' and was refused.");
+        }
+
+        // GetFullPath never follows links, so a symbolic link planted inside the checkout — a
+        // directory on the way or the file itself — could hand the tool a file outside it.
+        // Every existing component is checked; a link must land inside the checkout too.
+        var cursor = rootFull;
+        foreach (var segment in relative.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            cursor = Path.Combine(cursor, segment);
+            FileSystemInfo info = Directory.Exists(cursor) ? new DirectoryInfo(cursor) : new FileInfo(cursor);
+            if (!info.Exists)
+            {
+                break;
+            }
+            if (info.LinkTarget is not null)
+            {
+                var target = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+                if (target is null || !Path.GetFullPath(target).StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    throw new McpException($"{parameterName} '{relative}' goes through a symbolic link that leaves the checkout '{rootFull}' and was refused.");
+                }
+            }
         }
         return full;
     }

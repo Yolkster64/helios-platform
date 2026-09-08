@@ -374,7 +374,7 @@ class ValidateAllDelegationTests(unittest.TestCase):
         self.assertEqual(report.errors, [])
 
 
-class EnginePartityTests(unittest.TestCase):
+class EngineParityTests(unittest.TestCase):
     """The library engine and the built-in engine must give the same verdict, the same error
     paths and the same exit codes, so a runner with python-jsonschema and one without agree."""
 
@@ -420,3 +420,15 @@ class EnginePartityTests(unittest.TestCase):
             code, out = self._cli(str(pathlib.Path(temp) / "nope.json"), "--schema", str(s))
             self.assertEqual(code, 2, out)
             self.assertIn("manifest not found", out)
+
+    def test_date_time_shape_and_non_portable_patterns_agree_with_the_csharp_engine(self) -> None:
+        schema = {"type": "object", "properties": {"t": {"type": "string", "format": "date-time"}}}
+        for engine in target.available_engines():
+            padded, _ = target.validate_instance({"t": " 2026-09-07T23:00:00Z"}, schema, engine=engine)
+            prose, _ = target.validate_instance({"t": "Sept 7 2026 23:00"}, schema, engine=engine)
+            self.assertTrue(padded, engine)
+            self.assertTrue(prose, engine)
+        for pattern in ("^a\\Z", "(?i)abc", "(?<=x)y"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=f"{engine} {pattern}"):
+                    target.validate_instance("abc", {"type": "string", "pattern": pattern}, engine=engine)

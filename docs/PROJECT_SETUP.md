@@ -105,8 +105,9 @@ consumers read that map, so the check is the same everywhere:
   errors and completions appear as you type. `config/github/labels.json` and
   `config/github/milestones.json` carry no `$schema` key on purpose — their apply
   scripts also accept a bare array, which cannot hold one — so their binding lives
-  only in the workspace settings; the other manifests carry a relative `$schema`
-  too, for editors that honour it.
+  only in the workspace settings; the other mapped manifests carry a relative
+  `$schema` too, for editors that honour it — except `config/model-catalog.json`,
+  whose closed schema predates the key, so it is bound through the settings alone.
 - **Command line and CI.** `python3 scripts/validation/validate_config_schemas.py`
   validates every mapped manifest (or one path, or a draft with `--schema`), using
   `python-jsonschema` when installed and its built-in engine otherwise, so it runs

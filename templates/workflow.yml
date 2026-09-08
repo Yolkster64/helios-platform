@@ -57,9 +57,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Actions pinned to a MAJOR tag the publisher still moves (v4). upload/download-
-      # artifact@v3 is disabled by GitHub; actions/setup-powershell does not exist -
-      # pwsh is preinstalled, use `shell: pwsh`.
+      # Actions pinned to the MAJOR tag this repository's own workflows use today (v4 for
+      # checkout / setup-dotnet / upload-artifact) - newer majors exist (the skill's
+      # references/github-actions.md names them); bump every workflow together, never one
+      # starter alone. upload/download-artifact@v3 is disabled by GitHub;
+      # actions/setup-powershell does not exist - pwsh is preinstalled, use `shell: pwsh`.
       - uses: actions/checkout@v4
 
       # The env: idiom. Anything a contributor can influence (PR titles, branch names,

@@ -299,6 +299,80 @@ public sealed class McpConfigToolTests : IDisposable
     }
 
     [Fact]
+    public void JsonSchemaLite_SelfReferentialRef_IsASchemaError_NotAStackOverflow()
+    {
+        using var schema = JsonDocument.Parse("""{ "$defs": { "a": { "$ref": "#/$defs/b" }, "b": { "$ref": "#/$defs/a" } }, "$ref": "#/$defs/a" }""");
+        using var instance = JsonDocument.Parse("""{ }""");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("$ref cycle", ex.Message);
+    }
+
+    [Fact]
+    public void SelfReferentialDraftSchema_IsAnActionableToolError()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/draft.json", """{ "name": "x" }""");
+        WriteManifest(root, "config/schemas/loop.schema.json", """{ "$ref": "#" }""");
+
+        var ex = Assert.Throws<McpException>(() => HeliosConfigTools.BuildValidationJson("config/draft.json", "config/schemas/loop.schema.json", root));
+
+        Assert.Contains("is not usable", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("""{ "enum": ["\u0041"] }""", "\"A\"", true)]
+    [InlineData("""{ "const": 1.0 }""", "1", true)]
+    [InlineData("""{ "type": "array", "uniqueItems": true }""", """["\u0041", "A"]""", false)]
+    [InlineData("""{ "type": "string", "minLength": 2 }""", "\"e\u0301\"", true)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\" 2026-09-07T23:00:00Z\"", false)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07T23:00:00Z\"", true)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"Sept 7 2026 23:00\"", false)]
+    public void JsonSchemaLite_ComparesValuesCountsCodePointsAndChecksDateTimeShape(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Theory]
+    [InlineData("^a\\Z")]
+    [InlineData("(?i)abc")]
+    [InlineData("(?<=x)y")]
+    public void JsonSchemaLite_RefusesNonPortableRegexConstructs(string pattern)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse("\"abc\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("portable", ex.Message);
+    }
+
+    [Fact]
+    public void SymbolicLinkLeavingTheCheckout_IsRefused()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // symlink creation needs a privilege there; the Linux/macOS run covers the rule
+        }
+        var root = CreateRepoRoot();
+        var outside = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".json");
+        File.WriteAllText(outside, """{ "labels": [] }""");
+        _roots.Add(Path.GetDirectoryName(outside)!.Length > 0 ? outside : outside); // deleted with the roots
+        Directory.CreateDirectory(Path.Combine(root, "config", "github"));
+        File.CreateSymbolicLink(Path.Combine(root, "config", "github", "labels.json"), outside);
+
+        var ex = Assert.Throws<McpException>(() => HeliosConfigTools.BuildValidationJson("config/github/labels.json", null, root));
+
+        Assert.Contains("symbolic link", ex.Message);
+    }
+
+    [Fact]
     public void JsonSchemaLite_AnyOf_ReportsClosestBranch()
     {
         using var schema = JsonDocument.Parse("""

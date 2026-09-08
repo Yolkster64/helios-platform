@@ -64,6 +64,13 @@ internal static class JsonSchemaLite
         private readonly JsonElement _root;
         private readonly Dictionary<string, Regex> _regexes = new(StringComparer.Ordinal);
 
+        // A $ref that resolves back to itself without descending into the instance ("$ref": "#",
+        // or two $defs pointing at each other) would recurse until the process died with an
+        // uncatchable StackOverflowException — the MCP server with it. Real schemas nest a few
+        // dozen levels at most; past this the schema is the problem and says so.
+        private const int MaxDepth = 256;
+        private int _depth;
+
         public Validator(JsonElement root)
         {
             _root = root;
@@ -185,9 +192,17 @@ internal static class JsonSchemaLite
             var text = pattern.GetString()!;
             if (!_regexes.TryGetValue(text, out var regex))
             {
+                // JSON Schema patterns are ECMA-262. .NET's ECMAScript mode and the Python engine's
+                // portability check refuse the same non-portable constructs, so a pattern that
+                // validates here validates identically in CI and in the editor.
+                var unportable = NonPortableRegexConstructs.FirstOrDefault(text.Contains);
+                if (unportable is not null)
+                {
+                    throw new SchemaException($"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in '{text}'");
+                }
                 try
                 {
-                    regex = new Regex(text, RegexOptions.CultureInvariant, RegexTimeout);
+                    regex = new Regex(text, RegexOptions.ECMAScript, RegexTimeout);
                 }
                 catch (ArgumentException ex)
                 {
@@ -239,6 +254,23 @@ internal static class JsonSchemaLite
         // -- validation --------------------------------------------------------------
 
         public void Validate(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
+        {
+            if (++_depth > MaxDepth)
+            {
+                _depth--;
+                throw new SchemaException($"{path}: schema nesting deeper than {MaxDepth} levels — a $ref cycle that never descends into the instance");
+            }
+            try
+            {
+                ValidateCore(schema, instance, path, errors);
+            }
+            finally
+            {
+                _depth--;
+            }
+        }
+
+        private void ValidateCore(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
             if (schema.ValueKind == JsonValueKind.True)
             {
@@ -373,7 +405,7 @@ internal static class JsonSchemaLite
         private void ValidateString(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
             var value = instance.GetString() ?? "";
-            var length = new StringInfo(value).LengthInTextElements;
+            var length = value.EnumerateRunes().Count(); // Unicode code points, as the spec and the Python engine count
             if (schema.TryGetProperty("minLength", out var minLength) && length < minLength.GetInt32())
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is too short (minLength {minLength.GetInt32()})"));
@@ -406,9 +438,21 @@ internal static class JsonSchemaLite
             value.Length == 10
             && DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
+        // RFC 3339 shape first (DateTimeOffset.TryParse is lenient: it takes surrounding
+        // whitespace and many non-ISO spellings), then a real calendar/clock check.
+        private static readonly Regex DateTimeShape = new(
+            @"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?([Zz]|[+-][0-9]{2}:[0-9]{2})?$",
+            RegexOptions.ECMAScript, RegexTimeout);
+
         private static bool IsDateTime(string value) =>
-            value.Contains('T', StringComparison.OrdinalIgnoreCase)
+            DateTimeShape.IsMatch(value)
             && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _);
+
+        // Constructs .NET, Python and ECMA-262 do not share; refused by name so both engines agree.
+        private static readonly string[] NonPortableRegexConstructs =
+        {
+            "\\A", "\\Z", "\\z", "\\G", "(?<=", "(?<!", "\\p{", "\\P{", "(?i)", "(?m)", "(?s)", "(?x)", "(?#",
+        };
 
         private static void ValidateNumber(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
@@ -601,6 +645,12 @@ internal static class JsonSchemaLite
                     return "{" + string.Join(",", members) + "}";
                 case JsonValueKind.Array:
                     return "[" + string.Join(",", element.EnumerateArray().Select(Canonical)) + "]";
+                case JsonValueKind.String:
+                    // Compare the VALUE, not the source text: "\u0041" and "A" are the same string.
+                    return JsonSerializer.Serialize(element.GetString());
+                case JsonValueKind.Number:
+                    // 1.0 and 1 are the same number to JSON Schema.
+                    return element.GetDouble().ToString("R", CultureInfo.InvariantCulture);
                 default:
                     return element.GetRawText();
             }

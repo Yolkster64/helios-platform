@@ -152,8 +152,16 @@ def _check_date(value: str) -> bool:
     return True
 
 
+_DATE_TIME_SHAPE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?([Zz]|[+-][0-9]{2}:[0-9]{2})?$")
+
+# Constructs .NET, Python and ECMA-262 do not share; refused by name so the C# engine
+# (JsonSchemaLite, ECMAScript mode) and this one accept exactly the same patterns.
+_NON_PORTABLE_REGEX = ("\\A", "\\Z", "\\z", "\\G", "(?<=", "(?<!", "\\p{", "\\P{", "(?i)", "(?m)", "(?s)", "(?x)", "(?#")
+
+
 def _check_date_time(value: str) -> bool:
-    if "T" not in value and "t" not in value:
+    # RFC 3339 shape first (fromisoformat is lenient about separators), then a real clock check.
+    if not _DATE_TIME_SHAPE.match(value):
         return False
     try:
         _dt.datetime.fromisoformat(value.replace("z", "Z").replace("Z", "+00:00"))
@@ -231,6 +239,9 @@ class MiniValidator:
             raise SchemaError(f"{where}/pattern: must be a string")
         compiled = self._regex.get(pattern)
         if compiled is None:
+            unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
+            if unportable is not None:
+                raise SchemaError(f"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in {pattern!r}")
             try:
                 compiled = re.compile(pattern)
             except re.error as exc:
@@ -469,11 +480,29 @@ def _descend_alternatives(errors: Any) -> list[tuple[Any, str]]:
     return flattened
 
 
+def _refuse_non_portable_patterns(node: Any, where: str) -> None:
+    """Walk the schema once so the library engine refuses the same regex constructs the built-in
+    engine and the C# twin refuse (python-jsonschema would happily run `\\Z` or `(?i)`)."""
+    if isinstance(node, dict):
+        pattern = node.get("pattern")
+        if isinstance(pattern, str):
+            unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
+            if unportable is not None:
+                raise SchemaError(f"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in {pattern!r}")
+        for key, value in node.items():
+            if key not in ("enum", "const", "default", "examples"):
+                _refuse_non_portable_patterns(value, f"{where}/{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            _refuse_non_portable_patterns(value, f"{where}/{index}")
+
+
 def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple[list[Issue], str]:
     """Return (issues, engine_used). engine: auto | jsonschema | builtin."""
     if engine not in ("auto", "jsonschema", "builtin"):
         raise ValueError(f"unknown engine {engine!r}")
     use_library = engine == "jsonschema" or (engine == "auto" and jsonschema is not None)
+    _refuse_non_portable_patterns(schema, "#")
     if use_library:
         if jsonschema is None:
             raise SchemaError("python package 'jsonschema' is not installed; use --engine builtin")
