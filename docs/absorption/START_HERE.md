@@ -103,12 +103,15 @@ The short history, with the issue and pull request numbers you can open to check
   **absorption cadence workflow** that benchmarks the next candidates and posts verdicts
   on the epics, and **learning + absorption sections on the dashboard**. The milestone
   "Absorption tranche 5" (due 2026-09-27) tracks it.
-- **2026-09-06 — PR #191** closes epic E5 (#18): the deploy workflow pins its OIDC
-  audience and seals plan/deploy custody records, enforced by a validator and a contract
-  workflow. Follow-ups #198 and #199 merge the same day; #197, #196, #190 and #148 stay
-  open awaiting owner decisions (issue #229 has the triage table).
+- **2026-09-06 — PR #199** lands epic E5's (#18) deploy hardening: the deploy workflow
+  pins its OIDC audience and seals plan/deploy custody records, enforced by a validator
+  and a contract workflow. PR #191, the Copilot agent's own branch for the epic, merges
+  later that day with an empty diff and closes #18; #198 merges empty the same way;
+  #197, #196, #190 and #148 stay open awaiting owner decisions (issue #229 has the
+  triage table).
 - **2026-09-06 — the "Getting started" epic #223** re-sequences the program around
-  onboarding. Its sub-issue #231 carries the cadence as "Step 4", #235 asks for the
+  onboarding. Its former sub-issue #231 (closed the same day as a duplicate of #115)
+  carried the cadence as "Step 4", #235 asks for the
   cross-LLM learning loop to run with real outcomes, and #242's addendum 4 records the
   owner's ask in his words: absorption-specific setup, smart ranking, feeding the AI
   hub, code-specific tests per candidate with scores.
@@ -618,7 +621,7 @@ on `main`; "candidate" means a watchlist entry with no report yet.
 | Rank | What | Epic / candidates | Value | Risk | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 1 | **Keep the evidence loop itself as the way work enters the repo** — watchlist, hosted benchmark, status view, never-auto-merge | Program (PR #13, #94) | Everything else depends on it; it is what turned 195 upstream PRs into a decidable list | None — landed and enforced by `auto-merge.yml` and `pr-pipeline.yml` | PR #13 description; `.github/workflows/absorption-benchmark.yml`; the credential guard in `absorb-pr.ps1` |
-| 2 | **Small, bounded epics through the Copilot coding agent** — the pattern of #95/#96/#97 and #191 | E34 (#47), E24 (#37), E32 (#45), E5 (#18) | Four epics closed with real files: `Directory.Packages.props`, the `preflight` job in `ci-validation.yml`, `scripts/build/minimal-platform-scorecard.py`, `scripts/validation/validate_deploy_custody.py` | Low when scoped; the counter-example is #197's 686-file churn and the ten zero-diff shells #229 found | PRs #95, #96, #97, #191 (merged); issue #229's triage table |
+| 2 | **Small, bounded epics through the Copilot coding agent** — the pattern of #95/#96/#97 and #199 | E34 (#47), E24 (#37), E32 (#45), E5 (#18) | Four epics closed with real files: `Directory.Packages.props`, the `preflight` job in `ci-validation.yml`, `scripts/build/minimal-platform-scorecard.py`, `scripts/validation/validate_deploy_custody.py` | Low when scoped; the counter-example is #197's 686-file churn and the ten zero-diff shells #229 found | PRs #95, #96, #97, #199 (merged; #191 closed #18 with an empty diff); issue #229's triage table |
 | 3 | **Readiness and developer helpers** — `verify-readiness.ps1`, `setup-all.ps1`, `helios.ps1 verify/pr-update/prune-generated`, the model-catalog schema | E14 (#27), E1 (#14), E40 (#53), E15 (#28) | The "easy setup" the owner keeps asking for; every port was benchmarked first | Low — landed; the open PR #209 adds a board-setup inventory row and needs a rebase | Watchlist entries `#136 #138 #137 #130 #123 #124 #131 #110` (`benchmarked`); PRs #13, #94, #105; #14 closed 2026-09-06 |
 | 4 | **Schema validation for the config files** — the validator and JSON-Schema harness ideas | E4 (#17): `#292`, `#295`, `#285` | #242 measured that `config/aihub.json`, `fleet-topology.json` and `connectors.json` have no schema and that the repo's own `validate_all.py` was never called by a workflow (PR #248 wires it into `quality.yml`; the schemas are still missing); E15's `model-catalog.schema.json` is the precedent that worked | Low — validators only, never the upstream runtime or security model | Watchlist E4 `why`/`absorb` fields; #242 gap list; `config/schemas/model-catalog.schema.json` |
 | 5 | **The reliability evidence harness** | E11 (#24): `#220` | An evidence-report shape that matches the absorption reports, plus a development-only failure injector to exercise fallback chains and circuit breakers deliberately | Low if the injector stays dev-only and fails closed | Watchlist `#220`; ledger E11 |
