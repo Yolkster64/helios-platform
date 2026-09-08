@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "helios://config/schemas/aihub.schema.json",
   "title": "HELIOS multi-LLM hub configuration (config/aihub.json, config/aihub.cloud.json)",
-  "description": "Bound 1:1 to src/ai/HELIOS.AIHub/Configuration/AIHubOptions.cs: providers (map of provider entries), cliAgents (list), routing (defaultChain + taskRouting) and learning. Property names, types and enums match the binder; required lists match what the hub dereferences without a fallback (provider.type, an agent's name / command / argsTemplate, a chain's entries). The binder ignores unknown keys (System.Text.Json default) and scripts/bootstrap/auth-doctor.ps1 only type-checks the keys it knows, so objects are deliberately NOT closed here - an unknown key is tolerated exactly as the runtime tolerates it. No secrets: credential fields hold environment-variable NAMES (Key Vault secret names as fallback).",
+  "description": "Bound 1:1 to src/ai/HELIOS.AIHub/Configuration/AIHubOptions.cs: providers (map of provider entries), cliAgents (list), routing (defaultChain + taskRouting) and learning. Property names, types and enums match the binder; required lists match what the hub dereferences without a fallback (provider.type, an agent's name / command / argsTemplate, a chain's entries) plus the two sections a hub cannot serve a request without (providers, routing — the binder defaults them to empty, which leaves every route with an empty chain). The binder ignores unknown keys (System.Text.Json default) and scripts/bootstrap/auth-doctor.ps1 only type-checks the keys it knows, so objects are deliberately NOT closed here - an unknown key is tolerated exactly as the runtime tolerates it. No secrets: credential fields hold environment-variable NAMES (Key Vault secret names as fallback).",
   "type": "object",
   "required": ["providers", "routing"],
   "properties": {
@@ -43,7 +43,7 @@
         "type": {
           "type": "string",
           "enum": ["openai", "azure-openai", "anthropic", "anthropic-foundry", "github-models", "ollama", "azure-foundry-agent"],
-          "description": "Provider kind dispatched by ProviderFactory.CreateAll."
+          "description": "Provider kind dispatched by ProviderFactory.CreateAll. The factory folds case before dispatch; this schema pins the canonical lower-case spelling so the shipped profiles, the docs and the bootstrap scripts (which compare the type untrimmed) stay greppable."
         },
         "enabled": { "type": "boolean" },
         "model": {
@@ -51,7 +51,10 @@
           "minLength": 1,
           "description": "Default model, or the Azure OpenAI / Foundry DEPLOYMENT name."
         },
-        "apiKeyEnv": { "$ref": "#/$defs/envName" },
+        "apiKeyEnv": {
+          "anyOf": [{ "$ref": "#/$defs/envName" }, { "const": "" }],
+          "description": "The NAME of the environment variable holding the key; an empty string selects Key-Vault-only resolution through apiKeySecretName (the shape scripts/bootstrap/auto-login.ps1 and auth-doctor.ps1 handle as a blank apiKeyEnv)."
+        },
         "apiKeySecretName": {
           "type": "string",
           "pattern": "^[A-Za-z0-9-]{1,127}$",

@@ -36,10 +36,16 @@
         },
         "description": { "type": "string" },
         "due_on": {
-          "type": "string",
-          "format": "date",
-          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
-          "description": "Calendar date YYYY-MM-DD (a real one: 2026-02-30 fails). Omit to leave the live due date unmanaged."
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date",
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+            },
+            { "type": "null" },
+            { "const": "" }
+          ],
+          "description": "Calendar date YYYY-MM-DD (a real one: 2026-02-30 fails). Omit, null or an empty string leaves the live due date unmanaged: apply-milestones.ps1 reads a blank as absent and never clears a date."
         }
       }
     }

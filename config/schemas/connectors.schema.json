@@ -20,7 +20,7 @@
     },
     "slack": {
       "type": "object",
-      "required": ["enabled", "webhookUrlEnv", "channels", "notifyOn"],
+      "required": ["webhookUrlEnv", "notifyOn"],
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },
@@ -49,7 +49,7 @@
     },
     "linear": {
       "type": "object",
-      "required": ["enabled", "apiKeyEnv", "teamKey", "titlePrefix", "syncLabels", "githubLabelToLinear"],
+      "required": ["apiKeyEnv", "teamKey", "titlePrefix", "syncLabels"],
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },

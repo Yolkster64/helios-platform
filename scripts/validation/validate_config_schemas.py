@@ -372,7 +372,8 @@ class MiniValidator:
             for index, item in enumerate(items):
                 key = _canonical(item)
                 if key in seen:
-                    errors.append(Issue(f"{path}[{index}]", f"{_brief(items)} has non-unique elements"))
+                    # python-jsonschema reports the array, not the duplicate's index
+                    errors.append(Issue(path, f"{_brief(items)} has non-unique elements"))
                     break
                 seen.add(key)
         if "items" in schema:
@@ -411,7 +412,8 @@ class MiniValidator:
                 else:
                     self._validate(extra, value, child, errors)
             if "propertyNames" in schema:
-                self._validate(schema["propertyNames"], name, child, errors)
+                # python-jsonschema reports a bad key at the object, not at the key's own path
+                self._validate(schema["propertyNames"], name, path, errors)
         if unexpected:
             listed = ", ".join(f"'{name}'" for name in unexpected)
             plural = "were" if len(unexpected) > 1 else "was"
@@ -480,11 +482,23 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
             validator_class.check_schema(schema)
         except jsonschema.exceptions.SchemaError as exc:
             raise SchemaError(f"schema is invalid: {exc.message}") from exc
-        validator = validator_class(schema, format_checker=jsonschema.FormatChecker())
+        checker = jsonschema.FormatChecker()
+        # Register this module's date / date-time checks with the library engine: without the
+        # optional rfc3339-validator package jsonschema's own FormatChecker silently accepts any
+        # date-time, so the two engines would disagree on the shipped fabric contract.
+        for format_name, check in _FORMATS.items():
+            checker.checks(format_name)(lambda value, _check=check: not isinstance(value, str) or _check(value))
+        validator = validator_class(schema, format_checker=checker)
+        try:
+            raw_errors = list(validator.iter_errors(instance))
+        except Exception as exc:  # a $ref that does not resolve surfaces as a referencing error
+            if any(token in type(exc).__name__ for token in ("Referencing", "RefResolution", "Unresolvable")):
+                raise SchemaError(f"schema $ref does not resolve: {exc}") from exc
+            raise
         issues = [
             Issue(_format_json_path(error.absolute_path), message)
             for error, message in sorted(
-                _descend_alternatives(validator.iter_errors(instance)),
+                _descend_alternatives(raw_errors),
                 key=lambda pair: (list(map(str, pair[0].absolute_path)), pair[1]))
         ]
         return issues, "jsonschema"
@@ -539,6 +553,10 @@ def validate_file(manifest_path: Path, schema_path: Path, engine: str = "auto",
     schema = load_json(schema_path, "schema")
     label = to_repo_relative(manifest_path, repo_root) or str(manifest_path)
     schema_label = to_repo_relative(schema_path, repo_root) or str(schema_path)
+    if not manifest_path.is_file():
+        # A manifest that is not there is an input that could not be read (exit 2), not an
+        # invalid manifest (exit 1): the caller named a path that does not exist.
+        raise ValueError(f"manifest not found: {manifest_path}")
     try:
         instance = load_json(manifest_path, "manifest")
     except ValueError as exc:

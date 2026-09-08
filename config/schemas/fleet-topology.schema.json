@@ -25,8 +25,16 @@
     },
     "taskType": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*$",
-      "description": "A config/aihub.json taskRouting key."
+      "pattern": "^[a-z][a-z0-9_]*(:[a-z][a-z0-9]*)?$",
+      "description": "A config/aihub.json taskRouting key: a bare task type, or one qualified by a normalized language (`<taskType>:<language>`, one ':' at most) exactly as TaskTypeRoutingStrategy.RoutingKey spells it; FleetPlanService splits a qualified pool task type before its learning read."
+    },
+    "workspaceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "poolSize": { "type": "integer", "minimum": 1, "description": "Cap applied by scripts/fleet/start-fleet.ps1 in workspace mode (Codespaces / Cloud Shell); per pool, else inherited from defaults, else half the declared size rounded up." }
+      }
     },
     "envName": {
       "type": "string",
@@ -82,8 +90,8 @@
     },
     "hermesFleet": {
       "type": "object",
-      "required": ["board", "maxConcurrentLanes"],
       "additionalProperties": false,
+      "description": "Per pool, else inherited from defaults.hermesFleet (scripts/fleet/scale-fleet.ps1, learn-fleet.ps1); board defaults to the pool name and maxConcurrentLanes to the scripts' own cap, so neither is required here.",
       "properties": {
         "$comment": { "type": "string" },
         "board": { "$ref": "#/$defs/identifier" },
@@ -96,6 +104,7 @@
       "properties": {
         "$comment": { "type": "string" },
         "poolSize": { "type": "integer", "minimum": 1 },
+        "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
         "spawn": { "$ref": "#/$defs/spawn" },
         "autoscaling": { "$ref": "#/$defs/autoscaling" },
         "hermesFleet": { "$ref": "#/$defs/hermesFleet" }
@@ -103,7 +112,7 @@
     },
     "pool": {
       "type": "object",
-      "required": ["name", "hermesFleet", "taskTypes", "providerChain"],
+      "required": ["name", "taskTypes", "providerChain"],
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },
@@ -111,6 +120,7 @@
         "specialization": { "type": "string" },
         "assigneePrefix": { "$ref": "#/$defs/identifier" },
         "poolSize": { "type": "integer", "minimum": 1 },
+        "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
         "hermesFleet": { "$ref": "#/$defs/hermesFleet" },
         "taskTypes": {
           "type": "array",

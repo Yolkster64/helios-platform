@@ -341,7 +341,12 @@ def check_config_schemas(roots: list[Path], report: Report) -> None:
     # Register before executing: the module's frozen dataclasses resolve their own
     # module through sys.modules at class-creation time.
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:  # a broken validator must not take the whole sweep down
+        sys.modules.pop(spec.name, None)
+        report.warn(script, f"could not load the config schema validator ({type(exc).__name__}: {exc}); schema check skipped")
+        return
     resolved_roots = [path.resolve() for path in roots]
     for repo_root in sorted(repo_roots):
         try:

@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 
-from scripts.validation import validate_config_schemas as target
-
 ROOT = pathlib.Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:  # lets `python3 scripts/validation/tests/test_validate_config_schemas.py` run from any cwd
+    sys.path.insert(0, str(ROOT))
+
+from scripts.validation import validate_config_schemas as target  # noqa: E402
 SETTINGS = ROOT / ".vscode" / "settings.json"
 
 
@@ -350,6 +354,17 @@ class ValidateAllDelegationTests(unittest.TestCase):
             self.assertEqual(pathlib.Path(loaded.__file__).resolve(),
                              (ROOT / "scripts" / "validation" / "validate_config_schemas.py").resolve())
 
+    def test_unloadable_trusted_validator_is_a_warning_not_a_crash(self) -> None:
+        va = self._load_validate_all()
+        with tempfile.TemporaryDirectory() as temp:
+            broken = pathlib.Path(temp) / "validate_config_schemas.py"
+            broken.write_text("raise RuntimeError('cannot import')\n", encoding="utf-8")
+            va.trusted_validator = lambda: broken
+            report = va.Report()
+            va.check_config_schemas([ROOT / "config"], report)
+            self.assertEqual(report.errors, [])
+            self.assertTrue(any("schema check skipped" in w and "RuntimeError" in w for w in report.warnings), report.warnings)
+
     def test_real_checkout_config_manifests_are_checked(self) -> None:
         va = self._load_validate_all()
         report = va.Report()
@@ -357,3 +372,51 @@ class ValidateAllDelegationTests(unittest.TestCase):
         expected = sum(1 for m in target.load_mappings(ROOT) if m.manifest.startswith("config/"))
         self.assertEqual(report.checked, expected)
         self.assertEqual(report.errors, [])
+
+
+class EnginePartityTests(unittest.TestCase):
+    """The library engine and the built-in engine must give the same verdict, the same error
+    paths and the same exit codes, so a runner with python-jsonschema and one without agree."""
+
+    def _cli(self, *args: str) -> tuple[int, str]:
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "validation" / "validate_config_schemas.py"), *args],
+                              capture_output=True, text=True, cwd=ROOT)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_dangling_ref_is_a_schema_error_under_every_engine(self) -> None:
+        schema = {"type": "object", "properties": {"a": {"$ref": "#/$defs/missing"}}}
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError, msg=engine):
+                target.validate_instance({"a": 1}, schema, engine=engine)
+        with tempfile.TemporaryDirectory() as temp:
+            s = pathlib.Path(temp) / "s.json"; m = pathlib.Path(temp) / "m.json"
+            s.write_text(json.dumps(schema), encoding="utf-8"); m.write_text("{\"a\": 1}", encoding="utf-8")
+            for engine in target.available_engines():
+                code, out = self._cli(str(m), "--schema", str(s), "--engine", engine)
+                self.assertEqual(code, 2, (engine, out))
+                self.assertNotIn("Traceback", out, engine)
+
+    def test_date_time_format_is_enforced_under_every_engine(self) -> None:
+        schema = {"type": "object", "properties": {"t": {"type": "string", "format": "date-time"}}}
+        for engine in target.available_engines():
+            bad, _ = target.validate_instance({"t": "not-a-date"}, schema, engine=engine)
+            good, _ = target.validate_instance({"t": "2026-09-07T23:00:00Z"}, schema, engine=engine)
+            self.assertTrue(bad, engine)
+            self.assertEqual(good, [], engine)
+
+    def test_error_paths_agree_for_property_names_and_unique_items(self) -> None:
+        schema = {"type": "object", "propertyNames": {"pattern": "^[a-z]+$"},
+                  "properties": {"xs": {"type": "array", "uniqueItems": True}}}
+        paths = {}
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance({"Bad": 1, "xs": [1, 1]}, schema, engine=engine)
+            paths[engine] = sorted(issue.path for issue in issues)
+        for engine, found in paths.items():
+            self.assertEqual(found, ["$", "$.xs"], engine)
+
+    def test_missing_manifest_path_exits_2(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            s = pathlib.Path(temp) / "s.json"; s.write_text("{\"type\": \"object\"}", encoding="utf-8")
+            code, out = self._cli(str(pathlib.Path(temp) / "nope.json"), "--schema", str(s))
+            self.assertEqual(code, 2, out)
+            self.assertIn("manifest not found", out)

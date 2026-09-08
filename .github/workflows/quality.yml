@@ -96,9 +96,10 @@ jobs:
       # Shape, not just syntax: every manifest in config/schemas/manifests.json is
       # validated against its JSON Schema (labels, milestones, connectors, fork-watch,
       # absorption watchlist, fleet topology, aihub, model catalog, fabric contract, and
-      # the templates/ starters). Stdlib-only - the script's built-in engine runs when
-      # python-jsonschema is absent, as it is on ubuntu-latest - and blocking like the
-      # step above. Same check the helios_config_validate MCP tool performs.
+      # the templates/ starters). python-jsonschema when the runner image ships it
+      # (ubuntu-24.04 does), else the script's stdlib-only built-in engine - the test
+      # step below proves both paths agree - and blocking like the step above. Same
+      # check the helios_config_validate MCP tool performs.
       - name: Validate config manifests against their schemas
         run: python3 scripts/validation/validate_config_schemas.py
 
