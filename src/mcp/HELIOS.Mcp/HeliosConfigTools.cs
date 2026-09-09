@@ -345,8 +345,10 @@ internal static class ManifestSemantics
             "github-labels.schema.json" => universal.Concat(LabelNames(instance)).ToList(),
             "manifests.schema.json" => universal.Concat(MappingKeys(instance)).ToList(),
             "github-milestones.schema.json" => universal.Concat(MilestoneTitles(instance)).ToList(),
-            "fleet-topology.schema.json" => universal.Concat(FleetPoolNames(instance)).ToList(),
+            "fleet-topology.schema.json" => universal.Concat(FleetPoolNames(instance)).Concat(FleetCapacity(instance)).ToList(),
             "absorption-pr-watchlist.schema.json" => universal.Concat(WatchlistCandidates(instance)).ToList(),
+            "model-catalog.schema.json" => universal.Concat(ModelCatalogPairs(instance)).ToList(),
+            "helios-fabric.v1.schema.json" => universal.Concat(FabricSecrets(instance)).ToList(),
             _ => universal,
         };
     }
@@ -391,7 +393,232 @@ internal static class ManifestSemantics
     {
         "aihub.schema.json", "github-labels.schema.json", "manifests.schema.json",
         "github-milestones.schema.json", "fleet-topology.schema.json", "absorption-pr-watchlist.schema.json",
+        "model-catalog.schema.json", "helios-fabric.v1.schema.json",
     };
+
+    // What the fleet may attempt across ALL pools, not per pool. Every per-field ceiling in the
+    // topology schema is per pool, and `helios-fleet start` selects every pool by default: 100
+    // pools of 64 workers passed both validators and asked one host for 6,400 processes.
+    // scale-fleet.ps1 likewise sums each pool's burst lanes into ONE absolute
+    // `az vmss scale --new-capacity`, so the aggregate is what bills. Four times the 64-process
+    // ceiling start-fleet.ps1 enforces on one pool, and twice the 256-lane ceiling one pool may
+    // request. The Python twin (_check_fleet_capacity) carries the same two numbers.
+    private const long MaxFleetLocalWorkers = 256;
+    private const long MaxFleetBurstLanes = 512;
+
+    // The shapes scripts/validation/validate_helios_fabric_contract.py refuses anywhere in the
+    // Fabric contract: it records secret NAMES and references, never material, and a token pasted
+    // into a free-text field (notes, receiptPath) is the one thing its schema cannot express.
+    private static readonly Regex[] SecretShapes =
+    {
+        new("sk-[A-Za-z0-9]{20,}", RegexOptions.None, TimeSpan.FromSeconds(2)),
+        new("gh[pousr]_[A-Za-z0-9]{20,}", RegexOptions.None, TimeSpan.FromSeconds(2)),
+        new("xox[baprs]-[A-Za-z0-9-]{20,}", RegexOptions.None, TimeSpan.FromSeconds(2)),
+        new("AIza[0-9A-Za-z_-]{35}", RegexOptions.None, TimeSpan.FromSeconds(2)),
+        new(@"eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9._-]{12,}\.[A-Za-z0-9._-]{12,}", RegexOptions.None, TimeSpan.FromSeconds(2)),
+        // \x1c-\x1f explicitly: Python's \s covers the file/group/record/unit separators and
+        // .NET's does not, and the authoritative Fabric scanner is the Python one — without them a
+        // URL carrying U+001C in its userinfo reads as credentials here and as plain text there.
+        new(@"https?://[^/\s\x1c-\x1f:@]+:[^/\s\x1c-\x1f@]+@", RegexOptions.None, TimeSpan.FromSeconds(2)),
+    };
+
+    /// <summary>
+    /// No string in the Fabric contract may look like credential material. The authoritative
+    /// validator scans every string; the shared engines are the path this repository advertises for
+    /// authoring the contract, and without the rule they answer <c>valid: true</c> for a token
+    /// pasted into a note.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> FabricSecrets(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        Walk(instance, "$");
+        return issues;
+
+        void Walk(JsonElement node, string path)
+        {
+            switch (node.ValueKind)
+            {
+                case JsonValueKind.String when SecretShapes.Any(shape => shape.IsMatch(node.GetString() ?? "")):
+                    issues.Add(new JsonSchemaLite.Issue(path,
+                        "contains a secret-like value; the contract stores names and references, never the material itself"));
+                    break;
+                case JsonValueKind.Object:
+                    foreach (var member in node.EnumerateObject())
+                    {
+                        Walk(member.Value, $"{path}.{member.Name}");
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    var index = 0;
+                    foreach (var item in node.EnumerateArray())
+                    {
+                        Walk(item, $"{path}[{index++}]");
+                    }
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A model profile's identity is (provider, model), not the whole object. Two profiles
+    /// repeating one pair but differing in price or context validate as distinct objects while the
+    /// hub reads them as one model twice: ModelCatalog's context filter takes the FIRST match and
+    /// preference ranking sees both, so the catalog states two facts for one model.
+    /// scripts/build/validate-model-catalog.py already refuses the pair; this is the same rule
+    /// where the shared engines can see it.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> ModelCatalogPairs(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("models", out var models)
+            || models.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var entry in models.EnumerateArray())
+        {
+            var position = index++;
+            if (entry.ValueKind != JsonValueKind.Object
+                || !entry.TryGetProperty("provider", out var provider) || provider.ValueKind != JsonValueKind.String
+                || !entry.TryGetProperty("model", out var model) || model.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var providerText = provider.GetString()!;
+            var modelText = model.GetString()!;
+            if (providerText.Length == 0 || modelText.Length == 0)
+            {
+                continue;
+            }
+            // '\n' cannot appear in either name unescaped, so it separates the two halves safely.
+            var pair = providerText + "\n" + modelText;
+            if (seen.TryGetValue(pair, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.models[{position}]",
+                    $"'{providerText}/{modelText}' repeats entry {first}; a provider and model name together identify one profile"));
+            }
+            else
+            {
+                seen[pair] = position;
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// The totals the fleet scripts act on: worker processes started on the operator's host, and
+    /// burst lanes summed into one VMSS capacity request, resolved the way those scripts resolve
+    /// them. What the topology declares is what this bounds — `start-fleet.ps1 -PoolSize N`
+    /// overrides every pool's size from the command line and the workspace profile lowers it;
+    /// neither is in the file, and an operator typing a flag is making their own decision.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> FleetCapacity(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("pools", out var pools)
+            || pools.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var defaults = Section(instance, "defaults");
+        var defaultSize = Capacity(defaults, "poolSize");
+        long workers = 0, lanes = 0, burst = 0, count = 0;
+        foreach (var pool in pools.EnumerateArray())
+        {
+            count++;
+            if (pool.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+            // start-fleet.ps1's Get-EffectivePoolSize: the pool's poolSize, else the defaults',
+            // else 1, then clamped to hermesFleet.maxConcurrentLanes.
+            var cap = LaneCap(pool, defaults);
+            var size = Capacity(pool, "poolSize") ?? defaultSize ?? 1;
+            workers += cap > 0 ? Math.Min(size, cap) : size;
+
+            // scale-fleet.ps1: the merged autoscaling block, where a `cloud` pool holds no local
+            // lanes, maxLocalLanes defaults to minLocalLanes (a lone minimum IS the capacity), the
+            // lane cap clamps both, and the maximum is raised back to the minimum. No block
+            // anywhere means the reconciler skips the pool entirely.
+            var own = Section(pool, "autoscaling");
+            var inherited = defaults is { } presentDefaults ? Section(presentDefaults, "autoscaling") : null;
+            if (own is null && inherited is null)
+            {
+                continue;
+            }
+            var mode = Merged(own, inherited, "mode") is { ValueKind: JsonValueKind.String } text
+                ? text.GetString()! : "local";
+            var minimum = MergedCapacity(own, inherited, "minLocalLanes") ?? 1;
+            var maximum = MergedCapacity(own, inherited, "maxLocalLanes") ?? minimum;
+            if (mode == "cloud")
+            {
+                minimum = 0;
+                maximum = 0;
+            }
+            if (cap > 0)
+            {
+                maximum = Math.Min(maximum, cap);
+                minimum = Math.Min(minimum, cap);
+            }
+            lanes += Math.Max(maximum, minimum);
+            if (mode is "hybrid" or "cloud")
+            {
+                burst += MergedCapacity(own, inherited, "maxBurstLanes") ?? 0;
+            }
+        }
+        if (workers > MaxFleetLocalWorkers)
+        {
+            issues.Add(new JsonSchemaLite.Issue("$.pools",
+                $"{count} pools ask for {workers} worker processes together; start-fleet.ps1 selects every pool " +
+                $"by default, and {MaxFleetLocalWorkers} is the ceiling for one host"));
+        }
+        if (lanes > MaxFleetLocalWorkers)
+        {
+            issues.Add(new JsonSchemaLite.Issue("$.pools",
+                $"maxLocalLanes totals {lanes} across the pools; scale-fleet.ps1 runs a local process per lane, " +
+                $"and {MaxFleetLocalWorkers} is the ceiling for one host"));
+        }
+        if (burst > MaxFleetBurstLanes)
+        {
+            issues.Add(new JsonSchemaLite.Issue("$.pools",
+                $"maxBurstLanes totals {burst} across the pools; scale-fleet.ps1 sums them into one " +
+                $"'az vmss scale --new-capacity', and {MaxFleetBurstLanes} is the ceiling for that request"));
+        }
+        return issues;
+
+        static JsonElement? Section(JsonElement? node, string name) =>
+            node is { ValueKind: JsonValueKind.Object } present && present.TryGetProperty(name, out var value)
+            && value.ValueKind == JsonValueKind.Object ? value : null;
+
+        // A whole number however it is spelled: 64, 64.0 and 6.4e1 are the 64 PowerShell's [int]
+        // cast and the Python engine both read, and TryGetInt64 answers false for the last two.
+        static long? Capacity(JsonElement? node, string name) =>
+            node is { } present && present.TryGetProperty(name, out var value)
+            && JsonSchemaLite.TryGetWholeNumber(value, out var number) ? number : null;
+
+        // Get-PoolAutoscaling merges property by property, the pool's over the defaults'.
+        static JsonElement? Merged(JsonElement? own, JsonElement? inherited, string name) =>
+            own is { } pool && pool.TryGetProperty(name, out var mine) && mine.ValueKind != JsonValueKind.Null
+                ? mine
+                : inherited is { } shared && shared.TryGetProperty(name, out var theirs)
+                  && theirs.ValueKind != JsonValueKind.Null ? theirs : null;
+
+        static long? MergedCapacity(JsonElement? own, JsonElement? inherited, string name) =>
+            Merged(own, inherited, name) is { } value
+            && JsonSchemaLite.TryGetWholeNumber(value, out var number) ? number : null;
+
+        // Both scripts read the pool's whole hermesFleet block or the defaults' — never a merge.
+        static long LaneCap(JsonElement pool, JsonElement? defaults)
+        {
+            var hermes = Section(pool, "hermesFleet") ?? Section(defaults, "hermesFleet");
+            var cap = Capacity(hermes, "maxConcurrentLanes");
+            return cap is > 0 ? cap.Value : 0;
+        }
+    }
 
     /// <summary>The properties AIHubOptions and its nested records bind, by canonical spelling.</summary>
     private static readonly Dictionary<string, string[]> AihubSectionKeys = new(StringComparer.Ordinal)

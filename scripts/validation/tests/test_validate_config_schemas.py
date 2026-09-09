@@ -11,6 +11,7 @@ import threading
 import tempfile
 import time
 import unittest
+import unittest.mock
 from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -734,11 +735,13 @@ class Round6Tests(unittest.TestCase):
 
     def test_a_repetition_count_no_engine_can_hold_is_a_verdict(self) -> None:
         # re.compile raises OverflowError, not re.error, and the C# twin's QuantifierAt would
-        # overflow an int: both must report an unusable schema rather than crash.
+        # overflow an int: both must report an unusable schema rather than crash. Round 10 moved
+        # the refusal earlier - such a count is outside the range every engine holds - so the
+        # verdict now names the count rather than the failed compile.
         for engine in target.available_engines():
             with self.assertRaises(target.SchemaError, msg=engine) as caught:
                 target.validate_instance("a", {"type": "string", "pattern": "a{999999999999999999999999}"}, engine=engine)
-            self.assertIn("invalid regex", str(caught.exception))
+            self.assertIn("repetition count above", str(caught.exception))
 
     def test_a_number_out_of_double_range_is_not_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1249,3 +1252,294 @@ class Round9Tests(unittest.TestCase):
             for engine in target.available_engines():
                 issues, _ = target.validate_instance(topology, schema, engine=engine)
                 self.assertEqual(not issues, expected_valid, (engine, field, value, issues))
+
+
+class Round10Tests(unittest.TestCase):
+    """Round 10 of PR #252: the work budget follows the library engine, the self-check has a
+    depth of its own, integer tokens are held to the range a consumer can bind, one regex dialect
+    covers Python's possessive quantifiers, and three more rules a schema cannot express."""
+
+    def test_library_pattern_property_matching_is_charged_to_the_budget(self) -> None:
+        # Round 9 charged the built-in engine's loop; python-jsonschema runs its own, and this
+        # module's overridden keywords are where that work has to be counted. `auto` picks the
+        # library whenever it is installed, so this is the DEFAULT path in CI.
+        if target.jsonschema is None:
+            self.skipTest("python-jsonschema is not installed")
+        patterns = {f"^a{index}[0-9]*$": {} for index in range(2000)}
+        instance = {f"b{index}": 1 for index in range(2000)}
+        started = time.monotonic()
+        with self.assertRaises(target.SchemaError) as caught:
+            target.validate_instance(instance, {"type": "object", "patternProperties": patterns},
+                                     engine="jsonschema")
+        self.assertIn("keyword evaluations", str(caught.exception))
+        self.assertLess(time.monotonic() - started, 60)
+
+    def test_library_additional_property_coverage_is_charged_to_the_budget(self) -> None:
+        if target.jsonschema is None:
+            self.skipTest("python-jsonschema is not installed")
+        # additionalProperties repeats the coverage matches; with additionalProperties present and
+        # no property matching, every key is tried against every pattern a second time.
+        patterns = {f"^a{index}[0-9]*$": {} for index in range(2000)}
+        instance = {f"b{index}": 1 for index in range(2000)}
+        with self.assertRaises(target.SchemaError) as caught:
+            target.validate_instance(instance,
+                                     {"type": "object", "patternProperties": patterns,
+                                      "additionalProperties": True},
+                                     engine="jsonschema")
+        self.assertIn("keyword evaluations", str(caught.exception))
+
+    def test_ordinary_manifests_are_nowhere_near_the_budget(self) -> None:
+        for mapping in target.load_mappings():
+            instance = target.load_json(ROOT / mapping.manifest, "manifest")
+            schema = target.load_json(ROOT / mapping.schema, "schema")
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(instance, schema, engine=engine)
+                self.assertEqual(issues, [], (mapping.manifest, engine, issues))
+
+    def test_a_deeply_nested_schema_is_a_verdict_not_a_recursion_error(self) -> None:
+        # CountEvaluation bounds the NUMBER of nodes, not the depth of the call stack: the walk
+        # ran before any instance keyword and took the whole sweep down with a traceback.
+        deep: dict[str, Any] = {}
+        cursor = deep
+        for _ in range(5000):
+            cursor["not"] = {}
+            cursor = cursor["not"]
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError) as caught:
+                target.validate_instance({}, deep, engine=engine)
+            self.assertIn("nesting deeper than", str(caught.exception), engine)
+
+    def test_an_integer_token_no_consumer_can_hold_is_refused_while_reading(self) -> None:
+        # json's own parser builds an int of any size, so only fractional and exponent tokens went
+        # through the double-range check: a 400-digit price passed the model-catalog gate while
+        # ModelCatalog.TryLoad could not bind it.
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "catalog.json"
+            path.write_text('{"inputPerMillionUsd": ' + "9" * 400 + "}", encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                target.load_json(path, "manifest")
+            self.assertIn("out of range for a JSON number", str(caught.exception))
+            path.write_text('{"pr": 191, "delta": -3, "zero": 0}', encoding="utf-8")
+            self.assertEqual(target.load_json(path, "manifest"), {"pr": 191, "delta": -3, "zero": 0})
+
+    def test_possessive_quantifiers_are_outside_the_shared_dialect(self) -> None:
+        # Python 3.11 accepts these; .NET's ECMAScript parser reads the second '+' as a nested
+        # quantifier and refuses the pattern, so one schema had two verdicts.
+        for pattern in ("a++", "a*+", "a?+", "a{2,3}+", "(ab)++", "(?>ab)+"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(pattern, engine)):
+                    target.validate_instance("x", {"type": "string", "pattern": pattern}, engine=engine)
+        # A literal plus, a lazy quantifier and every shipped pattern stay legal.
+        for pattern in (r"\++", "a+?", "^[a-z]+(-[a-z]+)*$", r"^[A-Za-z0-9_-]+\.json$"):
+            for engine in target.available_engines():
+                target.validate_instance("a", {"type": "string", "pattern": pattern}, engine=engine)
+
+    def test_a_model_catalog_pair_identifies_one_profile(self) -> None:
+        catalog = target.load_json(ROOT / "config" / "model-catalog.json", "manifest")
+        self.assertEqual(target._check_model_catalog(catalog), [])
+        first = json.loads(json.dumps(catalog["models"][0], default=str))
+        clashing = {"models": catalog["models"] + [dict(first, contextTokens=1)]}
+        issues = target._check_model_catalog(clashing)
+        self.assertEqual(len(issues), 1, issues)
+        self.assertIn("identify one profile", issues[0].message)
+
+    def test_the_fabric_contract_may_not_carry_secret_material(self) -> None:
+        contract = target.load_json(ROOT / "config" / "fabric" / "helios-fabric.v1.json", "manifest")
+        self.assertEqual(target._check_fabric_contract(contract), [])
+        for value in ("sk-" + "a" * 24, "ghp_" + "b" * 24, "https://user:secret@example.invalid/x"):
+            issues = target._check_fabric_contract({"checklist": [{"notes": value}]})
+            self.assertEqual(len(issues), 1, (value, issues))
+            self.assertEqual(issues[0].path, "$.checklist[0].notes")
+        # A secret NAME is exactly what the contract is for.
+        self.assertEqual(target._check_fabric_contract({"secretName": "openai-api-key"}), [])
+
+    def test_the_fleet_is_bounded_in_aggregate_not_only_per_pool(self) -> None:
+        schema = target.load_json(ROOT / "config" / "schemas" / "fleet-topology.schema.json", "schema")
+        base = target.load_json(ROOT / "config" / "fleet" / "fleet-topology.json", "manifest")
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(base, schema, engine=engine)
+            self.assertEqual(issues, [], (engine, issues))
+        # The pool ARRAY is bounded: 1,000 pools of 64 workers used to validate.
+        many = json.loads(json.dumps(base, default=str))
+        pool = many["pools"][0]
+        many["pools"] = [dict(pool, name=f"pool-{index}") for index in range(17)]
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(many, schema, engine=engine)
+            self.assertTrue(issues, engine)
+        # And so are the totals the scripts act on, inside the array bound.
+        heavy = json.loads(json.dumps(base, default=str))
+        heavy["defaults"]["poolSize"] = 64
+        heavy["defaults"]["autoscaling"]["maxBurstLanes"] = 256
+        # No hermesFleet cap on these: a declared maxConcurrentLanes clamps the spawn size, and
+        # this is the case where nothing else stands between the topology and the host.
+        heavy["pools"] = [{key: value for key, value in
+                           dict(pool, name=f"pool-{index}", poolSize=64,
+                                autoscaling=dict(pool.get("autoscaling", {}), maxBurstLanes=256)).items()
+                           if key != "hermesFleet"}
+                          for index in range(16)]
+        messages = " ".join(issue.message for issue in target._check_fleet_pools(heavy))
+        self.assertIn("worker processes together", messages)
+        self.assertIn("az vmss scale", messages)
+
+
+
+class Round10bTests(unittest.TestCase):
+    """The defects the local reviewer found inside round 10: a cache that cached nothing, an
+    exponent range the two engines did not share, a $ref the self-check never followed, a
+    substring refusal that hit a character class, and fleet totals that did not resolve the way
+    the fleet scripts resolve them."""
+
+    def test_the_enum_cache_renders_the_instance_once(self) -> None:
+        # dict.setdefault evaluates its default whether or not the key is present, so the instance
+        # was still rendered once per option and the cache saved nothing.
+        renders = 0
+        original = target._canonical_key
+
+        def counting(value: Any) -> str:
+            nonlocal renders
+            if value is instance:
+                renders += 1
+            return original(value)
+
+        instance = "x" * 4096
+        with unittest.mock.patch.object(target, "_canonical_key", counting):
+            issues, _ = target.validate_instance(instance, {"enum": [f"o{index}" for index in range(500)]},
+                                                 engine="builtin")
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(renders, 1, f"the instance was rendered {renders} times")
+
+    def test_both_engines_stop_at_the_same_exponent(self) -> None:
+        # Decimal carries an exponent the C# normalizer cannot hold, and a token only one engine
+        # can order is a manifest with two verdicts.
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "m.json"
+            path.write_text('{"n": 1e-1000000000000000000}', encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                target.load_json(path, "manifest")
+            self.assertIn("exponent is past", str(caught.exception))
+            # Just inside the range is still exact, and still refused against a positive minimum.
+            path.write_text('{"n": 1e-1000000001}', encoding="utf-8")
+            instance = target.load_json(path, "manifest")
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(instance,
+                                                     {"properties": {"n": {"minimum": 0, "exclusiveMinimum": 0}}},
+                                                     engine=engine)
+                self.assertEqual(issues, [], engine)
+
+    def test_a_ref_may_only_point_where_the_self_check_walks(self) -> None:
+        # Only $defs and definitions are walked as annotations, so a $ref into `default` validated
+        # against a subschema whose keywords, patterns and numbers nothing had checked.
+        # ...and naming a definition is not the same as descending into one: '#/$defs/a/default'
+        # reached exactly the same unchecked place, one level lower.
+        for pointer in ("#/default", "#/examples/0", "#/title", "#/$defs/a/default", "#/$defs"):
+            schema = {"$ref": pointer, "default": {"pattern": "^(a+)+$"},
+                      "examples": [{"pattern": "^(a+)+$"}], "title": "x",
+                      "$defs": {"a": {"default": {"pattern": "^(a+)+$"}}}}
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(pointer, engine)) as caught:
+                    target.validate_instance("a", schema, engine=engine)
+                self.assertIn("$defs", str(caught.exception))
+        # The shapes every shipped schema uses stay legal, cycles included.
+        cyclic = {"$defs": {"a": {"not": {"$ref": "#/$defs/a"}}}, "$ref": "#/$defs/a"}
+        target.MiniValidator(cyclic)
+        target.MiniValidator({"properties": {"next": {"$ref": "#"}}})
+        # ...including a root that declares its own dialect and is then referenced.
+        target.MiniValidator({"$schema": "https://json-schema.org/draft/2020-12/schema",
+                              "type": "object", "properties": {"next": {"$ref": "#"}}})
+
+    def test_a_repetition_python_alone_understands_is_refused(self) -> None:
+        # Python reads {,3} as {0,3} and .NET reads three literal characters, so `^a{,3}$` matches
+        # "aa" in one engine and only the text "a{,3}" in the other - and `a{,3}+` is a possessive
+        # quantifier that a scan needing a lower bound never sees.
+        for pattern in ("a{,3}", "a{,3}+", "^a{,3}$", "a{,}", "a{,}+", "a{,}?"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(pattern, engine)):
+                    target.validate_instance("aa", {"type": "string", "pattern": pattern}, engine=engine)
+        # A brace that is not a repetition stays a literal in both.
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance("a{,x}", {"type": "string", "pattern": "^a\\{,x\\}$"},
+                                                 engine=engine)
+            self.assertEqual(issues, [], engine)
+
+    def test_a_repetition_count_no_engine_holds_is_refused(self) -> None:
+        # Python compiles it; .NET refuses the pattern outright ("Quantifier and capture group
+        # numbers must be less than or equal to Int32.MaxValue").
+        for pattern in ("^a{0,2147483648}$", "a{2147483648}", "a{2147483648,}"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(pattern, engine)):
+                    target.validate_instance("", {"type": "string", "pattern": pattern}, engine=engine)
+        # The largest count both hold is still legal, however it is spelled.
+        for pattern in ("a{2147483647}", "a{0002147483647}"):
+            for engine in target.available_engines():
+                target.validate_instance("a", {"type": "string", "pattern": pattern}, engine=engine)
+
+    def test_an_exponents_leading_zeros_are_not_its_magnitude(self) -> None:
+        # int() on a 4,301-digit string is refused outright by CPython, so reading the literal that
+        # way refused `1e-000...01` - the exponent -1 - which .NET's long.TryParse accepts.
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "m.json"
+            path.write_text('{"n": 1e-' + "0" * 4300 + '1}', encoding="utf-8")
+            self.assertEqual(target._canonical(target.load_json(path, "manifest")), '{"n":0.1}')
+            self.assertFalse(target._exponent_out_of_range("-" + "0" * 4300 + "1"))
+            self.assertTrue(target._exponent_out_of_range("-1000000000000000000"))
+
+    def test_the_two_engines_stop_at_the_exponent_as_written(self) -> None:
+        # Judging a NORMALIZED exponent put these two on opposite sides of the limit in the two
+        # engines: one is scaled up by its fraction, the other down by its trailing zero.
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "m.json"
+            for token, readable in (("1.1e-999999999999999999", True),
+                                    ("10e-1000000000000000000", False),
+                                    ("0e-1000000001", True),
+                                    ("0e1000000000000000000", False),
+                                    # A large POSITIVE exponent is out of double range as well, so
+                                    # both engines refuse it before the exponent limit is reached.
+                                    ("1e999999999999999999", False),
+                                    ("1e1000000000000000000", False)):
+                path.write_text('{"n": ' + token + "}", encoding="utf-8")
+                if readable:
+                    self.assertIn("n", target.load_json(path, "manifest"), token)
+                else:
+                    with self.assertRaises(ValueError, msg=token):
+                        target.load_json(path, "manifest")
+
+    def test_a_character_class_is_not_an_atomic_group(self) -> None:
+        # "(?>" as a raw substring hit "[(?>]" — three literal characters in a class.
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(">", {"type": "string", "pattern": "[(?>]"}, engine=engine)
+            self.assertEqual(issues, [], engine)
+            with self.assertRaises(target.SchemaError, msg=engine):
+                target.validate_instance("ab", {"type": "string", "pattern": "(?>ab)"}, engine=engine)
+
+    def test_fleet_totals_resolve_the_way_the_scripts_resolve_them(self) -> None:
+        base = {"version": 2, "defaults": {}, "pools": []}
+
+        def topology(pools: list[dict[str, Any]], defaults: dict[str, Any] | None = None) -> dict[str, Any]:
+            return dict(base, defaults=defaults or {},
+                        pools=[dict(pool, name=f"pool-{index}", taskTypes=["code"], providerChain=["openai"])
+                               for index, pool in enumerate(pools)])
+
+        # scale-fleet.ps1 defaults maxLocalLanes to minLocalLanes: a lone minimum IS the capacity.
+        heavy = topology([{} for _ in range(5)], {"autoscaling": {"minLocalLanes": 64}})
+        self.assertIn("maxLocalLanes totals 320",
+                      " ".join(issue.message for issue in target._check_fleet_capacity(heavy)))
+        # ...and it raises the maximum back to the minimum, so a small maximum does not help.
+        heavy = topology([{} for _ in range(5)], {"autoscaling": {"minLocalLanes": 64, "maxLocalLanes": 1}})
+        self.assertTrue(target._check_fleet_capacity(heavy))
+        # A cloud pool holds no local lanes at all, so this one is safe and must pass.
+        cloud = topology([{} for _ in range(5)], {"autoscaling": {"mode": "cloud", "maxLocalLanes": 64}})
+        self.assertEqual([issue.message for issue in target._check_fleet_capacity(cloud)], [])
+        # hermesFleet.maxConcurrentLanes clamps both the spawn size and the lane ceiling.
+        capped = topology([{"poolSize": 64} for _ in range(5)],
+                          {"autoscaling": {"maxLocalLanes": 64}, "hermesFleet": {"maxConcurrentLanes": 2}})
+        self.assertEqual([issue.message for issue in target._check_fleet_capacity(capped)], [])
+        # Burst counts only for a pool that may burst.
+        local = topology([{} for _ in range(5)], {"autoscaling": {"mode": "local", "maxBurstLanes": 256}})
+        self.assertEqual([issue.message for issue in target._check_fleet_capacity(local)], [])
+        bursting = topology([{} for _ in range(5)], {"autoscaling": {"mode": "hybrid", "maxBurstLanes": 256}})
+        self.assertIn("maxBurstLanes totals 1280",
+                      " ".join(issue.message for issue in target._check_fleet_capacity(bursting)))
+        # A whole number however it is spelled: PowerShell's [int] cast reads 64.0 as 64.
+        spelled = topology([{} for _ in range(5)], {"poolSize": decimal.Decimal("64.0")})
+        self.assertIn("worker processes together",
+                      " ".join(issue.message for issue in target._check_fleet_capacity(spelled)))

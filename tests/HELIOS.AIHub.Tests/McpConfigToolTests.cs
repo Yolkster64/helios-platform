@@ -699,14 +699,15 @@ public sealed class McpConfigToolTests : IDisposable
     public void JsonSchemaLite_RepetitionCountTooLargeForAnInt_IsASchemaError()
     {
         // QuantifierAt used int.Parse: this count overflows it, and the overflow escaped the schema
-        // self-check as a crash rather than a verdict. The Python twin sees OverflowError from
-        // re.compile and reports the same way.
+        // self-check as a crash rather than a verdict. Round 10 moved the refusal earlier - such a
+        // count is outside the range every engine holds - so the verdict now names the count
+        // rather than the failed compile, and the Python twin says the same thing.
         using var schema = JsonDocument.Parse("""{ "type": "string", "pattern": "a{999999999999999999999999}" }""");
         using var instance = JsonDocument.Parse("\"a\"");
 
         var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
 
-        Assert.Contains("invalid regex", ex.Message);
+        Assert.Contains("repetition count above", ex.Message);
     }
 
     [Fact]
@@ -1107,6 +1108,418 @@ public sealed class McpConfigToolTests : IDisposable
 
         Assert.Contains("keyword evaluations", ex.Message);
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(60), $"took {started.Elapsed}");
+    }
+
+    [Theory]
+    [InlineData("a++")]
+    [InlineData("a*+")]
+    [InlineData("a?+")]
+    [InlineData("a{2,3}+")]
+    [InlineData("(ab)++")]
+    [InlineData("(?>ab)+")]
+    public void JsonSchemaLite_RefusesPossessiveQuantifiers(string pattern)
+    {
+        // Python 3.11 accepts these and ECMA-262 has none, so the Python engine used to call such
+        // a schema usable while this one reported it broken. Both refuse it now, by name.
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "string", pattern }));
+        using var instance = JsonDocument.Parse("\"x\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("portable (ECMA-262) regex subset", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("\\++", "++")]        // one or more LITERAL plus signs, not a quantifier
+    [InlineData("a+?", "a")]          // lazy, legal in both dialects
+    [InlineData("^[a-z]+(-[a-z]+)*$", "a-b")]
+    public void JsonSchemaLite_AcceptsQuantifiersBothDialectsShare(string pattern, string subject)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "string", pattern }));
+        using var instance = JsonDocument.Parse(JsonSerializer.Serialize(subject));
+
+        Assert.Empty(JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+    }
+
+    [Fact]
+    public void JsonSchemaLite_RefusesADialectDeclaredBelowTheRoot()
+    {
+        // The Python engine refuses this so python-jsonschema cannot hand the subtree back to a
+        // validator without its regex and number rules; one schema must not be usable through one
+        // path and refused by the other.
+        using var schema = JsonDocument.Parse("""
+            { "type": "object",
+              "properties": { "a": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "string" } } }
+            """);
+        using var instance = JsonDocument.Parse("""{ "a": "x" }""");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("a dialect may only be declared at the root", ex.Message);
+        // The root's own $schema stays an annotation.
+        using var rooted = JsonDocument.Parse("""
+            { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "string" }
+            """);
+        using var text = JsonDocument.Parse("\"x\"");
+        Assert.Empty(JsonSchemaLite.Validate(rooted.RootElement, text.RootElement));
+    }
+
+    [Fact]
+    public void JsonSchemaLite_BoundsRecursionDuringTheSchemaSelfCheck()
+    {
+        // CountEvaluation bounds the NUMBER of schema nodes, not the depth of the call stack, and
+        // the self-check runs before the guarded instance walk: a StackOverflowException here
+        // cannot be caught and would take the MCP process with it.
+        var deep = new System.Text.StringBuilder();
+        const int levels = 5000;
+        for (var index = 0; index < levels; index++)
+        {
+            deep.Append("{\"not\":");
+        }
+        deep.Append("{}");
+        deep.Append('}', levels);
+        using var schema = JsonDocument.Parse(deep.ToString(), new JsonDocumentOptions { MaxDepth = levels + 8 });
+        using var instance = JsonDocument.Parse("{}");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("nesting deeper than", ex.Message);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_OrdersNumbersExactlyBeyondTheOldExponentGuard()
+    {
+        // 1e-1000000001 is a real number to the Python engine (decimal.Decimal holds it), and
+        // comparing doubles here made it equal to zero: the invalid instance passed `minimum`.
+        using var schema = JsonDocument.Parse("""{ "type": "number", "minimum": 1e-1000000001 }""");
+        using var zero = JsonDocument.Parse("0");
+        using var above = JsonDocument.Parse("1e-1000000000");
+
+        Assert.Single(JsonSchemaLite.Validate(schema.RootElement, zero.RootElement));
+        Assert.Empty(JsonSchemaLite.Validate(schema.RootElement, above.RootElement));
+    }
+
+    [Fact]
+    public void JsonSchemaLite_RefusesASchemaNumberItCannotOrderExactly()
+    {
+        // Past decimal.Decimal's own range the Python engine refuses the token while READING the
+        // file, so accepting it here would leave one manifest with two verdicts.
+        using var schema = JsonDocument.Parse("""{ "type": "number", "minimum": 1e-9999999999999999999 }""");
+        using var instance = JsonDocument.Parse("0");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("outside the exponent range", ex.Message);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_ChargesEveryEnumComparisonToTheBudget()
+    {
+        // enum scanned every option without charging anything, and each comparison re-rendered the
+        // whole instance: a large enum against a large string was billions of characters of work
+        // for one keyword evaluation, in a server with no whole-request deadline.
+        var options = string.Join(", ", Enumerable.Range(0, 300_000).Select(index => $"\"o{index}\""));
+        using var schema = JsonDocument.Parse($"{{ \"enum\": [ {options} ] }}");
+        using var instance = JsonDocument.Parse("\"" + new string('x', 20_000) + "\"");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("keyword evaluations", ex.Message);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(60), $"took {started.Elapsed}");
+    }
+
+    [Fact]
+    public void JsonSchemaLite_EnumStillComparesByValueAndType()
+    {
+        // The cached key must not change any verdict: 191 and 191.0 are one number, true is not 1.
+        using var schema = JsonDocument.Parse("""{ "enum": [191, "a", true, null, {"x": 1}] }""");
+        foreach (var (text, valid) in new[] { ("191.0", true), ("191", true), ("\"a\"", true), ("true", true),
+                                              ("null", true), ("{\"x\": 1.0}", true), ("1", false),
+                                              ("false", false), ("\"b\"", false) })
+        {
+            using var instance = JsonDocument.Parse(text);
+            Assert.Equal(valid, JsonSchemaLite.Validate(schema.RootElement, instance.RootElement).Count == 0);
+        }
+    }
+
+    [Fact]
+    public void ModelCatalog_RefusesARepeatedProviderAndModelPair()
+    {
+        // ModelCatalog's context filter takes the FIRST matching profile while preference ranking
+        // sees both, so one catalog would state two prices for one model.
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/model-catalog.json", """
+            { "models": [
+                { "provider": "openai", "model": "gpt", "class": "balanced", "contextTokens": 128000,
+                  "inputPerMillionUsd": 1, "outputPerMillionUsd": 2, "relativeSpeed": "fast",
+                  "strengths": ["code"] },
+                { "provider": "openai", "model": "gpt", "class": "balanced", "contextTokens": 64000,
+                  "inputPerMillionUsd": 3, "outputPerMillionUsd": 4, "relativeSpeed": "fast",
+                  "strengths": ["code"] } ] }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/model-catalog.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("identify one profile", json);
+    }
+
+    [Fact]
+    public void FabricContract_RefusesSecretLikeMaterialInAnyString()
+    {
+        var root = CreateRepoRoot();
+        var shipped = File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fabric", "helios-fabric.v1.json"));
+        WriteManifest(root, "config/fabric/helios-fabric.v1.json", shipped);
+        Assert.Contains("\"valid\": true",
+            HeliosConfigTools.BuildValidationJson("config/fabric/helios-fabric.v1.json", null, root));
+
+        using var document = JsonDocument.Parse(shipped);
+        var mutated = JsonNode.Parse(shipped)!;
+        mutated["contractVersion"] = "sk-" + new string('a', 24);
+        WriteManifest(root, "config/fabric/helios-fabric.v1.json", mutated.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fabric/helios-fabric.v1.json", null, root);
+
+        Assert.Contains("secret-like value", json);
+    }
+
+    [Fact]
+    public void FleetTopology_IsBoundedInAggregateNotOnlyPerPool()
+    {
+        // Every ceiling in the schema is per pool and start-fleet selects them all: 16 pools of 64
+        // workers is 1,024 processes on one host, and the burst lanes are summed into ONE
+        // absolute `az vmss scale --new-capacity`.
+        var root = CreateRepoRoot();
+        var shipped = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fleet", "fleet-topology.json")))!;
+        var template = shipped["pools"]!.AsArray()[0]!.ToJsonString();
+        var pools = new JsonArray();
+        for (var index = 0; index < 16; index++)
+        {
+            var pool = JsonNode.Parse(template)!.AsObject();
+            pool["name"] = $"pool-{index}";
+            pool["poolSize"] = 64;
+            pool["autoscaling"] = new JsonObject { ["maxBurstLanes"] = 256 };
+            pool.Remove("hermesFleet");   // a declared maxConcurrentLanes would clamp the spawn size
+            pools.Add(pool);
+        }
+        shipped["pools"] = pools;
+        WriteManifest(root, "config/fleet/fleet-topology.json", shipped.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fleet/fleet-topology.json", null, root);
+
+        Assert.False(JsonDocument.Parse(json).RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("worker processes together", json);
+        Assert.Contains("az vmss scale", json);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_ARefMayOnlyPointWhereTheSelfCheckWalks()
+    {
+        // Only $defs and definitions are walked as annotations, so a $ref into `default` validated
+        // against a subschema whose keywords, patterns and numbers nothing had checked - the one
+        // way an unchecked bound could still reach CompareNumbers.
+        using var schema = JsonDocument.Parse("""{ "$ref": "#/default", "default": { "minimum": 1e-9999999999999999999 } }""");
+        using var instance = JsonDocument.Parse("0");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("$defs", ex.Message);
+
+        // Naming a definition is not the same as descending into one: '#/$defs/a/default' reached
+        // exactly the same unchecked place, one level lower.
+        using var deeper = JsonDocument.Parse("""
+            { "$defs": { "a": { "default": { "pattern": "a++" } } }, "$ref": "#/$defs/a/default" }
+            """);
+        using var text = JsonDocument.Parse("\"aa\"");
+        Assert.Contains("$defs", Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(deeper.RootElement, text.RootElement)).Message);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_AcceptsTheRefShapesTheShippedSchemasUse()
+    {
+        // A cycle through $defs, a reference to the root, and a root that declares its own dialect
+        // and is then referenced: all legal, and none of them a "nested dialect".
+        using var cyclic = JsonDocument.Parse("""
+            { "$defs": { "a": { "not": { "$ref": "#/$defs/a" } } }, "$ref": "#/$defs/a" }
+            """);
+        JsonSchemaLite.CheckSchema(cyclic.RootElement);
+
+        using var rooted = JsonDocument.Parse("""
+            { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+              "properties": { "next": { "$ref": "#" } } }
+            """);
+        JsonSchemaLite.CheckSchema(rooted.RootElement);
+    }
+
+    [Theory]
+    [InlineData("a{,3}")]
+    [InlineData("a{,3}+")]
+    [InlineData("^a{,3}$")]
+    [InlineData("a{,}")]
+    [InlineData("a{,}+")]
+    [InlineData("a{,}?")]
+    public void JsonSchemaLite_RefusesARepetitionPythonAloneUnderstands(string pattern)
+    {
+        // Python reads {,3} as {0,3} and this parser reads three literal characters.
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "string", pattern }));
+        using var instance = JsonDocument.Parse("\"aa\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("omitted lower bound", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("^a{0,2147483648}$", false)]
+    [InlineData("a{2147483648}", false)]
+    [InlineData("a{2147483648,}", false)]
+    [InlineData("a{2147483647}", true)]
+    [InlineData("a{0002147483647}", true)]
+    public void JsonSchemaLite_RefusesARepetitionCountNoEngineHolds(string pattern, bool usable)
+    {
+        // Python compiles a larger count; this parser refuses the pattern outright, so the shared
+        // refusal has to name the count rather than leave one engine to discover it.
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "string", pattern }));
+        using var instance = JsonDocument.Parse("\"a\"");
+
+        if (usable)
+        {
+            JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+            return;
+        }
+        Assert.Contains("repetition count above", Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement)).Message);
+    }
+
+    [Theory]
+    // Judging a NORMALIZED exponent put these on opposite sides of the limit in the two engines.
+    [InlineData("1.1e-999999999999999999", true)]
+    [InlineData("10e-1000000000000000000", false)]
+    [InlineData("0e-1000000001", true)]
+    [InlineData("0e1000000000000000000", false)]
+    // A large POSITIVE exponent is out of double range as well, so both engines refuse it before
+    // the exponent limit is reached.
+    [InlineData("1e999999999999999999", false)]
+    [InlineData("1e1000000000000000000", false)]
+    public void JsonSchemaLite_StopsAtTheExponentAsWritten(string token, bool holdable)
+    {
+        using var instance = JsonDocument.Parse(token);
+
+        Assert.Equal(holdable, JsonSchemaLite.IsFiniteNumber(instance.RootElement));
+    }
+
+    [Fact]
+    public void JsonSchemaLite_ACharacterClassIsNotAnAtomicGroup()
+    {
+        // "(?>" as a raw substring hit "[(?>]" - three literal characters in a class.
+        using var classSchema = JsonDocument.Parse("""{ "type": "string", "pattern": "[(?>]" }""");
+        using var subject = JsonDocument.Parse("\">\"");
+        Assert.Empty(JsonSchemaLite.Validate(classSchema.RootElement, subject.RootElement));
+
+        using var atomic = JsonDocument.Parse("""{ "type": "string", "pattern": "(?>ab)" }""");
+        using var text = JsonDocument.Parse("\"ab\"");
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(atomic.RootElement, text.RootElement));
+        Assert.Contains("atomic group", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("64", 64L)]
+    [InlineData("64.0", 64L)]
+    [InlineData("6.4e1", 64L)]
+    [InlineData("-64", -64L)]
+    [InlineData("0e100", 0L)]
+    [InlineData("1000000000000000000", 1000000000000000000L)]
+    [InlineData("9223372036854775807", 9223372036854775807L)]
+    [InlineData("-9223372036854775808", -9223372036854775808L)]
+    public void JsonSchemaLite_ReadsAWholeNumberHoweverItIsSpelled(string token, long expected)
+    {
+        using var document = JsonDocument.Parse(token);
+
+        Assert.True(JsonSchemaLite.TryGetWholeNumber(document.RootElement, out var value), token);
+        Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData("64.5")]
+    [InlineData("1e-1")]
+    [InlineData("1e30")]
+    [InlineData("9223372036854775808")]     // one past long.MaxValue
+    public void JsonSchemaLite_RefusesANumberThatIsNotAWholeLong(string token)
+    {
+        using var document = JsonDocument.Parse(token);
+
+        Assert.False(JsonSchemaLite.TryGetWholeNumber(document.RootElement, out _), token);
+    }
+
+    [Theory]
+    // scale-fleet.ps1 defaults maxLocalLanes to minLocalLanes, raises the maximum back to the
+    // minimum, zeroes local lanes for a cloud pool, clamps both to maxConcurrentLanes, and counts
+    // burst only for a pool that may burst. The totals have to resolve the same way.
+    [InlineData("""{ "autoscaling": { "minLocalLanes": 64 } }""", false)]
+    [InlineData("""{ "autoscaling": { "minLocalLanes": 64, "maxLocalLanes": 1 } }""", false)]
+    [InlineData("""{ "autoscaling": { "mode": "cloud", "maxLocalLanes": 64 } }""", true)]
+    [InlineData("""{ "autoscaling": { "maxLocalLanes": 64 }, "hermesFleet": { "maxConcurrentLanes": 2 } }""", true)]
+    [InlineData("""{ "autoscaling": { "mode": "local", "maxBurstLanes": 256 } }""", true)]
+    [InlineData("""{ "autoscaling": { "mode": "hybrid", "maxBurstLanes": 256 } }""", false)]
+    [InlineData("""{ "poolSize": 64.0 }""", false)]
+    public void FleetTopology_TotalsResolveTheWayTheScriptsResolveThem(string defaultsJson, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        var pools = new JsonArray();
+        for (var index = 0; index < 5; index++)
+        {
+            pools.Add(new JsonObject
+            {
+                ["name"] = $"pool-{index}",
+                ["taskTypes"] = new JsonArray("code"),
+                ["providerChain"] = new JsonArray("openai"),
+            });
+        }
+        var topology = new JsonObject
+        {
+            ["version"] = 2,
+            ["defaults"] = JsonNode.Parse(defaultsJson),
+            ["pools"] = pools,
+        };
+        WriteManifest(root, "config/fleet/fleet-topology.json", topology.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fleet/fleet-topology.json", null, root);
+
+        Assert.Equal(expectedValid, JsonDocument.Parse(json).RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Fact]
+    public void FabricSecrets_ReadWhitespaceTheWayThePythonScannerDoes()
+    {
+        // Python's \s covers U+001C-001F and .NET's does not, so a URL carrying one in its
+        // userinfo read as credentials here and as plain text in the authoritative scanner.
+        var root = CreateRepoRoot();
+        var shipped = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fabric", "helios-fabric.v1.json")))!;
+        var separator = ((char)0x1c).ToString();   // FILE SEPARATOR: whitespace to Python, not to .NET
+        shipped["$comment"] = $"https://user{separator}:password@example.invalid/";
+        WriteManifest(root, "config/fabric/helios-fabric.v1.json", shipped.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fabric/helios-fabric.v1.json", null, root);
+
+        Assert.DoesNotContain("secret-like value", json);
+        // The same URL without the separator is credentials in both engines.
+        shipped["$comment"] = "https://user:password@example.invalid/";
+        WriteManifest(root, "config/fabric/helios-fabric.v1.json", shipped.ToJsonString());
+        Assert.Contains("secret-like value",
+            HeliosConfigTools.BuildValidationJson("config/fabric/helios-fabric.v1.json", null, root));
     }
 
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>

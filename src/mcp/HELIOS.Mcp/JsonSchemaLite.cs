@@ -68,8 +68,23 @@ internal static class JsonSchemaLite
     internal static string NumberKey(JsonElement number) => Validator.CanonicalNumberFor(number);
 
     /// <summary>True when the token is a real, finite JSON number every consumer can hold.</summary>
+    /// <remarks>
+    /// Double range is one half of it; the other is an exponent this validator can order exactly.
+    /// The Python engine refuses both while READING a file (float() gives inf, decimal.Decimal
+    /// refuses the exponent), so a token failing either test makes one manifest valid here and
+    /// unreadable there.
+    /// </remarks>
     internal static bool IsFiniteNumber(JsonElement number) =>
-        number.ValueKind == JsonValueKind.Number && number.TryGetDouble(out var value) && double.IsFinite(value);
+        number.ValueKind == JsonValueKind.Number && number.TryGetDouble(out var value) && double.IsFinite(value)
+        && Validator.IsExactNumber(number);
+
+    /// <summary>
+    /// The value of a whole-number token, however it is spelled: 64, 64.0 and 6.4e1 are the same
+    /// 64, which is what PowerShell's [int] cast and the Python engine both read. TryGetInt64 alone
+    /// answers false for the last two, so a semantic rule using it would silently count zero.
+    /// </summary>
+    internal static bool TryGetWholeNumber(JsonElement number, out long value) =>
+        Validator.TryGetWholeNumberFor(number, out value);
 
     /// <summary>Rejects a schema that uses a keyword outside the supported subset.</summary>
     internal static void CheckSchema(JsonElement schemaRoot) => new Validator(schemaRoot).CheckSchema();
@@ -85,6 +100,7 @@ internal static class JsonSchemaLite
         // dozen levels at most; past this the schema is the problem and says so.
         private const int MaxDepth = 256;
         private int _depth;
+        private int _walkDepth;
 
         // One instance may cost this many keyword evaluations. An acyclic $defs chain whose allOf
         // duplicates the next $ref doubles the work at every level, so the depth guard never fires
@@ -116,10 +132,34 @@ internal static class JsonSchemaLite
         public void CheckSchema()
         {
             _evaluations = 0;
+            _walkDepth = 0;
             WalkSchema(_root, "#");
         }
 
         private void WalkSchema(JsonElement node, string where)
+        {
+            // CountEvaluation bounds the NUMBER of schema nodes, not the depth of the call stack:
+            // a few thousand nested `not` or `items` reach this recursion before the guarded
+            // instance walk ever runs, and a StackOverflowException cannot be caught — it takes
+            // the MCP process with it. The Python twin guards its own schema walk at the same
+            // depth (_walk_schema), so both give a verdict instead of dying.
+            if (++_walkDepth > MaxDepth)
+            {
+                _walkDepth--;
+                throw new SchemaException(
+                    $"{where}: schema nesting deeper than {MaxDepth} levels — more structure than any manifest schema needs");
+            }
+            try
+            {
+                WalkSchemaHere(node, where);
+            }
+            finally
+            {
+                _walkDepth--;
+            }
+        }
+
+        private void WalkSchemaHere(JsonElement node, string where)
         {
             CountEvaluation(where);
             if (node.ValueKind is JsonValueKind.True or JsonValueKind.False)
@@ -135,6 +175,14 @@ internal static class JsonSchemaLite
             {
                 var key = property.Name;
                 var value = property.Value;
+                if (key == "$schema" && where != "#")
+                {
+                    // The Python engine refuses this so python-jsonschema cannot hand the subtree
+                    // back to a validator without its regex and number rules. Nothing here would
+                    // re-select an engine, but a schema must not be usable through one path and
+                    // refused by the other: one dialect, declared once, at the root.
+                    throw new SchemaException($"{where}/$schema: a dialect may only be declared at the root of a schema");
+                }
                 if (Annotations.Contains(key))
                 {
                     if (key is "$defs" or "definitions" && value.ValueKind == JsonValueKind.Object)
@@ -241,6 +289,10 @@ internal static class JsonSchemaLite
                         {
                             throw new SchemaException($"{where}/{key}: must be a number");
                         }
+                        EnsureExactNumbers(value, $"{where}/{key}");
+                        break;
+                    case "const":
+                        EnsureExactNumbers(value, $"{where}/const");
                         break;
                     case "required":
                         if (value.ValueKind != JsonValueKind.Array || value.EnumerateArray().Any(name => name.ValueKind != JsonValueKind.String))
@@ -253,6 +305,7 @@ internal static class JsonSchemaLite
                         {
                             throw new SchemaException($"{where}/enum: must be a non-empty array");
                         }
+                        EnsureExactNumbers(value, $"{where}/enum");
                         break;
                     case "uniqueItems":
                         if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
@@ -267,6 +320,36 @@ internal static class JsonSchemaLite
                         }
                         break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Every number literal in a schema must be one this engine orders exactly — the same range
+        /// the Python engine's Decimal holds while reading a file. Past it that engine refuses the
+        /// token outright, so accepting it here would leave one manifest with two verdicts and
+        /// CompareNumbers with nothing exact to say about the bound.
+        /// </summary>
+        private static void EnsureExactNumbers(JsonElement node, string where)
+        {
+            switch (node.ValueKind)
+            {
+                case JsonValueKind.Number when !TryNormalizeNumber(node.GetRawText(), out _, out _, out _):
+                    throw new SchemaException(
+                        $"{where}: the number {node.GetRawText()} is outside the exponent range this validator " +
+                        "orders exactly, and no consumer of a manifest could hold it either");
+                case JsonValueKind.Object:
+                    foreach (var member in node.EnumerateObject())
+                    {
+                        EnsureExactNumbers(member.Value, $"{where}/{member.Name}");
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    var position = 0;
+                    foreach (var item in node.EnumerateArray())
+                    {
+                        EnsureExactNumbers(item, $"{where}/{position++}");
+                    }
+                    break;
             }
         }
 
@@ -302,6 +385,11 @@ internal static class JsonSchemaLite
                 {
                     throw new SchemaException($"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in '{text}'");
                 }
+                var pythonOnly = PythonOnlyConstruct(text);
+                if (pythonOnly is not null)
+                {
+                    throw new SchemaException($"{where}/pattern: {pythonOnly} in '{text}'");
+                }
                 var catastrophic = CatastrophicShape(text);
                 if (catastrophic is not null)
                 {
@@ -326,6 +414,25 @@ internal static class JsonSchemaLite
             if (text is null || !text.StartsWith('#'))
             {
                 throw new SchemaException($"{where}/$ref: only local '#/...' references are supported, got '{text}'");
+            }
+            // A $ref may only NAME a definition — '#', '#/$defs/<name>' or '#/definitions/<name>'
+            // — and not descend past one. Every other target is refused because the walk never
+            // reaches it: annotations other than $defs and definitions are skipped, so
+            // `{"$ref": "#/default", "default": {...}}` validated against a subschema whose
+            // keywords, patterns and numbers nothing had checked, and '#/$defs/a/default' reached
+            // the same place one level lower. Refusing the shape closes both without walking
+            // anything twice, and every shipped schema already writes #/$defs/<name>. The Python
+            // twin refuses the same shapes.
+            var segments = text.StartsWith("#/", StringComparison.Ordinal)
+                ? text[2..].Split('/')
+                : Array.Empty<string>();
+            if (text != "#"
+                && !(segments.Length == 2 && segments[1].Length > 0
+                     && segments[0] is "$defs" or "definitions"))
+            {
+                throw new SchemaException(
+                    $"{where}/$ref: '{text}' must be '#' or name one definition ('#/$defs/<name>' or " +
+                    "'#/definitions/<name>'); nothing deeper is reached by the schema self-check");
             }
             var node = _root;
             var pointer = text[1..];
@@ -406,8 +513,7 @@ internal static class JsonSchemaLite
                 }
             }
 
-            if (schema.TryGetProperty("enum", out var options)
-                && !options.EnumerateArray().Any(option => JsonEquals(instance, option)))
+            if (schema.TryGetProperty("enum", out var options) && !EnumContains(options, instance, path))
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is not one of {Display(options)}"));
             }
@@ -617,6 +723,66 @@ internal static class JsonSchemaLite
             return (close - index + 1, high!.Length == 0 || CountValue(high) > 1);
         }
 
+        /// <summary>
+        /// This parser refuses a repetition count above Int32.MaxValue outright ("Quantifier and
+        /// capture group numbers must be less than or equal to Int32.MaxValue") while Python
+        /// compiles it, so a pattern carrying one is usable in CI and unusable here.
+        /// </summary>
+        private const long MaxRepetition = 2_147_483_647;
+
+        /// <summary>
+        /// `{,n}` or `{,}` at <paramref name="index"/>: Python reads them as {0,n} and {0,}; this
+        /// parser reads literal characters. So `^a{,3}$` matches "aa" in one engine and only the
+        /// text "a{,3}" in the other — and `a{,3}+` is a possessive quantifier QuantifierAt, which
+        /// needs a lower bound, never sees.
+        /// </summary>
+        private static bool OmittedLowerBound(string pattern, int index)
+        {
+            var cursor = index + 1;
+            if (cursor >= pattern.Length || pattern[cursor] != ',')
+            {
+                return false;
+            }
+            cursor++;
+            while (cursor < pattern.Length && char.IsAsciiDigit(pattern[cursor]))
+            {
+                cursor++;
+            }
+            return cursor < pattern.Length && pattern[cursor] == '}';
+        }
+
+        /// <summary>A `{n}` / `{n,}` / `{n,m}` whose count is past what this parser accepts.</summary>
+        private static bool OversizedCount(string pattern, int index)
+        {
+            var cursor = index + 1;
+            while (cursor < pattern.Length && (char.IsAsciiDigit(pattern[cursor]) || pattern[cursor] == ','))
+            {
+                cursor++;
+            }
+            if (cursor >= pattern.Length || pattern[cursor] != '}')
+            {
+                return false;
+            }
+            var body = pattern[(index + 1)..cursor];
+            var comma = body.IndexOf(',');
+            var low = comma < 0 ? body : body[..comma];
+            var high = comma < 0 ? null : body[(comma + 1)..];
+            return (IsCount(low) && CountAbove(low)) || (high is { Length: > 0 } && IsCount(high) && CountAbove(high));
+        }
+
+        /// <summary>The count spelled by <paramref name="text"/> exceeds MaxRepetition.</summary>
+        private static bool CountAbove(string text)
+        {
+            var stripped = text.TrimStart('0');
+            if (stripped.Length == 0)
+            {
+                return false;
+            }
+            return stripped.Length > 10
+                   || !long.TryParse(stripped, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+                   || value > MaxRepetition;
+        }
+
         private static bool IsCount(string text) => text.Length > 0 && text.All(char.IsAsciiDigit);
 
         /// <summary>
@@ -808,13 +974,84 @@ internal static class JsonSchemaLite
             "\\A", "\\Z", "\\z", "\\G", "(?<=", "(?<!", "\\p{", "\\P{", "(?i)", "(?m)", "(?s)", "(?x)", "(?#",
         };
 
+        /// <summary>
+        /// The reason a pattern uses a construct Python has and ECMA-262 does not, or null. Python
+        /// 3.11 accepts possessive quantifiers (a++, a*+, a?+, a{2,3}+) and atomic groups ((?>...));
+        /// this parser reads the second '+' as a nested quantifier and refuses the pattern, so
+        /// without the refusal a schema using one passes CI and is unusable here. Naming the
+        /// construct is the point: both engines refuse it for the same stated reason. Found by
+        /// walking the pattern rather than by searching for a substring, so a literal '\\++' and a
+        /// character class '[(?>]' are read as what they are and stay legal. The twin of
+        /// _python_only_construct in scripts/validation/validate_config_schemas.py.
+        /// </summary>
+        internal static string? PythonOnlyConstruct(string pattern)
+        {
+            var index = 0;
+            while (index < pattern.Length)
+            {
+                var c = pattern[index];
+                if (c == '\\')
+                {
+                    index += 2;
+                    continue;
+                }
+                if (c == '[')
+                {
+                    var cursor = index + 1;
+                    if (cursor < pattern.Length && pattern[cursor] == '^')
+                    {
+                        cursor++;
+                    }
+                    if (cursor < pattern.Length && pattern[cursor] == ']')
+                    {
+                        cursor++; // a leading ']' is a literal
+                    }
+                    while (cursor < pattern.Length && pattern[cursor] != ']')
+                    {
+                        cursor += pattern[cursor] == '\\' ? 2 : 1;
+                    }
+                    index = cursor + 1;
+                    continue;
+                }
+                if (c == '(' && pattern.AsSpan(index + 1).StartsWith("?>"))
+                {
+                    return "an atomic group ('(?>') is outside the portable (ECMA-262) regex subset";
+                }
+                if (c == '{' && OmittedLowerBound(pattern, index))
+                {
+                    return "an omitted lower bound ('{,n}') is outside the portable (ECMA-262) regex subset";
+                }
+                if (c == '{' && OversizedCount(pattern, index))
+                {
+                    return $"a repetition count above {MaxRepetition} is outside the range every engine holds";
+                }
+                var (length, _) = QuantifierAt(pattern, index);
+                if (length > 0)
+                {
+                    index += length;
+                    if (index < pattern.Length && pattern[index] == '+')
+                    {
+                        return "a possessive quantifier ('++', '*+', '?+', '{n,m}+') is outside the portable (ECMA-262) regex subset";
+                    }
+                    if (index < pattern.Length && pattern[index] == '?')
+                    {
+                        index++;   // lazy: legal in both dialects
+                    }
+                    continue;
+                }
+                index++;
+            }
+            return null;
+        }
+
         private static void ValidateNumber(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
             // The Python engine refuses a token outside double range while parsing ("1e400" reads
-            // as inf, and System.Text.Json's binders fail on it); JsonDocument parses it happily,
-            // so the same manifest would be valid here and unreadable there. Say so once, before
-            // any bound is compared.
-            if (!instance.TryGetDouble(out var magnitude) || !double.IsFinite(magnitude))
+            // as inf, and System.Text.Json's binders fail on it), and refuses an exponent its own
+            // Decimal cannot hold; JsonDocument parses both happily, so the same manifest would be
+            // valid here and unreadable there. Say so once, before any bound is compared — which is
+            // also what leaves CompareNumbers with two numbers it can order exactly.
+            if (!IsFiniteNumber(instance))
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is out of range for a JSON number: no consumer of this manifest can hold it"));
                 return;
@@ -997,20 +1234,65 @@ internal static class JsonSchemaLite
             _ => false,
         };
 
-        private static bool JsonEquals(JsonElement left, JsonElement right)
+        /// <summary>
+        /// <paramref name="instance"/> is one of <paramref name="options"/>, charging every
+        /// comparison and rendering the instance once. Nothing used to charge here, and JsonEquals
+        /// re-rendered the whole instance per option: a 200,000-entry enum against a 100 KB string
+        /// drove billions of characters of rendering for a single keyword evaluation, and this
+        /// engine has no whole-request deadline. Both keys are computed on first use and reused, so
+        /// the cost of the keyword is bounded by the size of the two documents. The Python twin
+        /// (_enum_contains) caches the same two keys.
+        /// </summary>
+        private bool EnumContains(JsonElement options, JsonElement instance, string path)
         {
-            if (left.ValueKind == JsonValueKind.Number && right.ValueKind == JsonValueKind.Number)
+            if (options.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+            var keys = new InstanceKeys(instance);
+            foreach (var option in options.EnumerateArray())
+            {
+                CountEvaluation(path);
+                if (JsonEquals(keys, option))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>The equality keys for one instance, each rendered at most once.</summary>
+        private sealed class InstanceKeys
+        {
+            private string? _number;
+            private string? _canonical;
+
+            public InstanceKeys(JsonElement value) => Value = value;
+
+            public JsonElement Value { get; }
+
+            public string Number => _number ??= CanonicalNumber(Value);
+
+            public string CanonicalKey => _canonical ??= Canonical(Value);
+        }
+
+        private static bool JsonEquals(JsonElement left, JsonElement right) =>
+            JsonEquals(new InstanceKeys(left), right);
+
+        private static bool JsonEquals(InstanceKeys left, JsonElement right)
+        {
+            if (left.Value.ValueKind == JsonValueKind.Number && right.ValueKind == JsonValueKind.Number)
             {
                 // As written, not as doubles: 9007199254740992 and 9007199254740993 share one
                 // double. See CanonicalNumber.
-                return CanonicalNumber(left) == CanonicalNumber(right);
+                return left.Number == CanonicalNumber(right);
             }
-            if (left.ValueKind is JsonValueKind.True or JsonValueKind.False
+            if (left.Value.ValueKind is JsonValueKind.True or JsonValueKind.False
                 || right.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
-                return left.ValueKind == right.ValueKind;
+                return left.Value.ValueKind == right.ValueKind;
             }
-            return Canonical(left) == Canonical(right);
+            return left.CanonicalKey == Canonical(right);
         }
 
         /// <summary>Canonical form for messages: a whole manifest quoted back is noise, not a hint.</summary>
@@ -1071,6 +1353,34 @@ internal static class JsonSchemaLite
                 : (negative ? "-" : "") + significant + "e" + exponent.ToString(CultureInfo.InvariantCulture);
         }
 
+        internal static bool TryGetWholeNumberFor(JsonElement number, out long value)
+        {
+            value = 0;
+            if (number.ValueKind != JsonValueKind.Number
+                || !TryNormalizeNumber(number.GetRawText(), out var negative, out var digits, out var exponent))
+            {
+                return false;
+            }
+            if (digits.Length == 0)
+            {
+                return true;   // zero, however it is spelled
+            }
+            // Fractional, or too wide for any long. Within 19 digits the whole number is spelled
+            // out and long.TryParse decides — so long.MaxValue and long.MinValue both read exactly,
+            // where an 18-digit ceiling refused them.
+            if (exponent < 0 || digits.Length + exponent > 19)
+            {
+                return false;
+            }
+            var whole = exponent == 0 ? digits : digits + new string('0', (int)exponent);
+            return long.TryParse(negative ? "-" + whole : whole, NumberStyles.AllowLeadingSign,
+                                 CultureInfo.InvariantCulture, out value);
+        }
+
+        /// <summary>True when this token's exponent is inside the range ordered exactly here.</summary>
+        internal static bool IsExactNumber(JsonElement number) =>
+            TryNormalizeNumber(number.GetRawText(), out _, out _, out _);
+
         /// <summary>Splits a JSON number token into sign, significant digits and a power of ten.</summary>
         private static bool TryNormalizeNumber(string raw, out bool negative, out string significant, out long exponent)
         {
@@ -1081,23 +1391,35 @@ internal static class JsonSchemaLite
             var exponentAt = body.IndexOfAny(new[] { 'e', 'E' });
             if (exponentAt >= 0)
             {
-                // Zero is zero however it is spelled: 0e-1000000001 has nothing for an exponent to
-                // scale, so it normalizes before the guard below can refuse it.
-                if (body[..exponentAt].Trim('0').Trim('.').Length == 0)
-                {
-                    return true;
-                }
                 // The bound keeps the arithmetic below from wrapping: subtracting a fraction's
                 // digits from long.MinValue would turn a tiny number into an enormous one and
-                // reverse the comparison. Past this magnitude nothing exact is left to say — and
-                // such a value is out of double range anyway, which ValidateNumber refuses first.
-                const long exponentLimit = 1_000_000_000;
+                // reverse the comparison. It sits where the Python engine's own numbers stop —
+                // decimal.Decimal refuses a larger exponent while READING the file — so every token
+                // that engine can hold is ordered exactly here instead of through a double, which
+                // is what made `minimum: 1e-1000000001` and the instance 0 two zeroes.
+                //
+                // It is applied to the exponent AS WRITTEN, before the adjustments below, because
+                // that literal is the one thing both engines can read without reproducing the
+                // other's arithmetic: judging a normalized exponent instead put
+                // 1.1e-999999999999999999 and 10e-1000000000000000000 — one scaled up by its
+                // fraction, one down by its trailing zero — on opposite sides in the two engines.
+                // Zero is judged the same way for the same reason. The adjustments then move the
+                // exponent by at most the token's length, which leaves this three orders of
+                // magnitude clear of long.MinValue.
+                const long exponentLimit = 999_999_999_999_999_999;
                 // Compared, not Math.Abs'd: Math.Abs(long.MinValue) throws, and long.MinValue is
                 // exactly the exponent an attacker would write.
                 if (!long.TryParse(body[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent)
                     || exponent > exponentLimit || exponent < -exponentLimit)
                 {
                     return false;
+                }
+                // Zero is zero however it is spelled: 0e-1000000001 has nothing for an exponent to
+                // scale, so it normalizes to "0" once the written exponent is in range.
+                if (body[..exponentAt].Trim('0').Trim('.').Length == 0)
+                {
+                    exponent = 0;
+                    return true;
                 }
                 body = body[..exponentAt];
             }
@@ -1123,7 +1445,14 @@ internal static class JsonSchemaLite
             if (!TryNormalizeNumber(left.GetRawText(), out var leftNegative, out var leftDigits, out var leftExponent)
                 || !TryNormalizeNumber(right.GetRawText(), out var rightNegative, out var rightDigits, out var rightExponent))
             {
-                return left.GetDouble().CompareTo(right.GetDouble()); // exponent beyond long: nothing exact is left
+                // Unreachable for a document either engine accepts: ValidateNumber refuses an
+                // instance number outside double range before any bound is compared, and CheckSchema
+                // refuses a schema number past the exponent limit wherever the walk reaches — which,
+                // since the walk follows $ref, is everywhere a bound can be. Comparing doubles here
+                // is what made 1e-1000000001 equal to zero, so there is no such fallback any more.
+                throw new SchemaException(
+                    "a number token beyond this validator's exponent range cannot be ordered exactly: " +
+                    $"'{left.GetRawText()}' against '{right.GetRawText()}'");
             }
             var leftZero = leftDigits.Length == 0;
             var rightZero = rightDigits.Length == 0;

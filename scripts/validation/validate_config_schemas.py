@@ -162,12 +162,32 @@ def _canonical(value: Any) -> str:
     return json.dumps(value)
 
 
-def _number_key(value: Any) -> str:
-    """A number's equality key: sign, significant digits, and the power of ten that scales them.
+# The exponent both engines hold, applied to the LITERAL in the token - the one place the two
+# engines can agree without either reproducing the other's normalization. It is also exactly where
+# decimal.Decimal's own constructor stops on this platform, so the explicit check only makes that
+# boundary the same everywhere rather than a property of the local build. Keep it equal to
+# `exponentLimit` in src/mcp/HELIOS.Mcp/JsonSchemaLite.cs.
+_MAX_EXPONENT = 999_999_999_999_999_999
+_EXPONENT_IN_TOKEN = re.compile(r"[eE]([+-]?[0-9]+)\Z")
 
-    1, 1.0 and 1e0 are one number and share this key; 9007199254740992 and 9007199254740993 are
-    two, and so are 0 and 1e-29. The C# twin's CanonicalNumber produces the same shape, so the two
-    engines judge one manifest alike.
+
+def _exponent_out_of_range(written: str) -> bool:
+    """The exponent literal's magnitude is past _MAX_EXPONENT.
+
+    Leading zeros are stripped before the digits are counted, and the count decides the answer for
+    anything long: int() on a 4,300-digit string is refused outright by CPython, and `1e-000...01`
+    is the exponent -1 however many zeros precede it - which .NET's long.TryParse reads without
+    complaint, so an int() here would have refused a token the C# twin accepts.
+    """
+    digits = written.lstrip("+-").lstrip("0") or "0"
+    return len(digits) > len(str(_MAX_EXPONENT)) or int(digits) > _MAX_EXPONENT
+
+
+def _normalize_number(value: Any) -> tuple[bool, str, int]:
+    """(negative, significant digits, power of ten) - the C# twin's TryNormalizeNumber.
+
+    1, 1.0 and 1e0 normalize alike; 9007199254740992 and 9007199254740993 do not, and neither do
+    0 and 1e-29. No digits means zero, whatever exponent the token carried.
     """
     if isinstance(value, decimal.Decimal):
         exact = value
@@ -178,10 +198,19 @@ def _number_key(value: Any) -> str:
     sign, digits, exponent = exact.as_tuple()
     text = "".join(str(digit) for digit in digits).lstrip("0")
     stripped = text.rstrip("0")
-    exponent = int(exponent) + (len(text) - len(stripped))
-    if not stripped:
+    return bool(sign), stripped, int(exponent) + (len(text) - len(stripped))
+
+
+def _number_key(value: Any) -> str:
+    """A number's equality key: sign, significant digits, and the power of ten that scales them.
+
+    The C# twin's CanonicalNumber produces the same shape, so the two engines judge one manifest
+    alike.
+    """
+    negative, digits, exponent = _normalize_number(value)
+    if not digits:
         return "0"
-    return f"{'-' if sign else ''}{stripped}e{exponent}"
+    return f"{'-' if negative else ''}{digits}e{exponent}"
 
 
 def _canonical_key(value: Any) -> str:
@@ -282,6 +311,47 @@ def _quantifier_at(pattern: str, index: int) -> tuple[int, bool]:
     if not high:                   # {n,}
         return close - index + 1, True
     return close - index + 1, _count_value(high) > 1
+
+
+# .NET refuses a repetition count above this outright ("Quantifier and capture group numbers
+# must be less than or equal to Int32.MaxValue"), while Python compiles it, so a pattern carrying
+# one is usable in CI and unusable through helios_config_validate.
+_MAX_REPETITION = 2_147_483_647
+
+
+def _omitted_lower_bound(pattern: str, index: int) -> bool:
+    """`{,n}` or `{,}` at `index`: Python reads them as {0,n} and {0,}; .NET reads literal
+    characters.
+
+    So `^a{,3}$` matches "aa" in one engine and nothing but the text "a{,3}" in the other - and
+    `a{,3}+` is a possessive quantifier that _quantifier_at, which needs a lower bound, never sees.
+    """
+    cursor = index + 1
+    if cursor >= len(pattern) or pattern[cursor] != ",":
+        return False
+    cursor += 1
+    while cursor < len(pattern) and pattern[cursor] in "0123456789":
+        cursor += 1
+    return cursor < len(pattern) and pattern[cursor] == "}"
+
+
+def _count_above(text: str, ceiling: int) -> bool:
+    """The count spelled by `text` exceeds `ceiling`, without building a huge int for a huge one."""
+    stripped = text.lstrip("0") or "0"
+    return len(stripped) > len(str(ceiling)) or int(stripped) > ceiling
+
+
+def _oversized_count(pattern: str, index: int) -> bool:
+    """A `{n}` / `{n,}` / `{n,m}` at `index` whose count is past what .NET's parser accepts."""
+    cursor = index + 1
+    length = len(pattern)
+    while cursor < length and pattern[cursor] in "0123456789,":
+        cursor += 1
+    if cursor >= length or pattern[cursor] != "}":
+        return False
+    low, comma, high = pattern[index + 1:cursor].partition(",")
+    parts = (low, high) if comma else (low,)
+    return any(_is_count(part) and _count_above(part, _MAX_REPETITION) for part in parts)
 
 
 def _is_count(text: str) -> bool:
@@ -466,6 +536,51 @@ def _bounded(what: str, where: str, work: Callable[[], Any]) -> Any:
             "that must be consumed each repetition, instead of a quantified group)") from None
 
 
+def _python_only_construct(pattern: str) -> str | None:
+    """The reason this pattern means different things to the three engines, or None.
+
+    Python 3.11 added possessive quantifiers (a++, a*+, a?+, a{2,3}+) and atomic groups ((?>...)),
+    it reads `{,n}` and `{,}` as repetitions where .NET reads literal characters, and it compiles a
+    repetition count .NET refuses outright. Each of those makes a schema usable in CI and unusable
+    through helios_config_validate. Found by walking the pattern rather than by searching for a
+    substring, so a literal '\\++' - one or more plus signs - and a character class '[(?>]' are read
+    as what they are and stay legal.
+    """
+    index = 0
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "[":
+            cursor = index + 1
+            if cursor < length and pattern[cursor] == "^":
+                cursor += 1
+            if cursor < length and pattern[cursor] == "]":   # a leading ']' is a literal
+                cursor += 1
+            while cursor < length and pattern[cursor] != "]":
+                cursor += 2 if pattern[cursor] == "\\" else 1
+            index = cursor + 1
+            continue
+        if char == "(" and pattern.startswith("?>", index + 1):
+            return "an atomic group ('(?>') is outside the portable (ECMA-262) regex subset"
+        if char == "{" and _omitted_lower_bound(pattern, index):
+            return "an omitted lower bound ('{,n}') is outside the portable (ECMA-262) regex subset"
+        if char == "{" and _oversized_count(pattern, index):
+            return f"a repetition count above {_MAX_REPETITION} is outside the range every engine holds"
+        size, _ = _quantifier_at(pattern, index)
+        if size:
+            index += size
+            if index < length and pattern[index] == "+":
+                return "a possessive quantifier ('++', '*+', '?+', '{n,m}+') is outside the portable (ECMA-262) regex subset"
+            if index < length and pattern[index] == "?":
+                index += 1                                    # lazy: legal in both dialects
+            continue
+        index += 1
+    return None
+
+
 def _unsafe_pattern(pattern: str) -> str | None:
     """The reason a pattern is refused by every engine, or None when it is fine.
 
@@ -475,6 +590,9 @@ def _unsafe_pattern(pattern: str) -> str | None:
     unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
     if unportable is not None:
         return f"'{unportable}' is outside the portable (ECMA-262) regex subset"
+    python_only = _python_only_construct(pattern)
+    if python_only is not None:
+        return python_only
     return _catastrophic_shape(pattern)
 
 
@@ -510,6 +628,7 @@ class MiniValidator:
         self.root = schema
         self._regex: dict[str, re.Pattern[str]] = {}
         self._depth = 0
+        self._schema_depth = 0
         self._evaluations = 0
         self._memo: dict[tuple[int, int, str], list[Issue]] = {}
         # The self-check walks attacker-supplied structure too, so it runs under the same clock
@@ -523,6 +642,22 @@ class MiniValidator:
         self._walk_schema(self.root, "#")
 
     def _walk_schema(self, node: Any, where: str) -> None:
+        # The self-check recurses through the schema's own structure, and CountEvaluation-style
+        # budgets bound the NUMBER of nodes, not the depth of the call stack: a few thousand
+        # nested `not` or `items` raise RecursionError here, which is a traceback out of
+        # validate_all.py's whole sweep rather than a verdict about one schema. The C# twin
+        # (JsonSchemaLite.WalkSchema) would die with an uncatchable StackOverflowException, so
+        # both guard the walk at the same depth the instance walk uses.
+        self._schema_depth += 1
+        try:
+            if self._schema_depth > _MAX_DEPTH:
+                raise SchemaError(f"{where}: schema nesting deeper than {_MAX_DEPTH} levels - "
+                                  "more structure than any manifest schema needs")
+            self._walk_schema_here(node, where)
+        finally:
+            self._schema_depth -= 1
+
+    def _walk_schema_here(self, node: Any, where: str) -> None:
         if isinstance(node, bool):
             return
         if not isinstance(node, dict):
@@ -618,9 +753,22 @@ class MiniValidator:
             self._regex[pattern] = compiled
         return compiled
 
+    # A $ref may only NAME a definition - '#', '#/$defs/<name>' or '#/definitions/<name>' - and
+    # not descend past one. Every other target is refused because the walk never reaches it:
+    # annotations other than $defs and definitions are skipped, so `{"$ref": "#/default", ...}`
+    # validated against a subschema whose keywords, patterns and numbers nothing had checked, and
+    # `#/$defs/a/default` reached the same place one level lower. Refusing the shape closes both
+    # without walking anything twice, and every shipped schema already writes #/$defs/<name>.
+    _REF_CONTAINERS = ("$defs", "definitions")
+
     def _resolve(self, ref: Any, where: str) -> Any:
         if not isinstance(ref, str) or not ref.startswith("#"):
             raise SchemaError(f"{where}/$ref: only local '#/...' references are supported, got {ref!r}")
+        segments = ref[2:].split("/") if ref.startswith("#/") else []
+        if ref != "#" and not (len(segments) == 2 and segments[0] in self._REF_CONTAINERS and segments[1]):
+            raise SchemaError(f"{where}/$ref: {ref!r} must be '#' or name one definition "
+                              "('#/$defs/<name>' or '#/definitions/<name>'); nothing deeper is "
+                              "reached by the schema self-check")
         node: Any = self.root
         pointer = ref[1:]
         if pointer.startswith("/"):
@@ -637,6 +785,21 @@ class MiniValidator:
         return node
 
     # -- validation -------------------------------------------------------------------
+
+    def charge(self, path: str) -> None:
+        """Spend one unit of the work budget, or say which instance exhausted it.
+
+        Public because the library engine's overridden keywords charge here too: python-jsonschema
+        runs its own property and pattern loops, and work done there is work done against the same
+        instance."""
+        self._evaluations += 1
+        if self._evaluations > _MAX_EVALUATIONS:
+            raise SchemaError(
+                f"{path}: this schema costs more than {_MAX_EVALUATIONS} keyword evaluations for one "
+                "instance - more work than any manifest should need")
+
+    def reset_budget(self) -> None:
+        self._evaluations = 0
 
     def iter_errors(self, instance: Any) -> list[Issue]:
         errors: list[Issue] = []
@@ -701,7 +864,7 @@ class MiniValidator:
                 errors.append(Issue(path, f"{_brief(instance)} is not of type {wanted}"))
                 return  # type mismatches make the remaining keywords meaningless
 
-        if "enum" in schema and not any(_json_equal(instance, option) for option in schema["enum"]):
+        if "enum" in schema and not self._enum_contains(schema["enum"], instance, path):
             errors.append(Issue(path, f"{_brief(instance)} is not one of {_canonical(schema['enum'])}"))
         if "const" in schema and not _json_equal(instance, schema["const"]):
             errors.append(Issue(path, f"{_canonical(schema['const'])} was expected"))
@@ -727,6 +890,40 @@ class MiniValidator:
             branch = "then" if not self._errors_for(schema["if"], instance, path) else "else"
             if branch in schema:
                 self._validate(schema[branch], instance, path, errors)
+
+    def _enum_contains(self, options: Any, instance: Any, path: str) -> bool:
+        """`instance` is one of `options` - _json_equal's rules, with the instance rendered once.
+
+        A 200,000-entry enum against a 100 KB string used to render that string once per option:
+        gigabytes of work charged as a single keyword evaluation. The comparison keys are computed
+        on first use and reused, and every comparison spends a unit of the budget, so the cost of
+        this keyword is bounded by the size of the documents. The C# twin caches the same two keys.
+        """
+        if not isinstance(options, list):
+            return False
+        # NOT dict.setdefault: it evaluates its default argument whether or not the key is
+        # present, so the instance was still rendered once per option and the cache saved nothing.
+        number_key: str | None = None
+        canonical_key: str | None = None
+        for option in options:
+            self.charge(path)
+            if isinstance(instance, bool) or isinstance(option, bool):
+                if isinstance(instance, bool) and isinstance(option, bool) and instance == option:
+                    return True
+                continue
+            if isinstance(instance, _NUMBER_TYPES) and isinstance(option, _NUMBER_TYPES):
+                if number_key is None:
+                    number_key = canonical_key if canonical_key is not None else _number_key(instance)
+                if number_key == _number_key(option):
+                    return True
+                continue
+            if canonical_key is None:
+                # _canonical_key of a number IS its number key, so a mixed enum renders the
+                # instance once rather than once per kind.
+                canonical_key = number_key if number_key is not None else _canonical_key(instance)
+            if canonical_key == _canonical_key(option):
+                return True
+        return False
 
     def _errors_for(self, schema: Any, instance: Any, path: str) -> list[Issue]:
         collected: list[Issue] = []
@@ -825,11 +1022,7 @@ class MiniValidator:
                 # Every attempt is charged: P patterns against N keys is P×N matches, and only
                 # _validate used to touch the budget, so a large pair could spend millions of
                 # matches against one instance evaluation. The C# twin charges the same way.
-                self._evaluations += 1
-                if self._evaluations > _MAX_EVALUATIONS:
-                    raise SchemaError(
-                        f"{path}: this schema costs more than {_MAX_EVALUATIONS} keyword evaluations for one "
-                        "instance - more work than any manifest should need")
+                self.charge(path)
                 compiled = self._compile(pattern, path)
                 if _bounded(f"matching {pattern!r}", path, lambda: compiled.search(name)):
                     matched = True
@@ -905,7 +1098,8 @@ spec = importlib.util.spec_from_file_location("_helios_config_schema_validator",
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
-request = json.loads(sys.stdin.read(), parse_float=module._exact_number)
+request = json.loads(sys.stdin.read(), parse_float=module._exact_number,
+                     parse_int=module._exact_integer)
 try:
     issues, engine = module.validate_instance(request["instance"], request["schema"], request["engine"])
 except module.SchemaError as exc:
@@ -983,6 +1177,7 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
             if not validator.is_type(instance, "string"):
                 return
             compiled = checked._compile(pattern, "#")
+            checked.charge("$")
             if not _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(instance)):
                 yield jsonschema.exceptions.ValidationError(f"{instance!r} does not match {pattern!r}")
 
@@ -992,6 +1187,11 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
             for pattern, subschema in pattern_properties.items():
                 compiled = checked._compile(pattern, "#")
                 for name, value in instance.items():
+                    # Charged like the built-in engine's own loop: python-jsonschema counts nothing,
+                    # so P patterns against N keys was P×N matches spent outside every budget, and
+                    # the default (library) path could be held to the per-manifest deadline for
+                    # every mapped manifest in the sweep.
+                    checked.charge("$")
                     if _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(name)):
                         yield from validator.descend(value, subschema, path=name, schema_path=pattern)
 
@@ -1009,6 +1209,7 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
                 covered = False
                 for pattern in patterns:
                     compiled = checked._compile(pattern, "#")
+                    checked.charge("$")   # the coverage matches are the same P×N work, charged too
                     if _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(name)):
                         covered = True
                         break
@@ -1039,6 +1240,7 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
         for format_name, check in _FORMATS.items():
             checker.checks(format_name)(lambda value, _check=check: not isinstance(value, str) or _check(value))
         validator = validator_class(schema, format_checker=checker)
+        checked.reset_budget()   # the pass below gets the whole budget, not what the self-check left
         try:
             # python-jsonschema runs its own re matches and carries no timeout of its own, so the
             # whole pass goes under one deadline: the guarantee holds for both engines.
@@ -1083,19 +1285,44 @@ def _exact_number(token: str) -> Any:
     approximate = float(token)
     if not math.isfinite(approximate):
         raise ValueError(f"number token {token!r} is out of range for a JSON number (it reads as {approximate})")
+    # The exponent as WRITTEN, before any normalization: the C# twin reads the same digits, so
+    # neither engine has to reproduce the other's arithmetic to reach the same verdict. Checking a
+    # normalized exponent instead made 1.1e-999999999999999999 and 10e-1000000000000000000 - one
+    # scaled up by its fraction, one down by its trailing zero - land on opposite sides in the two.
+    written = _EXPONENT_IN_TOKEN.search(token)
+    if written is not None and _exponent_out_of_range(written.group(1)):
+        raise ValueError(f"number token {token!r} is out of range for a JSON number "
+                         f"(its exponent is past 1e{_MAX_EXPONENT}, which neither validation engine "
+                         "can order exactly)")
     try:
         # An absurd exponent underflows the float check to 0.0 and then raises out of the Decimal
         # constructor ("1e-999999999999999999999999"); that is this manifest's verdict, not a
         # traceback through the CLI's --json output.
-        return decimal.Decimal(token)
+        value = decimal.Decimal(token)
     except decimal.DecimalException as exc:
         raise ValueError(f"number token {token!r} is out of range for a JSON number ({exc.__class__.__name__})") from exc
+    return value
+
+
+def _exact_integer(token: str) -> int:
+    """An integer token, refused when no consumer could hold it.
+
+    json's default parser builds a Python int of any size, so a 400-digit integer read fine here
+    while ModelCatalog.TryLoad cannot bind it to a double and the C# engine reports it out of
+    range - the required gate approving a catalog the hub cannot load. The same rule as
+    _exact_number, applied to the tokens json routes past it.
+    """
+    if not math.isfinite(float(token)):
+        raise ValueError(f"number token {token!r} is out of range for a JSON number "
+                         f"(it reads as {float(token)})")
+    return int(token)   # at most ~309 digits by the check above, so int() is bounded too
 
 
 def load_json(path: Path, label: str) -> Any:
     try:
         with path.open(encoding="utf-8") as stream:
-            return json.load(stream, parse_constant=_reject_constant, parse_float=_exact_number)
+            return json.load(stream, parse_constant=_reject_constant, parse_float=_exact_number,
+                             parse_int=_exact_integer)
     except FileNotFoundError as exc:
         raise ValueError(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:
@@ -1359,6 +1586,125 @@ def _check_github_milestones(instance: Any) -> list[Issue]:
     return issues
 
 
+# What the fleet may attempt across ALL pools, not per pool. Every per-field ceiling is per pool,
+# and `helios-fleet start` selects every pool by default: 100 pools of 64 workers each passed both
+# validators and asked one host for 6,400 processes. scale-fleet.ps1 likewise sums each pool's
+# burst lanes into ONE absolute `az vmss scale --new-capacity`, so the aggregate is what bills.
+# Four times the 64-process ceiling start-fleet.ps1 enforces on a single pool, and twice the
+# 256-lane ceiling one pool may request - far above the shipped topology (36 workers, 24 burst
+# lanes across four pools) and far below a number that takes a host or an invoice down.
+_MAX_FLEET_LOCAL_WORKERS = 256
+_MAX_FLEET_BURST_LANES = 512
+
+
+def _fleet_number(value: Any) -> int | None:
+    """A capacity field as a whole number, or None when it is absent or not one.
+
+    A whole number however it is spelled: PowerShell's [int] cast reads 64, 64.0 and 6.4e1 alike,
+    and so does the C# twin's TryGetWholeNumber."""
+    if isinstance(value, bool) or not isinstance(value, _NUMBER_TYPES) or not _is_integer(value):
+        return None
+    return int(value)
+
+
+_FLEET_AUTOSCALING_KEYS = ("mode", "minLocalLanes", "maxLocalLanes", "maxBurstLanes",
+                           "scaleUpQueueDepth", "scaleDownIdleSeconds", "burstTarget")
+
+
+def _fleet_autoscaling(pool: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any] | None:
+    """scale-fleet.ps1's Get-PoolAutoscaling: the pool's block merged over defaults', property by
+    property. None when neither declares one - the reconciler then skips the pool entirely."""
+    base = defaults.get("autoscaling")
+    own = pool.get("autoscaling")
+    if not isinstance(base, dict) and not isinstance(own, dict):
+        return None
+    base = base if isinstance(base, dict) else {}
+    own = own if isinstance(own, dict) else {}
+    merged: dict[str, Any] = {}
+    for name in _FLEET_AUTOSCALING_KEYS:
+        value = own.get(name, base.get(name))
+        if value is not None:
+            merged[name] = value
+    return merged
+
+
+def _fleet_lane_cap(pool: dict[str, Any], defaults: dict[str, Any]) -> int:
+    """hermesFleet.maxConcurrentLanes for this pool, or 0 for "no declared cap". Both scripts read
+    the pool's whole hermesFleet block or the defaults' - never a merge of the two."""
+    hermes = pool.get("hermesFleet")
+    if not isinstance(hermes, dict):
+        hermes = defaults.get("hermesFleet")
+    cap = _fleet_number(hermes.get("maxConcurrentLanes")) if isinstance(hermes, dict) else None
+    return cap if cap is not None and cap > 0 else 0
+
+
+def _check_fleet_capacity(instance: Any) -> list[Issue]:
+    """The totals the fleet scripts act on, resolved the way they resolve them.
+
+    start-fleet.ps1's Get-EffectivePoolSize: the pool's poolSize, else the defaults', else 1, then
+    clamped to hermesFleet.maxConcurrentLanes. scale-fleet.ps1: the merged autoscaling block, where
+    a `cloud` pool holds no local lanes at all, maxLocalLanes defaults to minLocalLanes (so a lone
+    minimum IS the capacity), the lane cap clamps both, and the maximum is raised back to the
+    minimum; burst lanes count only for a pool that may burst (hybrid or cloud).
+
+    What the topology declares is what this bounds. `start-fleet.ps1 -PoolSize N` overrides every
+    pool's size from the command line and the workspace profile lowers it; neither is in the file,
+    and an operator typing a flag is making their own decision. This says what the manifest may ask
+    for on its own.
+    """
+    if not isinstance(instance, dict):
+        return []
+    pools = instance.get("pools")
+    if not isinstance(pools, list):
+        return []
+    defaults = instance.get("defaults") if isinstance(instance.get("defaults"), dict) else {}
+    default_size = _fleet_number(defaults.get("poolSize"))
+    workers = lanes = burst = 0
+    for pool in pools:
+        if not isinstance(pool, dict):
+            continue
+        cap = _fleet_lane_cap(pool, defaults)
+        size = _fleet_number(pool.get("poolSize"))
+        if size is None:
+            size = default_size if default_size is not None else 1
+        workers += min(size, cap) if cap else size
+
+        autoscaling = _fleet_autoscaling(pool, defaults)
+        if autoscaling is None:
+            continue                       # no autoscaling block anywhere: the reconciler skips it
+        mode = autoscaling.get("mode")
+        mode = mode if isinstance(mode, str) else "local"
+        minimum = _fleet_number(autoscaling.get("minLocalLanes"))
+        minimum = 1 if minimum is None else minimum
+        maximum = _fleet_number(autoscaling.get("maxLocalLanes"))
+        maximum = minimum if maximum is None else maximum
+        if mode == "cloud":
+            minimum = maximum = 0
+        if cap:
+            maximum = min(maximum, cap)
+            minimum = min(minimum, cap)
+        lanes += max(maximum, minimum)
+        if mode in ("hybrid", "cloud"):
+            burst += _fleet_number(autoscaling.get("maxBurstLanes")) or 0
+    issues: list[Issue] = []
+    if workers > _MAX_FLEET_LOCAL_WORKERS:
+        issues.append(Issue("$.pools",
+                            f"{len(pools)} pools ask for {workers} worker processes together; "
+                            f"start-fleet.ps1 selects every pool by default, and {_MAX_FLEET_LOCAL_WORKERS} "
+                            "is the ceiling for one host"))
+    if lanes > _MAX_FLEET_LOCAL_WORKERS:
+        issues.append(Issue("$.pools",
+                            f"maxLocalLanes totals {lanes} across the pools; scale-fleet.ps1 runs a "
+                            f"local process per lane, and {_MAX_FLEET_LOCAL_WORKERS} is the ceiling "
+                            "for one host"))
+    if burst > _MAX_FLEET_BURST_LANES:
+        issues.append(Issue("$.pools",
+                            f"maxBurstLanes totals {burst} across the pools; scale-fleet.ps1 sums them "
+                            f"into one 'az vmss scale --new-capacity', and {_MAX_FLEET_BURST_LANES} "
+                            "is the ceiling for that request"))
+    return issues
+
+
 def _check_fleet_pools(instance: Any) -> list[Issue]:
     """A pool name is an identity: start-fleet.ps1 derives the assignee prefix and the Hermes board
     from it and scale-fleet.ps1 keys per-pool state by it, so two pools sharing a name share lanes
@@ -1377,7 +1723,7 @@ def _check_fleet_pools(instance: Any) -> list[Issue]:
             issues.append(Issue(f"$.pools[{index}].name",
                                 f"'{name}' repeats pool {first}; a pool name is its board, its assignee "
                                 "prefix and its scaling key"))
-    return issues
+    return issues + _check_fleet_capacity(instance)
 
 
 def _check_github_labels(instance: Any) -> list[Issue]:
@@ -1399,6 +1745,72 @@ def _check_github_labels(instance: Any) -> list[Issue]:
         if first != index:
             issues.append(Issue(f"{prefix}[{index}].name",
                                 f"'{name}' repeats entry {first} ('{entries[first].get('name')}'); GitHub matches label names case-insensitively"))
+    return issues
+
+
+def _check_model_catalog(instance: Any) -> list[Issue]:
+    """A profile's identity is (provider, model), not the whole object.
+
+    Two profiles repeating one pair but differing in price or context validate as distinct objects
+    while the hub reads them as one model twice: ModelCatalog's context filter takes the FIRST
+    match and preference ranking sees both, so the catalog states two facts for one model.
+    scripts/build/validate-model-catalog.py already refuses the pair; this is the same rule where
+    the shared engines - the CLI sweep and helios_config_validate - can see it.
+    """
+    models = instance.get("models") if isinstance(instance, dict) else None
+    if not isinstance(models, list):
+        return []
+    issues: list[Issue] = []
+    seen: dict[tuple[str, str], int] = {}
+    for index, entry in enumerate(models):
+        provider = entry.get("provider") if isinstance(entry, dict) else None
+        model = entry.get("model") if isinstance(entry, dict) else None
+        if not isinstance(provider, str) or not isinstance(model, str) or not provider or not model:
+            continue
+        first = seen.setdefault((provider, model), index)
+        if first != index:
+            issues.append(Issue(f"$.models[{index}]",
+                                f"'{provider}/{model}' repeats entry {first}; a provider and model "
+                                "name together identify one profile"))
+    return issues
+
+
+# The shapes scripts/validation/validate_helios_fabric_contract.py refuses anywhere in the Fabric
+# contract. The contract records secret NAMES and references, never material, and a value like this
+# in a free-text field (notes, receiptPath) is the one thing its schema cannot express.
+_SECRET_SHAPES = (
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{20,}"),
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9._-]{12,}\.[A-Za-z0-9._-]{12,}"),
+    re.compile(r"https?://[^/\s:@]+:[^/\s@]+@"),
+)
+
+
+def _iter_strings(value: Any, path: str = "$"):
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _iter_strings(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _iter_strings(item, f"{path}.{key}")
+
+
+def _check_fabric_contract(instance: Any) -> list[Issue]:
+    """No string in the contract may look like credential material.
+
+    The authoritative validator scans every string; the shared engines are the path this repository
+    advertises for authoring the contract, and without the rule they answer `valid: true` for a
+    token pasted into a note. Names and references only - the repository's standing rule.
+    """
+    issues: list[Issue] = []
+    for path, value in _iter_strings(instance):
+        if any(shape.search(value) for shape in _SECRET_SHAPES):
+            issues.append(Issue(path, "contains a secret-like value; the contract stores names and "
+                                      "references, never the material itself"))
     return issues
 
 
@@ -1437,6 +1849,8 @@ _SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
     "github-milestones.schema.json": _check_github_milestones,
     "fleet-topology.schema.json": _check_fleet_pools,
     "absorption-pr-watchlist.schema.json": _check_absorption_watchlist,
+    "model-catalog.schema.json": _check_model_catalog,
+    "helios-fabric.v1.schema.json": _check_fabric_contract,
 }
 
 
