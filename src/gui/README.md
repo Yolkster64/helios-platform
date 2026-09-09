@@ -39,18 +39,25 @@ Requirements:
 - .NET 10 SDK (the repo-root `global.json` pins 10.0.100 with `rollForward:
   latestFeature`, so any newer 10.0.x band is accepted; the shell itself still
   targets `net8.0-windows10.0.19041.0`, which the .NET 10 SDK builds fine).
-- Visual Studio 2022 17.10+ with the **Windows application development** workload
-  (or plain `dotnet` CLI — the WinUI XAML compiler ships via the
-  `Microsoft.WindowsAppSDK` NuGet package, so VS is convenient but not mandatory).
+- Visual Studio or Build Tools with the **Windows application development** components
+  and MSBuild compatible with the repository's .NET 10 SDK. Build from Developer
+  PowerShell so the Visual Studio `MSBuild.exe` is on `PATH`.
 - To *run* the produced exe: the [Windows App SDK 1.6 runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
   must be installed, because the project is unpackaged (`WindowsPackageType=None`) and
   deliberately **not** self-contained (`WindowsAppSDKSelfContained` unset).
 
 ```powershell
-# from the repo root, on Windows
-dotnet build src/gui/HELIOS.Shell.sln -c Debug -p:Platform=x64
-dotnet run --project src/gui/HELIOS.Shell/HELIOS.Shell.csproj -p:Platform=x64
+# from the repo root, in Developer PowerShell on Windows
+msbuild src/gui/HELIOS.Shell.sln /restore /p:Configuration=Debug /p:Platform=x64
 ```
+
+Launch the built `HELIOS.Shell.exe` from its output directory, or start the project
+in Visual Studio. The native build uses Visual Studio MSBuild because Windows App
+SDK 1.6's PRI resource targets need its packaging tasks. The plain `dotnet build`
+toolchain can fail with `MSB4062` for `ExpandPriContent` before compiling application
+code. The Windows CI gate uses Microsoft's `setup-msbuild` action for the same
+toolchain. See [Microsoft's WinUI CI guidance](https://learn.microsoft.com/windows/apps/package-and-deploy/ci-for-winui3)
+and [setup-msbuild](https://github.com/microsoft/setup-msbuild).
 
 Point the dashboard at a running hub API first:
 

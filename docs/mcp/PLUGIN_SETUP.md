@@ -113,6 +113,8 @@ Codex runs `scripts/mcp_stdio.py` from the installed plugin's directory. The
 shim requires an absolute `HELIOS_REPO_ROOT`, validates the checkout layout and
 executes its existing `scripts/bootstrap/connect.py mcp` entrypoint. That entrypoint
 builds with diagnostics on stderr and starts the existing C# stdio MCP server.
+On Windows, the shim uses a native subprocess with inherited stdio and returns
+its exit status, preserving checkout paths containing spaces. POSIX uses exec.
 The shim does not depend on the current terminal directory or on unsupported
 `${CODEX_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_ROOT}` substitutions. Relative plugin
 `cwd` is resolved by Codex's [plugin MCP configuration code](https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/plugin_config.rs).

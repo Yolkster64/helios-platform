@@ -234,8 +234,9 @@ public sealed class HeliosHandoffStore
     private static string CanonicalId(string value) => Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty
         ? id.ToString("D") : throw new McpException("handoffId and correlationId must be non-empty UUIDs.");
 
-    private static string ValidateRecipient(string recipient) => recipient is "chatgpt" or "claude" or "codex"
-        ? recipient : throw new McpException("recipient must be chatgpt, claude, or codex.");
+    private static string ValidateRecipient(string recipient) => recipient is
+        "chatgpt" or "claude" or "codex" or "copilot" or "hermes" or "xcore" or "human"
+        ? recipient : throw new McpException("recipient must be chatgpt, claude, codex, copilot, hermes, xcore, or human.");
 
     private static void ValidateContent(HeliosHandoff note)
     {
@@ -263,12 +264,12 @@ public sealed class HeliosHandoffStore
 public static class HeliosHandoffTools
 {
     [McpServerTool(Name = "helios_handoff_submit", ReadOnly = false, Idempotent = true, OpenWorld = false)]
-    [Description("Store an immutable HELIOS handoff for ChatGPT, Claude, or Codex to retrieve. Never executes the note, sends a notification, or injects it into a conversation. Repeating the same UUID and content returns the original receipt; different content with the same UUID is rejected.")]
+    [Description("Store an immutable HELIOS handoff for chatgpt, claude, codex, copilot, hermes, xcore, or human to retrieve. Never executes the note, sends a notification, or injects it into a conversation. Repeating the same UUID and content returns the original receipt; different content with the same UUID is rejected.")]
     public static string Submit(string handoffId, string correlationId, string recipient, string note, string? sourceSha = null) =>
         HeliosHandoffStore.Serialize(HeliosHandoffStore.CreateDefault().Submit(handoffId, correlationId, recipient, note, sourceSha));
 
     [McpServerTool(Name = "helios_handoff_list", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("List up to 50 shared handoff receipt headers for chatgpt, claude, or codex; fetch a receipt ID to read its note. No automatic execution.")]
+    [Description("List up to 50 shared handoff receipt headers for chatgpt, claude, codex, copilot, hermes, xcore, or human; fetch a receipt ID to read its note. No automatic execution.")]
     public static string List(string recipient, int limit = 20) => HeliosHandoffStore.CreateDefault().List(recipient, limit);
 
     [McpServerTool(Name = "helios_handoff_fetch", ReadOnly = true, Idempotent = true, OpenWorld = false)]

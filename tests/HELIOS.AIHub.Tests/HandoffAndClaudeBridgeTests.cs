@@ -29,6 +29,27 @@ public sealed class HandoffAndClaudeBridgeTests : IDisposable
     }
 
     [Theory]
+    [InlineData("chatgpt")]
+    [InlineData("claude")]
+    [InlineData("codex")]
+    [InlineData("copilot")]
+    [InlineData("hermes")]
+    [InlineData("xcore")]
+    [InlineData("human")]
+    public void AllWorkspaceRolesShareTheSameImmutableHandoffContract(string recipient)
+    {
+        var store = new HeliosHandoffStore(_root);
+        var id = Guid.NewGuid().ToString();
+        var receipt = store.Submit(id, CorrelationId, recipient, "Review this evidence.");
+        Assert.Equal(recipient, receipt.Recipient);
+        Assert.Equal(receipt, store.Fetch(id));
+        Assert.Equal(receipt, store.Submit(id, CorrelationId, recipient, "Review this evidence."));
+        Assert.Contains(id, store.List(recipient));
+        Assert.Throws<McpException>(() => store.Submit(id, CorrelationId, recipient, "Changed evidence."));
+        Assert.Equal(receipt, store.Fetch(id));
+    }
+
+    [Theory]
     [InlineData("../../.env", "chatgpt", "valid note", null)]
     [InlineData("11111111-1111-1111-1111-111111111111", "shell", "valid note", null)]
     [InlineData("11111111-1111-1111-1111-111111111111", "chatgpt", "", null)]

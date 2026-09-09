@@ -11,7 +11,7 @@ public sealed class RemoteHandoffTools(RemoteMcpOptions options, IHttpContextAcc
     private HeliosHandoffStore Store => new(options.RepositoryRoot);
 
     [McpServerTool(Name = "helios_handoff_submit", ReadOnly = false, Idempotent = true, OpenWorld = false)]
-    [Description("Store a shared handoff for ChatGPT, Claude, or Codex to retrieve. Never executes the note or injects it into a chat. Reuse the same UUID for retries. Requires handoff.write delegated scope in Entra mode; sourceSha is a caller claim.")]
+    [Description("Store a shared handoff for chatgpt, claude, codex, copilot, hermes, xcore, or human to retrieve. Never executes the note or injects it into a chat. Reuse the same UUID for retries. Requires handoff.write delegated scope in Entra mode; sourceSha is a caller claim.")]
     public string Submit(string handoffId, string correlationId, string recipient, string note, string? sourceSha = null)
     {
         if (options.UsesEntra && (http.HttpContext is not { } context || !options.HasScope(context.User, "handoff.write")))
@@ -20,7 +20,7 @@ public sealed class RemoteHandoffTools(RemoteMcpOptions options, IHttpContextAcc
     }
 
     [McpServerTool(Name = "helios_handoff_list", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("List shared handoff headers for chatgpt, claude, or codex. The receiving client must fetch and choose how to use a note; no automatic execution.")]
+    [Description("List shared handoff headers for chatgpt, claude, codex, copilot, hermes, xcore, or human. The receiving client must fetch and choose how to use a note; no automatic execution.")]
     public string List(string recipient, int limit = 20) => Store.List(recipient, limit);
 
     [McpServerTool(Name = "helios_handoff_fetch", ReadOnly = true, Idempotent = true, OpenWorld = false)]

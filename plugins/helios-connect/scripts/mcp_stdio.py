@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 
@@ -29,7 +30,12 @@ def main() -> int:
         launcher = root / "scripts/bootstrap/connect.py"
         os.chdir(root)
         os.environ["HELIOS_REPO_ROOT"] = str(root)
-        os.execv(sys.executable, [sys.executable, str(launcher), "mcp"])
+        argv = [sys.executable, str(launcher), "mcp"]
+        if os.name == "nt":
+            # Windows execv neither quotes spaced paths reliably nor preserves
+            # the child exit status. Keep stdio inherited for the MCP transport.
+            return subprocess.run(argv, shell=False).returncode
+        os.execv(sys.executable, argv)
     except (OSError, ValueError):
         print("HELIOS Connect could not start the selected checkout. Verify its files and Python installation.", file=sys.stderr)
         return 2

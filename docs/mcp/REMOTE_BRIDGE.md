@@ -92,7 +92,10 @@ The returned ID and timestamp are the storage receipt.
 
 ChatGPT uses `helios_handoff_list` with `recipient: "chatgpt"`, then
 `helios_handoff_fetch` with the returned `handoffId`. Reverse the recipient to
-`claude` or `codex` for the other direction. The source SHA and note are caller
+`claude` or `codex` for the other direction. All seven workspace roles are valid
+recipients: `chatgpt`, `claude`, `codex`, `copilot`, `hermes`, `xcore`, and `human`.
+A recipient name does not start an agent or grant approval authority.
+The source SHA and note are caller
 claims; they are not authenticated identity, instructions or approval.
 
 Receipts live in the primary checkout's ignored `.helios/bridge` folder, are immutable and survive
@@ -167,8 +170,9 @@ The separate `HELIOS shared MCP bridge` CI lane builds the whole portable soluti
 No live model or tenant is needed for these tests. On this implementation pass,
 24 checks against the actual transport-independent C# process/options/handoff
 code passed in a package-free harness. That harness used MCP attribute/exception
-shims and does not prove SDK transport or JWT integration. Full package restore
-was blocked locally, so the committed HTTP/JWT tests require CI verification.
+shims and does not prove SDK transport or JWT integration. Local package restore was blocked. GitHub CI subsequently built the full solution
+and passed all 671 AIHub tests, including actual SDK HTTP/JWT tests, at
+`b710e92ef066e7eb7e06f8b1a1032f8bc0a63ad6`. Later changes require their own current-head CI result.
 
 ## Source continuity
 
