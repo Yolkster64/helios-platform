@@ -190,13 +190,21 @@ class EntryPointTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('bash'), 'Bash required')
     def test_real_bash_wrapper_from_directory_with_spaces(self):
+        bash = shutil.which('bash')
+        if os.name == 'nt':
+            # Windows' PATH may find the WSL launcher even when no distribution
+            # is installed. Exercise Git for Windows' actual Bash instead.
+            git = Path(shutil.which('git') or '')
+            candidates = [git.parent.parent / 'bin/bash.exe', git.parent / 'bash.exe']
+            bash = next((str(path) for path in candidates if path.is_file()), None)
+            self.assertIsNotNone(bash, 'Git for Windows Bash is required by this fixture')
         with tempfile.TemporaryDirectory(prefix="HELIOS space ") as directory:
             dest = Path(directory)
             for path in ['connect.sh', 'scripts/bootstrap/connect.py', 'config/aihub.json', 'config/connectors.json', 'config/control-project.json']:
                 target = dest / path; target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / path, target)
-            result = subprocess.run(['bash', str(dest / 'connect.sh'), 'status', '--json'], capture_output=True, text=True, cwd=dest.parent, timeout=15)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run([bash, (dest / 'connect.sh').as_posix(), 'status', '--json'], capture_output=True, text=True, cwd=dest.parent, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertFalse(json.loads(result.stdout)['authenticationProbed'])
 
 

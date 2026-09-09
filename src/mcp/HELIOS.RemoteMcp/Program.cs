@@ -73,7 +73,9 @@ public static class Program
         }
         var mcp = builder.Services.AddMcpServer().WithHttpTransport(transport =>
         {
-            transport.SessionMode = HttpServerSessionMode.Stateless;
+            // Use the API shipped in the repository's pinned 2.1.0 package.
+            // SessionMode is documented on the newer SDK documentation branch.
+            transport.Stateless = true;
         }).WithTools<RemoteReadTools>().WithTools<RemoteHandoffTools>();
         if (options.ClaudeEnabled) mcp.WithTools<RemoteClaudeTools>();
 
