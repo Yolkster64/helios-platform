@@ -20,5 +20,54 @@
   "[json]": {
     "editor.insertSpaces": true,
     "editor.tabSize": 2
+  },
+  "json.schemas": [
+    {
+      "fileMatch": ["/config/schemas/manifests.json"],
+      "url": "./config/schemas/manifests.schema.json"
+    },
+    {
+      "fileMatch": ["/config/github/labels.json", "/templates/manifest-labels.json"],
+      "url": "./config/schemas/github-labels.schema.json"
+    },
+    {
+      "fileMatch": ["/config/github/milestones.json", "/templates/manifest-milestones.json"],
+      "url": "./config/schemas/github-milestones.schema.json"
+    },
+    {
+      "fileMatch": ["/config/connectors.json"],
+      "url": "./config/schemas/connectors.schema.json"
+    },
+    {
+      "fileMatch": ["/config/fork-watch.json"],
+      "url": "./config/schemas/fork-watch.schema.json"
+    },
+    {
+      "fileMatch": ["/config/absorption/pr-watchlist.json"],
+      "url": "./config/schemas/absorption-pr-watchlist.schema.json"
+    },
+    {
+      "fileMatch": ["/config/fleet/fleet-topology.json"],
+      "url": "./config/schemas/fleet-topology.schema.json"
+    },
+    {
+      "fileMatch": ["/config/aihub.json", "/config/aihub.cloud.json"],
+      "url": "./config/schemas/aihub.schema.json"
+    },
+    {
+      "fileMatch": ["/config/model-catalog.json"],
+      "url": "./config/schemas/model-catalog.schema.json"
+    },
+    {
+      "fileMatch": ["/config/fabric/helios-fabric.v1.json"],
+      "url": "./config/schemas/helios-fabric.v1.schema.json"
+    }
+  ],
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": [
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      "templates/workflow.yml"
+    ]
   }
 }

@@ -4,7 +4,8 @@ One tool surface for every agent. The HELIOS MCP server (stdio) exposes the mult
 (`helios_ai_ask`, `helios_ai_route`, `helios_ai_tandem`, `helios_ai_compare`,
 `helios_ai_status`, `helios_providers_list`, `helios_optimal_provider_get`,
 `helios_task_routing_get`, `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
-`helios_infra_validate`, `helios_azure_inventory_get`, `helios_auth_status_get`,
+`helios_infra_validate`, `helios_config_validate`, `helios_azure_inventory_get`,
+`helios_auth_status_get`,
 `helios_fleet_plan_get`, `helios_fabric_plan_get`, `helios_foundry_agent_list`,
 `helios_foundry_agent_create`,
 `helios_operator_profile_get`, `helios_operator_profile_save`,
@@ -184,6 +185,12 @@ All tools are non-destructive. `helios_ai_*` call LLM providers (network, token 
 that separate implemented/runtime-available selections from candidates and never install
 or execute candidates;
 `helios_infra_validate` compiles `infra/main.bicep` locally with no subscription access;
+`helios_config_validate` validates one repo-relative manifest (`config/github/labels.json`,
+`config/github/milestones.json`, `config/connectors.json`, `config/aihub.json`, ...)
+against the JSON Schema `config/schemas/manifests.json` maps it to — or a draft against an
+explicit `schemaPath` — and returns `{ path, schema, valid, errors: [{ path, message }] }`;
+it is a purely local read that refuses absolute or `..` paths, applies nothing, and never
+rewrites the file (the same check `scripts/validation/validate_config_schemas.py` runs in CI);
 `helios_absorb_status_get` / `helios_fleet_status_get` are read-only local reads of the
 absorption watchlist and fleet run state;
 `helios_azure_inventory_get` is a strictly read-only Azure management-plane inventory

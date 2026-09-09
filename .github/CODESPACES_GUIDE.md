@@ -43,6 +43,7 @@ type is filtered out of the picker by the core count (`basicLinux32gb` already h
 | Port 5170 forwarded (`helios-ai-api`) | `forwardPorts` |
 | `helios-ai` on PATH (symlink to the Release build) | `postCreateCommand` |
 | Auth self-check line on every attach | `postAttachCommand` runs `scripts/bootstrap/session-start-check.sh` |
+| Themed chrome (Monado navy and cyan; a light variant for the built-in light themes) | `customizations.vscode.settings` in `devcontainer.json`, the same block as `workspace.code-workspace`; derivation and contrast in [`docs/architecture/WORKSPACE_THEME.md`](../docs/architecture/WORKSPACE_THEME.md) |
 
 VS Code extensions (the same list in `.devcontainer/devcontainer.json`,
 `.vscode/extensions.json`, and `workspace.code-workspace`):
@@ -59,6 +60,41 @@ VS Code extensions (the same list in `.devcontainer/devcontainer.json`,
 Tasks (Terminal > Run Task, from `.vscode/tasks.json`): `build`, `test`, `stack-smoke`,
 `first-run`, `auth-doctor`. The `helios` MCP server for Copilot agent mode is registered
 in `.vscode/mcp.json` (see `docs/mcp/CLIENT_SETUP.md`).
+
+## Themed workspace
+
+**What you see on first open.** With VS Code's default theme (**Default Dark Modern**)
+the chrome takes the Monado pack from `src/gui/HELIOS.Shell/Themes/Tokens.xaml`: navy
+title bar, activity bar, side bar, status bar and terminal (`#0A1428` / `#0F1D2E`); the
+cyan accent (`#00D9FF`) on the active tab, badges, focus ring, cursor and the
+**Codespaces** status-bar item; the readiness colours (green `#3DDC97`, amber `#FFB454`,
+pink `#FF6B84`) on git decorations, gutters and terminal ANSI slots. The window title
+starts with `HELIOS Control`. The block lives under `customizations.vscode.settings` in
+`.devcontainer/devcontainer.json`; the identical block sits in `workspace.code-workspace`
+for local clones. Token-to-key table and the measured contrast:
+[`docs/architecture/WORKSPACE_THEME.md`](../docs/architecture/WORKSPACE_THEME.md).
+
+**How it is scoped.** The customizations are theme-scoped, not global. The dark block
+applies to any colour theme whose name contains `Dark` (plus the built-ins Abyss,
+Monokai, Monokai Dimmed, Red and Tomorrow Night Blue); the light block applies to the
+five built-in light themes (Default Light Modern, Default Light+, Light (Visual Studio),
+Quiet Light, Solarized Light). The repo never sets `workbench.colorTheme`: your own
+theme choice stays.
+
+**Switch light / dark.** Command Palette > **Preferences: Color Theme** (Ctrl+K Ctrl+T)
+and pick a theme from either group. To follow the operating system, set
+`window.autoDetectColorScheme` with `workbench.preferredDarkColorTheme` and
+`workbench.preferredLightColorTheme` naming one theme from each group.
+
+**Disable with one setting.** Pick a theme outside both groups, for example **Default
+High Contrast** (the high-contrast themes are deliberately unscoped, matching the
+shell's rule that system colours win) or any theme without `Dark` in its name;
+`workbench.colorTheme` is the switch. Putting `"workbench.colorCustomizations": {}` in
+*user* settings does not cancel the block, because VS Code merges object settings across
+scopes and a remote or workspace value outranks a user value. In a Codespace the
+devcontainer spec applies the block as default values in the machine-scope settings
+file, so **Preferences: Open Remote Settings (JSON)** lets you delete it outright;
+locally, opening the folder (`code .`) instead of `workspace.code-workspace` drops it.
 
 ## First run
 
@@ -137,10 +173,32 @@ the CI workflows plus the bot review loop described in `CLAUDE.md` / `AGENTS.md`
 - Delete with `gh codespace delete --repo Yolkster64/helios-platform`
 - A `Rebuild Container` (Command Palette) is needed after `devcontainer.json` changes
 
+## Prebuilds (owner step)
+
+Prebuilds are configured in the repository settings, not in a workflow file; GitHub
+runs its own Actions workflow for them (so Actions must be enabled). Owner click path:
+<https://github.com/Yolkster64/helios-platform> > **Settings** > sidebar **Code,
+planning, and automation** > **Codespaces** > **Prebuild configuration** > **Set up
+prebuild**. Choose branch `main` and `.devcontainer/devcontainer.json`; under
+**Reduce prebuild available to only specific regions** tick only your default region
+(each region is billed as separate storage); keep the trigger **Every push** (the
+default, so a codespace never starts from a stale image); set **Template history** to
+1; under **Show advanced options** add yourself for failure notifications; **Create**.
+The machine picker then shows **Prebuild ready** on the types that satisfy
+`hostRequirements`.
+
+A prebuild honours `image`, `features`, `hostRequirements`, `onCreateCommand` and
+`updateContentCommand`; it never runs `postCreateCommand`, which is where this repo
+restores and builds `HELIOS.sln`. Today a prebuild therefore saves the image and
+feature layer only. Field list, lifecycle and the caching trade-off:
+[`.devcontainer/README.md`](../.devcontainer/README.md).
+
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
+| No **Prebuild ready** label in the machine picker | No prebuild exists for this branch, configuration file and region yet: the owner step above, then wait for its workflow run |
+| Chrome is not navy (plain theme colours) | The active theme is outside both scopes; pick one whose name contains `Dark`, or a built-in light theme (see Themed workspace) |
 | `helios-ai: command not found` | `dotnet build HELIOS.sln -c Release`, then re-open the terminal (the symlink points at the Release output) |
 | `dotnet build` fails on `src/core/HELIOS.Platform` | Expected: the core project is deliberately excluded from `HELIOS.sln`; build the solution, not the folder |
 | Provider shows not-ready | The matching env var is unset: set the Codespaces secret above, or `az login` + `source scripts/bootstrap/load-env-from-keyvault.sh` |
@@ -155,3 +213,4 @@ the CI workflows plus the bot review loop described in `CLAUDE.md` / `AGENTS.md`
 - [ ] `bash scripts/bootstrap/first-run.sh` ran and its owner checklist is empty or understood
 - [ ] `git status` shows the branch you meant to work on
 - [ ] Secrets you need are present by NAME (`env | grep -E 'OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_MODELS_TOKEN|AZURE_KEY_VAULT_URI|AZURE_OPENAI_ENDPOINT|AZURE_OPENAI_API_KEY' | cut -d= -f1`)
+- [ ] The title bar starts with `HELIOS Control` and the status bar is navy (or you chose a theme outside both scopes on purpose)

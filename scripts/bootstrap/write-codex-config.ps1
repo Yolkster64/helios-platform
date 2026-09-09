@@ -190,13 +190,33 @@ Write-Report "write-codex-config: mode=$mode path=$Path repo=$RepoRoot"
 # The explanatory comment lives INSIDE the table (after the header line) on purpose: the
 # replace path swaps the whole table, header to next header, so comments placed above the
 # header would survive every re-render and pile up.
+# Launch the BUILT server when it is there. `dotnet run --project` re-evaluates the build on
+# every start, which takes long enough that Codex gives up on the handshake and reports no
+# helios_* tools at all (measured: the built assembly answers tools/list in well under a
+# second, `dotnet run` does not). The fallback keeps a fresh checkout working; the comment in
+# the table tells the reader to build and re-run for the fast path.
+$mcpAssembly = Join-Path $mcpProjectDir 'bin' 'Release' 'net10.0' 'HELIOS.Mcp.dll'
+if (Test-Path -LiteralPath $mcpAssembly) {
+    $mcpArgsLine = 'args = [{0}]' -f (ConvertTo-TomlBasicString $mcpAssembly)
+    $mcpLaunchNote = '# Launches the built server directly, so the tool list is ready immediately.'
+}
+else {
+    # NOT --no-build: with no Release output there is nothing for it to run, so the registered
+    # server could never start. `dotnet run` builds first - slow enough that Codex may drop a
+    # server on its first call, which the note says - but a slow server beats a dead one.
+    $mcpArgsLine = 'args = ["run", "--project", {0}, "-c", "Release"]' -f (ConvertTo-TomlBasicString $mcpProjectDir)
+    $mcpLaunchNote = '# The Release build is missing, so this falls back to `dotnet run`, which builds first.' + [Environment]::NewLine +
+                     '# Run `dotnet build HELIOS.sln -c Release` and re-run this script: a build on every start' + [Environment]::NewLine +
+                     '# is slow enough that Codex can drop the server before it answers.'
+}
 $rendered = @(
     '[mcp_servers.helios]',
     '# Rendered by scripts/bootstrap/write-codex-config.ps1 (HELIOS). Re-run it after moving',
     '# the checkout: the project path is absolute because Codex starts MCP servers from its',
     '# own working directory, where a repo-relative path would not resolve.',
+    $mcpLaunchNote,
     'command = "dotnet"',
-    ('args = ["run", "--project", {0}, "-c", "Release"]' -f (ConvertTo-TomlBasicString $mcpProjectDir)),
+    $mcpArgsLine,
     ('env = {{ HELIOS_REPO_ROOT = {0} }}' -f (ConvertTo-TomlBasicString $RepoRoot))
 )
 if (-not $SkipPlaywright) {

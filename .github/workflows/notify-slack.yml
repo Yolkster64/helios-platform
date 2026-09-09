@@ -42,6 +42,16 @@ jobs:
           WF_URL: ${{ github.event.workflow_run.html_url }}
           WF_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          # config/connectors.json declares slack.enabled; honour it here, or the switch
+          # would be documentation.
+          # `.slack.enabled // true` would NOT work: jq's alternative operator treats false
+          # exactly like null, so a disabled connector would post anyway. Only an explicit false
+          # disables; absent, null or anything else leaves it enabled.
+          if [ "$(jq -r 'if .slack.enabled == false then "off" else "on" end' config/connectors.json)" = "off" ]; then
+            echo "slack.enabled is false in config/connectors.json — skipping."
+            exit 0
+          fi
+
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
             echo "SLACK_WEBHOOK_URL is not configured — skipping (see config/connectors.json)."
             exit 0

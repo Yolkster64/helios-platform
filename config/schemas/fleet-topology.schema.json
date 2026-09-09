@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/fleet-topology.schema.json",
+  "title": "HELIOS agent-fleet topology v2 (config/fleet/fleet-topology.json)",
+  "description": "Declarative pool layout (docs/architecture/HERMES_FLEET_AND_XCORE.md). Bound read-only by src/ai/HELIOS.AIHub/Fleet/FleetTopology.cs (version, pools[].name / taskTypes / providerChain / hermesFleet); scripts/fleet/start-fleet.ps1 reads defaults.spawn and each pool's hermesFleet / assigneePrefix / taskTypes, scripts/fleet/scale-fleet.ps1 merges each pool's autoscaling over defaults.autoscaling. version is pinned to 2: a v3 layout gets a v3 schema, not a silently half-read file. Objects are closed so a misspelled key (maxLocalLane, providerchain) fails here instead of falling back to a default at run time; every object accepts a $comment.",
+  "type": "object",
+  "required": ["version", "defaults", "pools"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "version": { "type": "integer", "const": 2 },
+    "defaults": { "$ref": "#/$defs/defaults" },
+    "pools": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "Every per-pool ceiling in this schema is per pool, and `helios-fleet start` selects them all: without a bound on the array, 1,000 pools of 64 workers validated and asked one host for 64,000 processes. Four times the shipped layout. The aggregate worker and burst-lane totals are bounded as well, by the semantic rule the schema cannot express (validate_config_schemas.py, ManifestSemantics).",
+      "items": { "$ref": "#/$defs/pool" }
+    },
+    "coordination": { "$ref": "#/$defs/coordination" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "taskType": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(:[a-z][a-z0-9_-]*)?$",
+      "description": "A config/aihub.json taskRouting key: a bare task type, or one qualified by a normalized language (`<taskType>:<language>`, one ':' at most) exactly as TaskTypeRoutingStrategy.RoutingKey spells it; FleetPlanService splits a qualified pool task type before its learning read."
+    },
+    "workspaceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Cap applied by scripts/fleet/start-fleet.ps1 in workspace mode (Codespaces / Cloud Shell); per pool, else inherited from defaults, else half the declared size rounded up. 64 is the same ceiling start-fleet.ps1 enforces on -PoolSize: a topology value bypasses that parameter check and spawns this many worker processes." }
+      }
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "nameList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "lanes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "description": "A lane THRESHOLD, not a capacity: scale-fleet.ps1 compares it and casts it to [int], so the bound is the cast's. Capacity fields use laneCapacity / burstCapacity instead."
+    },
+    "laneCapacity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64,
+      "description": "Worker processes scale-fleet.ps1 may start on the operator's own host for one pool: the reconciler derives its delta straight from these and spawns a process per lane, so the ceiling is the same 64 start-fleet.ps1 enforces on -PoolSize. A topology is config, and config should not be able to fork two billion workers."
+    },
+    "burstCapacity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 256,
+      "description": "Lanes a pool may add on ARC burst capacity, which scale-fleet.ps1 aggregates into `az vmss scale --new-capacity`: paid cloud capacity, so it is bounded well above any shipped pool (8) and far below a number that would bill by accident."
+    },
+    "spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "command": { "type": "string", "minLength": 1 },
+        "argsTemplate": {
+          "type": "string",
+          "pattern": "\\{prompt\\}",
+          "description": "Must carry the {prompt} slot; {assignee} is substituted when present. Passed as argv, never through a shell."
+        },
+        "envContract": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/envName" }
+        },
+        "termination": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["kanban_complete", "kanban_block"] }
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "mode": {
+          "type": "string",
+          "enum": ["hybrid", "local", "cloud"],
+          "description": "hybrid = warm local lanes plus ARC burst; local = never burst; cloud = never run locally."
+        },
+        "minLocalLanes": { "$ref": "#/$defs/laneCapacity" },
+        "maxLocalLanes": { "$ref": "#/$defs/laneCapacity" },
+        "burstTarget": { "type": "string", "minLength": 1 },
+        "maxBurstLanes": { "$ref": "#/$defs/burstCapacity" },
+        "scaleUpQueueDepth": { "$ref": "#/$defs/lanes" },
+        "scaleDownIdleSeconds": { "type": "integer", "minimum": 0, "maximum": 2147483647, "description": "Idle seconds before scaling down; read as an [int] by scale-fleet.ps1." }
+      }
+    },
+    "hermesFleet": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per pool, else inherited from defaults.hermesFleet (scripts/fleet/scale-fleet.ps1, learn-fleet.ps1); board defaults to the pool name and maxConcurrentLanes to the scripts' own cap, so neither is required here.",
+      "properties": {
+        "$comment": { "type": "string" },
+        "board": { "$ref": "#/$defs/identifier" },
+        "maxConcurrentLanes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "Concurrent Hermes lanes for the pool. Bound to a C# int (HermesFleetOptions.MaxConcurrentLanes): a larger value fails FleetTopology.TryLoad outright, and the fleet scripts cast it to [int] before applying the cap."
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Worker processes per pool unless a pool overrides it; 64 is the ceiling start-fleet.ps1 enforces on -PoolSize, applied here too because a topology value bypasses that check." },
+        "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
+        "spawn": { "$ref": "#/$defs/spawn" },
+        "autoscaling": { "$ref": "#/$defs/autoscaling" },
+        "hermesFleet": { "$ref": "#/$defs/hermesFleet" }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "required": ["name", "taskTypes", "providerChain"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "name": { "$ref": "#/$defs/identifier" },
+        "specialization": { "type": "string" },
+        "assigneePrefix": { "$ref": "#/$defs/identifier" },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Worker processes for this pool; the same 64 ceiling as -PoolSize in start-fleet.ps1." },
+        "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
+        "hermesFleet": { "$ref": "#/$defs/hermesFleet" },
+        "taskTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/taskType" }
+        },
+        "providerChain": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Ordered provider / CLI-agent names from config/aihub.json; first is primary."
+        },
+        "tools": { "$ref": "#/$defs/nameList" },
+        "skills": { "$ref": "#/$defs/nameList" },
+        "agents": { "$ref": "#/$defs/nameList" },
+        "autoscaling": { "$ref": "#/$defs/autoscaling" }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["from", "to", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "when": { "type": "string", "minLength": 1 }
+      }
+    },
+    "coordination": {
+      "type": "object",
+      "required": ["handoffs"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "handoffs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/handoff" }
+        },
+        "aihubTaskType": { "$ref": "#/$defs/taskType" }
+      }
+    }
+  }
+}

@@ -87,7 +87,7 @@ fleet pools' tool allowlists (the review pool is read-only by design).
   too), the capability-backlog taxonomy as roadmap seed
 - Risks: security model differs; absorb taxonomy and validators, not the runtime
 
-## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — absorbed (PR #191)
+## E5 — Azure activation hardening: MI→KV custody, OIDC (`infra`) — absorbed (PR #199)
 
 Managed-identity→Key-Vault secret binding, token audience hardening, and immutable
 plan/deploy custody — extending our OIDC + Key Vault stack with audit custody
@@ -104,8 +104,10 @@ discipline on the deploy path.
   and seals/upload artifacts even for failed attempts. Enforcement is in
   `scripts/validation/validate_deploy_custody.py` via
   `.github/workflows/deploy-hardening-contract.yml`.
-- Closed: issue #18 closed as completed on 2026-09-06 with PR #191; follow-ups #198
-  and #199 merged the same day, while #197, #196, #190 and #148 stay open for owner
+- Closed: issue #18 closed as completed on 2026-09-06 when PR #191 merged — with an
+  empty diff, its files having landed earlier that day through PR #199 (the port:
+  `helios-deploy.yml`, `deploy-hardening-contract.yml`, `validate_deploy_custody.py`);
+  #198 merged empty the same way, while #197, #196, #190 and #148 stay open for owner
   decision (issue #229 has the triage table)
 
 ## E6 — Private Azure edge & segmented network (`infra`) — open

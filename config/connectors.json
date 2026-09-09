@@ -1,4 +1,5 @@
 {
+  "$schema": "./schemas/connectors.schema.json",
   "$comment": "Connector wiring for Slack and Linear. This file carries env-var NAMES and routing choices only — never tokens or webhook values (repo hard rule). The same names are read by the GitHub Actions notify/sync workflows today and by the HELIOS.Connectors service when it lands (ROADMAP_MULTI_LLM.md PR4), so there is exactly one place that says where notifications go.",
   "slack": {
     "enabled": true,

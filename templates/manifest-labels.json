@@ -1,0 +1,15 @@
+{
+  "$comment": "Starter for config/github/labels.json, the manifest scripts/github/apply-labels.ps1 reconciles (dry-run by default; -Apply creates missing labels and patches drifted color/description; never deletes or renames). An entry carries EXACTLY name / color / description: any other key marks it INVALID. color is six hex digits; description is capped at 100 characters by GitHub. No $schema key here on purpose - the script also accepts a bare array, which cannot carry one - so VS Code binds this file and config/github/labels.json to config/schemas/github-labels.schema.json through .vscode/settings.json, and CI validates both with scripts/validation/validate_config_schemas.py. Both example names are deliberately not live labels, so an unedited copy applied by mistake creates two harmless labels instead of patching a real one; replace them before applying.",
+  "labels": [
+    {
+      "name": "example-lane",
+      "color": "0e8a16",
+      "description": "Replace: name the lane, contract, or workflow this label drives (max 100 characters)"
+    },
+    {
+      "name": "example-owner-step",
+      "color": "d93f0b",
+      "description": "Replace: a convention label - waits on a step only the repository owner can take"
+    }
+  ]
+}

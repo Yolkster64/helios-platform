@@ -50,7 +50,9 @@
         },
         "contextTokens": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "Bound to ModelProfile.ContextTokens, a C# int: ModelCatalog.TryLoad deserializes it during hub construction, so a larger value passes JSON Schema and then stops the hub from starting."
         },
         "inputPerMillionUsd": {
           "type": "number",

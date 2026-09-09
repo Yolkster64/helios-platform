@@ -66,11 +66,17 @@ only where one layer genuinely needs another's output shape.
 Run `scripts/validate_all.py` (bundled) from the repo root. It parses every JSON/YAML file,
 compiles Bicep, checks Terraform formatting/validity, and lints Actions workflows for the
 failure modes that actually bite: nonexistent actions, deprecated versions, missing
-`permissions`, and shell-injection through `${{ }}` interpolation.
+`permissions`, and shell-injection through `${{ }}` interpolation. Inside the HELIOS
+checkout it also validates every manifest listed in `config/schemas/manifests.json`
+that lies under the paths you pass (pass `config`, or nothing, to cover them all)
+against its JSON Schema (delegating to `scripts/validation/validate_config_schemas.py`
+from this checkout only — a scanned tree's manifests and schemas are read as data and its
+scripts are never imported — the same check CI and the `helios_config_validate` MCP tool
+run).
 
 ```bash
 python .claude/skills/automation-wiring/scripts/validate_all.py            # whole repo
-python .claude/skills/automation-wiring/scripts/validate_all.py infra .github/workflows
+python .claude/skills/automation-wiring/scripts/validate_all.py infra .github/workflows config
 ```
 
 Anything the script can't check — does the workflow actually trigger on the change you
