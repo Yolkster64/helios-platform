@@ -506,7 +506,7 @@ class HardeningTests(unittest.TestCase):
 
     def test_nested_quantifier_patterns_are_refused_under_every_engine(self) -> None:
         # The classic shape - a group that is one quantified atom, quantified again - is refused ...
-        for pattern in ("^(a+)+$", "^(?:\\d*)*$", "^([a-z]+){2,}$", "^(x{2,})+$", "^(a+?)+$"):
+        for pattern in ("^(a+)+$", "^(?:\\d*)*$", "^([a-z]+){2,}$", "^(x{2,})+$", "^(a+?)+$", "^(a?)+$"):
             for engine in target.available_engines():
                 with self.assertRaises(target.SchemaError, msg=(engine, pattern)) as caught:
                     target.validate_instance("aaaaaaaaaaaaaaaaaaaaaaaaaaaab", {"type": "string", "pattern": pattern}, engine=engine)
@@ -575,3 +575,125 @@ class HardeningTests(unittest.TestCase):
             for engine in target.available_engines():
                 issues, _ = target.validate_instance(instance, schema, engine=engine)
                 self.assertEqual(sorted(issue.path for issue in issues), expected, (engine, overlay, issues))
+
+
+class Round5Tests(unittest.TestCase):
+    """Round 5 of PR #252: ambiguous alternations, the type keyword's shape, one schema per
+    manifest, case-insensitive label names, baseUrl as a real URI, disabled providers, and the
+    two consumer bounds (ContextTokens as a C# int, the 64-worker pool ceiling)."""
+
+    def _cli(self, *args: str) -> tuple[int, str]:
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "validation" / "validate_config_schemas.py"), *args],
+                              capture_output=True, text=True, cwd=ROOT)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_quantified_alternations_are_refused_and_plain_ones_accepted(self) -> None:
+        for pattern in ("^(a|aa)+$", "^(?:ab|a)*$", "^(x|y){2,}$", "^(a|aa|aaa)+$", "^((a|b)|c)+$"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(engine, pattern)) as caught:
+                    target.validate_instance("aaaaaaaaaaaaaaaaaaaaaaaaaaaab", {"type": "string", "pattern": pattern}, engine=engine)
+                self.assertIn("alternation", str(caught.exception))
+        for pattern, value in (("^(dev|prod)$", "dev"), ("^(?:https?|wss?)://[a-z]+$", "https://x"),
+                               ("^(a|b)?c$", "c"), ("^[ab]+$", "abab"), ("^(a|b)c(d|e)f$", "acdf"),
+                               # a '(' or '|' inside a character class is a literal, not structure
+                               ("^[(a|b)+]$", "a"), ("^(a|b){0,1}c$", "c"), ("^(ab|cd){1}$", "ab")):
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(value, {"type": "string", "pattern": pattern}, engine=engine)
+                self.assertEqual(issues, [], (engine, pattern))
+        # Every pattern the shipped schemas use stays accepted by both engines.
+        for schema_file in sorted((ROOT / "config" / "schemas").glob("*.schema.json")):
+            schema = json.loads(schema_file.read_text(encoding="utf-8"))
+            for engine in target.available_engines():
+                target.validate_instance({}, schema, engine=engine)
+
+    def test_type_keyword_shape_is_checked_under_every_engine(self) -> None:
+        for schema in ({"type": 1}, {"type": []}, {"type": ["string", 2]}, {"type": None}):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(engine, schema)):
+                    target.validate_instance("x", schema, engine=engine)
+
+    def test_a_manifest_has_exactly_one_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "config" / "schemas").mkdir(parents=True)
+            for name in ("manifests.schema.json", "github-labels.schema.json"):
+                (root / "config" / "schemas" / name).write_text((ROOT / "config" / "schemas" / name).read_text(encoding="utf-8"), encoding="utf-8")
+            (root / "config" / "labels.json").write_text(json.dumps({"labels": [{"name": "bug", "color": "d73a4a"}]}), encoding="utf-8")
+            (root / "config" / "schemas" / "manifests.json").write_text(json.dumps({"mappings": [
+                {"manifest": "config/labels.json", "schema": "config/schemas/github-labels.schema.json"},
+                {"manifest": "./config/labels.json", "schema": "config/schemas/manifests.schema.json"}]}), encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                target.load_mappings(root)
+            self.assertIn("mapped twice", str(caught.exception))
+            code, out = self._cli("--repo-root", str(root))
+            self.assertEqual(code, 2, out)
+            self.assertNotIn("Traceback", out)
+            # The map validated as a manifest names the duplicate entry under both engines (an
+            # exact duplicate here: "./" also fails the map's own path pattern, a second issue).
+            (root / "config" / "schemas" / "manifests.json").write_text(json.dumps({"mappings": [
+                {"manifest": "config/labels.json", "schema": "config/schemas/github-labels.schema.json"},
+                {"manifest": "config/labels.json", "schema": "config/schemas/manifests.schema.json"}]}), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(root / "config" / "schemas" / "manifests.json",
+                                              ROOT / "config" / "schemas" / "manifests.schema.json", engine=engine, repo_root=root)
+                self.assertEqual([issue.path for issue in result.issues], ["$.mappings[1].manifest"], (engine, result.issues))
+        # find_mapping normalizes exactly like the loader: a leading "./" is dropped, nothing else is.
+        mappings = target.load_mappings(ROOT)
+        self.assertIsNotNone(target.find_mapping("./config/github/labels.json", mappings))
+        self.assertIsNotNone(target.find_mapping("config\\github\\labels.json", mappings))
+
+    def test_duplicate_label_names_are_reported_case_insensitively(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "github-labels.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            m = pathlib.Path(temp) / "labels.json"
+            for text, expected in ((json.dumps({"labels": [{"name": "Bug", "color": "d73a4a"}, {"name": "bug", "color": "d73a4a"}]}), ["$.labels[1].name"]),
+                                   # 'straße' folds onto 'strasse' under casefold but not under the
+                                   # C# twin's OrdinalIgnoreCase; both engines must say the same.
+                                   (json.dumps([{"name": "strasse", "color": "d73a4a"}, {"name": "STRASSE", "color": "d73a4a"}]), ["$[1].name"]),
+                                   (json.dumps([{"name": "strasse", "color": "d73a4a"}, {"name": "strasse-b", "color": "d73a4a"}]), []),
+                                   (json.dumps([{"name": "Bug", "color": "d73a4a"}, {"name": "BUG", "color": "d73a4a"}, {"name": "docs", "color": "0075ca"}]), ["$[1].name"]),
+                                   (json.dumps({"labels": [{"name": "bug", "color": "d73a4a"}, {"name": "docs", "color": "0075ca"}]}), [])):
+                m.write_text(text, encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(m, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, text, result.issues))
+
+    def test_aihub_base_url_must_be_an_absolute_http_uri(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            m = pathlib.Path(temp) / "aihub.json"
+            for base_url, expected in (("https://:80/x", ["$.providers.p.baseUrl"]), ("https://host:bad/x", ["$.providers.p.baseUrl"]),
+                                       # urlsplit raises on this one; it is a verdict, not a traceback
+                                       ("https://[bad]/", ["$.providers.p.baseUrl"]),
+                                       ("https://host:99999/x", ["$.providers.p.baseUrl"]), ("https://host:8443/v1/", []),
+                                       ("http://localhost:11434", []), ("https://[::1]:8080/", [])):
+                m.write_text(json.dumps({"providers": {"p": {"type": "ollama", "model": "llama3", "baseUrl": base_url}},
+                                         "routing": {"defaultChain": ["p"], "taskRouting": {}}}), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(m, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, base_url, result.issues))
+
+    def test_disabled_provider_name_may_be_reused_by_an_enabled_cli_agent(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            m = pathlib.Path(temp) / "aihub.json"
+            for enabled, expected in ((False, []), (True, ["$.cliAgents[0].name"])):
+                m.write_text(json.dumps({"providers": {"codex": {"type": "openai", "model": "m", "apiKeyEnv": "OPENAI_API_KEY", "enabled": enabled},
+                                                       "p": {"type": "ollama", "model": "llama3"}},
+                                         "cliAgents": [{"name": "codex", "command": "codex", "argsTemplate": "exec {prompt}"}],
+                                         "routing": {"defaultChain": ["p"], "taskRouting": {}}}), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(m, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, enabled, result.issues))
+
+    def test_consumer_bounds_context_tokens_and_pool_size(self) -> None:
+        catalog = json.loads((ROOT / "config" / "model-catalog.json").read_text(encoding="utf-8"))
+        catalog["models"][0]["contextTokens"] = 2147483648
+        topology = json.loads((ROOT / "config" / "fleet" / "fleet-topology.json").read_text(encoding="utf-8"))
+        topology["defaults"]["poolSize"] = 65
+        for instance, schema_name, fragment in ((catalog, "model-catalog.schema.json", "contextTokens"),
+                                                (topology, "fleet-topology.schema.json", "poolSize")):
+            schema = json.loads((ROOT / "config" / "schemas" / schema_name).read_text(encoding="utf-8"))
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(instance, schema, engine=engine)
+                self.assertTrue(any(fragment in issue.path for issue in issues), (engine, schema_name, issues))

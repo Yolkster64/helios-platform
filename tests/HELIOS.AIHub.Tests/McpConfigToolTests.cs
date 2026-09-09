@@ -350,6 +350,7 @@ public sealed class McpConfigToolTests : IDisposable
     [InlineData("^([a-z]+){2,}$")]
     [InlineData("^(x{2,})+$")]
     [InlineData("^(a+?)+$")]
+    [InlineData("^(a?)+$")]
     public void JsonSchemaLite_RefusesNestedQuantifiers(string pattern)
     {
         using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
@@ -522,6 +523,145 @@ public sealed class McpConfigToolTests : IDisposable
         var configPath = AIHubOptions.FindConfigFile(AppContext.BaseDirectory);
         Assert.False(configPath is null, "config/aihub.json not found walking up from the test output directory");
         return Directory.GetParent(Path.GetDirectoryName(configPath!)!)!.FullName;
+    }
+
+    [Theory]
+    [InlineData("^(a|aa)+$")]
+    [InlineData("^(?:ab|a)*$")]
+    [InlineData("^(x|y){2,}$")]
+    [InlineData("^(a|aa|aaa)+$")]
+    [InlineData("^((a|b)|c)+$")]
+    public void JsonSchemaLite_RefusesQuantifiedAlternations(string pattern)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse("\"aaaaaaaaaaaaaaaaaaaaaaaaaaaab\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("alternation", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("^(dev|prod)$", "dev")]
+    [InlineData("^(?:https?|wss?)://[a-z]+$", "https://x")]
+    [InlineData("^(a|b)?c$", "c")]
+    [InlineData("^(a|b)c(d|e)f$", "acdf")]
+    [InlineData("^[(a|b)+]$", "a")]
+    [InlineData("^(a|b){0,1}c$", "c")]
+    [InlineData("^(ab|cd){1}$", "ab")]
+    public void JsonSchemaLite_AcceptsPlainAlternations(string pattern, string value)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse(JsonSerializer.Serialize(value));
+
+        Assert.Empty(JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+    }
+
+    [Theory]
+    [InlineData("""{ "type": 1 }""")]
+    [InlineData("""{ "type": [] }""")]
+    [InlineData("""{ "type": ["string", 2] }""")]
+    [InlineData("""{ "type": null }""")]
+    public void JsonSchemaLite_RefusesTypeValuesOfTheWrongShape(string schemaJson)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse("\"x\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("type", ex.Message);
+    }
+
+    [Fact]
+    public void TypeOfTheWrongShapeInADraftSchema_IsAnActionableToolError()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/schemas/draft.schema.json", """{ "type": 1 }""");
+        WriteManifest(root, "config/draft.json", "{}");
+
+        var ex = Assert.Throws<McpException>(() => HeliosConfigTools.BuildValidationJson("config/draft.json", "config/schemas/draft.schema.json", root));
+
+        Assert.Contains("not usable", ex.Message);
+    }
+
+    [Fact]
+    public void ManifestMappedTwice_IsAnActionableToolError_AndReportedOnTheMapItself()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/schemas/manifests.json", """
+            { "mappings": [
+                { "manifest": "config/github/labels.json", "schema": "config/schemas/github-labels.schema.json" },
+                { "manifest": "./config/github/labels.json", "schema": "config/schemas/manifests.schema.json" } ] }
+            """);
+        WriteManifest(root, "config/github/labels.json", """{ "labels": [ { "name": "bug", "color": "d73a4a" } ] }""");
+
+        var ex = Assert.Throws<McpException>(() => HeliosConfigTools.BuildValidationJson("config/github/labels.json", null, root));
+        Assert.Contains("twice", ex.Message);
+
+        // The map validated as a manifest names the duplicate entry (an exact duplicate here:
+        // "./" also fails the map's own path pattern, which would be a second issue).
+        WriteManifest(root, "config/schemas/manifests.json", """
+            { "mappings": [
+                { "manifest": "config/github/labels.json", "schema": "config/schemas/github-labels.schema.json" },
+                { "manifest": "config/github/labels.json", "schema": "config/schemas/manifests.schema.json" } ] }
+            """);
+        var json = HeliosConfigTools.BuildValidationJson("config/schemas/manifests.json", "config/schemas/manifests.schema.json", root);
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { "$.mappings[1].manifest" }, doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Theory]
+    [InlineData("""{ "labels": [ { "name": "Bug", "color": "d73a4a" }, { "name": "bug", "color": "d73a4a" } ] }""", "$.labels[1].name")]
+    [InlineData("""[ { "name": "Bug", "color": "d73a4a" }, { "name": "BUG", "color": "d73a4a" }, { "name": "docs", "color": "0075ca" } ]""", "$[1].name")]
+    public void DuplicateLabelNames_AreReportedCaseInsensitively(string manifestJson, string expectedPath)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/github/labels.json", manifestJson);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/github/labels.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { expectedPath }, doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Theory]
+    [InlineData("https://:80/x", false)]
+    [InlineData("https://host:bad/x", false)]
+    [InlineData("https://host:99999/x", false)]
+    [InlineData("https://[bad]/", false)]
+    [InlineData("https://host:8443/v1/", true)]
+    [InlineData("http://localhost:11434", true)]
+    public void AihubBaseUrl_MustBeAnAbsoluteHttpUri(string baseUrl, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", $$"""
+            { "providers": { "p": { "type": "ollama", "model": "llama3", "baseUrl": "{{baseUrl}}" } }, "routing": { "defaultChain": ["p"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void DisabledProviderName_MayBeReusedByAnEnabledCliAgent(bool providerEnabled, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", $$"""
+            { "providers": { "codex": { "type": "openai", "model": "m", "apiKeyEnv": "OPENAI_API_KEY", "enabled": {{(providerEnabled ? "true" : "false")}} }, "p": { "type": "ollama", "model": "llama3" } },
+              "cliAgents": [ { "name": "codex", "command": "codex", "argsTemplate": "exec {prompt}" } ],
+              "routing": { "defaultChain": ["p"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
     }
 
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>

@@ -49,14 +49,17 @@ while a matching theme is active:
 
 | Scope key | Draws from | Matches |
 | --- | --- | --- |
-| `[*Dark*][*dark*][Abyss][Monokai][Monokai Dimmed][Red][Tomorrow Night Blue]` | `Tokens.xaml` `Default` | Any theme whose name contains `Dark` (VS Code's default **Default Dark Modern** included) plus the built-in dark themes without `Dark` in the name |
+| `[Default Dark Modern][Default Dark+][Dark (Visual Studio)][Visual Studio Dark][Abyss][Kimbie Dark][Monokai][Monokai Dimmed][Red][Solarized Dark][Tomorrow Night Blue]` | `Tokens.xaml` `Default` | The eleven built-in ordinary dark themes, by name (VS Code's default **Default Dark Modern** included); add another dark theme's name to the key to opt it in |
 | `[Default Light Modern][Default Light+][Light (Visual Studio)][Quiet Light][Solarized Light]` | `Tokens.xaml` `Light` | The five built-in light themes; add another light theme's name to the key to opt it in |
 
 Consequences worth knowing:
 
 - Dark is the default experience because a fresh VS Code uses Default Dark Modern.
 - The high-contrast themes (`Default High Contrast`, `Default High Contrast Light`) are in
-  neither scope, matching the shell's rule that user contrast themes win.
+  neither scope, matching the shell's rule that user contrast themes win. That is why the dark
+  key names its themes instead of matching `[*Dark*]`: a wildcard also matches
+  `Default High Contrast` and any third-party high-contrast theme whose name contains "Dark",
+  and would replace the accessibility colours those themes exist to provide.
 - One setting disables everything: choose a theme outside both scopes. Adding
   `"workbench.colorCustomizations": {}` to user settings does **not** cancel the block,
   because VS Code merges object settings across scopes and workspace or remote values

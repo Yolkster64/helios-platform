@@ -33,7 +33,7 @@
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },
-        "poolSize": { "type": "integer", "minimum": 1, "description": "Cap applied by scripts/fleet/start-fleet.ps1 in workspace mode (Codespaces / Cloud Shell); per pool, else inherited from defaults, else half the declared size rounded up." }
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Cap applied by scripts/fleet/start-fleet.ps1 in workspace mode (Codespaces / Cloud Shell); per pool, else inherited from defaults, else half the declared size rounded up. 64 is the same ceiling start-fleet.ps1 enforces on -PoolSize: a topology value bypasses that parameter check and spawns this many worker processes." }
       }
     },
     "envName": {
@@ -103,7 +103,7 @@
       "additionalProperties": false,
       "properties": {
         "$comment": { "type": "string" },
-        "poolSize": { "type": "integer", "minimum": 1 },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Worker processes per pool unless a pool overrides it; 64 is the ceiling start-fleet.ps1 enforces on -PoolSize, applied here too because a topology value bypasses that check." },
         "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
         "spawn": { "$ref": "#/$defs/spawn" },
         "autoscaling": { "$ref": "#/$defs/autoscaling" },
@@ -119,7 +119,7 @@
         "name": { "$ref": "#/$defs/identifier" },
         "specialization": { "type": "string" },
         "assigneePrefix": { "$ref": "#/$defs/identifier" },
-        "poolSize": { "type": "integer", "minimum": 1 },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Worker processes for this pool; the same 64 ceiling as -PoolSize in start-fleet.ps1." },
         "workspaceProfile": { "$ref": "#/$defs/workspaceProfile" },
         "hermesFleet": { "$ref": "#/$defs/hermesFleet" },
         "taskTypes": {

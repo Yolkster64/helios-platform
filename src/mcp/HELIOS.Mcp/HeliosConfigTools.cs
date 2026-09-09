@@ -154,6 +154,10 @@ public static class HeliosConfigTools
             {
                 throw new McpException($"'{MappingRelativePath}' has no 'mappings' array.");
             }
+            // Every entry is read, not just the first match: a manifest mapped twice would give the
+            // sweep (which validates both) and this tool (which would stop at the first) two verdicts
+            // for one file, so an ambiguous map is refused here exactly as load_mappings refuses it.
+            string? found = null;
             foreach (var mapping in mappings.EnumerateArray())
             {
                 if (mapping.ValueKind != JsonValueKind.Object
@@ -164,12 +168,17 @@ public static class HeliosConfigTools
                 {
                     continue;
                 }
-                if (string.Equals(manifest.GetString(), manifestRelative, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(ManifestSemantics.NormalizeManifestKey(manifest.GetString()!), manifestRelative, StringComparison.OrdinalIgnoreCase))
                 {
-                    return schema.GetString();
+                    if (found is not null)
+                    {
+                        throw new McpException(
+                            $"'{MappingRelativePath}' maps '{manifestRelative}' twice ('{found}' and '{schema.GetString()}'); a manifest has exactly one schema — fix the map before validating.");
+                    }
+                    found = schema.GetString();
                 }
             }
-            return null;
+            return found;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -297,17 +306,146 @@ public static class HeliosConfigTools
 internal static class ManifestSemantics
 {
     private const string AihubSchemaId = "helios://config/schemas/aihub.schema.json";
+    private const string LabelsSchemaId = "helios://config/schemas/github-labels.schema.json";
+    private const string ManifestsSchemaId = "helios://config/schemas/manifests.schema.json";
 
     public static IReadOnlyList<JsonSchemaLite.Issue> Check(JsonElement schema, JsonElement instance)
     {
-        if (schema.ValueKind == JsonValueKind.Object
-            && schema.TryGetProperty("$id", out var id)
-            && id.ValueKind == JsonValueKind.String
-            && id.GetString() == AihubSchemaId)
+        if (schema.ValueKind != JsonValueKind.Object
+            || !schema.TryGetProperty("$id", out var id)
+            || id.ValueKind != JsonValueKind.String)
         {
-            return AihubNames(instance);
+            return Array.Empty<JsonSchemaLite.Issue>();
         }
-        return Array.Empty<JsonSchemaLite.Issue>();
+        return id.GetString() switch
+        {
+            AihubSchemaId => AihubNames(instance).Concat(AihubBaseUrls(instance)).ToList(),
+            LabelsSchemaId => LabelNames(instance),
+            ManifestsSchemaId => MappingKeys(instance),
+            _ => Array.Empty<JsonSchemaLite.Issue>(),
+        };
+    }
+
+    /// <summary>Forward slashes, no leading "./" — the same key find_mapping uses.</summary>
+    public static string NormalizeManifestKey(string path)
+    {
+        var key = path.Replace('\\', '/');
+        return key.StartsWith("./", StringComparison.Ordinal) ? key[2..] : key;
+    }
+
+    /// <summary>
+    /// ProviderFactory hands baseUrl to <c>new Uri(...)</c>; the schema pattern excludes credentials
+    /// and query data but cannot establish a host or a valid port, so <c>https://:80/x</c> and
+    /// <c>https://host:bad/x</c> pass it and fail on the first request. Mirrors the Python engine's
+    /// <c>_check_aihub_base_urls</c>.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> AihubBaseUrls(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("providers", out var providers)
+            || providers.ValueKind != JsonValueKind.Object)
+        {
+            return issues;
+        }
+        foreach (var provider in providers.EnumerateObject())
+        {
+            if (provider.Value.ValueKind != JsonValueKind.Object
+                || !provider.Value.TryGetProperty("baseUrl", out var baseUrl)
+                || baseUrl.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var text = baseUrl.GetString()!;
+            // Uri.TryCreate never throws, so a malformed value - "https://[bad]/" - is this
+            // manifest's verdict here, exactly as the Python twin turns urlsplit's ValueError
+            // into one instead of letting it escape the sweep.
+            var ok = Uri.TryCreate(text, UriKind.Absolute, out var uri)
+                     && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                     && !string.IsNullOrEmpty(uri.Host);
+            if (!ok)
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.providers.{provider.Name}.baseUrl", $"'{text}' is not an absolute http(s) URI with a host and a valid port"));
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// GitHub and apply-labels.ps1 identify labels case-insensitively; two entries whose names
+    /// differ only by case would be POSTed twice or patched against each other on every run.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> LabelNames(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        JsonElement entries;
+        string prefix;
+        if (instance.ValueKind == JsonValueKind.Object && instance.TryGetProperty("labels", out var labels))
+        {
+            entries = labels;
+            prefix = "$.labels";
+        }
+        else
+        {
+            entries = instance;
+            prefix = "$";
+        }
+        if (entries.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, (int Index, string Name)>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var entry in entries.EnumerateArray())
+        {
+            var position = index++;
+            if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var text = name.GetString()!;
+            if (seen.TryGetValue(text, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"{prefix}[{position}].name", $"'{text}' repeats entry {first.Index} ('{first.Name}'); GitHub matches label names case-insensitively"));
+            }
+            else
+            {
+                seen[text] = (position, text);
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>A manifest mapped twice would get two verdicts for one file; see LookupMappedSchema.</summary>
+    private static List<JsonSchemaLite.Issue> MappingKeys(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("mappings", out var mappings)
+            || mappings.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var entry in mappings.EnumerateArray())
+        {
+            var position = index++;
+            if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("manifest", out var manifest) || manifest.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var key = NormalizeManifestKey(manifest.GetString()!);
+            if (seen.TryGetValue(key, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.mappings[{position}].manifest", $"'{manifest.GetString()}' is already mapped by entry {first}; a manifest has exactly one schema"));
+            }
+            else
+            {
+                seen[key] = position;
+            }
+        }
+        return issues;
     }
 
     /// <summary>
@@ -329,6 +467,12 @@ internal static class ManifestSemantics
         {
             foreach (var provider in providers.EnumerateObject())
             {
+                if (provider.Value.ValueKind == JsonValueKind.Object
+                    && provider.Value.TryGetProperty("enabled", out var providerEnabled)
+                    && providerEnabled.ValueKind == JsonValueKind.False)
+                {
+                    continue; // ProviderFactory.CreateAll skips a disabled provider before registering it
+                }
                 owners.TryAdd(provider.Name, $"providers.{provider.Name}");
             }
         }

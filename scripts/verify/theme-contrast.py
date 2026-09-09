@@ -9,7 +9,11 @@ the standard library:
    at least 4.5:1 (AA, normal text); every interactive indicator in
    ``INDICATOR_PAIRS`` (focus rings, active borders, cursors) holds at least 3:1
    (AA, non-text contrast). ``terminal.ansiBlack`` is skipped only when it equals
-   ``terminal.background`` (the dark-terminal convention).
+   ``terminal.background`` (the dark-terminal convention). A palette block that
+   omits a colour key a declared pair names FAILS: VS Code would fall back to the
+   active theme for that side of the pair, which is never measured against the
+   HELIOS colour on the other side, and two blocks missing the same key stay equal
+   so the drift check alone would not notice.
 2. Provenance. Every hex value in the dark block is a colour literal of the
    ``Default`` dictionary in ``src/gui/HELIOS.Shell/Themes/Tokens.xaml``; every
    hex in the light block is a literal of the ``Light`` dictionary. No colour may
@@ -220,9 +224,19 @@ def check_block(
     scope: str, block: dict[str, str], failures: list[str]
 ) -> list[dict]:
     rows: list[dict] = []
+    # A block that names none of the declared pair colours is not a palette block (an
+    # unscoped stray key, say); one that names any of them must name all of them.
+    declared = {key for pairs in (TEXT_PAIRS, INDICATOR_PAIRS) for pair in pairs for key in pair}
+    if not declared & set(block):
+        return rows
     for pairs, threshold, kind in ((TEXT_PAIRS, AA_TEXT, "text"), (INDICATOR_PAIRS, AA_NON_TEXT, "indicator")):
         for fg_key, bg_key in pairs:
-            if fg_key not in block or bg_key not in block:
+            absent = [key for key in (fg_key, bg_key) if key not in block]
+            if absent:
+                failures.append(
+                    f"{scope}: pair {fg_key} on {bg_key}: {', '.join(absent)} is not defined in the block "
+                    "(VS Code would fall back to the active theme for that colour, unmeasured)"
+                )
                 continue
             fg, bg = block[fg_key], block[bg_key]
             if fg_key == "terminal.ansiBlack" and fg.upper() == bg.upper():

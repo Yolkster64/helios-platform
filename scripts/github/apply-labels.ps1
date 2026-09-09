@@ -41,7 +41,8 @@
     Manifest shape (config/github/labels.json): an object with a `$comment` and a
     `labels` array of { name, color, description }; a bare array of entries is
     accepted too. color is six hex digits (a leading '#' is tolerated), description
-    at most 100 characters (GitHub's limit). Those three are the ONLY keys an entry
+    at most 100 characters (GitHub's limit, counted in Unicode scalar values like the
+    JSON Schema's maxLength - an astral character such as an emoji is one). Those three are the ONLY keys an entry
     may carry: any other key (a typo such as `descr`, or `aliases`, which this
     script does not support) marks the entry invalid (exit 1, key named) instead of
     being silently dropped and read as "in sync".
@@ -155,6 +156,23 @@ function Get-OptionalProperty {
     $prop = $Object.PSObject.Properties[$Name]
     if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
     return $Default
+}
+
+# Length in Unicode scalar values, which is what GitHub's 100-character cap and the
+# JSON Schema's maxLength both count. $String.Length counts UTF-16 code units, so an
+# astral character (an emoji) would count twice and this script would refuse a
+# description the required schema gate had just accepted.
+function Measure-TextLength {
+    param([string]$Value)
+    if ([string]::IsNullOrEmpty($Value)) { return 0 }
+    $count = 0
+    $index = 0
+    while ($index -lt $Value.Length) {
+        $index += if ([char]::IsHighSurrogate($Value[$index]) -and $index + 1 -lt $Value.Length -and
+                      [char]::IsLowSurrogate($Value[$index + 1])) { 2 } else { 1 }
+        $count++
+    }
+    return $count
 }
 
 # Renders one argv element the way an operator would retype it in a POSIX shell,
@@ -340,7 +358,9 @@ foreach ($entry in $entries) {
     if (-not $name) { $problem = 'entry has no name' }
     elseif ($unknownKeys.Count -gt 0) { $problem = "unknown key(s) $($unknownKeys -join ', ') (allowed: $($allowedKeys -join ', '))" }
     elseif ($color -notmatch '^[0-9a-f]{6}$') { $problem = "color '$color' is not six hex digits" }
-    elseif ($description.Length -gt 100) { $problem = "description is $($description.Length) characters (GitHub caps it at 100)" }
+    # Counted in Unicode scalar values, not UTF-16 code units: GitHub's 100-character cap and
+    # the schema's maxLength both count code points, so 51 emoji are 51 here, not 102.
+    elseif (($descriptionLength = Measure-TextLength $description) -gt 100) { $problem = "description is $descriptionLength characters (GitHub caps it at 100)" }
     if ($problem) {
         $item.state = 'invalid'
         $item.detail = $problem

@@ -33,6 +33,7 @@ import argparse
 import datetime as _dt
 import json
 import re
+from urllib.parse import urlsplit
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -161,16 +162,119 @@ _DATE_TIME_SHAPE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}
 # (JsonSchemaLite, ECMAScript mode) and this one accept exactly the same patterns.
 _NON_PORTABLE_REGEX = ("\\A", "\\Z", "\\z", "\\G", "(?<=", "(?<!", "\\p{", "\\P{", "(?i)", "(?m)", "(?s)", "(?x)", "(?#")
 
-# The classic catastrophic shape: a group whose whole content is ONE quantified atom (a
-# character, an escape or a class) and which is quantified again - ^(a+)+$, (\d*)*, ([a-z]+){2,},
-# (x{2,})+ - backtracks exponentially on a non-matching string; Python's re has no timeout, so
-# it is refused up front (the C# twin refuses the same shape and also runs under a 2 s timeout).
-# A group that ends in a literal - ([a-z]+/)* - is NOT this shape: every iteration must consume
-# the literal, so the split is unambiguous and the match is linear.
-_QUANTIFIER = r"(?:[+*]|\{[0-9]+(?:,[0-9]*)?\})"
-_NESTED_QUANTIFIER = re.compile(
-    r"\((?:\?:)?(?:\\.|\[(?:[^\]\\]|\\.)*\]|[^()\\\[\]])" + _QUANTIFIER + r"\??\)" + _QUANTIFIER
-)
+# The two catastrophic shapes, found by walking the pattern rather than by matching it with
+# another regex (a regex cannot skip character classes or count alternatives reliably):
+#
+#   1. a group whose whole content is ONE quantified atom, quantified again - ^(a+)+$, (\d*)*,
+#      ([a-z]+){2,}, (x{2,})+, (a+?)+;
+#   2. a group carrying a top-level alternation, quantified - ^(a|aa)+$, (?:ab|a)*, (a|aa|aaa)+ -
+#      whose alternatives can match the same text.
+#
+# Both backtrack exponentially on a non-matching string and Python's re has no timeout, so they
+# are refused before evaluation (the C# twin refuses the identical shapes and also runs under a
+# 2 s timeout). A group that must consume a literal each iteration - ([a-z]+/)*, (?:ab*)*c - is
+# unambiguous and linear; a bounded quantifier - (a|b)?, (dev|prod) - is safe; and a '(' or '|'
+# INSIDE a character class - [(a|b)+] - is a literal, not structure.
+
+
+def _quantifier_at(pattern: str, index: int) -> tuple[int, bool]:
+    """(length, unbounded_or_above_one) of the quantifier at `index`; (0, False) if none.
+    '?' and '{0,1}' / '{1}' repeat at most once, so they cannot multiply a group's paths."""
+    if index >= len(pattern):
+        return 0, False
+    char = pattern[index]
+    if char in "+*":
+        return 1, True
+    if char == "?":
+        return 1, False
+    if char != "{":
+        return 0, False
+    close = pattern.find("}", index)
+    if close < 0:
+        return 0, False
+    body = pattern[index + 1:close]
+    if not body or not all(part.isdigit() for part in body.split(",", 1) if part):
+        return 0, False  # not a quantifier, just a literal brace
+    low, _, high = body.partition(",")
+    if not low.isdigit():
+        return 0, False
+    if not _:                      # {n}
+        return close - index + 1, int(low) > 1
+    if not high:                   # {n,}
+        return close - index + 1, True
+    return close - index + 1, int(high) > 1
+
+
+def _catastrophic_shape(pattern: str) -> str | None:
+    """The reason `pattern` can backtrack exponentially, or None."""
+    frames: list[dict[str, int]] = []
+    current = {"alternation": 0, "atoms": 0, "quantifiers": 0}
+    index = 0
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "\\":
+            index += 2
+            current["atoms"] += 1
+            continue
+        if char == "[":
+            cursor = index + 1
+            if cursor < length and pattern[cursor] == "^":
+                cursor += 1
+            if cursor < length and pattern[cursor] == "]":   # a leading ']' is a literal
+                cursor += 1
+            while cursor < length and pattern[cursor] != "]":
+                cursor += 2 if pattern[cursor] == "\\" else 1
+            index = cursor + 1
+            current["atoms"] += 1
+            continue
+        if char == "(":
+            frames.append(current)
+            current = {"alternation": 0, "atoms": 0, "quantifiers": 0}
+            index += 1
+            if pattern.startswith("?:", index):
+                index += 2
+            elif index < length and pattern[index] == "?":
+                index += 1
+                while index < length and pattern[index] in "=!<":
+                    index += 1
+            continue
+        if char == ")":
+            inner = current
+            current = frames.pop() if frames else {"alternation": 0, "atoms": 0, "quantifiers": 0}
+            index += 1
+            size, multiplying = _quantifier_at(pattern, index)
+            if size:
+                index += size
+                if index < length and pattern[index] == "?":
+                    index += 1                                # lazy marker
+                if multiplying:
+                    if inner["alternation"]:
+                        return "a quantified group carries an alternation (ambiguous backtracking); write a character class or split the pattern"
+                    if inner["atoms"] == 1 and inner["quantifiers"] == 1:
+                        return "a quantified group is itself quantified (catastrophic backtracking)"
+                current["quantifiers"] += 1
+            current["atoms"] += 1
+            continue
+        if char == "|":
+            current["alternation"] = 1
+            current["atoms"] = 0          # each alternative is measured on its own
+            current["quantifiers"] = 0
+            index += 1
+            continue
+        if char in "^$":
+            index += 1                    # an anchor is not an atom
+            continue
+        size, _multiplying = _quantifier_at(pattern, index)
+        if size and current["atoms"]:
+            index += size
+            if index < length and pattern[index] == "?":
+                index += 1
+            current["quantifiers"] += 1
+            continue
+        index += 1
+        current["atoms"] += 1
+    return None
 
 # Nesting deeper than this means a $ref cycle that never descends into the instance
 # ("$ref": "#", or two $defs pointing at each other); real schemas nest a few dozen levels.
@@ -185,9 +289,7 @@ def _unsafe_pattern(pattern: str) -> str | None:
     unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
     if unportable is not None:
         return f"'{unportable}' is outside the portable (ECMA-262) regex subset"
-    if _NESTED_QUANTIFIER.search(pattern):
-        return "a quantified group is itself quantified (catastrophic backtracking)"
-    return None
+    return _catastrophic_shape(pattern)
 
 
 def _check_date_time(value: str) -> bool:
@@ -255,6 +357,8 @@ class MiniValidator:
                     self._walk_schema(sub, f"{where}/{key}/{index}")
             elif key == "type":
                 names = value if isinstance(value, list) else [value]
+                if not names or not all(isinstance(name, str) for name in names):
+                    raise SchemaError(f"{where}/type: must be a type name or a non-empty array of type names")
                 for name in names:
                     if name not in _TYPE_NAMES:
                         raise SchemaError(f"{where}/type: unknown type {name!r}")
@@ -630,7 +734,9 @@ def _check_aihub_names(instance: Any) -> list[Issue]:
     owners: dict[str, str] = {}
     providers = instance.get("providers")
     if isinstance(providers, dict):
-        for key in providers:
+        for key, entry in providers.items():
+            if isinstance(entry, dict) and entry.get("enabled") is False:
+                continue  # ProviderFactory.CreateAll skips a disabled provider before registering it
             owners.setdefault(str(key).lower(), f"providers.{key}")
     agents = instance.get("cliAgents")
     if isinstance(agents, list):
@@ -649,10 +755,101 @@ def _check_aihub_names(instance: Any) -> list[Issue]:
     return issues
 
 
+def _absolute_http_uri_problem(value: str) -> str | None:
+    """Why `value` is not an absolute http(s) URI with a host and a valid port, or None.
+    ProviderFactory hands baseUrl to `new Uri(...)`; the schema pattern excludes credentials and
+    query data but cannot establish a host or a port, so `https://:80/x` and `https://host:bad/x`
+    pass it and then fail on the first request."""
+    try:
+        parts = urlsplit(value)
+        scheme, host = parts.scheme, parts.hostname
+    except ValueError as exc:
+        # urlsplit itself raises on a malformed bracketed host ("https://[bad]/"); that is an
+        # invalid URI, so it is this manifest's verdict, never a traceback out of the sweep.
+        return f"it does not parse as a URI ({exc})"
+    if scheme not in ("http", "https"):
+        return "the scheme must be http or https"
+    if not host:
+        return "the host is empty"
+    try:
+        parts.port
+    except ValueError:
+        return "the port is not a number in 0..65535"
+    return None
+
+
+def _check_aihub_base_urls(instance: Any) -> list[Issue]:
+    issues: list[Issue] = []
+    providers = instance.get("providers") if isinstance(instance, dict) else None
+    if not isinstance(providers, dict):
+        return issues
+    for key, entry in providers.items():
+        if not isinstance(entry, dict) or not isinstance(entry.get("baseUrl"), str):
+            continue
+        problem = _absolute_http_uri_problem(entry["baseUrl"])
+        if problem is not None:
+            issues.append(Issue(f"$.providers.{key}.baseUrl", f"{entry['baseUrl']!r} is not an absolute http(s) URI: {problem}"))
+    return issues
+
+
+def _check_aihub(instance: Any) -> list[Issue]:
+    return _check_aihub_names(instance) + _check_aihub_base_urls(instance)
+
+
+def _check_github_labels(instance: Any) -> list[Issue]:
+    """GitHub and apply-labels.ps1 identify labels case-insensitively; two entries whose names
+    differ only by case would be POSTed twice or patched against each other on every run."""
+    issues: list[Issue] = []
+    if isinstance(instance, dict):
+        entries, prefix = instance.get("labels"), "$.labels"
+    else:
+        entries, prefix = instance, "$"
+    if not isinstance(entries, list):
+        return issues
+    seen: dict[str, int] = {}
+    for index, entry in enumerate(entries):
+        name = entry.get("name") if isinstance(entry, dict) else None
+        if not isinstance(name, str):
+            continue
+        # .lower(), not .casefold(): the C# twin compares OrdinalIgnoreCase (simple case
+        # mapping), so casefold - which folds 'straße' onto 'strasse' - would make the two
+        # engines disagree about a manifest.
+        first = seen.setdefault(name.lower(), index)
+        if first != index:
+            issues.append(Issue(f"{prefix}[{index}].name",
+                                f"{name!r} repeats entry {first} ({entries[first].get('name')!r}); GitHub matches label names case-insensitively"))
+    return issues
+
+
+def _normalize_manifest_key(path: str) -> str:
+    key = path.replace("\\", "/")
+    return key[2:] if key.startswith("./") else key
+
+
+def _check_manifest_map(instance: Any) -> list[Issue]:
+    """A manifest mapped twice would be validated against both schemas by the sweep while the
+    single-file paths (find_mapping, the MCP tool) stop at the first entry: one file, two verdicts."""
+    issues: list[Issue] = []
+    mappings = instance.get("mappings") if isinstance(instance, dict) else None
+    if not isinstance(mappings, list):
+        return issues
+    seen: dict[str, int] = {}
+    for index, entry in enumerate(mappings):
+        manifest = entry.get("manifest") if isinstance(entry, dict) else None
+        if not isinstance(manifest, str):
+            continue
+        first = seen.setdefault(_normalize_manifest_key(manifest), index)
+        if first != index:
+            issues.append(Issue(f"$.mappings[{index}].manifest", f"{manifest!r} is already mapped by entry {first}; a manifest has exactly one schema"))
+    return issues
+
+
 # Rules a schema cannot express, keyed by the schema's $id; mirrored by ManifestSemantics in
 # src/mcp/HELIOS.Mcp/HeliosConfigTools.cs so the MCP tool and CI agree.
 _SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
-    "helios://config/schemas/aihub.schema.json": _check_aihub_names,
+    "helios://config/schemas/aihub.schema.json": _check_aihub,
+    "helios://config/schemas/github-labels.schema.json": _check_github_labels,
+    "helios://config/schemas/manifests.schema.json": _check_manifest_map,
 }
 
 
@@ -661,18 +858,23 @@ def load_mappings(repo_root: Path = REPO_ROOT) -> list[Mapping]:
     if not isinstance(data, dict) or not isinstance(data.get("mappings"), list):
         raise ValueError(f"{MAPPING_FILE}: top level must be an object with a 'mappings' array")
     mappings: list[Mapping] = []
+    seen: dict[str, int] = {}
     for index, entry in enumerate(data["mappings"]):
         if not isinstance(entry, dict) or not isinstance(entry.get("manifest"), str) \
                 or not isinstance(entry.get("schema"), str):
             raise ValueError(f"{MAPPING_FILE}: mappings[{index}] must carry string 'manifest' and 'schema'")
+        key = _normalize_manifest_key(entry["manifest"])
+        if key in seen:
+            raise ValueError(f"{MAPPING_FILE}: '{entry['manifest']}' is mapped twice (entries {seen[key]} and {index}); a manifest has exactly one schema")
+        seen[key] = index
         mappings.append(Mapping(entry["manifest"], entry["schema"], str(entry.get("consumer", ""))))
     return mappings
 
 
 def find_mapping(rel_path: str, mappings: list[Mapping]) -> Mapping | None:
-    wanted = rel_path.replace("\\", "/").lstrip("./")
+    wanted = _normalize_manifest_key(rel_path)
     for mapping in mappings:
-        if mapping.manifest == wanted:
+        if _normalize_manifest_key(mapping.manifest) == wanted:
             return mapping
     return None
 

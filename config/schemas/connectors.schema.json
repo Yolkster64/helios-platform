@@ -25,7 +25,10 @@
       "properties": {
         "$comment": { "type": "string" },
         "enabled": { "type": "boolean" },
-        "webhookUrlEnv": { "$ref": "#/$defs/envName" },
+        "webhookUrlEnv": {
+          "const": "SLACK_WEBHOOK_URL",
+          "description": "Pinned to the name notify-slack.yml and auth-doctor.ps1 read verbatim (secrets.SLACK_WEBHOOK_URL): the workflow does not resolve this field, so any other name would be silently ignored. Change the workflow, the doctor and this constant together."
+        },
         "botTokenEnv": { "$ref": "#/$defs/envName" },
         "channels": {
           "type": "object",
@@ -54,7 +57,10 @@
       "properties": {
         "$comment": { "type": "string" },
         "enabled": { "type": "boolean" },
-        "apiKeyEnv": { "$ref": "#/$defs/envName" },
+        "apiKeyEnv": {
+          "const": "LINEAR_API_KEY",
+          "description": "Pinned to the name linear-sync.yml and auth-doctor.ps1 read verbatim (secrets.LINEAR_API_KEY); see webhookUrlEnv."
+        },
         "teamKey": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9]*$",

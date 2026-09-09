@@ -154,6 +154,13 @@ internal static class JsonSchemaLite
                         }
                         break;
                     case "type":
+                        if (value.ValueKind != JsonValueKind.String
+                            && (value.ValueKind != JsonValueKind.Array
+                                || value.GetArrayLength() == 0
+                                || value.EnumerateArray().Any(name => name.ValueKind != JsonValueKind.String)))
+                        {
+                            throw new SchemaException($"{where}/type: must be a type name or a non-empty array of type names");
+                        }
                         foreach (var name in TypeList(value))
                         {
                             if (Array.IndexOf(TypeNames, name) < 0)
@@ -251,9 +258,10 @@ internal static class JsonSchemaLite
                 {
                     throw new SchemaException($"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in '{text}'");
                 }
-                if (NestedQuantifier.IsMatch(text))
+                var catastrophic = CatastrophicShape(text);
+                if (catastrophic is not null)
                 {
-                    throw new SchemaException($"{where}/pattern: a quantified group is itself quantified (catastrophic backtracking) in '{text}'");
+                    throw new SchemaException($"{where}/pattern: {catastrophic}, in '{text}'");
                 }
                 try
                 {
@@ -501,15 +509,172 @@ internal static class JsonSchemaLite
             @"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
             RegexOptions.ECMAScript, RegexTimeout);
 
-        // The classic catastrophic shape: a group whose whole content is ONE quantified atom (a
-        // character, an escape or a class) and which is quantified again - ^(a+)+$, (\d*)*, ([a-z]+){2,},
-        // (x{2,})+ - backtracks exponentially; refused by every engine before it runs (this one also
-        // runs under RegexTimeout). A group that ends in a literal - ([a-z]+/)* - is NOT this shape:
-        // every iteration must consume the literal, so the split is unambiguous and linear.
-        private const string Quantifier = @"(?:[+*]|\{[0-9]+(?:,[0-9]*)?\})";
-        private static readonly Regex NestedQuantifier = new(
-            @"\((?:\?:)?(?:\\.|\[(?:[^\]\\]|\\.)*\]|[^()\\\[\]])" + Quantifier + @"\??\)" + Quantifier,
-            RegexOptions.ECMAScript, RegexTimeout);
+        // The two catastrophic shapes, found by walking the pattern rather than by matching it
+        // with another regex (a regex cannot skip character classes or count alternatives
+        // reliably): a group whose whole content is ONE quantified atom, quantified again
+        // (^(a+)+$, (\d*)*, ([a-z]+){2,}, (x{2,})+, (a+?)+), and a group carrying a top-level
+        // alternation, quantified (^(a|aa)+$, (?:ab|a)*, (a|aa|aaa)+). Both backtrack
+        // exponentially; refused before the regex is built (this engine also runs every match
+        // under RegexTimeout). A group that must consume a literal each iteration - ([a-z]+/)*,
+        // (?:ab*)*c - is linear; a bounded quantifier - (a|b)? - is safe; and a '(' or '|' inside
+        // a character class - [(a|b)+] - is a literal, not structure. The twin of
+        // _catastrophic_shape in scripts/validation/validate_config_schemas.py.
+        private static (int Length, bool Multiplying) QuantifierAt(string pattern, int index)
+        {
+            if (index >= pattern.Length)
+            {
+                return (0, false);
+            }
+            var c = pattern[index];
+            if (c is '+' or '*')
+            {
+                return (1, true);
+            }
+            if (c == '?')
+            {
+                return (1, false);
+            }
+            if (c != '{')
+            {
+                return (0, false);
+            }
+            var close = pattern.IndexOf('}', index);
+            if (close < 0)
+            {
+                return (0, false);
+            }
+            var body = pattern[(index + 1)..close];
+            var comma = body.IndexOf(',');
+            var low = comma < 0 ? body : body[..comma];
+            var high = comma < 0 ? null : body[(comma + 1)..];
+            if (low.Length == 0 || !low.All(char.IsAsciiDigit) || (high is { Length: > 0 } && !high.All(char.IsAsciiDigit)))
+            {
+                return (0, false); // not a quantifier, just a literal brace
+            }
+            if (comma < 0)
+            {
+                return (close - index + 1, int.Parse(low, CultureInfo.InvariantCulture) > 1);
+            }
+            return (close - index + 1, high!.Length == 0 || int.Parse(high, CultureInfo.InvariantCulture) > 1);
+        }
+
+        private sealed class GroupFrame
+        {
+            public bool Alternation;
+            public int Atoms;
+            public int Quantifiers;
+        }
+
+        internal static string? CatastrophicShape(string pattern)
+        {
+            var frames = new Stack<GroupFrame>();
+            var current = new GroupFrame();
+            var index = 0;
+            while (index < pattern.Length)
+            {
+                var c = pattern[index];
+                if (c == '\\')
+                {
+                    index += 2;
+                    current.Atoms++;
+                    continue;
+                }
+                if (c == '[')
+                {
+                    var cursor = index + 1;
+                    if (cursor < pattern.Length && pattern[cursor] == '^')
+                    {
+                        cursor++;
+                    }
+                    if (cursor < pattern.Length && pattern[cursor] == ']')
+                    {
+                        cursor++; // a leading ']' is a literal
+                    }
+                    while (cursor < pattern.Length && pattern[cursor] != ']')
+                    {
+                        cursor += pattern[cursor] == '\\' ? 2 : 1;
+                    }
+                    index = cursor + 1;
+                    current.Atoms++;
+                    continue;
+                }
+                if (c == '(')
+                {
+                    frames.Push(current);
+                    current = new GroupFrame();
+                    index++;
+                    if (index + 1 < pattern.Length && pattern[index] == '?' && pattern[index + 1] == ':')
+                    {
+                        index += 2;
+                    }
+                    else if (index < pattern.Length && pattern[index] == '?')
+                    {
+                        index++;
+                        while (index < pattern.Length && pattern[index] is '=' or '!' or '<')
+                        {
+                            index++;
+                        }
+                    }
+                    continue;
+                }
+                if (c == ')')
+                {
+                    var inner = current;
+                    current = frames.Count > 0 ? frames.Pop() : new GroupFrame();
+                    index++;
+                    var (size, multiplying) = QuantifierAt(pattern, index);
+                    if (size > 0)
+                    {
+                        index += size;
+                        if (index < pattern.Length && pattern[index] == '?')
+                        {
+                            index++; // lazy marker
+                        }
+                        if (multiplying)
+                        {
+                            if (inner.Alternation)
+                            {
+                                return "a quantified group carries an alternation (ambiguous backtracking); write a character class or split the pattern";
+                            }
+                            if (inner.Atoms == 1 && inner.Quantifiers == 1)
+                            {
+                                return "a quantified group is itself quantified (catastrophic backtracking)";
+                            }
+                        }
+                        current.Quantifiers++;
+                    }
+                    current.Atoms++;
+                    continue;
+                }
+                if (c == '|')
+                {
+                    current.Alternation = true;
+                    current.Atoms = 0; // each alternative is measured on its own
+                    current.Quantifiers = 0;
+                    index++;
+                    continue;
+                }
+                if (c is '^' or '$')
+                {
+                    index++; // an anchor is not an atom
+                    continue;
+                }
+                var (atomQuantifier, _) = QuantifierAt(pattern, index);
+                if (atomQuantifier > 0 && current.Atoms > 0)
+                {
+                    index += atomQuantifier;
+                    if (index < pattern.Length && pattern[index] == '?')
+                    {
+                        index++;
+                    }
+                    current.Quantifiers++;
+                    continue;
+                }
+                index++;
+                current.Atoms++;
+            }
+            return null;
+        }
 
         private static bool IsDateTime(string value) =>
             DateTimeShape.IsMatch(value)

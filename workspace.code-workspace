@@ -26,7 +26,7 @@
     "terminal.integrated.defaultProfile.linux": "bash",
     "window.title": "HELIOS Control${separator}${dirty}${activeEditorShort}${separator}${rootName}",
     "workbench.colorCustomizations": {
-      "[*Dark*][*dark*][Abyss][Monokai][Monokai Dimmed][Red][Tomorrow Night Blue]": {
+      "[Default Dark Modern][Default Dark+][Dark (Visual Studio)][Visual Studio Dark][Abyss][Kimbie Dark][Monokai][Monokai Dimmed][Red][Solarized Dark][Tomorrow Night Blue]": {
         "titleBar.activeBackground": "#0A1428",
         "titleBar.activeForeground": "#E8F1F8",
         "titleBar.inactiveBackground": "#0F1D2E",
