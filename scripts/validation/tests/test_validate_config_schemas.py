@@ -1735,3 +1735,25 @@ class Round12Tests(unittest.TestCase):
         issues = target._check_fork_watch(blank)
         self.assertEqual(len(issues), 1, issues)
         self.assertIn("str.strip()", issues[0].message)
+
+
+class Round13Tests(unittest.TestCase):
+    """Round 13 of PR #252: a watched repository is its slug, and a malformed mapping entry is
+    refused by the MCP lookup the way the CLI sweep refuses it."""
+
+    def test_a_watched_repository_is_named_once(self) -> None:
+        # uniqueItems compares whole objects, so two entries naming one repo with different
+        # `because` text both passed, and fork-observation.yml fetches it twice and overwrites the
+        # same ${slug}.* digest files.
+        base = target.load_json(ROOT / "config" / "fork-watch.json", "manifest")
+        self.assertEqual(target._check_fork_watch(base), [])
+        doubled = json.loads(json.dumps(base, default=str))
+        first = doubled["repos"][0]
+        doubled["repos"].append(dict(first, because="a different reason"))
+        issues = target._check_fork_watch(doubled)
+        self.assertEqual(len(issues), 1, issues)
+        self.assertIn("already watched by entry 0", issues[0].message)
+        # GitHub matches owner/name case-insensitively, so this does too.
+        cased = json.loads(json.dumps(base, default=str))
+        cased["repos"].append(dict(first, repo=str(first["repo"]).upper()))
+        self.assertEqual(len(target._check_fork_watch(cased)), 1)

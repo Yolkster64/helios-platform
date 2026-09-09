@@ -1853,7 +1853,19 @@ def _check_fork_watch(instance: Any) -> list[Issue]:
     if not isinstance(repos, list):
         return []
     issues: list[Issue] = []
+    # A repository is its slug, not its whole entry: uniqueItems compares whole objects, so two
+    # entries naming one repo with different `because` text both passed. fork-observation.yml then
+    # fetches it twice, overwrites the same ${slug}.* files and prints the heading twice. GitHub
+    # matches owner/name case-insensitively, so this does too.
+    seen: dict[str, int] = {}
     for index, entry in enumerate(repos):
+        slug = entry.get("repo") if isinstance(entry, dict) else None
+        if isinstance(slug, str) and slug:
+            first = seen.setdefault(_ordinal_ignore_case(slug), index)
+            if first != index:
+                issues.append(Issue(f"$.repos[{index}].repo",
+                                    f"'{slug}' is already watched by entry {first}; fork-observation.yml "
+                                    "would fetch it twice and overwrite the same digest files"))
         because = entry.get("because") if isinstance(entry, dict) else None
         if isinstance(because, str) and because and not because.strip():
             issues.append(Issue(f"$.repos[{index}].because",

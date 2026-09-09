@@ -1664,6 +1664,45 @@ public sealed class McpConfigToolTests : IDisposable
         Assert.Contains("str.strip()", json);
     }
 
+    [Fact]
+    public void ForkWatch_AWatchedRepositoryIsNamedOnce()
+    {
+        // uniqueItems compares whole objects, so two entries naming one repo with different
+        // `because` text both passed, and fork-observation.yml fetches it twice.
+        var root = CreateRepoRoot();
+        var shipped = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fork-watch.json")))!;
+        var repos = shipped["repos"]!.AsArray();
+        var duplicate = JsonNode.Parse(repos[0]!.ToJsonString())!;
+        duplicate["because"] = "a different reason";
+        repos.Add(duplicate);
+        WriteManifest(root, "config/fork-watch.json", shipped.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fork-watch.json", null, root);
+
+        Assert.False(JsonDocument.Parse(json).RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("already watched by entry 0", json);
+    }
+
+    [Fact]
+    public void MappingLookup_RefusesAMalformedEntryRatherThanSkippingIt()
+    {
+        // load_mappings rejects the whole control map for a malformed entry, so skipping one here
+        // let this tool answer valid:true for a file whose map the required sweep will not read.
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/schemas/manifests.json", """
+            { "mappings": [
+                42,
+                { "manifest": "config/github/labels.json", "schema": "config/schemas/github-labels.schema.json" } ] }
+            """);
+        WriteManifest(root, "config/github/labels.json", """[]""");
+
+        var ex = Assert.Throws<McpException>(
+            () => HeliosConfigTools.BuildValidationJson("config/github/labels.json", null, root));
+
+        Assert.Contains("malformed entry", ex.Message);
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {

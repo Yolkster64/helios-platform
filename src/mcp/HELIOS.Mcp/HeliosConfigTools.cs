@@ -160,13 +160,18 @@ public static class HeliosConfigTools
             string? found = null;
             foreach (var mapping in mappings.EnumerateArray())
             {
+                // Refused, not skipped: load_mappings rejects the whole control map for a malformed
+                // entry, so skipping one here let this tool answer `valid: true` for a file whose
+                // map the required sweep refuses to read at all — two verdicts for one repository.
                 if (mapping.ValueKind != JsonValueKind.Object
                     || !mapping.TryGetProperty("manifest", out var manifest)
                     || !mapping.TryGetProperty("schema", out var schema)
                     || manifest.ValueKind != JsonValueKind.String
                     || schema.ValueKind != JsonValueKind.String)
                 {
-                    continue;
+                    throw new McpException(
+                        $"'{MappingRelativePath}' has a malformed entry: every mapping needs string 'manifest' and " +
+                        "'schema' fields. The CLI sweep refuses the whole map for this, so fix it before validating.");
                 }
                 if (string.Equals(ManifestSemantics.NormalizeManifestKey(manifest.GetString()!), manifestRelative, StringComparison.OrdinalIgnoreCase))
                 {
@@ -466,13 +471,34 @@ internal static class ManifestSemantics
         {
             return issues;
         }
+        // A repository is its slug, not its whole entry: uniqueItems compares whole objects, so two
+        // entries naming one repo with different `because` text both passed, and fork-observation.yml
+        // fetches it twice and overwrites the same digest files. GitHub matches owner/name
+        // case-insensitively, so this does too.
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var index = 0;
         foreach (var entry in repos.EnumerateArray())
         {
             var position = index++;
-            if (entry.ValueKind != JsonValueKind.Object
-                || !entry.TryGetProperty("because", out var because)
-                || because.ValueKind != JsonValueKind.String)
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+            if (entry.TryGetProperty("repo", out var slug) && slug.ValueKind == JsonValueKind.String
+                && slug.GetString() is { Length: > 0 } slugText)
+            {
+                if (seen.TryGetValue(slugText, out var first))
+                {
+                    issues.Add(new JsonSchemaLite.Issue($"$.repos[{position}].repo",
+                        $"'{slugText}' is already watched by entry {first}; fork-observation.yml would fetch it " +
+                        "twice and overwrite the same digest files"));
+                }
+                else
+                {
+                    seen[slugText] = position;
+                }
+            }
+            if (!entry.TryGetProperty("because", out var because) || because.ValueKind != JsonValueKind.String)
             {
                 continue;
             }

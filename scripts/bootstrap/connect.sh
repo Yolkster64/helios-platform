@@ -122,6 +122,38 @@ run_pwsh() {   # run_pwsh <script-relative-path> [args...]; echoes nothing, retu
     "$pwsh_bin" -NoProfile -File "$REPO_ROOT/$1" "${@:2}" >/dev/null 2>&1
 }
 
+run_pwsh_json() {   # like run_pwsh, but echoes stdout so the caller can read the report
+    if [ -z "$pwsh_bin" ]; then return 127; fi
+    "$pwsh_bin" -NoProfile -File "$REPO_ROOT/$1" "${@:2}" 2>/dev/null
+}
+
+owner_action_count() {   # stdin: a -Json report; echoes the number of owner actions, or "?"
+    # An exit code is not the verdict: auto-login.ps1 exits 0 whether or not providers are
+    # unconfigured and reserves non-zero for internal failure, so reading $? alone reported
+    # "every provider resolved" for a host where none had. The report says what is left.
+    if ! have python3; then printf '?'; return; fi
+    # Two shapes, because the two scripts report differently: auto-login carries ownerActions[],
+    # auth-doctor carries lanes[] with a per-lane state. Either answers "how much is left".
+    python3 -c '
+import json, sys
+try:
+    report = json.load(sys.stdin)
+except Exception:
+    print("?"); sys.exit(0)
+actions = report.get("ownerActions")
+if isinstance(actions, list):
+    print(len(actions)); sys.exit(0)
+lanes = report.get("lanes")
+if isinstance(lanes, dict):
+    lanes = list(lanes.values())
+if isinstance(lanes, list):
+    print(sum(1 for lane in lanes
+              if isinstance(lane, dict) and lane.get("state") not in ("ready", "ok")))
+else:
+    print("?")
+' 2>/dev/null || printf '?'
+}
+
 # ---------------------------------------------------------------------------
 # 1. GitHub — the device code is printed by gh itself, in the foreground.
 #
@@ -248,10 +280,31 @@ if ! skipped oidc; then
     elif [ "$verify_only" -eq 1 ]; then
         record oidc ok "an Azure session exists; the variables are applied on a full run"
     else
-        bash "$REPO_ROOT/scripts/bootstrap/azure-oidc-setup.sh" >/dev/null 2>&1
+        oidc_out=$(bash "$REPO_ROOT/scripts/bootstrap/azure-oidc-setup.sh" 2>&1)
         rc=$?
         case $rc in
-            0) record oidc ok "the OIDC identity and the three repository variables are in place" ;;
+            0)
+                # Exit 0 means the identity and its federated credentials exist. It does NOT mean
+                # the repository variables do: azure-oidc-setup.sh PRINTS three `gh variable set`
+                # lines and never runs them, so recording "in place" here left helios-deploy.yml
+                # unable to authenticate with nothing on the owner's list. Ask GitHub instead.
+                oidc_cmds=$(printf '%s\n' "$oidc_out" | sed -n 's/^[[:space:]]*\(gh variable set .*\)$/\1/p')
+                oidc_present=0
+                if have gh && gh variable list --repo "$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" \
+                        --json name -q '.[].name' 2>/dev/null | grep -qx 'AZURE_CLIENT_ID'; then
+                    oidc_present=1
+                fi
+                if [ "$oidc_present" -eq 1 ]; then
+                    record oidc ok "the OIDC identity exists and AZURE_CLIENT_ID is set on the repository"
+                elif [ -n "$oidc_cmds" ]; then
+                    record oidc needs-owner \
+                        "the OIDC identity exists; the three repository variables are printed by that script, not written" \
+                        "$(printf '%s' "$oidc_cmds" | paste -sd';' - | sed 's/;/ ; /g')"
+                else
+                    record oidc needs-owner \
+                        "the OIDC identity exists; the three repository variables could not be confirmed" \
+                        "bash scripts/bootstrap/azure-oidc-setup.sh   # prints the three gh variable set lines to run"
+                fi ;;
             2) record oidc needs-owner "the OIDC lane printed steps for you" \
                    "bash scripts/bootstrap/azure-oidc-setup.sh" ;;
             *) record oidc failed "azure-oidc-setup.sh exited $rc" ;;
@@ -296,15 +349,31 @@ if ! skipped hub; then
         record hub needs-owner "PowerShell 7 is not on this host" \
             "install PowerShell 7, then re-run this script"
     else
-        run_pwsh scripts/bootstrap/auto-login.ps1 -Json
+        # auto-login.ps1 delegates to auth-doctor.ps1 -Apply, which may replace the az CLI
+        # profile, so a run that promises to change nothing asks auth-doctor directly instead:
+        # without -Apply its contract is report-only.
+        if [ "$verify_only" -eq 1 ]; then
+            hub_script="auth-doctor.ps1"
+            hub_json=$(run_pwsh_json scripts/bootstrap/auth-doctor.ps1 -Json)
+        else
+            hub_script="auto-login.ps1"
+            hub_json=$(run_pwsh_json scripts/bootstrap/auto-login.ps1 -Json)
+        fi
         rc=$?
-        case $rc in
-            0) record hub ok "every configured provider resolved a credential" ;;
-            2) record hub needs-owner "some providers are unconfigured (a valid state)" \
-                   "pwsh scripts/bootstrap/auth-doctor.ps1   # names the variable or vault secret each one wants" ;;
-            *) record hub failed "auto-login.ps1 exited $rc" ;;
-        esac
-        say "   exit $rc"
+        hub_actions=$(printf '%s' "$hub_json" | owner_action_count)
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+            record hub failed "$hub_script exited $rc"
+        elif [ "$hub_actions" = "?" ]; then
+            record hub failed \
+                "$hub_script exited $rc but its --json report could not be read, so no provider's credential state is known" \
+                "pwsh scripts/bootstrap/auth-doctor.ps1   # read the report directly"
+        elif [ "$hub_actions" = "0" ]; then
+            record hub ok "every configured provider resolved a credential"
+        else
+            record hub needs-owner "$hub_actions provider credential(s) still want something from you (a valid state)" \
+                "pwsh scripts/bootstrap/auth-doctor.ps1   # names the variable or vault secret each one wants"
+        fi
+        say "   exit $rc; owner actions: $hub_actions"
     fi
 fi
 
@@ -509,15 +578,21 @@ if ! skipped verify; then
     # .tools/pwsh, and without it every lane it probes reports "could not run".
     verify_path="$PATH"
     case "$pwsh_bin" in */*) verify_path="$(dirname "$pwsh_bin"):$PATH" ;; esac
-    mkdir -p "$STATE_DIR"
-    verify_json="$STATE_DIR/connect-firstrun.json"
+    # A temporary file, not a record: a read-only run leaves nothing new in the checkout.
+    if [ "$verify_only" -eq 1 ]; then
+        verify_json="${TMPDIR:-/tmp}/helios-firstrun-$$.json"
+    else
+        mkdir -p "$STATE_DIR"
+        verify_json="$STATE_DIR/connect-firstrun.json"
+    fi
     PATH="$verify_path" bash "$REPO_ROOT/scripts/bootstrap/first-run.sh" --verify-only --json >"$verify_json" 2>/dev/null
     rc=$?
     # --json carries the verdict in the document, not in the exit code (it exits 0
     # whether or not lanes are outstanding), so read the lanes rather than $?.
     outstanding=""
+    verify_parsed=0
     if have python3; then
-        outstanding="$(python3 - "$verify_json" <<'PYVERIFY' 2>/dev/null || true
+        if outstanding="$(python3 - "$verify_json" <<'PYVERIFY' 2>/dev/null
 import json, sys
 try:
     report = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -527,10 +602,18 @@ lanes = report.get("lanes", {})
 print(" ".join(sorted(name for name, lane in lanes.items()
                       if isinstance(lane, dict) and lane.get("state") not in ("ready", "ok"))))
 PYVERIFY
-)"
+)"; then verify_parsed=1; fi
     fi
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
         record verify failed "first-run.sh --verify-only exited $rc"
+    elif ! have python3; then
+        # Silence is not readiness: without a parser the report cannot be read, and claiming
+        # every lane is ready was a verdict nothing had checked.
+        record verify needs-owner "the --json report cannot be read on this host (no python3)" \
+            "bash scripts/bootstrap/first-run.sh --verify-only   # the full report, one command per lane"
+    elif [ "$verify_parsed" -eq 0 ]; then
+        record verify failed "first-run.sh exited $rc but its --json report could not be parsed, so no lane state is known" \
+            "bash scripts/bootstrap/first-run.sh --verify-only   # read the report directly"
     elif [ -z "$outstanding" ]; then
         record verify ok "first-run reports every lane ready"
     else
@@ -538,6 +621,7 @@ PYVERIFY
             "bash scripts/bootstrap/first-run.sh --verify-only   # the full report, one command per lane"
     fi
     say "   exit $rc; outstanding: ${outstanding:-none}"
+    [ "$verify_only" -eq 1 ] && rm -f "$verify_json"
 fi
 
 # ---------------------------------------------------------------------------

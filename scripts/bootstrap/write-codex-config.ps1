@@ -201,10 +201,13 @@ if (Test-Path -LiteralPath $mcpAssembly) {
     $mcpLaunchNote = '# Launches the built server directly, so the tool list is ready immediately.'
 }
 else {
-    $mcpArgsLine = 'args = ["run", "--project", {0}, "-c", "Release", "--no-build"]' -f (ConvertTo-TomlBasicString $mcpProjectDir)
-    $mcpLaunchNote = '# The Release build is missing, so this falls back to `dotnet run --no-build`. Run' + [Environment]::NewLine +
-                     '# `dotnet build HELIOS.sln -c Release` and re-run this script: Codex drops a server that'  + [Environment]::NewLine +
-                     '# is slow to answer, and a build on every start is slow enough to lose the tools.'
+    # NOT --no-build: with no Release output there is nothing for it to run, so the registered
+    # server could never start. `dotnet run` builds first - slow enough that Codex may drop a
+    # server on its first call, which the note says - but a slow server beats a dead one.
+    $mcpArgsLine = 'args = ["run", "--project", {0}, "-c", "Release"]' -f (ConvertTo-TomlBasicString $mcpProjectDir)
+    $mcpLaunchNote = '# The Release build is missing, so this falls back to `dotnet run`, which builds first.' + [Environment]::NewLine +
+                     '# Run `dotnet build HELIOS.sln -c Release` and re-run this script: a build on every start' + [Environment]::NewLine +
+                     '# is slow enough that Codex can drop the server before it answers.'
 }
 $rendered = @(
     '[mcp_servers.helios]',

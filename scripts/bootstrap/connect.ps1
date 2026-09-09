@@ -98,6 +98,29 @@ function Test-Application {
     return $null -ne (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
 
+function Get-LaneReport {
+    # Runs a repo script that speaks -Json and returns @{ Code; Outstanding } where Outstanding
+    # is how much the report still wants from the owner, or $null when it cannot be read.
+    # An exit code is not the verdict: auto-login.ps1 exits 0 whether or not providers are
+    # unconfigured and reserves non-zero for internal failure. The two scripts also report
+    # differently - auto-login carries ownerActions[], auth-doctor carries lanes[] with a state.
+    param([Parameter(Mandatory)][string]$RelativePath, [string[]]$Arguments = @())
+    $full = Join-Path $repoRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $full)) { return @{ Code = 127; Outstanding = $null } }
+    $raw = & pwsh -NoProfile -File $full @Arguments 2>$null
+    $code = $LASTEXITCODE
+    try { $report = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop }
+    catch { return @{ Code = $code; Outstanding = $null } }
+    if ($null -ne $report.ownerActions) { return @{ Code = $code; Outstanding = @($report.ownerActions).Count } }
+    if ($null -ne $report.lanes) {
+        $lanes = if ($report.lanes -is [System.Collections.IEnumerable] -and $report.lanes -isnot [string]) {
+            @($report.lanes)
+        } else { @($report.lanes.PSObject.Properties.Value) }
+        return @{ Code = $code; Outstanding = @($lanes | Where-Object { $_.state -notin @('ready', 'ok') }).Count }
+    }
+    return @{ Code = $code; Outstanding = $null }
+}
+
 function Invoke-Lane {
     # Runs a repo script by path and returns its exit code; output is discarded so
     # a lane cannot leak a value into the transcript.
@@ -187,7 +210,28 @@ if (-not (Test-Skipped 'oidc')) {
             # azure-oidc-setup.ps1 has no read-only mode: it is idempotent and only runs here.
             $code = Invoke-Lane 'scripts/bootstrap/azure-oidc-setup.ps1'
             switch ($code) {
-                0 { Add-Lane oidc 'ok' 'the OIDC identity and the three repository variables are in place' }
+                0 {
+                    # Exit 0 means the identity and its federated credentials exist. It does NOT
+                    # mean the repository variables do: azure-oidc-setup PRINTS three
+                    # `gh variable set` lines and never runs them, so recording "in place" left
+                    # helios-deploy.yml unable to authenticate with nothing on the owner's list.
+                    $oidcSet = $false
+                    if (Test-Application 'gh') {
+                        $slugForVars = (& gh repo view --json nameWithOwner -q .nameWithOwner 2>$null)
+                        if ($LASTEXITCODE -eq 0 -and $slugForVars) {
+                            $varNames = @(& gh variable list --repo $slugForVars --json name -q '.[].name' 2>$null)
+                            $oidcSet = ($LASTEXITCODE -eq 0) -and ($varNames -contains 'AZURE_CLIENT_ID')
+                        }
+                    }
+                    if ($oidcSet) {
+                        Add-Lane oidc 'ok' 'the OIDC identity exists and AZURE_CLIENT_ID is set on the repository'
+                    }
+                    else {
+                        Add-Lane oidc 'needs-owner' `
+                            'the OIDC identity exists; the three repository variables are printed by that script, not written' `
+                            'pwsh scripts/bootstrap/azure-oidc-setup.ps1   # prints the three gh variable set lines to run'
+                    }
+                }
                 2 { Add-Lane oidc 'needs-owner' 'the OIDC lane printed steps for you' `
                         'pwsh scripts/bootstrap/azure-oidc-setup.ps1' }
                 default { Add-Lane oidc 'failed' "azure-oidc-setup.ps1 exited $code" }
@@ -226,14 +270,29 @@ if (-not (Test-Skipped 'secrets')) {
 # 5. Hub — pull whatever the vault already holds into this process.
 if (-not (Test-Skipped 'hub')) {
     Write-Step '5. Hub (providers resolve their credentials)'
-    $code = Invoke-Lane 'scripts/bootstrap/auto-login.ps1' @('-Json')
-    switch ($code) {
-        0 { Add-Lane hub 'ok' 'every configured provider resolved a credential' }
-        2 { Add-Lane hub 'needs-owner' 'some providers are unconfigured (a valid state; each one names its variable)' `
-                'pwsh scripts/bootstrap/auth-doctor.ps1   # names the environment variable or vault secret each lane wants' }
-        default { Add-Lane hub 'failed' "auto-login.ps1 exited $code" }
+    # auto-login.ps1 delegates to auth-doctor.ps1 -Apply, which may replace the az CLI profile,
+    # so a run that promises to change nothing asks auth-doctor directly instead: without -Apply
+    # its contract is report-only.
+    $hubScript = if ($readOnly) { 'auth-doctor.ps1' } else { 'auto-login.ps1' }
+    $hub = Get-LaneReport "scripts/bootstrap/$hubScript" @('-Json')
+    $code = $hub.Code
+    if ($code -ne 0 -and $code -ne 2) {
+        Add-Lane hub 'failed' "$hubScript exited $code"
     }
-    Write-Line "   exit $code"
+    elseif ($null -eq $hub.Outstanding) {
+        Add-Lane hub 'failed' `
+            "$hubScript exited $code but its -Json report could not be read, so no provider's credential state is known" `
+            'pwsh scripts/bootstrap/auth-doctor.ps1   # read the report directly'
+    }
+    elseif ($hub.Outstanding -eq 0) {
+        Add-Lane hub 'ok' 'every configured provider resolved a credential'
+    }
+    else {
+        Add-Lane hub 'needs-owner' `
+            "$($hub.Outstanding) provider credential(s) still want something from you (a valid state)" `
+            'pwsh scripts/bootstrap/auth-doctor.ps1   # names the environment variable or vault secret each lane wants'
+    }
+    Write-Line "   exit $code; outstanding: $($hub.Outstanding)"
 }
 
 # 6. ChatGPT / OpenAI — one lane over four surfaces that are easy to confuse:
@@ -313,8 +372,15 @@ if (-not (Test-Skipped 'connectors')) {
             $slug = ($origin -replace '^(git@github\.com:|https://github\.com/)', '') -replace '\.git$', ''
         }
     }
-    & gh auth status --hostname github.com *> $null
-    if (-not (Test-Application 'gh') -or $LASTEXITCODE -ne 0) {
+    # Test-Application FIRST: with ErrorActionPreference = 'Stop' a missing gh turns
+    # command-not-found into a terminating error that ends the whole orchestrator, instead of
+    # this lane recording needs-owner and the run continuing as promised.
+    $ghReady = $false
+    if (Test-Application 'gh') {
+        & gh auth status --hostname github.com *> $null
+        $ghReady = $LASTEXITCODE -eq 0
+    }
+    if (-not $ghReady) {
         Add-Lane connectors 'needs-owner' 'the two connector secrets cannot be listed until gh is signed in' $ghLoginCommand
         Write-Line '   gh is not signed in; skipping the secret listing.'
     }
@@ -431,7 +497,9 @@ $failed = @($lanes | Where-Object { $_.state -eq 'failed' }).Count -gt 0
 $pending = @($lanes | Where-Object { $_.state -eq 'needs-owner' }).Count -gt 0
 
 if ($Json) {
-    Get-Content -LiteralPath $stateFile -Raw
+    # $stateJson, not the file: a read-only run deliberately does not write $stateFile, so
+    # reading it terminated on a clean checkout and returned stale lanes after a mutable run.
+    $stateJson
 }
 else {
     Write-Host ''
