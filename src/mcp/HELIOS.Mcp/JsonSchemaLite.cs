@@ -61,6 +61,16 @@ internal static class JsonSchemaLite
         return issues;
     }
 
+    /// <summary>
+    /// A JSON number's identity, exactly: 191 and 191.0 share it. Semantic rules outside this
+    /// class compare numbers with it so they read a value the way schema validation does.
+    /// </summary>
+    internal static string NumberKey(JsonElement number) => Validator.CanonicalNumberFor(number);
+
+    /// <summary>True when the token is a real, finite JSON number every consumer can hold.</summary>
+    internal static bool IsFiniteNumber(JsonElement number) =>
+        number.ValueKind == JsonValueKind.Number && number.TryGetDouble(out var value) && double.IsFinite(value);
+
     /// <summary>Rejects a schema that uses a keyword outside the supported subset.</summary>
     internal static void CheckSchema(JsonElement schemaRoot) => new Validator(schemaRoot).CheckSchema();
 
@@ -153,6 +163,14 @@ internal static class JsonSchemaLite
                         }
                         foreach (var sub in value.EnumerateObject())
                         {
+                            if (key == "patternProperties")
+                            {
+                                // The KEY is itself a regex, and a walk of the subschemas never
+                                // reaches it: against an instance with no properties nothing would
+                                // ever compile "[", and the schema would pass as usable.
+                                using var keyDocument = JsonDocument.Parse($"\"{JsonEncodedText.Encode(sub.Name)}\"");
+                                Compile(keyDocument.RootElement.Clone(), $"{where}/{key}/{sub.Name}");
+                            }
                             WalkSchema(sub.Value, $"{where}/{key}/{sub.Name}");
                         }
                         break;
@@ -756,9 +774,33 @@ internal static class JsonSchemaLite
             }
         }
 
-        private static bool IsDateTime(string value) =>
-            DateTimeShape.IsMatch(value)
-            && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _);
+        private static bool IsDateTime(string value)
+        {
+            // Shape first, then a real calendar and clock check — but NOT through DateTimeOffset,
+            // which cannot hold an offset beyond ±14:00 while RFC 3339 (and the Python twin, whose
+            // fromisoformat accepts ±23:59) allows any two-digit hour. The regex has already fixed
+            // every field's position, so the parts can be read directly.
+            // '$' in .NET matches before a final newline, so the shape alone would accept
+            // "2026-01-01T00:00:00Z\n" and then read its offset from the wrong six characters.
+            if (value.Length == 0 || value[^1] is '\n' or '\r' || !DateTimeShape.IsMatch(value))
+            {
+                return false;
+            }
+            var local = string.Concat(value[..10], "T", value[11..19]);
+            if (!DateTime.TryParseExact(local, "yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out _))
+            {
+                return false;
+            }
+            var offset = value[^6..];
+            if (offset[0] is not ('+' or '-'))
+            {
+                return true;   // the shape guarantees the only other ending is Z or z
+            }
+            return int.TryParse(offset[1..3], NumberStyles.None, CultureInfo.InvariantCulture, out var hours)
+                && int.TryParse(offset[4..6], NumberStyles.None, CultureInfo.InvariantCulture, out var minutes)
+                && hours <= 23 && minutes <= 59;
+        }
 
         // Constructs .NET, Python and ECMA-262 do not share; refused by name so both engines agree.
         private static readonly string[] NonPortableRegexConstructs =
@@ -768,6 +810,15 @@ internal static class JsonSchemaLite
 
         private static void ValidateNumber(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
+            // The Python engine refuses a token outside double range while parsing ("1e400" reads
+            // as inf, and System.Text.Json's binders fail on it); JsonDocument parses it happily,
+            // so the same manifest would be valid here and unreadable there. Say so once, before
+            // any bound is compared.
+            if (!instance.TryGetDouble(out var magnitude) || !double.IsFinite(magnitude))
+            {
+                errors.Add(new Issue(path, $"{Brief(instance)} is out of range for a JSON number: no consumer of this manifest can hold it"));
+                return;
+            }
             // Compared as written, not as doubles: minimum 9007199254740993 against the integer
             // 9007199254740992 is the same double twice, and the invalid instance would pass.
             if (schema.TryGetProperty("minimum", out var minimum) && CompareNumbers(instance, minimum) < 0)
@@ -887,8 +938,10 @@ internal static class JsonSchemaLite
                 }
                 if (hasPropertyNames)
                 {
+                    // Reported at the object, not at the key's own path: that is where
+                    // python-jsonschema and the Python twin report a bad property name.
                     using var nameDocument = JsonDocument.Parse($"\"{JsonEncodedText.Encode(member.Name)}\"");
-                    Validate(propertyNames, nameDocument.RootElement.Clone(), child, errors);
+                    Validate(propertyNames, nameDocument.RootElement.Clone(), path, errors);
                 }
             }
 
@@ -914,8 +967,10 @@ internal static class JsonSchemaLite
             {
                 return significant.Length == 0 || exponent >= 0;
             }
-            var value = number.GetDouble();
-            return !double.IsInfinity(value) && Math.Floor(value) == value;
+            // Only an exponent past the normalizer's guard reaches here, and a double would answer
+            // for a value it cannot hold: 1e-1000000001 becomes zero and would read as an integer,
+            // where the Python engine - whose numbers are exact - calls it fractional.
+            return false;
         }
 
         private static bool MatchesType(JsonElement instance, string expected) => expected switch
@@ -990,6 +1045,8 @@ internal static class JsonSchemaLite
         /// power of ten that scales them. Python's json keeps integers exact and compares numbers
         /// numerically, so this is also what keeps the two engines agreeing about one manifest.
         /// </summary>
+        internal static string CanonicalNumberFor(JsonElement element) => CanonicalNumber(element);
+
         private static string CanonicalNumber(JsonElement element)
         {
             var raw = element.GetRawText();
@@ -1012,9 +1069,16 @@ internal static class JsonSchemaLite
             var exponentAt = body.IndexOfAny(new[] { 'e', 'E' });
             if (exponentAt >= 0)
             {
+                // Zero is zero however it is spelled: 0e-1000000001 has nothing for an exponent to
+                // scale, so it normalizes before the guard below can refuse it.
+                if (body[..exponentAt].Trim('0').Trim('.').Length == 0)
+                {
+                    return true;
+                }
                 // The bound keeps the arithmetic below from wrapping: subtracting a fraction's
                 // digits from long.MinValue would turn a tiny number into an enormous one and
-                // reverse the comparison. Past this magnitude nothing exact is left to say.
+                // reverse the comparison. Past this magnitude nothing exact is left to say — and
+                // such a value is out of double range anyway, which ValidateNumber refuses first.
                 const long exponentLimit = 1_000_000_000;
                 // Compared, not Math.Abs'd: Math.Abs(long.MinValue) throws, and long.MinValue is
                 // exactly the exponent an attacker would write.

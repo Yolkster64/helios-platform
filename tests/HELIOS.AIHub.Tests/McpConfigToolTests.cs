@@ -877,6 +877,220 @@ public sealed class McpConfigToolTests : IDisposable
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(15), $"took {started.Elapsed}");
     }
 
+    [Theory]
+    // JsonDocument parses 1e400 happily, but every consumer binds a double and the Python engine
+    // refuses the token while reading the file: the same manifest must not be valid here.
+    [InlineData("""{ "minimum": 0 }""", "1e400", false)]
+    [InlineData("""{ "minimum": 0 }""", "-1e400", false)]
+    [InlineData("""{ "minimum": 0 }""", "1e308", true)]
+    // Past the normalizer's exponent guard a double would answer for a value it cannot hold.
+    [InlineData("""{ "type": "integer" }""", "1e-1000000001", false)]
+    [InlineData("""{ "type": "number" }""", "1e-1000000001", true)]
+    public void JsonSchemaLite_RefusesNumbersNoConsumerCanHold(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Theory]
+    // RFC 3339 allows any two-digit offset; DateTimeOffset stops at ±14:00, and the Python twin
+    // accepts the full range, so the check reads the parts instead of parsing an offset type.
+    [InlineData("2026-01-01T00:00:00+15:00", true)]
+    [InlineData("2026-01-01T00:00:00+23:59", true)]
+    [InlineData("2026-01-01T00:00:00-14:00", true)]
+    [InlineData("2026-01-01T00:00:00Z", true)]
+    [InlineData("2026-01-01T00:00:00+24:00", false)]
+    [InlineData("2026-01-01T00:00:00+15:60", false)]
+    [InlineData("2026-02-30T00:00:00Z", false)]
+    [InlineData("2026-01-01T25:00:00Z", false)]
+    public void JsonSchemaLite_AcceptsTheFullRfc3339OffsetRange(string value, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse("""{ "type": "string", "format": "date-time" }""");
+        using var instance = JsonDocument.Parse(JsonSerializer.Serialize(value));
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_APatternPropertiesKeyIsCompiled()
+    {
+        // Against an instance with no properties nothing else would ever compile the key.
+        using var schema = JsonDocument.Parse("""{ "type": "object", "patternProperties": { "[": {} } }""");
+        using var instance = JsonDocument.Parse("{}");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("pattern", ex.Message);
+    }
+
+    [Theory]
+    // AIHubOptions.Load binds case-insensitively, so the later spelling replaces the earlier.
+    [InlineData("""{ "providers": { "live": { "type": "ollama", "model": "m" } }, "Providers": null, "routing": { "defaultChain": ["live"], "taskRouting": {} } }""", false)]
+    [InlineData("""{ "providers": { "live": { "type": "ollama", "model": "m", "Type": "openai" } }, "routing": { "defaultChain": ["live"], "taskRouting": {} } }""", false)]
+    [InlineData("""{ "providers": { "live": { "type": "ollama", "model": "m" } }, "routing": { "defaultChain": ["live"], "taskRouting": {} } }""", true)]
+    public void AihubCaseInsensitiveAliases_AreRefused(string manifestJson, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", manifestJson);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Fact]
+    public void DuplicateWatchlistPullRequests_AreReported()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/absorption/pr-watchlist.json", """
+            { "candidates": [
+                { "pr": 191, "title": "one", "status": "watching" },
+                { "pr": 191, "title": "two", "status": "watching" } ] }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/absorption/pr-watchlist.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("$.candidates[1].pr",
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Fact]
+    public void SemanticRules_FollowTheSchemaFile_NotItsEditableId()
+    {
+        // Removing one `$id` line used to switch every semantic rule off while validation passed.
+        var root = CreateRepoRoot();
+        var schemaPath = Path.Combine(root, "config", "schemas", "aihub.schema.json");
+        var schema = JsonNode.Parse(File.ReadAllText(schemaPath))!.AsObject();
+        schema.Remove("$id");
+        File.WriteAllText(schemaPath, schema.ToJsonString());
+        WriteManifest(root, "config/aihub.json", """
+            { "providers": { "codex": { "type": "ollama", "model": "m" } },
+              "cliAgents": [ { "name": "codex", "command": "codex", "argsTemplate": "exec {prompt}" } ],
+              "routing": { "defaultChain": ["codex"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { "$.cliAgents[0].name" },
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Theory]
+    // '$' matches before a final newline in .NET, so the shape alone accepted a timestamp with one
+    // and then read its offset from the wrong six characters.
+    [InlineData("2026-01-01T00:00:00Z\n", false)]
+    [InlineData("2026-01-01T00:00:00+99:99\n", false)]
+    [InlineData("2026-01-01T00:00:00Z", true)]
+    public void JsonSchemaLite_DateTimeRejectsATrailingNewline(string value, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse("""{ "type": "string", "format": "date-time" }""");
+        using var instance = JsonDocument.Parse(JsonSerializer.Serialize(value));
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Theory]
+    // Zero is zero however it is spelled, even past the normalizer's exponent guard.
+    [InlineData("""{ "type": "integer" }""", "0e-1000000001", true)]
+    [InlineData("""{ "type": "integer" }""", "0.000e999999999999", true)]
+    [InlineData("""{ "minimum": 0 }""", "-0", true)]
+    public void JsonSchemaLite_ZeroNormalizesWhateverItsExponent(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Fact]
+    public void NumbersOutOfDoubleRange_AreReportedWhereverTheySit()
+    {
+        // The Python engine refuses the token while reading the file, so a value the schema walk
+        // never reaches — an unknown property here — must not leave the two engines disagreeing.
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", """
+            { "providers": { "live": { "type": "ollama", "model": "m" } },
+              "routing": { "defaultChain": ["live"], "taskRouting": {} },
+              "unused": 1e400 }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("$.unused",
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Fact]
+    public void WatchlistDuplicates_ReadAPullRequestNumberAsSchemaValidationDoes()
+    {
+        // 191 and 191.0 are one pull request; the identity check must not depend on the spelling.
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/absorption/pr-watchlist.json", """
+            { "candidates": [
+                { "pr": 191.0, "title": "one", "status": "watching" },
+                { "pr": 191, "title": "two", "status": "watching" } ] }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/absorption/pr-watchlist.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("$.candidates[1].pr",
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Fact]
+    public void SemanticRules_DoNotFollowAFamiliarNameElsewhereInTheTree()
+    {
+        // A file name is not identity: only config/schemas/ (or a HELIOS $id) carries these rules.
+        var root = CreateRepoRoot();
+        WriteManifest(root, "scratch/aihub.schema.json", """{ "type": "object" }""");
+        WriteManifest(root, "config/draft.json", """{ "Providers": null }""");
+
+        var json = HeliosConfigTools.BuildValidationJson("config/draft.json", "scratch/aihub.schema.json", root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.True(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+    }
+
+    [Fact]
+    public void SemanticRules_FollowAHeliosIdWhereverTheSchemaSits()
+    {
+        // The $id fallback is what an explicitly passed schema outside config/schemas/ has left.
+        var root = CreateRepoRoot();
+        var shipped = File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "schemas", "aihub.schema.json"));
+        WriteManifest(root, "scratch/custom.schema.json", shipped);
+        WriteManifest(root, "config/draft.json", """
+            { "providers": { "codex": { "type": "ollama", "model": "m" } },
+              "cliAgents": [ { "name": "codex", "command": "codex", "argsTemplate": "exec {prompt}" } ],
+              "routing": { "defaultChain": ["codex"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/draft.json", "scratch/custom.schema.json", root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { "$.cliAgents[0].name" },
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {

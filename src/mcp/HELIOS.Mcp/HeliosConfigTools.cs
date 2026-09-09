@@ -82,7 +82,7 @@ public static class HeliosConfigTools
             using var stream = File.OpenRead(manifestFull);
             using var manifestDocument = JsonDocument.Parse(stream);
             errors.AddRange(JsonSchemaLite.Validate(schemaDocument.RootElement, manifestDocument.RootElement));
-            errors.AddRange(ManifestSemantics.Check(schemaDocument.RootElement, manifestDocument.RootElement));
+            errors.AddRange(ManifestSemantics.Check(schemaDocument.RootElement, manifestDocument.RootElement, schemaRelative));
         }
         catch (JsonException ex)
         {
@@ -305,29 +305,230 @@ public static class HeliosConfigTools
 /// </summary>
 internal static class ManifestSemantics
 {
-    private const string AihubSchemaId = "helios://config/schemas/aihub.schema.json";
-    private const string LabelsSchemaId = "helios://config/schemas/github-labels.schema.json";
-    private const string ManifestsSchemaId = "helios://config/schemas/manifests.schema.json";
-    private const string MilestonesSchemaId = "helios://config/schemas/github-milestones.schema.json";
-    private const string FleetTopologySchemaId = "helios://config/schemas/fleet-topology.schema.json";
-
-    public static IReadOnlyList<JsonSchemaLite.Issue> Check(JsonElement schema, JsonElement instance)
+    /// <summary>
+    /// The rules for a schema, chosen by the schema FILE this checkout ships. The $id inside a
+    /// schema is editable data: keying on it meant that removing or mistyping one line switched
+    /// every semantic rule off while ordinary validation still passed. The file name comes from the
+    /// trusted map (or from an explicit schemaPath, which ResolveInsideRepo has already confined);
+    /// the $id is a fallback for a schema that carries one but sits elsewhere.
+    /// </summary>
+    public static IReadOnlyList<JsonSchemaLite.Issue> Check(JsonElement schema, JsonElement instance, string schemaRelativePath = "")
     {
-        if (schema.ValueKind != JsonValueKind.Object
-            || !schema.TryGetProperty("$id", out var id)
-            || id.ValueKind != JsonValueKind.String)
+        // A file name alone is not identity — any directory can hold a file called
+        // aihub.schema.json — so the name counts only for a schema under this checkout's
+        // config/schemas/. Anything else is selected by its HELIOS $id or not at all, which is
+        // also what the Python twin's _semantics_for does.
+        var path = schemaRelativePath.Replace('\\', '/');
+        var name = path.StartsWith("config/schemas/", StringComparison.Ordinal)
+                   && path.LastIndexOf('/') == "config/schemas".Length
+            ? path[(path.LastIndexOf('/') + 1)..]
+            : "";
+        if (!SemanticNames.Contains(name)
+            && schema.ValueKind == JsonValueKind.Object
+            && schema.TryGetProperty("$id", out var id) && id.ValueKind == JsonValueKind.String)
         {
-            return Array.Empty<JsonSchemaLite.Issue>();
+            var identifier = id.GetString() ?? "";
+            name = identifier.StartsWith("helios://config/schemas/", StringComparison.Ordinal)
+                ? identifier[(identifier.LastIndexOf('/') + 1)..]
+                : name;
         }
-        return id.GetString() switch
+        // Every manifest, whatever its schema: the Python engine refuses a number outside double
+        // range while READING the file, so a value the C# walk never reaches (an unknown property,
+        // or a schema that says `true`) must not make one engine call the file valid and the other
+        // unreadable.
+        var universal = NumbersWithinDoubleRange(instance);
+        return name switch
         {
-            AihubSchemaId => AihubNames(instance).Concat(AihubBaseUrls(instance)).Concat(AihubChains(instance)).ToList(),
-            LabelsSchemaId => LabelNames(instance),
-            ManifestsSchemaId => MappingKeys(instance),
-            MilestonesSchemaId => MilestoneTitles(instance),
-            FleetTopologySchemaId => FleetPoolNames(instance),
-            _ => Array.Empty<JsonSchemaLite.Issue>(),
+            "aihub.schema.json" => universal.Concat(AihubNames(instance)).Concat(AihubBaseUrls(instance))
+                .Concat(AihubChains(instance)).Concat(AihubKeys(instance)).ToList(),
+
+            "github-labels.schema.json" => universal.Concat(LabelNames(instance)).ToList(),
+            "manifests.schema.json" => universal.Concat(MappingKeys(instance)).ToList(),
+            "github-milestones.schema.json" => universal.Concat(MilestoneTitles(instance)).ToList(),
+            "fleet-topology.schema.json" => universal.Concat(FleetPoolNames(instance)).ToList(),
+            "absorption-pr-watchlist.schema.json" => universal.Concat(WatchlistCandidates(instance)).ToList(),
+            _ => universal,
         };
+    }
+
+    /// <summary>
+    /// Every number in the document, wherever it sits, must be one a consumer can hold: 1e400
+    /// parses as a JsonElement but binds to no double, and the Python engine refuses the token
+    /// while reading the file rather than while validating a keyword.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> NumbersWithinDoubleRange(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        Walk(instance, "$");
+        return issues;
+
+        void Walk(JsonElement node, string path)
+        {
+            switch (node.ValueKind)
+            {
+                case JsonValueKind.Number when !JsonSchemaLite.IsFiniteNumber(node):
+                    issues.Add(new JsonSchemaLite.Issue(path,
+                        $"{node.GetRawText()} is out of range for a JSON number: no consumer of this manifest can hold it"));
+                    break;
+                case JsonValueKind.Object:
+                    foreach (var member in node.EnumerateObject())
+                    {
+                        Walk(member.Value, $"{path}.{member.Name}");
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    var index = 0;
+                    foreach (var item in node.EnumerateArray())
+                    {
+                        Walk(item, $"{path}[{index++}]");
+                    }
+                    break;
+            }
+        }
+    }
+
+    private static readonly HashSet<string> SemanticNames = new(StringComparer.Ordinal)
+    {
+        "aihub.schema.json", "github-labels.schema.json", "manifests.schema.json",
+        "github-milestones.schema.json", "fleet-topology.schema.json", "absorption-pr-watchlist.schema.json",
+    };
+
+    /// <summary>The properties AIHubOptions and its nested records bind, by canonical spelling.</summary>
+    private static readonly Dictionary<string, string[]> AihubSectionKeys = new(StringComparer.Ordinal)
+    {
+        // $schema and $comment are deliberately absent: nothing binds them, so a differently cased
+        // spelling cannot replace a section — it is an unknown key, which this schema tolerates.
+        ["$"] = new[] { "providers", "cliAgents", "routing", "learning" },
+        ["$.routing"] = new[] { "defaultChain", "taskRouting" },
+        ["$.learning"] = new[] { "enabled", "mode", "localPath", "tableEndpointEnv", "adaptiveRouting", "historyWindow" },
+    };
+
+    private static readonly string[] AihubProviderKeys =
+        { "type", "enabled", "model", "apiKeyEnv", "apiKeySecretName", "endpointEnv", "baseUrl" };
+
+    private static readonly string[] AihubAgentKeys =
+        { "name", "enabled", "command", "argsTemplate", "model", "timeoutSeconds" };
+
+    private static List<JsonSchemaLite.Issue> AliasIssues(JsonElement node, string path, string[] canonical)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return issues;
+        }
+        var known = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in canonical)
+        {
+            known[name] = name;
+        }
+        foreach (var member in node.EnumerateObject())
+        {
+            if (known.TryGetValue(member.Name, out var match) && !string.Equals(member.Name, match, StringComparison.Ordinal))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"{path}.{member.Name}",
+                    $"'{member.Name}' differs from '{match}' only by case; the hub's binder folds them together and the later one replaces the earlier"));
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// AIHubOptions.Load binds with PropertyNameCaseInsensitive, so a manifest carrying both
+    /// `providers` and `Providers` binds them to one property in source order and the last one
+    /// wins - silently replacing a section that validated. The provider map is case-insensitive
+    /// for the same reason. Mirrors the Python engine's _check_aihub_keys.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> AihubKeys(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object)
+        {
+            return issues;
+        }
+        foreach (var (path, canonical) in AihubSectionKeys)
+        {
+            var node = instance;
+            if (path != "$" && !instance.TryGetProperty(path[2..], out node))
+            {
+                continue;
+            }
+            issues.AddRange(AliasIssues(node, path, canonical));
+        }
+        if (instance.TryGetProperty("providers", out var providers) && providers.ValueKind == JsonValueKind.Object)
+        {
+            var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var provider in providers.EnumerateObject())
+            {
+                if (seen.TryGetValue(provider.Name, out var first))
+                {
+                    issues.Add(new JsonSchemaLite.Issue($"$.providers.{provider.Name}",
+                        $"'{provider.Name}' repeats '{first}'; provider keys are matched case-insensitively"));
+                }
+                else
+                {
+                    seen[provider.Name] = provider.Name;
+                }
+                issues.AddRange(AliasIssues(provider.Value, $"$.providers.{provider.Name}", AihubProviderKeys));
+            }
+        }
+        if (instance.TryGetProperty("cliAgents", out var agents) && agents.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var agent in agents.EnumerateArray())
+            {
+                issues.AddRange(AliasIssues(agent, $"$.cliAgents[{index++}]", AihubAgentKeys));
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// A candidate's pull-request number is its identity: seed-absorption-tasks.ps1 derives the
+    /// task id `absorb-pr-&lt;n&gt;` from it and reads the existing ids once, before the loop, so two
+    /// entries with one number are enqueued twice under the same id in a single run.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> WatchlistCandidates(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        JsonElement candidates;
+        if (instance.ValueKind == JsonValueKind.Object && instance.TryGetProperty("candidates", out var listed))
+        {
+            candidates = listed;
+        }
+        else
+        {
+            candidates = instance;
+        }
+        if (candidates.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var candidate in candidates.EnumerateArray())
+        {
+            var position = index++;
+            // 191 and 191.0 are one pull request: read the number as schema validation reads it,
+            // not as one spelling of it.
+            if (candidate.ValueKind != JsonValueKind.Object
+                || !candidate.TryGetProperty("pr", out var number)
+                || number.ValueKind != JsonValueKind.Number
+                || !JsonSchemaLite.IsFiniteNumber(number))
+            {
+                continue;
+            }
+            var key = JsonSchemaLite.NumberKey(number);
+            if (seen.TryGetValue(key, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.candidates[{position}].pr",
+                    $"pull request {number.GetRawText()} repeats entry {first}; both would seed the same absorb-pr task in one run"));
+            }
+            else
+            {
+                seen[key] = position;
+            }
+        }
+        return issues;
     }
 
     /// <summary>Forward slashes, no leading "./" — the same key find_mapping uses.</summary>

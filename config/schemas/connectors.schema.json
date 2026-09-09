@@ -74,8 +74,8 @@
         },
         "titlePrefix": {
           "type": "string",
-          "pattern": "\\{number\\}",
-          "description": "Must contain the {number} slot: linear-sync.yml derives its loop marker from the text before it."
+          "pattern": "^[^{}]*[^{}\\s][^{}]*\\{number\\}[^{}]*$",
+          "description": "Must carry a non-empty marker, then exactly one {number} slot: linear-sync.yml derives its loop guard from the text BEFORE the slot, so a prefix that starts with {number} yields an empty marker and the guard stops recognising this workflow's own mirrors - the duplicate-issue loop the runbook exists to prevent."
         },
         "syncLabels": {
           "type": "array",

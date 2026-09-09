@@ -482,6 +482,10 @@ def _check_date_time(value: str) -> bool:
     # RFC 3339 shape first (fromisoformat is lenient about separators), then a real clock check.
     if not _DATE_TIME_SHAPE.match(value):
         return False
+    # The shape fixes each field's width, not its range, and fromisoformat normalizes an offset of
+    # +15:60 into +16:00 rather than refusing it. The C# twin reads the digits; so does this.
+    if value[-6] in "+-" and not (int(value[-5:-3]) <= 23 and int(value[-2:]) <= 59):
+        return False
     try:
         _dt.datetime.fromisoformat(value.replace("z", "Z").replace("Z", "+00:00"))
     except ValueError:
@@ -524,6 +528,11 @@ class MiniValidator:
         if not isinstance(node, dict):
             raise SchemaError(f"{where}: a schema must be an object or a boolean")
         for key, value in node.items():
+            if key == "$schema" and where != "#":
+                # python-jsonschema re-selects a validator for a subschema that declares its own
+                # dialect, which would drop this module's regex and number rules for that subtree.
+                # No shipped schema does it, and the built-in engine has no second dialect to give.
+                raise SchemaError(f"{where}/$schema: a dialect may only be declared at the root of a schema")
             if key in _ANNOTATIONS:
                 if key in ("$defs", "definitions") and isinstance(value, dict):
                     for name, sub in value.items():
@@ -537,6 +546,12 @@ class MiniValidator:
                 if not isinstance(value, dict):
                     raise SchemaError(f"{where}/{key}: must be an object")
                 for name, sub in value.items():
+                    # The KEY of a patternProperties entry is itself a regex, and it is the one
+                    # thing a walk of the subschemas never reaches: with an instance that has no
+                    # properties, nothing else would ever compile "[" and the schema would pass as
+                    # usable. python-jsonschema refuses it at check_schema; so does this now.
+                    if key == "patternProperties":
+                        self._compile(name, f"{where}/{key}/{name}")
                     self._walk_schema(sub, f"{where}/{key}/{name}")
             elif key in ("additionalProperties", "propertyNames", "items", "contains",
                          "not", "if", "then", "else"):
@@ -591,7 +606,13 @@ class MiniValidator:
                 # Bounded like a match: a{999999999999999999999999} raises OverflowError (not
                 # re.error) out of the C parser, and a large-but-legal repeat count builds a
                 # program big enough to matter.
-                compiled = _bounded(f"compiling {pattern!r}", f"{where}/pattern", lambda: re.compile(pattern))
+                # re.ASCII: JSON Schema patterns are ECMA-262, where \d \w \s and their
+                # negations are ASCII. Python's default is Unicode, so `^\d+$` would accept an
+                # Arabic-Indic digit here and be refused by the C# engine's ECMAScript mode - the
+                # same manifest, two verdicts. The shipped schemas use \s and \S, which differ the
+                # same way for a non-breaking space.
+                compiled = _bounded(f"compiling {pattern!r}", f"{where}/pattern",
+                                    lambda: re.compile(pattern, re.ASCII))
             except (re.error, OverflowError, MemoryError, RecursionError) as exc:
                 raise SchemaError(f"{where}/pattern: invalid regex {pattern!r}: {exc}") from exc
             self._regex[pattern] = compiled
@@ -946,13 +967,64 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
         type_checker = (jsonschema.Draft202012Validator.TYPE_CHECKER
                         .redefine("number", lambda _checker, instance: _matches_type(instance, "number"))
                         .redefine("integer", lambda _checker, instance: _matches_type(instance, "integer")))
+        def _ascii_pattern(validator: Any, pattern: Any, instance: Any, _schema: Any) -> Any:
+            # The library compiles patterns itself, with Python's Unicode defaults; this routes
+            # them through the same compile the built-in engine uses - ASCII shorthand classes,
+            # the portability refusals and the deadline - so all three paths judge one manifest
+            # the same way.
+            if not validator.is_type(instance, "string"):
+                return
+            compiled = checked._compile(pattern, "#")
+            if not _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(instance)):
+                yield jsonschema.exceptions.ValidationError(f"{instance!r} does not match {pattern!r}")
+
+        def _ascii_pattern_properties(validator: Any, pattern_properties: Any, instance: Any, _schema: Any) -> Any:
+            if not validator.is_type(instance, "object"):
+                return
+            for pattern, subschema in pattern_properties.items():
+                compiled = checked._compile(pattern, "#")
+                for name, value in instance.items():
+                    if _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(name)):
+                        yield from validator.descend(value, subschema, path=name, schema_path=pattern)
+
+        def _ascii_additional_properties(validator: Any, additional: Any, instance: Any, schema_node: Any) -> Any:
+            # The library decides which properties patternProperties already covers with its own
+            # Unicode matcher, so overriding patternProperties alone left a property matched there
+            # and validated nowhere. Coverage is decided by the same compile as everything else.
+            if not validator.is_type(instance, "object"):
+                return
+            declared = schema_node.get("properties", {})
+            patterns = schema_node.get("patternProperties", {})
+            for name, value in instance.items():
+                if name in declared:
+                    continue
+                covered = False
+                for pattern in patterns:
+                    compiled = checked._compile(pattern, "#")
+                    if _bounded(f"matching {pattern!r}", "$", lambda: compiled.search(name)):
+                        covered = True
+                        break
+                if covered:
+                    continue
+                if validator.is_type(additional, "object") or validator.is_type(additional, "boolean"):
+                    if additional is False:
+                        yield jsonschema.exceptions.ValidationError(
+                            f"Additional properties are not allowed ('{name}' was unexpected)")
+                    elif additional is not True:
+                        yield from validator.descend(value, additional, path=name)
+
         validator_class = jsonschema.validators.extend(
-            jsonschema.Draft202012Validator, type_checker=type_checker)
+            jsonschema.Draft202012Validator, type_checker=type_checker,
+            validators={"pattern": _ascii_pattern, "patternProperties": _ascii_pattern_properties,
+                        "additionalProperties": _ascii_additional_properties})
         try:
             validator_class.check_schema(schema)
         except jsonschema.exceptions.SchemaError as exc:
             raise SchemaError(f"schema is invalid: {exc.message}") from exc
-        checker = jsonschema.FormatChecker()
+        # Only the formats this module implements: the library's default checker also validates
+        # "regex", "uri", "email" and more when their optional packages are present, and would then
+        # refuse a manifest the built-in engine and the C# twin accept as an annotation.
+        checker = jsonschema.FormatChecker(formats=[])
         # Register this module's date / date-time checks with the library engine: without the
         # optional rfc3339-validator package jsonschema's own FormatChecker silently accepts any
         # date-time, so the two engines would disagree on the shipped fabric contract.
@@ -1172,8 +1244,90 @@ def _check_aihub_chains(instance: Any) -> list[Issue]:
     return issues
 
 
+# The properties AIHubOptions and its nested records bind, by their canonical spelling. The
+# binder is case-insensitive (AIHubOptions.Load sets PropertyNameCaseInsensitive), so a manifest
+# carrying both `providers` and `Providers` binds them to one property in source order and the
+# last one wins - silently replacing a section that validated.
+# Metadata keys ($schema, $comment) are deliberately absent: nothing binds them, so a differently
+# cased spelling of one cannot replace a section - it is just an unknown key, which this schema
+# tolerates on purpose.
+_AIHUB_KEYS: dict[str, tuple[str, ...]] = {
+    "$": ("providers", "cliAgents", "routing", "learning"),
+    "$.routing": ("defaultChain", "taskRouting"),
+    "$.learning": ("enabled", "mode", "localPath", "tableEndpointEnv", "adaptiveRouting", "historyWindow"),
+}
+_AIHUB_PROVIDER_KEYS = ("type", "enabled", "model", "apiKeyEnv", "apiKeySecretName", "endpointEnv", "baseUrl")
+_AIHUB_AGENT_KEYS = ("name", "enabled", "command", "argsTemplate", "model", "timeoutSeconds")
+
+
+def _alias_issues(obj: Any, path: str, canonical: tuple[str, ...]) -> list[Issue]:
+    """Keys that differ from a known property only by case: the binder folds them together."""
+    if not isinstance(obj, dict):
+        return []
+    known = {_ordinal_ignore_case(name): name for name in canonical}
+    issues: list[Issue] = []
+    for key in obj:
+        match = known.get(_ordinal_ignore_case(str(key)))
+        if match is not None and str(key) != match:
+            issues.append(Issue(f"{path}.{key}",
+                                f"'{key}' differs from '{match}' only by case; the hub's binder folds them "
+                                "together and the later one replaces the earlier"))
+    return issues
+
+
+def _check_aihub_keys(instance: Any) -> list[Issue]:
+    issues: list[Issue] = []
+    if not isinstance(instance, dict):
+        return issues
+    for path, canonical in _AIHUB_KEYS.items():
+        node = instance if path == "$" else instance.get(path.split(".", 1)[1])
+        issues.extend(_alias_issues(node, path, canonical))
+    providers = instance.get("providers")
+    if isinstance(providers, dict):
+        # The provider map itself binds to a case-insensitive dictionary, so two keys differing
+        # only by case are one provider with two spellings.
+        seen: dict[str, str] = {}
+        for key in providers:
+            folded = _ordinal_ignore_case(str(key))
+            if folded in seen:
+                issues.append(Issue(f"$.providers.{key}",
+                                    f"'{key}' repeats '{seen[folded]}'; provider keys are matched case-insensitively"))
+            else:
+                seen[folded] = str(key)
+            issues.extend(_alias_issues(providers[key], f"$.providers.{key}", _AIHUB_PROVIDER_KEYS))
+    agents = instance.get("cliAgents")
+    if isinstance(agents, list):
+        for index, agent in enumerate(agents):
+            issues.extend(_alias_issues(agent, f"$.cliAgents[{index}]", _AIHUB_AGENT_KEYS))
+    return issues
+
+
 def _check_aihub(instance: Any) -> list[Issue]:
-    return _check_aihub_names(instance) + _check_aihub_base_urls(instance) + _check_aihub_chains(instance)
+    return (_check_aihub_names(instance) + _check_aihub_base_urls(instance)
+            + _check_aihub_chains(instance) + _check_aihub_keys(instance))
+
+
+def _check_absorption_watchlist(instance: Any) -> list[Issue]:
+    """A candidate's pull-request number is its identity: seed-absorption-tasks.ps1 derives the
+    task id `absorb-pr-<n>` from it and reads the existing ids once, before the loop, so two
+    entries with one number are enqueued twice under the same id in a single run."""
+    candidates = instance.get("candidates") if isinstance(instance, dict) else instance
+    if not isinstance(candidates, list):
+        return []
+    issues: list[Issue] = []
+    seen: dict[int, int] = {}
+    for index, candidate in enumerate(candidates):
+        number = candidate.get("pr") if isinstance(candidate, dict) else None
+        # 191 and 191.0 are one pull request: the identity check has to read a number the way the
+        # schema's "integer" does, not the way Python spells it.
+        if not isinstance(number, _NUMBER_TYPES) or isinstance(number, bool) or not _is_integer(number):
+            continue
+        first = seen.setdefault(int(number), index)
+        if first != index:
+            issues.append(Issue(f"$.candidates[{index}].pr",
+                                f"pull request {int(number)} repeats entry {first}; both would seed the task "
+                                "'absorb-pr-%d' in one run" % int(number)))
+    return issues
 
 
 def _check_github_milestones(instance: Any) -> list[Issue]:
@@ -1263,15 +1417,40 @@ def _check_manifest_map(instance: Any) -> list[Issue]:
     return issues
 
 
-# Rules a schema cannot express, keyed by the schema's $id; mirrored by ManifestSemantics in
-# src/mcp/HELIOS.Mcp/HeliosConfigTools.cs so the MCP tool and CI agree.
+# Rules a schema cannot express, keyed by the schema FILE this checkout ships. The $id inside a
+# schema is editable data: keying on it meant that removing or mistyping one line silently
+# switched every semantic rule off while ordinary validation still passed. The file name comes
+# from the trusted manifest map, and the $id is only a fallback for a schema passed by --schema
+# from outside the map. A test asserts every shipped schema still carries the $id its name implies.
 _SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
-    "helios://config/schemas/aihub.schema.json": _check_aihub,
-    "helios://config/schemas/github-labels.schema.json": _check_github_labels,
-    "helios://config/schemas/manifests.schema.json": _check_manifest_map,
-    "helios://config/schemas/github-milestones.schema.json": _check_github_milestones,
-    "helios://config/schemas/fleet-topology.schema.json": _check_fleet_pools,
+    "aihub.schema.json": _check_aihub,
+    "github-labels.schema.json": _check_github_labels,
+    "manifests.schema.json": _check_manifest_map,
+    "github-milestones.schema.json": _check_github_milestones,
+    "fleet-topology.schema.json": _check_fleet_pools,
+    "absorption-pr-watchlist.schema.json": _check_absorption_watchlist,
 }
+
+
+_SCHEMA_DIRECTORY = Path("config") / "schemas"
+
+
+def _semantics_for(schema_path: Path, schema: Any, repo_root: Path = REPO_ROOT) -> Callable[[Any], list[Issue]] | None:
+    """The semantic rules for a schema: by file name when it is one of this checkout's own schemas,
+    otherwise by its $id. A file name alone is not identity - any tree can hold a file called
+    aihub.schema.json - so the name only counts under config/schemas/ in this checkout."""
+    try:
+        shipped = schema_path.resolve().parent == (repo_root / _SCHEMA_DIRECTORY).resolve()
+    except OSError:
+        shipped = False
+    if shipped:
+        checks = _SEMANTIC_CHECKS.get(schema_path.name)
+        if checks is not None:
+            return checks
+    identifier = schema.get("$id", "") if isinstance(schema, dict) else ""
+    if not str(identifier).startswith("helios://config/schemas/"):
+        return None
+    return _SEMANTIC_CHECKS.get(str(identifier).rsplit("/", 1)[-1])
 
 
 def load_mappings(repo_root: Path = REPO_ROOT) -> list[Mapping]:
@@ -1323,7 +1502,7 @@ def validate_file(manifest_path: Path, schema_path: Path, engine: str = "auto",
         # A manifest that is not JSON is an invalid manifest, not a broken invocation.
         return Result(label, schema_label, False, [Issue("$", str(exc))], engine if engine != "auto" else "n/a")
     issues, used = validate_instance(instance, schema, engine)
-    semantic = _SEMANTIC_CHECKS.get(schema.get("$id", "")) if isinstance(schema, dict) else None
+    semantic = _semantics_for(schema_path, schema, repo_root)
     if semantic is not None:
         issues = issues + semantic(instance)
     return Result(label, schema_label, not issues, issues, used)
