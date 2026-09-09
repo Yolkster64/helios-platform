@@ -1214,3 +1214,38 @@ class Round8ParityTests(unittest.TestCase):
                 for engine in target.available_engines():
                     result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
                     self.assertEqual(result.valid, expected_valid, (engine, repr(prefix), result.issues))
+
+
+class Round9Tests(unittest.TestCase):
+    """Round 9 of PR #252: pattern-property matching is charged to the work budget, and the
+    fleet's capacity fields carry an operational ceiling rather than an int one."""
+
+    def test_pattern_property_matching_is_charged_to_the_budget(self) -> None:
+        # P patterns against N keys is P×N matches; only _validate used to touch the budget, so a
+        # large pair could spend millions of matches against one instance evaluation.
+        patterns = {f"^a{index}[0-9]*$": {} for index in range(2000)}
+        instance = {f"b{index}": 1 for index in range(2000)}
+        started = time.monotonic()
+        with self.assertRaises(target.SchemaError) as caught:
+            target.validate_instance(instance, {"type": "object", "patternProperties": patterns}, engine="builtin")
+        self.assertIn("keyword evaluations", str(caught.exception))
+        self.assertLess(time.monotonic() - started, 60)
+        # An ordinary manifest is nowhere near it: the shipped map has a handful of patterns.
+        issues, _ = target.validate_instance({"a1": 1}, {"type": "object", "patternProperties": {"^a[0-9]$": {}}},
+                                             engine="builtin")
+        self.assertEqual(issues, [])
+
+    def test_fleet_capacity_fields_have_an_operational_ceiling(self) -> None:
+        schema = json.loads((ROOT / "config" / "schemas" / "fleet-topology.schema.json").read_text(encoding="utf-8"))
+        base = json.loads((ROOT / "config" / "fleet" / "fleet-topology.json").read_text(encoding="utf-8"))
+        for field, value, expected_valid in (("maxLocalLanes", 64, True), ("maxLocalLanes", 65, False),
+                                             ("minLocalLanes", 65, False),
+                                             ("maxBurstLanes", 256, True), ("maxBurstLanes", 257, False),
+                                             ("maxBurstLanes", 2147483647, False),
+                                             # a queue depth is a threshold, not a capacity
+                                             ("scaleUpQueueDepth", 100000, True)):
+            topology = json.loads(json.dumps(base))
+            topology["defaults"]["autoscaling"][field] = value
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(topology, schema, engine=engine)
+                self.assertEqual(not issues, expected_valid, (engine, field, value, issues))

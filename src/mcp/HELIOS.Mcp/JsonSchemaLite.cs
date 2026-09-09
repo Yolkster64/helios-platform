@@ -901,6 +901,17 @@ internal static class JsonSchemaLite
 
             schema.TryGetProperty("properties", out var properties);
             schema.TryGetProperty("patternProperties", out var patternProperties);
+            // Compiled once per schema, not once per (pattern, member) pair: the old shape parsed a
+            // JsonDocument for every attempt, and P patterns against N keys is P×N of them.
+            var compiledPatterns = new List<(string Pattern, Regex Regex)>();
+            if (patternProperties.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var candidate in patternProperties.EnumerateObject())
+                {
+                    using var patternDocument = JsonDocument.Parse($"\"{JsonEncodedText.Encode(candidate.Name)}\"");
+                    compiledPatterns.Add((candidate.Name, Compile(patternDocument.RootElement.Clone(), path)));
+                }
+            }
             var hasAdditional = schema.TryGetProperty("additionalProperties", out var additional);
             var hasPropertyNames = schema.TryGetProperty("propertyNames", out var propertyNames);
             var unexpected = new List<string>();
@@ -914,15 +925,16 @@ internal static class JsonSchemaLite
                     matched = true;
                     Validate(propertySchema, member.Value, child, errors);
                 }
-                if (patternProperties.ValueKind == JsonValueKind.Object)
+                foreach (var (pattern, regex) in compiledPatterns)
                 {
-                    foreach (var candidate in patternProperties.EnumerateObject())
+                    // Every attempt is charged: P patterns against N keys is P×N matches, and only
+                    // recursive Validate calls used to touch the budget, so a pair of large files
+                    // could spend millions of matches against one instance evaluation.
+                    CountEvaluation(path);
+                    if (Matches(regex, member.Name, path))
                     {
-                        if (Matches(Compile(JsonDocument.Parse($"\"{JsonEncodedText.Encode(candidate.Name)}\"").RootElement, path), member.Name, path))
-                        {
-                            matched = true;
-                            Validate(candidate.Value, member.Value, child, errors);
-                        }
+                        matched = true;
+                        Validate(patternProperties.GetProperty(pattern), member.Value, child, errors);
                     }
                 }
                 if (!matched && hasAdditional)

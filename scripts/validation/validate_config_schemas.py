@@ -822,6 +822,14 @@ class MiniValidator:
                 matched = True
                 self._validate(properties[name], value, child, errors)
             for pattern, sub in pattern_properties.items():
+                # Every attempt is charged: P patterns against N keys is P×N matches, and only
+                # _validate used to touch the budget, so a large pair could spend millions of
+                # matches against one instance evaluation. The C# twin charges the same way.
+                self._evaluations += 1
+                if self._evaluations > _MAX_EVALUATIONS:
+                    raise SchemaError(
+                        f"{path}: this schema costs more than {_MAX_EVALUATIONS} keyword evaluations for one "
+                        "instance - more work than any manifest should need")
                 compiled = self._compile(pattern, path)
                 if _bounded(f"matching {pattern!r}", path, lambda: compiled.search(name)):
                     matched = True

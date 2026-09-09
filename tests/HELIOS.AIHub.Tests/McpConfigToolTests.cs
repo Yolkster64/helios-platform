@@ -1091,6 +1091,24 @@ public sealed class McpConfigToolTests : IDisposable
             doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
     }
 
+    [Fact]
+    public void JsonSchemaLite_PatternPropertyMatchesAreChargedToTheBudget()
+    {
+        // P patterns against N keys is P×N matches, and only recursive Validate calls used to
+        // touch the budget: a pair of large files could spend millions of matches — each parsing
+        // a temporary JsonDocument — against a single instance evaluation.
+        var patterns = string.Join(", ", Enumerable.Range(0, 2000).Select(index => $"\"^a{index}[0-9]*$\": {{}}"));
+        var members = string.Join(", ", Enumerable.Range(0, 2000).Select(index => $"\"b{index}\": 1"));
+        using var schema = JsonDocument.Parse($"{{ \"type\": \"object\", \"patternProperties\": {{ {patterns} }} }}");
+        using var instance = JsonDocument.Parse($"{{ {members} }}");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("keyword evaluations", ex.Message);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(60), $"took {started.Elapsed}");
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {

@@ -49,7 +49,19 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 2147483647,
-      "description": "A lane count. scripts/fleet/scale-fleet.ps1 casts these to [int] before comparing them, so a larger value is a cast failure rather than a bigger fleet."
+      "description": "A lane THRESHOLD, not a capacity: scale-fleet.ps1 compares it and casts it to [int], so the bound is the cast's. Capacity fields use laneCapacity / burstCapacity instead."
+    },
+    "laneCapacity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64,
+      "description": "Worker processes scale-fleet.ps1 may start on the operator's own host for one pool: the reconciler derives its delta straight from these and spawns a process per lane, so the ceiling is the same 64 start-fleet.ps1 enforces on -PoolSize. A topology is config, and config should not be able to fork two billion workers."
+    },
+    "burstCapacity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 256,
+      "description": "Lanes a pool may add on ARC burst capacity, which scale-fleet.ps1 aggregates into `az vmss scale --new-capacity`: paid cloud capacity, so it is bounded well above any shipped pool (8) and far below a number that would bill by accident."
     },
     "spawn": {
       "type": "object",
@@ -85,10 +97,10 @@
           "enum": ["hybrid", "local", "cloud"],
           "description": "hybrid = warm local lanes plus ARC burst; local = never burst; cloud = never run locally."
         },
-        "minLocalLanes": { "$ref": "#/$defs/lanes" },
-        "maxLocalLanes": { "$ref": "#/$defs/lanes" },
+        "minLocalLanes": { "$ref": "#/$defs/laneCapacity" },
+        "maxLocalLanes": { "$ref": "#/$defs/laneCapacity" },
         "burstTarget": { "type": "string", "minLength": 1 },
-        "maxBurstLanes": { "$ref": "#/$defs/lanes" },
+        "maxBurstLanes": { "$ref": "#/$defs/burstCapacity" },
         "scaleUpQueueDepth": { "$ref": "#/$defs/lanes" },
         "scaleDownIdleSeconds": { "type": "integer", "minimum": 0, "maximum": 2147483647, "description": "Idle seconds before scaling down; read as an [int] by scale-fleet.ps1." }
       }
