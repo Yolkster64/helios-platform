@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import decimal
 import json
 import pathlib
 import re
@@ -10,6 +11,7 @@ import threading
 import tempfile
 import time
 import unittest
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:  # lets `python3 scripts/validation/tests/test_validate_config_schemas.py` run from any cwd
@@ -749,9 +751,12 @@ class Round6Tests(unittest.TestCase):
             result = target.validate_file(path, ROOT / "config" / "schemas" / "model-catalog.schema.json", repo_root=ROOT)
             self.assertFalse(result.valid)
             self.assertIn("not valid JSON", result.issues[0].message)
-            # A number a double CAN hold still reads normally.
+            # A number a double CAN hold still reads normally — as a Decimal, which is what keeps
+            # 9007199254740993.0 and 9007199254740992.0 two numbers rather than one float.
             path.write_text('{"models": [{"contextTokens": 1e308}]}', encoding="utf-8")
-            self.assertEqual(target.load_json(path, "manifest"), {"models": [{"contextTokens": 1e308}]})
+            loaded = target.load_json(path, "manifest")["models"][0]["contextTokens"]
+            self.assertEqual(loaded, decimal.Decimal("1e308"))
+            self.assertEqual(float(loaded), 1e308)
 
     def test_routing_chains_must_be_reachable(self) -> None:
         schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
@@ -887,3 +892,127 @@ class Round6Tests(unittest.TestCase):
         self.assertIsInstance(answers[-1], target.SchemaError)
         self.assertIn("isolated validator was killed", str(answers[-1]))
         self.assertLess(time.monotonic() - started, 30)
+
+
+class Round7Tests(unittest.TestCase):
+    """Round 7 of PR #252: a JSON number keeps its value through parsing, the regex preflight is
+    linear, a schema cannot spend unbounded work on one instance, and every integer field is
+    bounded at its consumer's limit."""
+
+    @staticmethod
+    def _doubling_schema(levels: int = 20) -> dict[str, Any]:
+        """An acyclic $defs chain whose allOf repeats the next $ref: 2**levels evaluations, with
+        nesting far below the depth guard, so only a work budget stops it."""
+        defs: dict[str, Any] = {f"l{levels}": {"type": "object"}}
+        for level in range(levels - 1, -1, -1):
+            nxt = {"$ref": f"#/$defs/l{level + 1}"}
+            defs[f"l{level}"] = {"allOf": [nxt, dict(nxt)]}
+        return {"$ref": "#/$defs/l0", "$defs": defs}
+
+    def test_numbers_keep_their_value_through_parsing(self) -> None:
+        # Two tokens that round to one float, and a token that underflows to zero: both engines
+        # must keep them apart, exactly as the C# twin's CanonicalNumber does.
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "m.json"
+            schema_file = pathlib.Path(temp) / "s.json"
+            # BOTH sides are read through load_json: a Python float literal in this test would
+            # collapse 9007199254740993.0 onto its neighbour before the engine ever saw it, which
+            # is exactly the loss the round fixes.
+            for schema_text, text, expected_valid in (
+                    ('{"const": 9007199254740993.0}', '{"v": 9007199254740992.0}', False),
+                    ('{"const": 9007199254740993.0}', '{"v": 9007199254740993.0}', True),
+                    ('{"const": 0}', '{"v": 1e-324}', False),
+                    ('{"const": 1}', '{"v": 1.0}', True),
+                    ('{"const": 100}', '{"v": 1e2}', True),
+                    ('{"type": "array", "uniqueItems": true}', '{"v": [9007199254740992.0, 9007199254740993.0]}', True),
+                    ('{"type": "array", "uniqueItems": true}', '{"v": [1, 1.0]}', False),
+                    ('{"type": "integer"}', '{"v": 4.0}', True),
+                    ('{"type": "integer"}', '{"v": 4.5}', False),
+                    ('{"minimum": 9007199254740993}', '{"v": 9007199254740992}', False)):
+                manifest.write_text(text, encoding="utf-8")
+                schema_file.write_text(schema_text, encoding="utf-8")
+                schema = target.load_json(schema_file, "schema")
+                instance = target.load_json(manifest, "manifest")["v"]
+                for engine in target.available_engines():
+                    issues, _ = target.validate_instance(instance, schema, engine=engine)
+                    self.assertEqual(not issues, expected_valid, (engine, schema, text, issues))
+
+    def test_the_regex_preflight_is_linear_in_the_pattern(self) -> None:
+        # str.find per '{' made this quadratic: an 800 KB pattern of unmatched braces outran the
+        # deadline before compilation started. The bounded window makes each position O(1).
+        pattern = "{" * 200_000
+        started = time.monotonic()
+        self.assertIsNone(target._catastrophic_shape(pattern))
+        self.assertLess(time.monotonic() - started, 2.0)
+        # A real quantifier is still read as one, including the longest an engine can hold.
+        self.assertEqual(target._quantifier_at("a{2,}", 1), (4, True))
+        self.assertEqual(target._quantifier_at("a{1}", 1), (3, False))
+        self.assertEqual(target._quantifier_at("a{" + "9" * 24 + "}", 1), (26, True))
+
+    def test_a_schema_that_doubles_its_work_is_evaluated_once(self) -> None:
+        # 2**40 evaluations of identical (schema node, instance node) pairs, with nesting far below
+        # the depth guard. Memoized, it costs one evaluation per pair; the evaluation budget is the
+        # backstop behind that, not what saves this case.
+        started = time.monotonic()
+        issues, _ = target.validate_instance({}, self._doubling_schema(levels=40), engine="builtin")
+        self.assertEqual(issues, [])
+        self.assertLess(time.monotonic() - started, 10)
+        # Ordinary linear work is untouched by the budget: every array item is a distinct pair.
+        issues, _ = target.validate_instance([0] * 199_998, {"items": {}}, engine="builtin")
+        self.assertEqual(issues, [])
+
+    def test_an_exponent_no_decimal_can_hold_is_a_verdict(self) -> None:
+        # float() reads these as 0.0 or inf, so the finite check passes and the Decimal constructor
+        # raises: that is the manifest's verdict, not a traceback through --json.
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "m.json"
+            for token in ("1e-999999999999999999999999", "0e999999999999999999999999", "1e400"):
+                manifest.write_text('{"v": %s}' % token, encoding="utf-8")
+                with self.assertRaises(ValueError, msg=token) as caught:
+                    target.load_json(manifest, "manifest")
+                self.assertIn("out of range", str(caught.exception))
+
+    def test_the_isolated_pass_keeps_exact_numbers(self) -> None:
+        # The child is fed by _canonical, not json.dumps: a Decimal is not JSON-serializable, and
+        # that TypeError would have been swallowed into an unbounded in-process validation.
+        answers: list[Any] = []
+
+        def run() -> None:
+            try:
+                answers.append(target.validate_instance(
+                    {"n": decimal.Decimal("9007199254740993.0"), "s": "abc"},
+                    {"properties": {"n": {"const": decimal.Decimal("9007199254740993.0")},
+                                    "s": {"pattern": "^[a-z]+$"}}},
+                    engine="builtin"))
+            except BaseException as exc:  # noqa: BLE001 - the test inspects whatever comes back
+                answers.append(exc)
+
+        worker = threading.Thread(target=run)   # no deliverable alarm here, so the pass is isolated
+        worker.start()
+        worker.join(60)
+        self.assertEqual(answers[-1], ([], "builtin"), answers[-1])
+
+    def test_every_integer_field_is_bounded_at_its_consumer(self) -> None:
+        topology = json.loads((ROOT / "config" / "fleet" / "fleet-topology.json").read_text(encoding="utf-8"))
+        topology["defaults"]["hermesFleet"] = {"maxConcurrentLanes": 2147483648}
+        schema = json.loads((ROOT / "config" / "schemas" / "fleet-topology.schema.json").read_text(encoding="utf-8"))
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(topology, schema, engine=engine)
+            self.assertTrue(any("maxConcurrentLanes" in issue.path for issue in issues), (engine, issues))
+        # Every integer field in every shipped schema carries an upper bound or a const.
+        for schema_file in sorted((ROOT / "config" / "schemas").glob("*.schema.json")):
+            document = json.loads(schema_file.read_text(encoding="utf-8"))
+            unbounded: list[str] = []
+
+            def walk(node: Any, where: str) -> None:
+                if isinstance(node, dict):
+                    if node.get("type") == "integer" and "maximum" not in node and "const" not in node:
+                        unbounded.append(where)
+                    for key, value in node.items():
+                        walk(value, f"{where}/{key}")
+                elif isinstance(node, list):
+                    for index, value in enumerate(node):
+                        walk(value, f"{where}/{index}")
+
+            walk(document, "#")
+            self.assertEqual(unbounded, [], f"{schema_file.name} has integer fields with no upper bound")

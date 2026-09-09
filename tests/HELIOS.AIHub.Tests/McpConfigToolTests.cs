@@ -781,6 +781,102 @@ public sealed class McpConfigToolTests : IDisposable
             doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
     }
 
+    [Theory]
+    // Bounds went through GetDouble(), so minimum 9007199254740993 against 9007199254740992 was
+    // the same double twice and the invalid instance passed.
+    [InlineData("""{ "minimum": 9007199254740993 }""", "9007199254740992", false)]
+    [InlineData("""{ "minimum": 9007199254740993 }""", "9007199254740993", true)]
+    [InlineData("""{ "maximum": 9007199254740992 }""", "9007199254740993", false)]
+    [InlineData("""{ "exclusiveMinimum": 1e-29 }""", "0", false)]
+    [InlineData("""{ "exclusiveMinimum": 0 }""", "1e-29", true)]
+    [InlineData("""{ "maximum": 10 }""", "10", true)]
+    [InlineData("""{ "exclusiveMaximum": 10 }""", "10", false)]
+    [InlineData("""{ "minimum": -2 }""", "-3", false)]
+    [InlineData("""{ "minimum": -2 }""", "-1", true)]
+    [InlineData("""{ "minimum": -2.5 }""", "-2.50", true)]
+    public void JsonSchemaLite_ComparesBoundsWithoutRounding(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Theory]
+    // "integer" asked a double, so 1e-324 became 0 and 1.00000000000000001 became 1 — and the
+    // Python twin, whose numbers are exact, disagreed about the same manifest.
+    [InlineData("""{ "type": "integer" }""", "1e-324", false)]
+    [InlineData("""{ "type": "integer" }""", "1.00000000000000001", false)]
+    [InlineData("""{ "type": "integer" }""", "4.0", true)]
+    [InlineData("""{ "type": "integer" }""", "1e2", true)]
+    [InlineData("""{ "type": "integer" }""", "4.5", false)]
+    [InlineData("""{ "type": "number" }""", "1e-324", true)]
+    // An exponent that would wrap the normalizer's arithmetic must not reverse an ordering.
+    [InlineData("""{ "minimum": 1 }""", "0.01e-9223372036854775808", false)]
+    public void JsonSchemaLite_JudgesNumbersByValueNotByDouble(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_ALeadingZeroQuantifierIsStillReadAsItsCount()
+    {
+        // The window this scan used to carry made {000...02} look like a literal brace, so the
+        // nested quantifier behind it went unnoticed.
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(
+            new Dictionary<string, string> { ["pattern"] = "^(a+){" + new string('0', 40) + "2}$" }));
+        using var instance = JsonDocument.Parse("\"aaa\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("quantified group", ex.Message);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_ASchemaThatDoublesItsWorkIsRefused()
+    {
+        // An acyclic $defs chain whose allOf repeats the next $ref: 2^20 evaluations with nesting
+        // far below the depth guard, so only a work budget stops it. This server answers one
+        // request per process, so nothing else would.
+        const int levels = 20;
+        var defs = new List<string> { $"\"l{levels}\": {{ \"type\": \"object\" }}" };
+        for (var level = levels - 1; level >= 0; level--)
+        {
+            var next = $"{{ \"$ref\": \"#/$defs/l{level + 1}\" }}";
+            defs.Add($"\"l{level}\": {{ \"allOf\": [ {next}, {next} ] }}");
+        }
+        using var schema = JsonDocument.Parse($"{{ \"$ref\": \"#/$defs/l0\", \"$defs\": {{ {string.Join(", ", defs)} }} }}");
+        using var instance = JsonDocument.Parse("{}");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("keyword evaluations", ex.Message);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(30), $"took {started.Elapsed}");
+    }
+
+    [Fact]
+    public void JsonSchemaLite_UnmatchedBracesArePreflightedLinearly()
+    {
+        // QuantifierAt searched the rest of the pattern for '}' at every '{', which is quadratic:
+        // a large pattern of unmatched braces held the preflight before any regex was built.
+        var pattern = new string('{', 50_000);
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, string> { ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse("\"x\"");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(15), $"took {started.Elapsed}");
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {

@@ -45,7 +45,12 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
-    "lanes": { "type": "integer", "minimum": 0 },
+    "lanes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "description": "A lane count. scripts/fleet/scale-fleet.ps1 casts these to [int] before comparing them, so a larger value is a cast failure rather than a bigger fleet."
+    },
     "spawn": {
       "type": "object",
       "additionalProperties": false,
@@ -85,7 +90,7 @@
         "burstTarget": { "type": "string", "minLength": 1 },
         "maxBurstLanes": { "$ref": "#/$defs/lanes" },
         "scaleUpQueueDepth": { "$ref": "#/$defs/lanes" },
-        "scaleDownIdleSeconds": { "type": "integer", "minimum": 0 }
+        "scaleDownIdleSeconds": { "type": "integer", "minimum": 0, "maximum": 2147483647, "description": "Idle seconds before scaling down; read as an [int] by scale-fleet.ps1." }
       }
     },
     "hermesFleet": {
@@ -95,7 +100,12 @@
       "properties": {
         "$comment": { "type": "string" },
         "board": { "$ref": "#/$defs/identifier" },
-        "maxConcurrentLanes": { "type": "integer", "minimum": 1 }
+        "maxConcurrentLanes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "Concurrent Hermes lanes for the pool. Bound to a C# int (HermesFleetOptions.MaxConcurrentLanes): a larger value fails FleetTopology.TryLoad outright, and the fleet scripts cast it to [int] before applying the cap."
+        }
       }
     },
     "defaults": {

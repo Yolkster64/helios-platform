@@ -55,6 +55,7 @@ internal static class JsonSchemaLite
         // malformed keyword value or an unsafe pattern is a SchemaException before any instance
         // keyword is evaluated, never an InvalidOperationException from the middle of a walk.
         validator.CheckSchema();
+        validator.ResetBudget();   // the walk below gets the whole budget, not what the check left
         var issues = new List<Issue>();
         validator.Validate(schemaRoot, instance, "$", issues);
         return issues;
@@ -75,6 +76,26 @@ internal static class JsonSchemaLite
         private const int MaxDepth = 256;
         private int _depth;
 
+        // One instance may cost this many keyword evaluations. An acyclic $defs chain whose allOf
+        // duplicates the next $ref doubles the work at every level, so the depth guard never fires
+        // while the walk grows exponentially — and this server answers one request per process, so
+        // nothing else would stop it. A ceiling on total work, not on nesting; the Python twin
+        // carries the same one (_MAX_EVALUATIONS).
+        private const int MaxEvaluations = 200_000;
+        private int _evaluations;
+
+        public void ResetBudget() => _evaluations = 0;
+
+        private void CountEvaluation(string path)
+        {
+            if (++_evaluations > MaxEvaluations)
+            {
+                throw new SchemaException(
+                    $"{path}: this schema costs more than {MaxEvaluations} keyword evaluations for one " +
+                    "instance — an allOf that repeats the $ref below it doubles the work at every level");
+            }
+        }
+
         public Validator(JsonElement root)
         {
             _root = root;
@@ -82,10 +103,15 @@ internal static class JsonSchemaLite
 
         // -- schema self-check -------------------------------------------------------
 
-        public void CheckSchema() => WalkSchema(_root, "#");
+        public void CheckSchema()
+        {
+            _evaluations = 0;
+            WalkSchema(_root, "#");
+        }
 
         private void WalkSchema(JsonElement node, string where)
         {
+            CountEvaluation(where);
             if (node.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
                 return;
@@ -318,6 +344,7 @@ internal static class JsonSchemaLite
 
         public void Validate(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
+            CountEvaluation(path);
             if (++_depth > MaxDepth)
             {
                 _depth--;
@@ -541,28 +568,54 @@ internal static class JsonSchemaLite
             {
                 return (0, false);
             }
-            var close = pattern.IndexOf('}', index);
-            if (close < 0)
+            // Scan forward to the first character that cannot be part of a repetition count,
+            // rather than searching the rest of the pattern for '}': IndexOf is O(n) per '{',
+            // which made this preflight quadratic on a pattern of unmatched braces. Each character
+            // is consumed by at most one scan, so the walk stays linear however the braces are
+            // arranged — and a body of leading zeros is still read as the count it is. The Python
+            // twin scans the same way.
+            var cursor = index + 1;
+            while (cursor < pattern.Length && (char.IsAsciiDigit(pattern[cursor]) || pattern[cursor] == ','))
+            {
+                cursor++;
+            }
+            if (cursor >= pattern.Length || pattern[cursor] != '}')
             {
                 return (0, false);
             }
+            var close = cursor;
             var body = pattern[(index + 1)..close];
             var comma = body.IndexOf(',');
             var low = comma < 0 ? body : body[..comma];
             var high = comma < 0 ? null : body[(comma + 1)..];
-            if (low.Length == 0 || !low.All(char.IsAsciiDigit) || (high is { Length: > 0 } && !high.All(char.IsAsciiDigit)))
+            if (!IsCount(low) || (high is { Length: > 0 } && !IsCount(high)))
             {
                 return (0, false); // not a quantifier, just a literal brace
             }
-            // TryParse, not Parse: {999999999999999999999999} is a repetition count no int holds and
-            // an OverflowException here would escape the schema self-check as a crash rather than a
-            // verdict. A count too large to parse is certainly greater than one.
             if (comma < 0)
             {
-                return (close - index + 1, !int.TryParse(low, NumberStyles.None, CultureInfo.InvariantCulture, out var exact) || exact > 1);
+                return (close - index + 1, CountValue(low) > 1);
             }
-            return (close - index + 1, high!.Length == 0
-                || !int.TryParse(high, NumberStyles.None, CultureInfo.InvariantCulture, out var upper) || upper > 1);
+            return (close - index + 1, high!.Length == 0 || CountValue(high) > 1);
+        }
+
+        private static bool IsCount(string text) => text.Length > 0 && text.All(char.IsAsciiDigit);
+
+        /// <summary>
+        /// A repetition count, or 2 when it is longer than any engine could hold: such a count
+        /// multiplies anyway, and parsing it would overflow. Leading zeros are stripped first, so
+        /// {0000000000000000000000000000000000000002} is the count two, however it is spelled.
+        /// </summary>
+        private static long CountValue(string text)
+        {
+            var stripped = text.TrimStart('0');
+            if (stripped.Length == 0)
+            {
+                return 0;
+            }
+            return stripped.Length <= 18 && long.TryParse(stripped, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+                ? value
+                : 2;
         }
 
         private sealed class GroupFrame
@@ -715,20 +768,21 @@ internal static class JsonSchemaLite
 
         private static void ValidateNumber(JsonElement schema, JsonElement instance, string path, List<Issue> errors)
         {
-            var value = instance.GetDouble();
-            if (schema.TryGetProperty("minimum", out var minimum) && value < minimum.GetDouble())
+            // Compared as written, not as doubles: minimum 9007199254740993 against the integer
+            // 9007199254740992 is the same double twice, and the invalid instance would pass.
+            if (schema.TryGetProperty("minimum", out var minimum) && CompareNumbers(instance, minimum) < 0)
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is less than the minimum of {Display(minimum)}"));
             }
-            if (schema.TryGetProperty("maximum", out var maximum) && value > maximum.GetDouble())
+            if (schema.TryGetProperty("maximum", out var maximum) && CompareNumbers(instance, maximum) > 0)
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is greater than the maximum of {Display(maximum)}"));
             }
-            if (schema.TryGetProperty("exclusiveMinimum", out var exclusiveMinimum) && value <= exclusiveMinimum.GetDouble())
+            if (schema.TryGetProperty("exclusiveMinimum", out var exclusiveMinimum) && CompareNumbers(instance, exclusiveMinimum) <= 0)
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is less than or equal to the minimum of {Display(exclusiveMinimum)}"));
             }
-            if (schema.TryGetProperty("exclusiveMaximum", out var exclusiveMaximum) && value >= exclusiveMaximum.GetDouble())
+            if (schema.TryGetProperty("exclusiveMaximum", out var exclusiveMaximum) && CompareNumbers(instance, exclusiveMaximum) >= 0)
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is greater than or equal to the maximum of {Display(exclusiveMaximum)}"));
             }
@@ -854,6 +908,12 @@ internal static class JsonSchemaLite
             {
                 return true;
             }
+            // As written, not as a double: 1e-324 and 1.00000000000000001 round to 0 and 1 there,
+            // and the Python twin - whose numbers are exact - calls neither an integer.
+            if (TryNormalizeNumber(number.GetRawText(), out _, out var significant, out var exponent))
+            {
+                return significant.Length == 0 || exponent >= 0;
+            }
             var value = number.GetDouble();
             return !double.IsInfinity(value) && Math.Floor(value) == value;
         }
@@ -933,15 +993,35 @@ internal static class JsonSchemaLite
         private static string CanonicalNumber(JsonElement element)
         {
             var raw = element.GetRawText();
-            var negative = raw.StartsWith('-');
+            if (!TryNormalizeNumber(raw, out var negative, out var significant, out var exponent))
+            {
+                return raw; // an exponent no long holds: the token as written is its own key
+            }
+            return significant.Length == 0
+                ? "0"
+                : (negative ? "-" : "") + significant + "e" + exponent.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Splits a JSON number token into sign, significant digits and a power of ten.</summary>
+        private static bool TryNormalizeNumber(string raw, out bool negative, out string significant, out long exponent)
+        {
+            negative = raw.StartsWith('-');
+            significant = "";
+            exponent = 0;
             var body = negative ? raw[1..] : raw;
-            long exponent = 0;
             var exponentAt = body.IndexOfAny(new[] { 'e', 'E' });
             if (exponentAt >= 0)
             {
-                if (!long.TryParse(body[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+                // The bound keeps the arithmetic below from wrapping: subtracting a fraction's
+                // digits from long.MinValue would turn a tiny number into an enormous one and
+                // reverse the comparison. Past this magnitude nothing exact is left to say.
+                const long exponentLimit = 1_000_000_000;
+                // Compared, not Math.Abs'd: Math.Abs(long.MinValue) throws, and long.MinValue is
+                // exactly the exponent an attacker would write.
+                if (!long.TryParse(body[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent)
+                    || exponent > exponentLimit || exponent < -exponentLimit)
                 {
-                    return raw; // an exponent no long holds: the token as written is its own key
+                    return false;
                 }
                 body = body[..exponentAt];
             }
@@ -952,11 +1032,57 @@ internal static class JsonSchemaLite
                 body = string.Concat(body[..point], body[(point + 1)..]);
             }
             var digits = body.TrimStart('0');
-            var significant = digits.TrimEnd('0');
+            significant = digits.TrimEnd('0');
             exponent += digits.Length - significant.Length;
-            return significant.Length == 0
-                ? "0"
-                : (negative ? "-" : "") + significant + "e" + exponent.ToString(CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        /// <summary>
+        /// Orders two JSON numbers by value, exactly. Magnitudes are compared by the power of ten
+        /// of their leading digit and then digit by digit, so nothing is scaled into a big integer
+        /// a hostile exponent could blow up, and nothing rounds through a double on the way.
+        /// </summary>
+        private static int CompareNumbers(JsonElement left, JsonElement right)
+        {
+            if (!TryNormalizeNumber(left.GetRawText(), out var leftNegative, out var leftDigits, out var leftExponent)
+                || !TryNormalizeNumber(right.GetRawText(), out var rightNegative, out var rightDigits, out var rightExponent))
+            {
+                return left.GetDouble().CompareTo(right.GetDouble()); // exponent beyond long: nothing exact is left
+            }
+            var leftZero = leftDigits.Length == 0;
+            var rightZero = rightDigits.Length == 0;
+            if (leftZero || rightZero)
+            {
+                return leftZero && rightZero ? 0 : leftZero ? (rightNegative ? 1 : -1) : (leftNegative ? -1 : 1);
+            }
+            if (leftNegative != rightNegative)
+            {
+                return leftNegative ? -1 : 1;
+            }
+            var magnitude = CompareMagnitude(leftDigits, leftExponent, rightDigits, rightExponent);
+            return leftNegative ? -magnitude : magnitude;
+        }
+
+        private static int CompareMagnitude(string leftDigits, long leftExponent, string rightDigits, long rightExponent)
+        {
+            // The power of ten of the leading digit: 1e2 (digits "1", exponent 2) is 100.
+            var leftScale = leftExponent + leftDigits.Length;
+            var rightScale = rightExponent + rightDigits.Length;
+            if (leftScale != rightScale)
+            {
+                return leftScale < rightScale ? -1 : 1;
+            }
+            var width = Math.Max(leftDigits.Length, rightDigits.Length);
+            for (var index = 0; index < width; index++)
+            {
+                var leftDigit = index < leftDigits.Length ? leftDigits[index] : '0';
+                var rightDigit = index < rightDigits.Length ? rightDigits[index] : '0';
+                if (leftDigit != rightDigit)
+                {
+                    return leftDigit < rightDigit ? -1 : 1;
+                }
+            }
+            return 0;
         }
 
     }

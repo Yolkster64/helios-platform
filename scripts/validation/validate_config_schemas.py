@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime as _dt
+import decimal
 import json
 import math
 import os
@@ -98,11 +99,20 @@ _SUPPORTED = {
 _TYPE_NAMES = ("null", "boolean", "object", "array", "number", "integer", "string")
 
 
+# A JSON number is a decimal token, and json's float loses it: 9007199254740993.0 and
+# 9007199254740992.0 become one float, 1e-324 becomes zero. load_json parses every non-integer
+# token as a Decimal instead (parse_float below), so the Python engine compares what the manifest
+# wrote - exactly as the C# twin's CanonicalNumber does.
+_NUMBER_TYPES = (int, float, decimal.Decimal)
+
+
 def _is_integer(value: Any) -> bool:
     if isinstance(value, bool):
         return False
     if isinstance(value, int):
         return True
+    if isinstance(value, decimal.Decimal):
+        return value == value.to_integral_value()
     return isinstance(value, float) and value.is_integer()
 
 
@@ -111,7 +121,7 @@ def _type_of(value: Any) -> str:
         return "null"
     if isinstance(value, bool):
         return "boolean"
-    if isinstance(value, (int, float)):
+    if isinstance(value, _NUMBER_TYPES):
         return "integer" if _is_integer(value) else "number"
     if isinstance(value, str):
         return "string"
@@ -131,8 +141,63 @@ def _matches_type(value: Any, expected: str) -> bool:
     return actual == expected
 
 
+def _number_text(value: Any) -> str:
+    """A number as a message should read it: the way the manifest wrote it."""
+    return str(value) if isinstance(value, decimal.Decimal) else json.dumps(value)
+
+
 def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    """Compact JSON with object keys sorted — the form a message quotes back."""
+    if isinstance(value, bool) or value is None:
+        return json.dumps(value)
+    if isinstance(value, _NUMBER_TYPES):
+        return _number_text(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{" + ",".join(f"{json.dumps(key)}:{_canonical(item)}"
+                              for key, item in sorted(value.items())) + "}"
+    return json.dumps(value)
+
+
+def _number_key(value: Any) -> str:
+    """A number's equality key: sign, significant digits, and the power of ten that scales them.
+
+    1, 1.0 and 1e0 are one number and share this key; 9007199254740992 and 9007199254740993 are
+    two, and so are 0 and 1e-29. The C# twin's CanonicalNumber produces the same shape, so the two
+    engines judge one manifest alike.
+    """
+    if isinstance(value, decimal.Decimal):
+        exact = value
+    elif isinstance(value, float):
+        exact = decimal.Decimal(repr(value))   # the shortest token that round-trips, not the binary tail
+    else:
+        exact = decimal.Decimal(value)
+    sign, digits, exponent = exact.as_tuple()
+    text = "".join(str(digit) for digit in digits).lstrip("0")
+    stripped = text.rstrip("0")
+    exponent = int(exponent) + (len(text) - len(stripped))
+    if not stripped:
+        return "0"
+    return f"{'-' if sign else ''}{stripped}e{exponent}"
+
+
+def _canonical_key(value: Any) -> str:
+    """The structural equality key: _canonical, with numbers compared as values."""
+    if isinstance(value, bool) or value is None:
+        return json.dumps(value)
+    if isinstance(value, _NUMBER_TYPES):
+        return _number_key(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical_key(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{" + ",".join(f"{json.dumps(key)}:{_canonical_key(item)}"
+                              for key, item in sorted(value.items())) + "}"
+    return json.dumps(value)
 
 
 def _brief(value: Any, limit: int = 120) -> str:
@@ -144,9 +209,9 @@ def _brief(value: Any, limit: int = 120) -> str:
 def _json_equal(left: Any, right: Any) -> bool:
     if isinstance(left, bool) or isinstance(right, bool):
         return isinstance(left, bool) and isinstance(right, bool) and left == right
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return left == right
-    return _canonical(left) == _canonical(right)
+    if isinstance(left, _NUMBER_TYPES) and isinstance(right, _NUMBER_TYPES):
+        return _number_key(left) == _number_key(right)
+    return _canonical_key(left) == _canonical_key(right)
 
 
 def _check_date(value: str) -> bool:
@@ -195,20 +260,44 @@ def _quantifier_at(pattern: str, index: int) -> tuple[int, bool]:
         return 1, False
     if char != "{":
         return 0, False
-    close = pattern.find("}", index)
-    if close < 0:
+    # Scan forward to the first character that cannot be part of a repetition count, instead of
+    # searching the rest of the pattern for '}': str.find is O(n) per '{', which made this
+    # preflight quadratic on a pattern of unmatched braces (an 800 KB schema outran the deadline
+    # before compilation ever started). Each character is consumed by at most one scan, so the
+    # walk stays linear however the braces are arranged - and a body of leading zeros is still
+    # read as the count it is.
+    cursor = index + 1
+    length = len(pattern)
+    while cursor < length and pattern[cursor] in "0123456789,":
+        cursor += 1
+    if cursor >= length or pattern[cursor] != "}":
         return 0, False
+    close = cursor
     body = pattern[index + 1:close]
-    if not body or not all(part.isdigit() for part in body.split(",", 1) if part):
+    low, comma, high = body.partition(",")
+    if not _is_count(low) or (comma and high and not _is_count(high)):
         return 0, False  # not a quantifier, just a literal brace
-    low, _, high = body.partition(",")
-    if not low.isdigit():
-        return 0, False
-    if not _:                      # {n}
-        return close - index + 1, int(low) > 1
+    if not comma:                  # {n}
+        return close - index + 1, _count_value(low) > 1
     if not high:                   # {n,}
         return close - index + 1, True
-    return close - index + 1, int(high) > 1
+    return close - index + 1, _count_value(high) > 1
+
+
+def _is_count(text: str) -> bool:
+    return bool(text) and all(digit in "0123456789" for digit in text)
+
+
+def _count_value(text: str) -> int:
+    """A repetition count, or 2 when it is longer than any engine could hold.
+
+    int() on a very long digit string is both slow and refused outright past CPython's 4300-digit
+    limit, and every such count multiplies anyway - so the shape reads as "more than one" without
+    the conversion. Leading zeros are stripped first: {0000000000000000000000000000000000000002}
+    is the count two, however it is spelled.
+    """
+    stripped = text.lstrip("0") or "0"
+    return int(stripped) if len(stripped) <= 18 else 2
 
 
 def _catastrophic_shape(pattern: str) -> str | None:
@@ -300,6 +389,12 @@ _NUMBER_KEYWORDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"
 #     faulthandler watchdog does - would take a caller's service down with the bad pattern.
 # The per-match budget matches JsonSchemaLite's RegexTimeout so both engines give up at the same
 # point; a whole pass gets the longer one, since one deadline covers every match in it.
+# A resource guard, not a rule about schemas: past this many keyword evaluations for ONE instance
+# the walk is pathological rather than large. Memoization (below) already collapses the shape that
+# used to explode - an allOf repeating the $ref beneath it - so this ceiling sits far above any
+# instance a manifest could plausibly hold, and the C# twin keeps its own, lower one for a server
+# that answers a single request per process.
+_MAX_EVALUATIONS = 1_000_000
 _MATCH_BUDGET_SECONDS = 2.0
 _LIBRARY_PASS_BUDGET_SECONDS = 10.0
 _ISOLATION_ENV = "HELIOS_SCHEMA_VALIDATION_ISOLATED"
@@ -411,7 +506,12 @@ class MiniValidator:
         self.root = schema
         self._regex: dict[str, re.Pattern[str]] = {}
         self._depth = 0
-        self.check_schema()
+        self._evaluations = 0
+        self._memo: dict[tuple[int, int, str], list[Issue]] = {}
+        # The self-check walks attacker-supplied structure too, so it runs under the same clock
+        # as a validation pass rather than only bounding the regex work inside it.
+        with _match_deadline(_LIBRARY_PASS_BUDGET_SECONDS):
+            self.check_schema()
 
     # -- schema self-check ------------------------------------------------------------
 
@@ -463,7 +563,7 @@ class MiniValidator:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise SchemaError(f"{where}/{key}: must be a non-negative integer")
             elif key in _NUMBER_KEYWORDS:
-                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                if isinstance(value, bool) or not isinstance(value, _NUMBER_TYPES):
                     raise SchemaError(f"{where}/{key}: must be a number")
             elif key == "required":
                 if not isinstance(value, list) or not all(isinstance(name, str) for name in value):
@@ -519,7 +619,15 @@ class MiniValidator:
 
     def iter_errors(self, instance: Any) -> list[Issue]:
         errors: list[Issue] = []
-        self._validate(self.root, instance, "$", errors)
+        self._evaluations = 0
+        self._memo = {}
+        try:
+            with _match_deadline(_LIBRARY_PASS_BUDGET_SECONDS):
+                self._validate(self.root, instance, "$", errors)
+        except _MatchTimeout:
+            raise SchemaError(
+                f"validating this instance did not finish within {_LIBRARY_PASS_BUDGET_SECONDS:g}s and was "
+                "abandoned; the schema costs more work than any manifest should") from None
         return errors
 
     def is_valid(self, instance: Any) -> bool:
@@ -530,10 +638,28 @@ class MiniValidator:
         # into the instance; a RecursionError would take the CLI - or validate_all.py's whole
         # sweep - down with a traceback. Past this depth the schema is the problem and says so.
         self._depth += 1
+        self._evaluations += 1
         try:
             if self._depth > _MAX_DEPTH:
                 raise SchemaError(f"{path}: schema nesting deeper than {_MAX_DEPTH} levels - a $ref cycle that never descends into the instance")
-            self._validate_here(schema, instance, path, errors)
+            if self._evaluations > _MAX_EVALUATIONS:
+                raise SchemaError(
+                    f"{path}: this schema costs more than {_MAX_EVALUATIONS} keyword evaluations for one "
+                    "instance - more work than any manifest should need")
+            # The same schema node against the same instance node always gives the same answer, so
+            # it is evaluated once. That is what stops an allOf which repeats the $ref beneath it
+            # from doubling the work at every level (2**depth evaluations of identical pairs) while
+            # leaving ordinary work - every array item a distinct pair - untouched. Both objects are
+            # held by the documents being walked, so their ids are stable for this pass.
+            key = (id(schema), id(instance), path)
+            remembered = self._memo.get(key)
+            if remembered is not None:
+                errors.extend(remembered)
+                return
+            found: list[Issue] = []
+            self._validate_here(schema, instance, path, found)
+            self._memo[key] = found
+            errors.extend(found)
         finally:
             self._depth -= 1
 
@@ -561,7 +687,7 @@ class MiniValidator:
 
         if isinstance(instance, str):
             self._validate_string(schema, instance, path, errors)
-        elif isinstance(instance, (int, float)) and not isinstance(instance, bool):
+        elif isinstance(instance, _NUMBER_TYPES) and not isinstance(instance, bool):
             self._validate_number(schema, instance, path, errors)
         elif isinstance(instance, list):
             self._validate_array(schema, instance, path, errors)
@@ -643,7 +769,7 @@ class MiniValidator:
         if schema.get("uniqueItems"):
             seen: set[str] = set()
             for index, item in enumerate(items):
-                key = _canonical(item)
+                key = _canonical_key(item)
                 if key in seen:
                     # python-jsonschema reports the array, not the duplicate's index
                     errors.append(Issue(path, f"{_brief(items)} has non-unique elements"))
@@ -750,7 +876,7 @@ spec = importlib.util.spec_from_file_location("_helios_config_schema_validator",
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
-request = json.loads(sys.stdin.read())
+request = json.loads(sys.stdin.read(), parse_float=module._exact_number)
 try:
     issues, engine = module.validate_instance(request["instance"], request["schema"], request["engine"])
 except module.SchemaError as exc:
@@ -768,7 +894,11 @@ def _validate_in_child(instance: Any, schema: Any, engine: str) -> tuple[list[Is
     only imported the validator. One child per instance, so the cost is a process start per
     manifest (about a second for the whole shipped sweep on Windows).
     """
-    payload = json.dumps({"instance": instance, "schema": schema, "engine": engine})
+    # _canonical, not json.dumps: a Decimal is not JSON-serializable, and json.dumps would raise
+    # TypeError here - which the caller below would have caught, silently validating in this
+    # process with no bound at all. _canonical writes a Decimal as the number token it came from,
+    # and the child reads it back with this module's own parser.
+    payload = _canonical({"instance": instance, "schema": schema, "engine": engine})
     try:
         finished = subprocess.run(
             [sys.executable, "-c", _CHILD_PROGRAM, str(Path(__file__).resolve())],
@@ -810,7 +940,14 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
     if use_library:
         if jsonschema is None:
             raise SchemaError("python package 'jsonschema' is not installed; use --engine builtin")
-        validator_class = jsonschema.Draft202012Validator
+        # Decimal is a numbers.Number, so python-jsonschema calls it a "number", but its
+        # "integer" check is isinstance(int) and would call 4.0 a non-integer where this engine
+        # (and draft 2020-12) call it an integer. Teach the library the same two rules.
+        type_checker = (jsonschema.Draft202012Validator.TYPE_CHECKER
+                        .redefine("number", lambda _checker, instance: _matches_type(instance, "number"))
+                        .redefine("integer", lambda _checker, instance: _matches_type(instance, "integer")))
+        validator_class = jsonschema.validators.extend(
+            jsonschema.Draft202012Validator, type_checker=type_checker)
         try:
             validator_class.check_schema(schema)
         except jsonschema.exceptions.SchemaError as exc:
@@ -857,20 +994,28 @@ def _reject_constant(token: str) -> Any:
     raise ValueError(f"non-finite number token {token!r} is not JSON")
 
 
-def _reject_overflowing_float(token: str) -> float:
-    # json.load silently maps a number too large for a double onto inf ("1e400"); inf is not a JSON
-    # number and System.Text.Json - the hub's binder - refuses the same token, so the file is
-    # unreadable here rather than valid with a value no consumer can hold.
-    value = float(token)
-    if not math.isfinite(value):
-        raise ValueError(f"number token {token!r} is out of range for a JSON number (it reads as {value})")
-    return value
+def _exact_number(token: str) -> Any:
+    # Two rules in one place. A number too large for a double ("1e400") is refused: json maps it
+    # to inf, inf is not a JSON number, and System.Text.Json - the hub's binder - refuses the same
+    # token. Everything else is kept as a Decimal rather than a float, so the value the manifest
+    # wrote survives parsing: 9007199254740993.0 and 9007199254740992.0 stay two numbers, and
+    # 1e-324 stays distinct from zero.
+    approximate = float(token)
+    if not math.isfinite(approximate):
+        raise ValueError(f"number token {token!r} is out of range for a JSON number (it reads as {approximate})")
+    try:
+        # An absurd exponent underflows the float check to 0.0 and then raises out of the Decimal
+        # constructor ("1e-999999999999999999999999"); that is this manifest's verdict, not a
+        # traceback through the CLI's --json output.
+        return decimal.Decimal(token)
+    except decimal.DecimalException as exc:
+        raise ValueError(f"number token {token!r} is out of range for a JSON number ({exc.__class__.__name__})") from exc
 
 
 def load_json(path: Path, label: str) -> Any:
     try:
         with path.open(encoding="utf-8") as stream:
-            return json.load(stream, parse_constant=_reject_constant, parse_float=_reject_overflowing_float)
+            return json.load(stream, parse_constant=_reject_constant, parse_float=_exact_number)
     except FileNotFoundError as exc:
         raise ValueError(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:

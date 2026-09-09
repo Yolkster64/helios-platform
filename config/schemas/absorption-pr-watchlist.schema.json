@@ -30,7 +30,7 @@
       "required": ["pr", "title", "status"],
       "additionalProperties": false,
       "properties": {
-        "pr": { "type": "integer", "minimum": 1 },
+        "pr": { "type": "integer", "maximum": 2147483647, "minimum": 1 },
         "title": { "type": "string", "minLength": 1 },
         "status": {
           "type": "string",
