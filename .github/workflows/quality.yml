@@ -109,6 +109,13 @@ jobs:
       - name: Run schema validator tests
         run: python3 -m unittest scripts.validation.tests.test_validate_config_schemas -v
 
+      # The verdict table is merge evidence whenever no independent reviewer is available
+      # (docs/architecture/REVIEW_LOOP.md), so what it refuses to render matters as much as
+      # what it renders: a refutation with no evidence, a fix with no commit, or a finding
+      # whose text would break the table row it sits in.
+      - name: Run review verdict-table tests
+        run: python3 -m unittest scripts.validation.tests.test_verdict_table -v
+
   automation-validate:
     name: Automation Wiring Validation
     runs-on: ubuntu-latest

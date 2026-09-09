@@ -66,6 +66,37 @@ hit, reviews and commands **quietly stop** until the window resets — so a
      so in the PR ("Codex silent after two retriggers, presumed quota;
      proceeding on green checks").
 
+## When no reviewer is available
+
+Quota can take **every** reviewer at once, and it has: on PR #252 the cloud Codex reviewer
+answered `You have reached your Codex usage limits for code reviews` while the local
+`codex exec` CLI was simultaneously out of credits, leaving two rounds of a 14-round PR with
+no independent reader. The escalation above ends at "proceed on green checks", which is not
+enough on its own — green checks say the tests pass, not that the diff was read.
+
+So when no reviewer answers on the current head, the session reviews the round's own diff
+itself and posts **one** verdict comment before any merge:
+
+1. Review the round's diff adversarially, looking for the things a green suite does not
+   catch — defects introduced *inside* the fix, parity between the two validation engines or
+   the two connect orchestrators, and tests whose expectations the change silently
+   invalidated.
+2. Fix what is confirmed, in the same round; refute the rest **with evidence** (a file, a
+   line, a probe), never a bare disagreement.
+3. Render the verdict with `scripts/review/verdict-table.py` and post it. It refuses to
+   render a refutation carrying no evidence, and a fix that names no commit, so the comment
+   cannot claim more than the review established.
+4. Say in that comment which rounds had no external review. The table is the evidence the
+   rule asks for, not a substitute for an independent one.
+
+Tests remain the gate either way: the full gate runs on the staged tree before the commit is
+made, whoever reviewed it. When a reviewer becomes available again, its findings are handled
+as a normal round — a merge already taken is not a reason to leave a finding unanswered.
+
+This is the honest reading of the escalation above rather than a way around it: a self-review
+is weaker evidence than an independent one, and the record should show which a merge rested
+on.
+
 ## Stopping rule
 
 Merge when **all three** hold:
