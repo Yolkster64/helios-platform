@@ -39,11 +39,17 @@ Exit codes: 0 = rendered, 1 = the input is not a usable review, 2 = the input is
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import re
 import sys
 from typing import Any
 
 VERDICTS = ("CONFIRMED", "PLAUSIBLE", "REFUTED")
+
+# The characters that make markdown do something in a table cell: the row separator, the
+# escape itself, code spans, emphasis, and link syntax.
+_MARKDOWN_SPECIAL = re.compile(r"[\\`*_\[\]|]")
 
 
 class ReviewError(ValueError):
@@ -107,8 +113,32 @@ def normalise(review: Any) -> dict[str, Any]:
 
 
 def _cell(text: str) -> str:
-    """A markdown table cell: pipes and newlines would break the row."""
-    return text.replace("|", "\\|").replace("\n", " ").strip()
+    """Prose in a markdown table cell.
+
+    A pipe or a newline would break the row and move every later cell into the wrong column.
+    HTML is escaped and backticks are neutered because this comment IS the merge evidence
+    when no reviewer answered: a finding whose text can render its own bold "REFUTED", or an
+    <a href> the reader takes for a commit link, misrepresents the verdict beside it. Losing
+    inline code formatting in a summary is a small price for a table that cannot lie.
+    """
+    escaped = html.escape(str(text), quote=False)
+    # Emphasis and link syntax too, not just the row separators: escaping the pipe stops a
+    # finding from splitting its row, but `**Everything REFUTED. Safe to merge.**` left live
+    # in an evidence cell reads exactly like this table's own verdict text. One pass, so the
+    # backslashes this adds are not themselves re-escaped.
+    escaped = _MARKDOWN_SPECIAL.sub(r"\\\g<0>", escaped)
+    return escaped.replace("\r", " ").replace("\n", " ").strip()
+
+
+def _code(text: str) -> str:
+    """A value rendered inside a `code span`, where _cell's rules do not apply.
+
+    HTML and markdown are both inert inside a code span, so escaping them there would show
+    the escapes literally - but a backtick CLOSES the span, and no backslash escape works
+    inside one, so backticks are dropped rather than escaped.
+    """
+    return (str(text).replace("`", "").replace("|", "\\|")
+            .replace("\r", " ").replace("\n", " ").strip())
 
 
 def render(review: dict[str, Any]) -> str:
@@ -118,7 +148,7 @@ def render(review: dict[str, Any]) -> str:
     heading = "## Review verdict"
     if checked["round"] is not None:
         heading += f" — round {checked['round']}"
-    heading += f" (`{checked['head']}`)"
+    heading += f" (`{_code(checked['head'])}`)"
 
     lines = [heading, ""]
     if checked["reviewer"] == "session":
@@ -134,10 +164,10 @@ def render(review: dict[str, Any]) -> str:
     else:
         lines += ["| # | Finding | Lens | Verdict | Where |", "|---|---|---|---|---|"]
         for number, finding in enumerate(findings, start=1):
-            where = f"`{finding['commit']}`" if finding["commit"] else "refuted"
+            where = f"`{_code(finding['commit'])}`" if finding["commit"] else "refuted"
             if finding["file"]:
                 location = finding["file"] + (f":{finding['line']}" if finding["line"] else "")
-                summary = f"{_cell(finding['summary'])}<br>`{_cell(location)}`"
+                summary = f"{_cell(finding['summary'])}<br>`{_code(location)}`"
             else:
                 summary = _cell(finding["summary"])
             if finding["evidence"]:
@@ -171,6 +201,13 @@ def main(argv: list[str] | None = None) -> int:
                 raw = handle.read()
         else:
             raw = sys.stdin.read()
+    except UnicodeDecodeError as exc:
+        # UnicodeDecodeError subclasses ValueError, NOT OSError, so it escaped the handler
+        # below and surfaced as a traceback with exit 1 - which a caller reads as "the review
+        # is unusable" rather than "those bytes are not text". Same exit code as bad JSON,
+        # which is what the stdin path already returned for the same bytes.
+        print(f"the review is not UTF-8 text: {exc}", file=sys.stderr)
+        return 2
     except OSError as exc:
         print(f"cannot read the review: {exc}", file=sys.stderr)
         return 2

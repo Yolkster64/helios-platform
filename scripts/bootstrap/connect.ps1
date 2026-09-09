@@ -116,6 +116,24 @@ function Get-OptionalProperty {
     return $Default
 }
 
+function Test-Runnable {
+    # Can this candidate actually RUN a .ps1? Existence is not the question the bash twin
+    # asks - it asks `[ -x ]`, or `command -v` for a bare name - and a HELIOS_PWSH naming a
+    # non-executable file passed a plain Test-Path here and then killed the run at the first
+    # lane, which is the very failure the fallback below exists to avoid.
+    param([Parameter(Mandatory)][string]$Candidate)
+    if ($Candidate -notmatch '[\\/]') {
+        # A bare name is a PATH lookup, exactly as `command -v` treats it in the bash twin.
+        return $null -ne (Get-Command $Candidate -CommandType Application -ErrorAction SilentlyContinue)
+    }
+    $item = Get-Item -LiteralPath $Candidate -ErrorAction SilentlyContinue
+    if (-not $item -or $item.PSIsContainer) { return $false }
+    # Get-Command answers true for a non-executable file, so the mode is checked directly.
+    # Windows has no execute bit; there the file existing IS the test.
+    if ($IsWindows) { return $true }
+    return ($item.UnixMode -match '^.{3}x' -or $item.UnixMode -match 'x')
+}
+
 function Resolve-Pwsh {
     # The interpreter the .ps1 lanes are run with. A bare `pwsh` is a PATH lookup, which can
     # find a DIFFERENT PowerShell than the one running this script - so the interpreter this
@@ -130,7 +148,7 @@ function Resolve-Pwsh {
     $current = [Environment]::ProcessPath
     if ($current -and (Split-Path $current -Leaf) -notin @("pwsh$exe", 'pwsh')) { $current = $null }
     foreach ($candidate in @($env:HELIOS_PWSH, (Join-Path $repoRoot ".tools/pwsh/pwsh$exe"), $current)) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return $candidate }
+        if ($candidate -and (Test-Runnable $candidate)) { return $candidate }
     }
     return 'pwsh'
 }
@@ -153,9 +171,12 @@ function Get-LaneReport {
     if ($null -ne $actions) { return @{ Code = $code; Outstanding = @($actions).Count } }
     $reported = Get-OptionalProperty $report 'lanes'
     if ($null -ne $reported) {
+        # ForEach-Object, not .PSObject.Properties.Value: member enumeration over an EMPTY
+        # property collection throws under Set-StrictMode -Version Latest, so a report
+        # carrying `"lanes": {}` killed the orchestrator instead of being read as no lanes.
         $laneList = if ($reported -is [System.Collections.IEnumerable] -and $reported -isnot [string]) {
             @($reported)
-        } else { @($reported.PSObject.Properties.Value) }
+        } else { @($reported.PSObject.Properties | ForEach-Object { $_.Value }) }
         # A lane with no state of its own is not a resolved lane: it is counted as outstanding
         # rather than read as one, so an unexpected report shape cannot report everything ready.
         return @{ Code = $code
@@ -214,8 +235,9 @@ Write-Line 'HELIOS — connect everything'
 Write-Line "surface: $surface   repo: $repoRoot"
 if ($readOnly) { Write-Line 'mode: read-only (nothing is changed)' }
 
-# The same three cases as the bash twin, in the same order: acted on in Cloud Shell,
-# reported as skipped everywhere else, and absent when you asked to skip it. Cloud Shell
+# The same cases as the bash twin, in the same order: acted on in Cloud Shell, and reported
+# as skipped everywhere else - including when you asked to skip it, since off-Cloud-Shell the
+# lane is skipped either way and both twins say so. Cloud Shell
 # persistence is clouddrive plumbing that cloud-shell-setup.sh owns and this twin does not
 # reimplement - but the lane is still REPORTED there, because two twins that describe
 # different lanes are two different products.
@@ -522,6 +544,12 @@ if (-not (Test-Skipped 'verify')) {
         $reportPath = (New-TemporaryFile).FullName
         $verifyState = Join-Path ([IO.Path]::GetTempPath()) ('helios-firstrun-state-' + [guid]::NewGuid())
         New-Item -ItemType Directory -Path $verifyState -Force | Out-Null
+        # 0700, as the bash twin's mktemp -d already gives it. New-Item creates 0755, and the
+        # report underneath names the vault, the provider inventory and which secrets are
+        # missing - no secret VALUES, but reconnaissance, and on a shared runner or a
+        # multi-user host /tmp is readable by everyone. The parent's mode is what protects
+        # the tree; the files inside are 0644 in both twins.
+        if (-not $IsWindows) { & chmod 700 $verifyState }
         $env:HELIOS_STATE_DIR = $verifyState
     }
     else {
@@ -538,6 +566,13 @@ if (-not (Test-Skipped 'verify')) {
     try {
         $report = Get-Content -LiteralPath $reportPath -Raw -ErrorAction Stop | ConvertFrom-Json
         $readReport = Get-OptionalProperty $report 'lanes'
+        # An EMPTY lanes map is not "every lane ready": first-run emits {} whenever no child
+        # report could be merged, so treating it as readiness gave a clean bill of health to
+        # a run that captured no lane state at all. It is read as unreadable, like the bash
+        # twin now does.
+        if ($null -ne $readReport -and @($readReport.PSObject.Properties).Count -eq 0) {
+            $readReport = $null
+        }
         if ($null -ne $readReport) {
             foreach ($lane in $readReport.PSObject.Properties) {
                 if ((Get-OptionalProperty $lane.Value 'state') -notin @('ready', 'ok')) { $outstanding += $lane.Name }
@@ -603,7 +638,16 @@ else {
             }
         }
         Write-Host ''
-        Write-Host '  State saved to .helios/connect-state.json — re-run this script and the list gets shorter.'
+        # The read-only branch matters: this line is what an owner reads, and saying the
+        # state was saved when the run deliberately wrote nothing contradicts the mode's
+        # whole promise - and names a file a clean checkout does not have. The bash twin
+        # already branched here.
+        if ($readOnly) {
+            Write-Host '  Read-only run: nothing was written. Run without -Status to save progress.'
+        }
+        else {
+            Write-Host '  State saved to .helios/connect-state.json — re-run this script and the list gets shorter.'
+        }
     }
     else {
         Write-Host ''

@@ -67,7 +67,9 @@ usage: bash scripts/bootstrap/connect.sh [options]
   -h, --help          this text
 
   HELIOS_PWSH         the interpreter to run the .ps1 lanes with, when it is
-                      somewhere neither .tools/pwsh/pwsh nor PATH will find
+                      somewhere neither .tools/pwsh/pwsh nor PATH will find.
+                      Its DIRECTORY is also prepended to PATH for the verify
+                      lane, so first-run's children find the same PowerShell.
 
 Cloud Shell is the intended home: paste one line there and answer at most five
 prompts. See docs/CONNECT.md.
@@ -629,7 +631,12 @@ try:
     report = json.load(open(sys.argv[1], encoding="utf-8"))
 except Exception:
     sys.exit(1)
-lanes = report.get("lanes", {})
+lanes = report.get("lanes")
+# An EMPTY lanes map is not "every lane ready": first-run emits exactly {} on its degraded
+# no-python3 path and whenever no child report could be merged, so reading it as readiness
+# gave a clean bill of health to a run that captured no lane state at all.
+if not isinstance(lanes, dict) or not lanes:
+    sys.exit(1)
 print(" ".join(sorted(name for name, lane in lanes.items()
                       if isinstance(lane, dict) and lane.get("state") not in ("ready", "ok"))))
 PYVERIFY

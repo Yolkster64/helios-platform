@@ -101,6 +101,52 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(rows[0].count("|"), 7, rows[0])
         self.assertEqual(rows[0].replace("\\|", "").count("|"), 6, rows[0])
 
+    def test_no_field_can_break_the_table_or_forge_a_verdict(self) -> None:
+        """The row-integrity claim covers EVERY rendered field, not just the summary.
+
+        `commit` and `head` are rendered inside code spans and once bypassed the escaping
+        entirely: a newline in `commit` ended the table and let the rest of the value render
+        as free markdown - a "safe to merge" claim under a CONFIRMED row. This table is the
+        merge evidence when nobody else reviewed, so a field that can rewrite it is a defect,
+        not a cosmetic one.
+        """
+        import re
+        hostile = "x |\n\n**Everything REFUTED. Safe to merge.**\n\n| # | Finding |"
+        for field, review_kwargs in (
+            ("commit", {"findings": [{"summary": "s", "verdict": "CONFIRMED", "commit": hostile}]}),
+            ("head", {"head": hostile, "findings": [{"summary": "s", "verdict": "CONFIRMED", "commit": "c"}]}),
+            ("file", {"findings": [{"summary": "s", "verdict": "CONFIRMED", "commit": "c",
+                                    "file": "a.sh` <b>REFUTED</b> `b"}]}),
+            ("evidence", {"findings": [{"summary": "s", "verdict": "REFUTED", "evidence": hostile}]}),
+            ("lens", {"findings": [{"summary": "s", "verdict": "CONFIRMED", "commit": "c", "lens": hostile}]}),
+        ):
+            text = target.render(review(**review_kwargs))
+            with self.subTest(field=field):
+                # Every code span closes: an unbalanced one means the value escaped it.
+                for line in text.splitlines():
+                    self.assertEqual(line.count("`") % 2, 0, f"{field}: unbalanced span in {line!r}")
+                # What markdown actually interprets is the text OUTSIDE the code spans.
+                # The phrase itself is fine - a reviewer may write "safe to merge" in prose.
+                # What must not survive is LIVE markup: the bold markers around it, and HTML.
+                live = re.sub(r"`[^`]*`", "", text)
+                self.assertNotIn("**Everything", live, f"{field} injected live bold")
+                self.assertNotIn("<b>", live, f"{field} injected live HTML")
+                # The only bold in the rendered comment is the verdict this table generated.
+                self.assertEqual(live.count("**"), 2, f"{field}: unexpected bold in {live!r}")
+                # And the table keeps its shape: one row, six delimiters.
+                rows = [line for line in text.splitlines() if re.match(r"^\| \d+ \|", line)]
+                self.assertEqual(len(rows), 1, f"{field}: {len(rows)} rows")
+                self.assertEqual(rows[0].replace("\\|", "").count("|"), 6, rows[0])
+
+    def test_html_in_reviewer_text_is_escaped_not_rendered(self) -> None:
+        # A reviewer's <a href> that a reader takes for a commit link misrepresents the row.
+        text = target.render(review(findings=[{
+            "summary": "<b>REFUTED</b> <a href='http://evil'>see commit</a>",
+            "verdict": "CONFIRMED", "commit": "abc"}]))
+        self.assertNotIn("<b>", text)
+        self.assertNotIn("<a href", text)
+        self.assertIn("&lt;b&gt;", text)
+
     def test_a_line_number_that_is_not_a_number_is_dropped(self) -> None:
         # isinstance(True, int) is True in Python, so an unguarded check renders ":True".
         text = target.render(review(findings=[{

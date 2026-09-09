@@ -188,7 +188,13 @@ function Invoke-JsonStep {
     [System.IO.File]::WriteAllText($outPath, $text + "`n")
     try { $reports[$Name] = $text | ConvertFrom-Json }
     catch { Write-Verbose "$Name emitted invalid JSON: $($_.Exception.Message)" }
-    $relative = $outPath.Substring($repoRoot.Length).TrimStart('/', '\')
+    # Only a path INSIDE the checkout can be shown relative to it. HELIOS_STATE_DIR can put
+    # the reports anywhere, and Substring then either produced nonsense or - when the
+    # relocated path is shorter than $repoRoot - threw ArgumentOutOfRangeException, which
+    # under $ErrorActionPreference = 'Stop' ended the whole chain mid-run.
+    $relative = if ($outPath.StartsWith($repoRoot, [StringComparison]::Ordinal)) {
+        $outPath.Substring($repoRoot.Length).TrimStart('/', '\')
+    } else { $outPath }
     if ($exit -eq 0) { Write-Report "   exit 0 (ok); report: $relative" }
     else { Write-Report "   exit $exit (not clean — the checklist below carries the fix); report: $relative" }
     Add-Step -Name $Name -Script $Script -ExitCode $exit

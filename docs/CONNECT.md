@@ -144,8 +144,11 @@ own guesses: `.tools/pwsh/pwsh` in this checkout, then `pwsh` as the shell finds
 HELIOS_PWSH=/opt/microsoft/powershell/7/pwsh bash scripts/bootstrap/connect.sh --status
 ```
 
-The contracts on this page are tested offline on every change to either twin
-(`scripts/verify/tests/test_connect.ps1`, run by `.github/workflows/auth-contracts.yml`):
+The contracts on this page are tested on every change to either twin
+(`scripts/verify/tests/test_connect.ps1`, run by `.github/workflows/auth-contracts.yml`). The
+run reaches no network: `gh`, `az`, `codex` and every `.ps1` child are replaced by shims, and
+the bash orchestrators that do run for real reach the outside world only through those. What
+is proved:
 that a read-only run writes nothing and never reaches `auto-login.ps1`, that `--json` emits
 the report the run built, that a lane needing you always names a command, and that the two
 twins report the same lanes in the same order.

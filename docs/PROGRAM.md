@@ -43,7 +43,7 @@ Every row is a lane of the one connect command, so the table and the script neve
 | Linear + Slack | needs you | Both workflows read one routing table, honour an `enabled: false` switch, and skip green without their secret; the Linear project and milestones are mirrored; the Slack channels exist with a status post | Two repository secrets by name, and the Linear sync switch. |
 | The hub (C#, F#, C++, Python, PowerShell) | done | Routing with the language dimension, tandem and compare, a learning store both local and in Azure with bounded reads, the F# score, the C++ online learner, the Python spoke, PowerShell wrappers, per-language reviewer agents and knowledge packs | Fleet learning v2 is queued. |
 | Fleets (Xcore-9 and Hermes) | done | Topology, local fleet up / seed / learn / down, the burst module with a clean preview, Hermes installers, fleet status through the tool set | Burst deployment on your word. Hermes lanes are stubs until its command line is installed on a host. |
-| Config authoring | running | JSON Schemas for every manifest, one map, editor bindings, templates, the `helios_config_validate` tool, a required CI job | Pull request #252, in its sixth review round. |
+| Config authoring | done | JSON Schemas for every manifest, one map, editor bindings, templates, the `helios_config_validate` tool, a required CI job | Merged in #252, after fourteen review rounds. |
 | Desktop shell (WinUI 3) | rebuild | The theme tokens and the metrics seam are merged | Phases three to six lived only in a session container and were lost when it restarted. They are rebuilt from the design documents; the Windows build stays your step. |
 
 ## Done and merged
