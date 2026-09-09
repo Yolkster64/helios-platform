@@ -457,7 +457,9 @@ if (-not (Test-Skipped 'verify')) {
     if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
     # A temporary file, not a record: read-only runs put it where the OS reclaims it rather
     # than leaving a new file in the checkout's .helios/ directory.
-    $reportPath = if ($readOnly) { Join-Path ([IO.Path]::GetTempPath()) ("helios-firstrun-$PID.json") }
+    # New-TemporaryFile, not a name built from $PID: a predictable path in a world-writable
+    # directory can be pre-created as a symlink, and the write below would follow it.
+    $reportPath = if ($readOnly) { (New-TemporaryFile).FullName }
                   else { Join-Path $stateDir 'connect-firstrun.json' }
     & pwsh -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/first-run.ps1') -VerifyOnly -Json 2>$null |
         Set-Content -LiteralPath $reportPath -Encoding utf8

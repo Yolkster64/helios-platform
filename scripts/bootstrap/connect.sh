@@ -289,10 +289,18 @@ if ! skipped oidc; then
                 # lines and never runs them, so recording "in place" here left helios-deploy.yml
                 # unable to authenticate with nothing on the owner's list. Ask GitHub instead.
                 oidc_cmds=$(printf '%s\n' "$oidc_out" | sed -n 's/^[[:space:]]*\(gh variable set .*\)$/\1/p')
+                # All THREE, not just the first: azure-oidc-setup prints AZURE_CLIENT_ID,
+                # AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID, and helios-deploy.yml needs every one.
+                # A partial earlier run leaves one set and two missing, which would otherwise read
+                # as "in place" - the same false success this lane was fixed for.
                 oidc_present=0
-                if have gh && gh variable list --repo "$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" \
-                        --json name -q '.[].name' 2>/dev/null | grep -qx 'AZURE_CLIENT_ID'; then
-                    oidc_present=1
+                if have gh; then
+                    oidc_repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
+                    if [ -n "$oidc_repo" ]; then
+                        oidc_have=$(gh variable list --repo "$oidc_repo" --json name -q '.[].name' 2>/dev/null \
+                            | grep -cxE 'AZURE_CLIENT_ID|AZURE_TENANT_ID|AZURE_SUBSCRIPTION_ID' || true)
+                        [ "${oidc_have:-0}" -eq 3 ] && oidc_present=1
+                    fi
                 fi
                 if [ "$oidc_present" -eq 1 ]; then
                     record oidc ok "the OIDC identity exists and AZURE_CLIENT_ID is set on the repository"
@@ -363,9 +371,14 @@ if ! skipped hub; then
         hub_actions=$(printf '%s' "$hub_json" | owner_action_count)
         if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
             record hub failed "$hub_script exited $rc"
+        elif ! have python3; then
+            # `failed` means "not yours to fix" (the exit contract at the top of this file), and a
+            # missing parser is squarely the owner's to fix - the verify lane says the same.
+            record hub needs-owner "the --json report cannot be read on this host (no python3)" \
+                "pwsh scripts/bootstrap/auth-doctor.ps1   # read the report directly"
         elif [ "$hub_actions" = "?" ]; then
             record hub failed \
-                "$hub_script exited $rc but its --json report could not be read, so no provider's credential state is known" \
+                "$hub_script exited $rc but its --json report could not be parsed, so no provider's credential state is known" \
                 "pwsh scripts/bootstrap/auth-doctor.ps1   # read the report directly"
         elif [ "$hub_actions" = "0" ]; then
             record hub ok "every configured provider resolved a credential"
@@ -580,7 +593,9 @@ if ! skipped verify; then
     case "$pwsh_bin" in */*) verify_path="$(dirname "$pwsh_bin"):$PATH" ;; esac
     # A temporary file, not a record: a read-only run leaves nothing new in the checkout.
     if [ "$verify_only" -eq 1 ]; then
-        verify_json="${TMPDIR:-/tmp}/helios-firstrun-$$.json"
+        # mktemp, not a name built from $$: a predictable path in a world-writable directory can
+        # be pre-created as a symlink, and the redirect below would follow it and clobber the target.
+        verify_json=$(mktemp "${TMPDIR:-/tmp}/helios-firstrun-XXXXXX") || verify_json="$STATE_DIR/connect-firstrun.json"
     else
         mkdir -p "$STATE_DIR"
         verify_json="$STATE_DIR/connect-firstrun.json"
