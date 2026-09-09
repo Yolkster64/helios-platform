@@ -351,7 +351,15 @@ if ($ownerActions.Count -gt 0) {
     $n = 0
     foreach ($action in $ownerActions) { $n++; Write-Line "  $n. $action" }
 }
-else {
+# "Nothing left for you" is a claim about the REPOSITORY, and it used to be printed whenever
+# the owner-action list happened to be empty - so a dry run that had just reported an absent
+# environment and printed the PUT it would make signed off with "every environment matches".
+# The pending set is its own question, and is answered separately.
+$pendingCount = @($results | Where-Object { $_.state -eq 'would-change' }).Count
+if ($pendingCount -gt 0) {
+    Write-Line "$pendingCount environment(s) would change. Nothing was changed: re-run with -Apply to make the call(s) above."
+}
+elseif ($ownerActions.Count -eq 0) {
     Write-Line 'Nothing left for you: every environment in the manifest matches the repository.'
 }
 

@@ -91,6 +91,16 @@ exit 0
     # this script prints. Exit 2 is reserved for a genuinely missing precondition.
     Assert-Equal 0 $dry.Exit 'a dry run with pending changes must exit 0, not 2 (see governance-run.yml)'
 
+    # 1b. The closing line must not contradict the body. This is what CI caught that the
+    #     suite had not: a dry run reported the environment absent, printed the PUT it would
+    #     make, and then signed off "Nothing left for you: every environment in the manifest
+    #     matches the repository." The summary keyed off an empty owner-action list rather
+    #     than off the pending set.
+    Assert-True ($dry.Out -notmatch 'Nothing left for you') `
+        'a dry run with pending changes claimed every environment matches the repository'
+    Assert-True ($dry.Out -match 'environment\(s\) would change') `
+        'a dry run with pending changes did not say how many would change'
+
     # 2. The absent environment is reported as the unprotected state it really is, not as
     #    "not configured yet" - the workflow that names it creates it with no rules.
     Assert-True ($dry.Out -match 'absent') 'an absent environment was not reported'
