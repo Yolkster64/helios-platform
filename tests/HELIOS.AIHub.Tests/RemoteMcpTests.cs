@@ -181,7 +181,7 @@ public sealed class RemoteMcpTests : IDisposable
         using var tools = await RpcAsync(client, "tools/list", new { });
         var names = tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
             .Select(tool => tool.GetProperty("name").GetString()).ToArray();
-        Assert.Equal(10, names.Length);
+        Assert.Equal(12, names.Length);
         Assert.Contains("search", names); Assert.Contains("fetch", names);
         Assert.DoesNotContain("helios_ai_ask", names); Assert.DoesNotContain("helios_claude_ask", names);
         using var fetched = await RpcAsync(client, "tools/call", new { name = "fetch", arguments = new { id = "project" } });

@@ -1,0 +1,423 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/agent-catalog.schema.json",
+  "title": "Shared HELIOS agent and task catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "projectId",
+    "roles",
+    "automaticExecution",
+    "runtimeVerified",
+    "sources",
+    "tasks"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schemas/agent-catalog.schema.json"
+    },
+    "version": {
+      "const": 1
+    },
+    "projectId": {
+      "const": "helios-control"
+    },
+    "roles": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "chatgpt",
+          "claude",
+          "codex",
+          "copilot",
+          "hermes",
+          "xcore",
+          "human"
+        ]
+      }
+    },
+    "automaticExecution": {
+      "const": false
+    },
+    "runtimeVerified": {
+      "const": false
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalSkill",
+        "agentProfiles",
+        "languageSkills",
+        "workspacePlugin",
+        "operatorPlugin",
+        "routing",
+        "fleet",
+        "fleetGuide",
+        "hybridGuide",
+        "workspaces",
+        "handoffs",
+        "bicep",
+        "terraform",
+        "deploymentWorkflow",
+        "agentContract"
+      ],
+      "properties": {
+        "canonicalSkill": {
+          "const": "plugins/helios-connect/skills/helios-work/SKILL.md"
+        },
+        "agentProfiles": {
+          "const": ".claude/agents"
+        },
+        "languageSkills": {
+          "const": ".claude/skills"
+        },
+        "workspacePlugin": {
+          "const": "plugins/helios-connect/README.md"
+        },
+        "operatorPlugin": {
+          "const": "plugins/helios-operator/README.md"
+        },
+        "routing": {
+          "const": "config/aihub.json"
+        },
+        "fleet": {
+          "const": "config/fleet/fleet-topology.json"
+        },
+        "fleetGuide": {
+          "const": "docs/architecture/HERMES_FLEET_AND_XCORE.md"
+        },
+        "hybridGuide": {
+          "const": "docs/architecture/HYBRID_EXECUTION.md"
+        },
+        "workspaces": {
+          "const": "docs/AGENT_WORKSPACES.md"
+        },
+        "handoffs": {
+          "const": "docs/mcp/REMOTE_BRIDGE.md"
+        },
+        "bicep": {
+          "const": "infra/main.bicep"
+        },
+        "terraform": {
+          "const": "infra/terraform/main.tf"
+        },
+        "deploymentWorkflow": {
+          "const": ".github/workflows/helios-deploy.yml"
+        },
+        "agentContract": {
+          "const": "AGENTS.md"
+        }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implement",
+        "review",
+        "hybrid-plan",
+        "fleet-plan"
+      ],
+      "properties": {
+        "implement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "routeTaskType",
+            "suggestedRole",
+            "sourceKeys",
+            "steps",
+            "readinessNotes"
+          ],
+          "properties": {
+            "routeTaskType": {
+              "const": "code_generation"
+            },
+            "suggestedRole": {
+              "type": "string",
+              "enum": [
+                "chatgpt",
+                "claude",
+                "codex",
+                "copilot",
+                "hermes",
+                "xcore",
+                "human"
+              ]
+            },
+            "sourceKeys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 15,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "canonicalSkill",
+                  "agentProfiles",
+                  "languageSkills",
+                  "workspacePlugin",
+                  "operatorPlugin",
+                  "routing",
+                  "fleet",
+                  "fleetGuide",
+                  "hybridGuide",
+                  "workspaces",
+                  "handoffs",
+                  "bicep",
+                  "terraform",
+                  "deploymentWorkflow",
+                  "agentContract"
+                ]
+              }
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "readinessNotes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "routeTaskType",
+            "suggestedRole",
+            "sourceKeys",
+            "steps",
+            "readinessNotes"
+          ],
+          "properties": {
+            "routeTaskType": {
+              "const": "code_review"
+            },
+            "suggestedRole": {
+              "type": "string",
+              "enum": [
+                "chatgpt",
+                "claude",
+                "codex",
+                "copilot",
+                "hermes",
+                "xcore",
+                "human"
+              ]
+            },
+            "sourceKeys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 15,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "canonicalSkill",
+                  "agentProfiles",
+                  "languageSkills",
+                  "workspacePlugin",
+                  "operatorPlugin",
+                  "routing",
+                  "fleet",
+                  "fleetGuide",
+                  "hybridGuide",
+                  "workspaces",
+                  "handoffs",
+                  "bicep",
+                  "terraform",
+                  "deploymentWorkflow",
+                  "agentContract"
+                ]
+              }
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "readinessNotes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "hybrid-plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "routeTaskType",
+            "suggestedRole",
+            "sourceKeys",
+            "steps",
+            "readinessNotes"
+          ],
+          "properties": {
+            "routeTaskType": {
+              "const": "architecture_design"
+            },
+            "suggestedRole": {
+              "type": "string",
+              "enum": [
+                "chatgpt",
+                "claude",
+                "codex",
+                "copilot",
+                "hermes",
+                "xcore",
+                "human"
+              ]
+            },
+            "sourceKeys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 15,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "canonicalSkill",
+                  "agentProfiles",
+                  "languageSkills",
+                  "workspacePlugin",
+                  "operatorPlugin",
+                  "routing",
+                  "fleet",
+                  "fleetGuide",
+                  "hybridGuide",
+                  "workspaces",
+                  "handoffs",
+                  "bicep",
+                  "terraform",
+                  "deploymentWorkflow",
+                  "agentContract"
+                ]
+              }
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "readinessNotes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "fleet-plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "routeTaskType",
+            "suggestedRole",
+            "sourceKeys",
+            "steps",
+            "readinessNotes"
+          ],
+          "properties": {
+            "routeTaskType": {
+              "const": "agent_fleet_dispatch"
+            },
+            "suggestedRole": {
+              "type": "string",
+              "enum": [
+                "chatgpt",
+                "claude",
+                "codex",
+                "copilot",
+                "hermes",
+                "xcore",
+                "human"
+              ]
+            },
+            "sourceKeys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 15,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "canonicalSkill",
+                  "agentProfiles",
+                  "languageSkills",
+                  "workspacePlugin",
+                  "operatorPlugin",
+                  "routing",
+                  "fleet",
+                  "fleetGuide",
+                  "hybridGuide",
+                  "workspaces",
+                  "handoffs",
+                  "bicep",
+                  "terraform",
+                  "deploymentWorkflow",
+                  "agentContract"
+                ]
+              }
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "readinessNotes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

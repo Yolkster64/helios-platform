@@ -1,8 +1,9 @@
 # HELIOS Connect
 
-An optional Codex plugin for the existing HELIOS stdio MCP server. It packages
-connection wiring only. Claude Code keeps using `plugins/helios-operator` and
-the repository's `.mcp.json`; both clients reach the same C# implementation.
+An optional Codex plugin for the existing HELIOS stdio MCP server and the
+canonical `helios-work` task skill. Claude Code's `/helios-work` entrypoint reads
+that same skill; its existing `plugins/helios-operator` and repository MCP setup
+remain available. Both clients reach the same C# implementation.
 
 Prerequisites: `python3` on PATH, .NET 10, and a trusted HELIOS checkout with
 `scripts/bootstrap/connect.py`. Set `HELIOS_REPO_ROOT` to that checkout's absolute

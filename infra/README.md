@@ -49,7 +49,7 @@ Other deliberate changes:
 
 ## Three dialects
 
-The same stack exists in three IaC dialects with distinct roles:
+The infrastructure has three representations with distinct roles and coverage:
 
 - **Bicep** (`main.bicep` + `modules/`) — the **source of truth** and the deployment of
   record. All changes start here; `helios-deploy.yml` deploys from it.
@@ -57,10 +57,12 @@ The same stack exists in three IaC dialects with distinct roles:
   (never hand-edited; see `arm/README.md`) for ARM-only surfaces: pipelines without a
   Bicep toolchain and Azure portal "Deploy a custom template". CI fails if it drifts
   from the Bicep source.
-- **Terraform** (`terraform/`) — an **independent mirror** of the same design for
-  TF-native shops. Its resources are deliberately named differently from the Bicep
-  stack's; deploy it into its own resource group and never point both dialects at one
-  RG — neither tracks the other's state, so they would fight over the same resources.
+- **Terraform** (`terraform/`) — an **independent, partial mirror** covering Foundry,
+  Key Vault and fleet VMSS resources. AI Search and learning storage are not yet
+  mirrored. Its resource-name hashes differ from Bicep; designate a separate target
+  resource group and state owner. Do not let both dialects manage one target.
+  See [hybrid execution](../docs/architecture/HYBRID_EXECUTION.md) for the ownership,
+  worker and identity boundaries.
 
 ## Deploy
 

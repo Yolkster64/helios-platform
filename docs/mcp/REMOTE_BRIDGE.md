@@ -151,9 +151,23 @@ Production deployment remains disabled by repository policy.
 
 ## Tools and validation
 
+`helios_agent_catalog_get` returns the seven shared roles, actual checked-in
+agent/skill references, task templates and existing configured routes.
+`helios_task_packet_get` accepts `taskKind` (`implement`, `review`, `hybrid-plan`,
+or `fleet-plan`) and an optional `language`. Each packet includes the same
+canonical `helios-work` skill text and SHA-256, current language-aware route,
+source references, steps, readiness gaps and the shared handoff contract.
+Both tools report `routingSource: "config/aihub.json"` and
+`customProfileApplied: false`: they read the checked-in default routing profile;
+an `AIHUB_CONFIG` override is not applied to these shared templates.
+The packet is a deterministic template. It creates no task, subagent, model
+request or cloud deployment. Native client plugins and subagents remain
+client-specific; the project instructions and handoff format are shared.
+
 The default HTTP catalog contains `search`, `fetch`, `helios_project_get`,
 `helios_task_routing_get`, `helios_fabric_plan_get`, `helios_fleet_topology_get`,
-`helios_bridge_status_get`, and the three `helios_handoff_*` tools. Only the
+`helios_bridge_status_get`, the three `helios_handoff_*` tools,
+`helios_agent_catalog_get` and `helios_task_packet_get`. Only the
 explicit Claude opt-in adds `helios_claude_ask`. Remote requests cannot provide
 filesystem paths, executable names, CLI flags, resume IDs or arbitrary URLs.
 Search/fetch serve nine fixed repository documents, each limited to 128 KiB;

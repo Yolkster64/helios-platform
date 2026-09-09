@@ -41,9 +41,15 @@ deprecated; its parameter mapping lives in `infra/README.md`.
 
 1. `bicep build infra/main.bicep --stdout` locally (or `helios_infra_validate` via MCP).
 2. PR → `infra-validate.yml` compiles + lints (offline, always green-able).
-3. Merge/dispatch → `helios-deploy.yml`: OIDC login, **what-if on dispatch**, deploy on
-   main; skips gracefully when `AZURE_CLIENT_ID` secrets are absent.
-4. Never `az deployment group create` from a laptop against prod without a what-if first.
+3. `helios-deploy.yml` runs only through `workflow_dispatch` on `main`, using the
+   protected `azure-dev` environment and OIDC. It requires environment variables
+   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+   `AZURE_RESOURCE_GROUP` and `AZURE_LOCATION`; missing values fail before any Azure
+   operation. See `docs/OWNER_START_HERE.md` for the maintained setup contract.
+4. Dispatch defaults to **what-if**. Apply requires `what_if=false` and
+   `deploy_confirmed=true` after reviewing a successful what-if; a merge does not
+   trigger deployment. Follow `AGENTS.md` for execution authority: validation and
+   planning do not authorize an apply or bypass the protected environment.
 
 ## ARM JSON & Terraform
 

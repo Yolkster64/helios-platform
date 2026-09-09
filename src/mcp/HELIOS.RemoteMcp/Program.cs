@@ -76,7 +76,7 @@ public static class Program
             // Use the API shipped in the repository's pinned 2.1.0 package.
             // SessionMode is documented on the newer SDK documentation branch.
             transport.Stateless = true;
-        }).WithTools<RemoteReadTools>().WithTools<RemoteHandoffTools>();
+        }).WithTools<RemoteReadTools>().WithTools<RemoteHandoffTools>().WithTools<RemoteAgentCatalogTools>();
         if (options.ClaudeEnabled) mcp.WithTools<RemoteClaudeTools>();
 
         var app = builder.Build();

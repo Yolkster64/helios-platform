@@ -90,6 +90,12 @@
         "/config/control-project.json"
       ],
       "url": "./config/schemas/control-project.schema.json"
+    },
+    {
+      "fileMatch": [
+        "/config/agent-catalog.json"
+      ],
+      "url": "./config/schemas/agent-catalog.schema.json"
     }
   ],
   "yaml.schemas": {

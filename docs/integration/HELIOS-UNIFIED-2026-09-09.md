@@ -47,4 +47,23 @@ The .NET solution restore and Bicep command completion encountered an automatic 
 
 No cloud resources, Entra registrations, RBAC roles, credentials, native app installations, Slack deliveries, model inference calls or PR merges were performed. Slack's browser requires sign-in; Linear browser inspection received an explicit URL-policy rejection. Available connected-app tools do not expose the missing administration operations.
 
-A GitHub event follow-up is enabled for the merge of #252: verify the event, retarget open draft #253 to main, and inspect its current-head checks. It does not merge or deploy. Seven local starter worktrees were created from the published integration source; these are working directories, not running agents or cloud accounts.
+A GitHub event follow-up is enabled: a merge of #252 verifies the event, retargets open draft #253 to main, and inspects its current-head checks. Code updates on #253 trigger a read-only handoff/CI review in ChatGPT. The active implementation agent owns repairs, preventing competing writers. The follow-up does not merge or deploy. Seven local starter worktrees were created from the published integration source; these are working directories, not running agents or cloud accounts.
+
+## Shared agent work
+
+The shared `helios-work` skill is packaged once for Codex, referenced by the
+Claude entrypoint and `AGENTS.md`, and returned by the bounded MCP task-packet
+API. `helios_agent_catalog_get` indexes existing roles/profiles/skills;
+`helios_task_packet_get` prepares implement, review, hybrid-plan and fleet-plan
+work with the same skill hash, default-profile routing and handoff contract.
+Native execution and subagent activation remain client-specific.
+
+[Hybrid execution](../architecture/HYBRID_EXECUTION.md) records Bicep's current
+ownership, Terraform's actual coverage, identity boundaries, fleet stubs and
+cross-host transport gaps. The packet carries these gaps instead of claiming
+that configured pools are running.
+
+All 15 GitHub workflows passed at `e0d39603b80cdaf2f46050290b5a547a4e774041`,
+including 678 AIHub tests, the native Windows shell, Linux/Windows launcher
+and plugin tests, and Bicep/Terraform validation. The later shared-catalog
+addition requires its own current-head CI result on PR #253.

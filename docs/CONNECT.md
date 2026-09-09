@@ -95,6 +95,26 @@ it is not an API for appending to this arbitrary existing chat. Its access token
 is separate from an OpenAI Platform model key. This setup has not created a
 published channel, issued that token or registered a custom ChatGPT connection.
 
+## Shared agents, subagents and skills
+
+Every client can read one maintained work skill through the shared MCP API.
+`helios_agent_catalog_get` returns the seven roles and their existing sources;
+`helios_task_packet_get` returns the common instructions and references for a
+bounded work item. A native client can also read the same skill in this checkout.
+Plugin setup explains each client's discovery method. A packet does not start
+an agent, provision a worker or call a paid model by itself.
+
+Assign one issue and correlation ID to the parent task, give each subagent an
+isolated worktree, and return the changed commit, checks and findings through a
+handoff or PR. Local worktrees share the primary inbox; machines share one HTTP
+service. Each client retains its own supported execution tools and login.
+
+The [hybrid execution guide](architecture/HYBRID_EXECUTION.md) maps Azure,
+Bicep, Terraform, Hermes/XCore and hosted/local workers to their actual
+implementation. Choose one infrastructure owner for a target and keep the
+other representation as a checked reference; independent templates are not
+proof of identical resources or shared state.
+
 ## Multi-model work and learning
 
 All surfaces use `config/aihub.json`; the public project map is

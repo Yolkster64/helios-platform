@@ -109,6 +109,37 @@ one, while model providers need their own configured credentials.
 
 ## Implementation and verification
 
+### One reusable work skill
+
+`plugins/helios-connect/skills/helios-work/SKILL.md` is the canonical workflow
+for implementation, review, hybrid planning and fleet planning. It guides task
+ownership, isolated worktrees, provider choices and returned evidence. The
+client uses its own native agent facilities; the shared skill does not create
+accounts, start fleets or install other clients.
+
+| Client | Shared instructions | Native execution boundary |
+| --- | --- | --- |
+| Codex | HELIOS Connect exposes `helios-work` through the plugin's `skills` entry | Invoke the installed skill, then use available Codex agents with explicit assignments |
+| Claude Code | `/helios-work` loads the repository wrapper, which reads the canonical skill | Claude's available subagent tools run bounded work; existing `aihub-unity` supplies provider guidance |
+| Copilot | Include the canonical skill file as repository context, or retrieve the shared task packet through HELIOS MCP | Use the installed editor/CLI/cloud agent's supported facilities; do not assume a Codex plugin installs in Copilot |
+| ChatGPT | Connected HELIOS MCP returns the canonical instruction text and hash in a task packet | ChatGPT uses its available tools; a remote packet does not create a native subagent or wake another conversation |
+| Hermes / XCore | The same packet and fleet/Fabric configuration define the proposed work | A local role or plan is advisory until the actual executor returns a runtime receipt |
+
+After updating a client connection, inspect its tool list. When advertised,
+`helios_agent_catalog_get` reads configured roles and tasks, and
+`helios_task_packet_get` accepts `taskKind` (`implement`, `review`, `hybrid-plan`
+or `fleet-plan`) plus optional `language`. Both are read-only and perform no
+dispatch or inference. The packet carries the canonical instruction path, text
+and SHA-256. Use the current schema and report missing tools explicitly; an
+older running server does not acquire new tools just because the code changed.
+
+Use `AGENTS.md` for repository authority and [Agent workspaces](../AGENT_WORKSPACES.md)
+for the actual workspace helper. Linked worktrees share the local handoff store;
+independent machines use the configured HTTP service. Keep provider sign-ins,
+application consent and deployment identity local to their approved runtimes.
+
+### Plugin launcher
+
 Codex runs `scripts/mcp_stdio.py` from the installed plugin's directory. The
 shim requires an absolute `HELIOS_REPO_ROOT`, validates the checkout layout and
 executes its existing `scripts/bootstrap/connect.py mcp` entrypoint. That entrypoint

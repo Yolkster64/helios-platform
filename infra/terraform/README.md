@@ -4,9 +4,12 @@ A Terraform mirror of the Bicep stack in `infra/` (`main.bicep` +
 `modules/ai-foundry-account.bicep` / `ai-foundry-project.bicep` / `keyvault.bicep`),
 for teams that operate Terraform-native pipelines.
 
-**Bicep remains the deployment of record.** This directory is a faithful mirror for
-TF-native shops, not a replacement: changes land in the Bicep first and are ported
-here. If the two ever disagree, the Bicep wins.
+**Bicep remains the deployment of record.** This directory mirrors the Foundry,
+Key Vault and fleet VMSS resource families for a separately designated Terraform
+target. Changes land in Bicep first and are ported here; coverage is not complete.
+The optional AI Search connection and learning-storage resources are not mirrored.
+See [hybrid execution](../../docs/architecture/HYBRID_EXECUTION.md) for the current
+ownership and runtime-readiness map.
 
 ## What it mirrors
 
@@ -21,10 +24,11 @@ here. If the two ever disagree, the Bicep wins.
 | `aiServiceAccountResourceId` BYO short-circuit | `count` on the account/project resources + `local.effective_account_id` |
 | `modules/fleet-vmss.bicep` (opt-in Flexible VMSS + vnet/NSG + CPU autoscale; `deployFleetVmss` gate) | `azapi_resource.fleet_vmss` + `azurerm_virtual_network`/`azurerm_subnet`/`azurerm_network_security_group` + `azurerm_monitor_autoscale_setting`, all `count`-gated on `local.fleet_vmss_enabled` |
 
-Every Bicep parameter exists as a variable with the same name in snake_case
-(`aiServicesName` → `ai_services_name`), the same default, and the same type;
-`@secure()` parameters are `sensitive = true`. Outputs match `main.bicep`
-one-for-one; secrets are never output.
+Parameters for the resource families listed above use snake_case names
+(`aiServicesName` → `ai_services_name`); secure inputs use `sensitive = true`.
+AI Search and learning-storage parameters and outputs are absent. Naming and
+selected default representations also differ as described below. Secrets are
+never returned as outputs, but supplied secret values are held in Terraform state.
 
 Like the Bicep template, this configuration is resource-group scoped: it reads an
 existing resource group (`var.resource_group_name`) and does not create it.
@@ -112,12 +116,15 @@ Note that, as with any `azurerm_key_vault_secret`, supplied secret values are st
 in the Terraform state — protect the state accordingly (this is one more reason the
 Bicep path, which has no state file, remains the deployment of record).
 
-Offline validation (what CI would run — no backend, no subscription):
+Validation without a backend or cloud credentials (the CI path):
 
 ```bash
 terraform init -backend=false
 terraform validate
 ```
+
+Initialization downloads provider packages when they are not cached and writes
+local initialization files. It does not deploy Azure resources.
 
 ## Outputs
 

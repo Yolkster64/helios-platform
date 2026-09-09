@@ -71,6 +71,11 @@
       "manifest": "config/control-project.json",
       "schema": "config/schemas/control-project.schema.json",
       "consumer": "scripts/bootstrap/connect.py, src/gui/HELIOS.Shell/Views/ControlHomePage.xaml.cs"
+    },
+    {
+      "manifest": "config/agent-catalog.json",
+      "schema": "config/schemas/agent-catalog.schema.json",
+      "consumer": "src/mcp/HELIOS.Mcp/HeliosAgentCatalogTools.cs; src/mcp/HELIOS.RemoteMcp/RemoteAgentCatalogTools.cs"
     }
   ]
 }
