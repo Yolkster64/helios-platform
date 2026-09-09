@@ -74,6 +74,13 @@ $mode = if ($Apply) { 'apply' } else { 'dry-run' }
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $ManifestPath) { $ManifestPath = Join-Path $repoRoot 'config' 'github' 'environments.json' }
 
+# Exit 2 means "a precondition is missing", and nothing else. .github/workflows/
+# governance-run.yml reads exit 2 from an admin item during -Apply as "this admin
+# credential was rejected" and turns the row red with a rotate-your-token message - so
+# exiting 2 merely because a follow-up note remains (set this variable, paste that secret)
+# would report a perfectly good App token as revoked. Pending dry-run changes are exit 0
+# too: the runner counts the printed "would run:" lines to report them.
+$script:precondition = $false
 $lines = [System.Collections.Generic.List[string]]::new()
 $ownerActions = [System.Collections.Generic.List[string]]::new()
 $results = [System.Collections.Generic.List[object]]::new()
@@ -167,6 +174,7 @@ $script:gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContin
 if (-not $script:gh) {
     Write-Line 'gh is not on PATH, so nothing could be compared against the live repository.'
     Add-OwnerAction 'install the GitHub CLI (https://cli.github.com), then re-run this script'
+    $script:precondition = $true
 }
 
 $owner = $Repository.Split('/')[0]
@@ -241,6 +249,7 @@ foreach ($env in $environments) {
     foreach ($u in $unresolved) {
         Write-Line "   reviewer unresolved: $($u.Type) '$($u.Name)' — $($u.Reason)"
         Add-OwnerAction "resolve the reviewer $($u.Type) '$($u.Name)' for environment '$name' (edit config/github/environments.json, or grant this credential access), then re-run this script"
+        $script:precondition = $true
     }
 
     $live = $null
@@ -251,6 +260,7 @@ foreach ($env in $environments) {
         elseif ($reply.HttpStatus -eq 403) {
             Write-Line '   live: cannot read (403) — this credential is not an administrator of the repository'
             Add-OwnerAction "run this script with an administrator credential: gh auth login, then pwsh scripts/github/apply-environments.ps1 -Apply"
+            $script:precondition = $true
         }
         else {
             Write-Line "   live: lookup failed (HTTP $($reply.HttpStatus))"
@@ -308,7 +318,6 @@ foreach ($env in $environments) {
             Write-Line '   (the deployment branch policy is a second call; -Apply prints and makes both)'
         }
         $results.Add([pscustomobject]@{ name = $name; state = 'would-change' }) | Out-Null
-        Add-OwnerAction "apply the environment protection for '$name': pwsh scripts/github/apply-environments.ps1 -Apply"
         continue
     }
 
@@ -322,6 +331,7 @@ foreach ($env in $environments) {
         $results.Add([pscustomobject]@{ name = $name; state = 'failed' }) | Out-Null
         if ($reply.HttpStatus -eq 403 -or $reply.HttpStatus -eq 404) {
             Add-OwnerAction "grant an administrator credential and re-run: pwsh scripts/github/apply-environments.ps1 -Apply"
+            $script:precondition = $true
         }
         else { $failed = $true }
     }
@@ -355,5 +365,5 @@ if ($Json) {
 }
 
 if ($failed) { exit 1 }
-if ($ownerActions.Count -gt 0) { exit 2 }
+if ($script:precondition) { exit 2 }
 exit 0

@@ -3,6 +3,7 @@
 #
 #   rulesets    apply-rulesets.ps1       .github/rulesets/*.json      needs repo ADMIN
 #   settings    apply-repo-settings.ps1  Pages/auto-merge/wiki flags  needs repo ADMIN
+#   environments apply-environments.ps1  config/github/environments.json needs repo ADMIN
 #   labels      apply-labels.ps1         config/github/labels.json    needs issues:write
 #   milestones  apply-milestones.ps1     config/github/milestones.json needs issues:write
 #
@@ -124,6 +125,7 @@ on:
           - all
           - rulesets
           - settings
+          - environments
           - labels
           - milestones
 

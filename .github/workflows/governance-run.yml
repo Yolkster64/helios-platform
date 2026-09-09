@@ -42,7 +42,7 @@ on:
         type: boolean
         default: false
       scope:
-        description: 'all | rulesets | settings | labels | milestones'
+        description: 'all | rulesets | settings | environments | labels | milestones'
         type: string
         default: all
     secrets:
@@ -240,6 +240,7 @@ jobs:
 
           run_item rulesets   scripts/github/apply-rulesets.ps1      true
           run_item settings   scripts/github/apply-repo-settings.ps1 true
+          run_item environments scripts/github/apply-environments.ps1  true
           run_item labels     scripts/github/apply-labels.ps1        false
           run_item milestones scripts/github/apply-milestones.ps1    false
 

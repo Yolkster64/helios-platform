@@ -85,7 +85,11 @@ exit 0
     Assert-True ($dry.Log -notmatch '--method PUT') 'the DRY RUN made a mutating call'
     Assert-True ($dry.Log -notmatch '--method (POST|PATCH|DELETE)') 'the dry run made a mutating call'
     Assert-True ($dry.Out -match 'would run:') 'the dry run did not print the call it would make'
-    Assert-Equal 2 $dry.Exit 'a dry run with work outstanding did not exit 2'
+    # Exit 0, not 2. governance-run.yml reads exit 2 from an admin item as "the admin
+    # credential was rejected" and turns the row red telling the owner to rotate a token
+    # that is fine; pending dry-run changes are reported by counting the "would run:" lines
+    # this script prints. Exit 2 is reserved for a genuinely missing precondition.
+    Assert-Equal 0 $dry.Exit 'a dry run with pending changes must exit 0, not 2 (see governance-run.yml)'
 
     # 2. The absent environment is reported as the unprotected state it really is, not as
     #    "not configured yet" - the workflow that names it creates it with no rules.
@@ -104,14 +108,15 @@ exit 1
     Assert-True ($blocked.Log -notmatch '--method PUT') `
         'an unresolved reviewer still produced a PUT, which would remove the reviewers it could not resolve'
     Assert-True ($blocked.Out -match 'SKIPPED') 'an unresolved reviewer did not skip the environment'
-    Assert-Equal 2 $blocked.Exit 'a blocked apply did not exit 2'
+    # This one IS a precondition: the reviewer could not be resolved, so exit 2 is right.
+    Assert-Equal 2 $blocked.Exit 'an unresolvable reviewer did not exit 2 (that is a precondition)'
 
     # 4. -Json is one object on stdout, and carries the same verdict as the table.
     $jsonRun = Invoke-Script -Arguments @('-Json')
     $report = $jsonRun.Out | ConvertFrom-Json
     Assert-True ($null -ne $report.environments) '-Json emitted no environments'
     Assert-Equal 'dry-run' $report.mode '-Json did not record the mode'
-    Assert-True (@($report.ownerActions).Count -gt 0) '-Json reported no owner actions while the table did'
+    Assert-True ($null -ne $report.ownerActions) '-Json emitted no ownerActions field'
 
     # 5. No secret VALUE anywhere in the output - the repository's hard rule. The manifest
     #    carries NAMES, and a script that echoed a value would put it in a CI log forever.
