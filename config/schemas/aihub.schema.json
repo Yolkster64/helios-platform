@@ -33,7 +33,7 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-      "description": "Ordered provider / CLI-agent names: first is primary, the rest are fallbacks."
+      "description": "Ordered provider / CLI-agent names: first is primary, the rest are fallbacks. Every entry must name a provider key or a CLI agent declared in this file, and at least one of them must be enabled - the hub skips an entry it cannot resolve, so a typo degrades the chain silently and an all-disabled chain fails every request routed to it. A schema cannot see the other sections, so the validator checks that (validate_config_schemas.py `_check_aihub_chains`, ManifestSemantics.AihubChains)."
     },
     "provider": {
       "type": "object",
@@ -139,7 +139,12 @@
           "type": "boolean",
           "description": "true lets recorded history reorder chains; false records only."
         },
-        "historyWindow": { "type": "integer", "minimum": 1 }
+        "historyWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "How many recorded outcomes a routing decision may read back. Bound to a C# int (LearningOptions.HistoryWindow): a larger value overflows the binder, which is a startup failure rather than a slow read."
+        }
       }
     }
   }

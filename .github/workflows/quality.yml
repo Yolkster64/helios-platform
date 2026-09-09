@@ -112,6 +112,10 @@ jobs:
   automation-validate:
     name: Automation Wiring Validation
     runs-on: ubuntu-latest
+    # The sweep compiles and runs the schema patterns of every JSON artifact it finds. Each match
+    # is bounded by validate_config_schemas.py's own deadline; this is the outer bound on the job
+    # as a whole, matching json-validate.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 

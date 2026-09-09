@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import signal
 import subprocess
 import sys
+import threading
 import tempfile
+import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -697,3 +700,190 @@ class Round5Tests(unittest.TestCase):
             for engine in target.available_engines():
                 issues, _ = target.validate_instance(instance, schema, engine=engine)
                 self.assertTrue(any(fragment in issue.path for issue in issues), (engine, schema_name, issues))
+
+
+class Round6Tests(unittest.TestCase):
+    """Round 6 of PR #252: a clock instead of a list of bad regex shapes, numbers that survive the
+    round trip, reachable routing chains, and two more identity rules (milestone titles, pool
+    names)."""
+
+    def _cli(self, *args: str) -> tuple[int, str]:
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "validation" / "validate_config_schemas.py"), *args],
+                              capture_output=True, text=True, cwd=ROOT)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_a_backtracking_pattern_is_abandoned_under_every_engine(self) -> None:
+        # ^(a+a+)+$ is NOT a shape _catastrophic_shape names - that is the point of this test. A
+        # scanner only knows the shapes it enumerates; the deadline bounds the match either way.
+        # Unguarded, this subject runs for minutes under both engines.
+        pattern = "^(a+a+)+$"
+        self.assertIsNone(target._catastrophic_shape(pattern))
+        for engine in target.available_engines():
+            start = time.monotonic()
+            with self.assertRaises(target.SchemaError, msg=engine) as caught:
+                target.validate_instance("a" * 32 + "b", {"type": "string", "pattern": pattern}, engine=engine)
+            elapsed = time.monotonic() - start
+            self.assertIn("abandoned", str(caught.exception))
+            self.assertLess(elapsed, target._LIBRARY_PASS_BUDGET_SECONDS + 15, (engine, elapsed))
+        # The timer is disarmed afterwards: ordinary validation still works in this process.
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance("abc", {"type": "string", "pattern": "^[a-z]+$"}, engine=engine)
+            self.assertEqual(issues, [], engine)
+
+    def test_a_repetition_count_no_engine_can_hold_is_a_verdict(self) -> None:
+        # re.compile raises OverflowError, not re.error, and the C# twin's QuantifierAt would
+        # overflow an int: both must report an unusable schema rather than crash.
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError, msg=engine) as caught:
+                target.validate_instance("a", {"type": "string", "pattern": "a{999999999999999999999999}"}, engine=engine)
+            self.assertIn("invalid regex", str(caught.exception))
+
+    def test_a_number_out_of_double_range_is_not_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "model-catalog.json"
+            path.write_text('{"models": [{"contextTokens": 1e400}]}', encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                target.load_json(path, "manifest")
+            self.assertIn("out of range", str(caught.exception))
+            # As a manifest it is invalid (exit 1 territory), never a traceback out of the sweep.
+            result = target.validate_file(path, ROOT / "config" / "schemas" / "model-catalog.schema.json", repo_root=ROOT)
+            self.assertFalse(result.valid)
+            self.assertIn("not valid JSON", result.issues[0].message)
+            # A number a double CAN hold still reads normally.
+            path.write_text('{"models": [{"contextTokens": 1e308}]}', encoding="utf-8")
+            self.assertEqual(target.load_json(path, "manifest"), {"models": [{"contextTokens": 1e308}]})
+
+    def test_routing_chains_must_be_reachable(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        base = {
+            "providers": {"live": {"type": "ollama", "model": "llama3"},
+                          "parked": {"type": "ollama", "model": "llama3", "enabled": False}},
+            "cliAgents": [{"name": "cx", "command": "codex", "argsTemplate": "exec {prompt}"}],
+            "routing": {"defaultChain": ["live"], "taskRouting": {}},
+        }
+        cases: tuple[tuple[dict[str, list[str]], list[str]], ...] = (
+            ({}, []),
+            ({"code_review": ["cx", "live"]}, []),
+            ({"code_review": ["parked", "cx"]}, []),                      # disabled first is a fallback, not a fault
+            ({"code_review": ["parked"]}, ["$.routing.taskRouting.code_review"]),
+            ({"code_review": ["typo"]}, ["$.routing.taskRouting.code_review[0]",
+                                         "$.routing.taskRouting.code_review"]),
+            ({"code_review": ["live", "typo"]}, ["$.routing.taskRouting.code_review[1]"]),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "aihub.json"
+            for task_routing, expected in cases:
+                instance = json.loads(json.dumps(base))
+                instance["routing"]["taskRouting"] = task_routing
+                manifest.write_text(json.dumps(instance), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, task_routing, result.issues))
+            # A chain of nothing but disabled names is reported wherever it sits.
+            instance = json.loads(json.dumps(base))
+            instance["routing"]["defaultChain"] = ["parked"]
+            manifest.write_text(json.dumps(instance), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual([issue.path for issue in result.issues], ["$.routing.defaultChain"], (engine, result.issues))
+
+    def test_history_window_is_bounded_by_the_binder(self) -> None:
+        schema = json.loads((ROOT / "config" / "schemas" / "aihub.schema.json").read_text(encoding="utf-8"))
+        instance = json.loads((ROOT / "config" / "aihub.json").read_text(encoding="utf-8"))
+        instance["learning"]["historyWindow"] = 2147483648
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(instance, schema, engine=engine)
+            self.assertEqual([issue.path for issue in issues], ["$.learning.historyWindow"], (engine, issues))
+
+    def test_duplicate_milestone_titles_are_reported_case_insensitively(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "github-milestones.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "milestones.json"
+            for text, expected in (
+                    (json.dumps({"milestones": [{"title": "Control fabric"}, {"title": "control FABRIC"}]}), ["$.milestones[1].title"]),
+                    (json.dumps([{"title": "Owner setup"}, {"title": "owner setup"}]), ["$[1].title"]),
+                    (json.dumps([{"title": "Owner setup"}, {"title": "Owner setup 2"}]), [])):
+                manifest.write_text(text, encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, text, result.issues))
+
+    def test_duplicate_fleet_pool_names_are_reported(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "fleet-topology.schema.json"
+        topology = json.loads((ROOT / "config" / "fleet" / "fleet-topology.json").read_text(encoding="utf-8"))
+        topology["pools"].append(json.loads(json.dumps(topology["pools"][0])))
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "fleet-topology.json"
+            manifest.write_text(json.dumps(topology), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual([issue.path for issue in result.issues],
+                                 [f"$.pools[{len(topology['pools']) - 1}].name"], (engine, result.issues))
+
+    def test_case_folding_matches_the_csharp_comparer(self) -> None:
+        # .NET's OrdinalIgnoreCase is a per-character invariant uppercase: it folds 'ς' onto 'Σ'
+        # (str.lower() does not) and leaves 'ß' alone (str.upper() expands it to 'SS'). The two
+        # engines must judge the same manifest the same way, so the Python side folds that way too.
+        for left, right, duplicate in (("Σ", "ς", True),          # Σ / ς
+                                       ("straße", "STRASSE", False),   # straße / STRASSE
+                                       ("İ", "i̇", False),        # İ / i + combining dot
+                                       ("Bug", "bug", True)):
+            self.assertEqual(target._ordinal_ignore_case(left) == target._ordinal_ignore_case(right), duplicate,
+                             (left, right))
+        schema_path = ROOT / "config" / "schemas" / "github-milestones.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "milestones.json"
+            for left, right, expected in (("Σ", "ς", ["$[1].title"]),
+                                          ("straße", "STRASSE", [])):
+                manifest.write_text(json.dumps([{"title": left}, {"title": right}]), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, left, right, result.issues))
+
+    def test_an_undeliverable_alarm_is_not_claimed_as_a_deadline(self) -> None:
+        if not hasattr(signal, "setitimer"):
+            self.skipTest("no setitimer on this platform")
+        self.assertTrue(target._alarm_deliverable())
+        # A caller's own ITIMER_REAL is not ours to take, and a blocked SIGALRM would never arrive:
+        # in both states this must report "no alarm here" so the isolated path is used instead.
+        signal.setitimer(signal.ITIMER_REAL, 20, 3)
+        try:
+            self.assertFalse(target._alarm_deliverable())
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+        try:
+            self.assertFalse(target._alarm_deliverable())
+        finally:
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGALRM})
+        self.assertTrue(target._alarm_deliverable())
+
+    def test_validation_off_the_main_thread_is_isolated_and_bounded(self) -> None:
+        # A worker thread cannot receive SIGALRM, so the pass runs in a child that is killed on the
+        # budget. The failure must arrive as this thread's exception - killing the whole process
+        # (what a faulthandler watchdog does) would take a caller's service down with the pattern.
+        answers: list[Any] = []
+
+        def run(instance: Any, schema: dict[str, Any]) -> None:
+            try:
+                answers.append(target.validate_instance(instance, schema, engine="builtin"))
+            except BaseException as exc:  # noqa: BLE001 - the test inspects whatever comes back
+                answers.append(exc)
+
+        worker = threading.Thread(target=run, args=("abc", {"type": "string", "pattern": "^[a-z]+$"}))
+        worker.start()
+        worker.join(60)
+        self.assertEqual(answers[-1], ([], "builtin"), answers[-1])
+
+        previous = target._LIBRARY_PASS_BUDGET_SECONDS
+        target._LIBRARY_PASS_BUDGET_SECONDS = 1.0
+        try:
+            worker = threading.Thread(target=run, args=("a" * 32 + "b", {"type": "string", "pattern": "^(a+a+)+$"}))
+            started = time.monotonic()
+            worker.start()
+            worker.join(60)
+        finally:
+            target._LIBRARY_PASS_BUDGET_SECONDS = previous
+        self.assertIsInstance(answers[-1], target.SchemaError)
+        self.assertIn("isolated validator was killed", str(answers[-1]))
+        self.assertLess(time.monotonic() - started, 30)

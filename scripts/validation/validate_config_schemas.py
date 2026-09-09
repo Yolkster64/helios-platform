@@ -30,9 +30,15 @@ mapping and no --schema was given.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as _dt
 import json
+import math
+import os
 import re
+import signal
+import subprocess
+import threading
 from urllib.parse import urlsplit
 import sys
 from dataclasses import dataclass, field
@@ -283,9 +289,94 @@ _MAX_DEPTH = 256
 _INTEGER_KEYWORDS = ("minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties")
 _NUMBER_KEYWORDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
 
+# Every regex operation runs under a bound. Enumerating catastrophic shapes cannot be the
+# guarantee - a scanner only refuses what it names, and ^(a+a+)+$ is not one of them - while a
+# clock bounds every pattern, known shape or not. Two mechanisms, chosen by what the interpreter
+# can actually deliver here:
+#   * a SIGALRM deadline when the signal really can arrive - POSIX, the main thread, unblocked,
+#     and no alarm of the caller's to clobber. That is CI, the CLI and the sweep.
+#   * process isolation otherwise (Windows, a worker thread): the whole pass runs in a child
+#     interpreter that is killed when the budget expires. Ending THIS process instead - what a
+#     faulthandler watchdog does - would take a caller's service down with the bad pattern.
+# The per-match budget matches JsonSchemaLite's RegexTimeout so both engines give up at the same
+# point; a whole pass gets the longer one, since one deadline covers every match in it.
+_MATCH_BUDGET_SECONDS = 2.0
+_LIBRARY_PASS_BUDGET_SECONDS = 10.0
+_ISOLATION_ENV = "HELIOS_SCHEMA_VALIDATION_ISOLATED"
+
+
+class _MatchTimeout(Exception):
+    """A regex operation outran its budget."""
+
+
+# Per THREAD: a deadline armed by one thread bounds only that thread's work, so treating another
+# thread's guard as an enclosing one would leave the second thread running with no bound at all.
+_deadline = threading.local()
+
+
+def _alarm_deliverable() -> bool:
+    """Whether a SIGALRM deadline can be armed here without lying about it or clobbering a caller."""
+    if not (hasattr(signal, "setitimer") and hasattr(signal, "SIGALRM")):
+        return False                                    # Windows has neither
+    if threading.current_thread() is not threading.main_thread():
+        return False                                    # only the main thread runs signal handlers
+    if signal.getitimer(signal.ITIMER_REAL)[0]:
+        return False                                    # the caller armed ITIMER_REAL; not ours to take
+    if hasattr(signal, "pthread_sigmask") and signal.SIGALRM in signal.pthread_sigmask(signal.SIG_BLOCK, set()):
+        return False                                    # blocked: the alarm would never be delivered
+    return True
+
+
+@contextlib.contextmanager
+def _match_deadline(budget: float = _MATCH_BUDGET_SECONDS) -> Any:
+    """Bound the enclosed regex work with SIGALRM; nested uses ride on the outermost deadline.
+
+    Where no alarm can be delivered this yields unguarded on purpose: the caller is either inside
+    the isolating child (whose parent enforces the budget by killing it) or has reached the
+    documented last resort in validate_instance, which says so.
+    """
+    if getattr(_deadline, "held", False) or not _alarm_deliverable():
+        yield
+        return
+    _deadline.held = True
+    try:
+        def _fire(_signum: int, _frame: Any) -> None:
+            raise _MatchTimeout
+
+        previous = signal.signal(signal.SIGALRM, _fire)
+        signal.setitimer(signal.ITIMER_REAL, budget)
+        try:
+            yield
+        finally:
+            # Cancel first, restore always: an alarm delivered between the two raises _MatchTimeout
+            # out of setitimer, and without the inner try this module's handler would stay
+            # installed in the caller's process.
+            try:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+            finally:
+                signal.signal(signal.SIGALRM, previous)
+    finally:
+        _deadline.held = False
+
+
+def _bounded(what: str, where: str, work: Callable[[], Any]) -> Any:
+    """Run one regex operation under the deadline; a timeout is the schema's verdict."""
+    try:
+        with _match_deadline():
+            return work()
+    except _MatchTimeout:
+        raise SchemaError(
+            f"{where}: {what} did not finish within {_MATCH_BUDGET_SECONDS:g}s and was abandoned; "
+            "the pattern backtracks on this input - rewrite it (a character class, or a literal "
+            "that must be consumed each repetition, instead of a quantified group)") from None
+
 
 def _unsafe_pattern(pattern: str) -> str | None:
-    """The reason a pattern is refused by every engine, or None when it is fine."""
+    """The reason a pattern is refused by every engine, or None when it is fine.
+
+    An early refusal with a message that names the mistake, NOT the safety guarantee: a scanner
+    only knows the shapes it enumerates. The guarantee is _match_deadline, which bounds every
+    match whatever the pattern looks like."""
     unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
     if unportable is not None:
         return f"'{unportable}' is outside the portable (ECMA-262) regex subset"
@@ -397,8 +488,11 @@ class MiniValidator:
             if reason is not None:
                 raise SchemaError(f"{where}/pattern: {reason} in {pattern!r}")
             try:
-                compiled = re.compile(pattern)
-            except re.error as exc:
+                # Bounded like a match: a{999999999999999999999999} raises OverflowError (not
+                # re.error) out of the C parser, and a large-but-legal repeat count builds a
+                # program big enough to matter.
+                compiled = _bounded(f"compiling {pattern!r}", f"{where}/pattern", lambda: re.compile(pattern))
+            except (re.error, OverflowError, MemoryError, RecursionError) as exc:
                 raise SchemaError(f"{where}/pattern: invalid regex {pattern!r}: {exc}") from exc
             self._regex[pattern] = compiled
         return compiled
@@ -522,8 +616,10 @@ class MiniValidator:
             errors.append(Issue(path, f"{_brief(value)} is too short (minLength {schema['minLength']})"))
         if "maxLength" in schema and len(value) > schema["maxLength"]:
             errors.append(Issue(path, f"{_brief(value)} is too long (maxLength {schema['maxLength']})"))
-        if "pattern" in schema and not self._compile(schema["pattern"], path).search(value):
-            errors.append(Issue(path, f"{_brief(value)} does not match {_canonical(schema['pattern'])}"))
+        if "pattern" in schema:
+            compiled = self._compile(schema["pattern"], path)
+            if not _bounded(f"matching {schema['pattern']!r}", path, lambda: compiled.search(value)):
+                errors.append(Issue(path, f"{_brief(value)} does not match {_canonical(schema['pattern'])}"))
         checker = _FORMATS.get(schema.get("format", ""))
         if checker is not None and not checker(value):
             errors.append(Issue(path, f"{_brief(value)} is not a {_canonical(schema['format'])}"))
@@ -579,7 +675,8 @@ class MiniValidator:
                 matched = True
                 self._validate(properties[name], value, child, errors)
             for pattern, sub in pattern_properties.items():
-                if self._compile(pattern, path).search(name):
+                compiled = self._compile(pattern, path)
+                if _bounded(f"matching {pattern!r}", path, lambda: compiled.search(name)):
                     matched = True
                     self._validate(sub, value, child, errors)
             if not matched and "additionalProperties" in schema:
@@ -646,10 +743,64 @@ def _descend_alternatives(errors: Any) -> list[tuple[Any, str]]:
     return flattened
 
 
+_CHILD_PROGRAM = """
+import importlib.util, json, sys
+
+spec = importlib.util.spec_from_file_location("_helios_config_schema_validator", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+request = json.loads(sys.stdin.read())
+try:
+    issues, engine = module.validate_instance(request["instance"], request["schema"], request["engine"])
+except module.SchemaError as exc:
+    print(json.dumps({"schema_error": str(exc)}))
+else:
+    print(json.dumps({"issues": [issue.__dict__ for issue in issues], "engine": engine}))
+"""
+
+
+def _validate_in_child(instance: Any, schema: Any, engine: str) -> tuple[list[Issue], str]:
+    """Validate in a child interpreter that is killed when the budget expires.
+
+    The bound where no alarm can be delivered: the child's regex work cannot outlive the timeout,
+    and a pattern that backtracks kills the child - never this process, which may be a service that
+    only imported the validator. One child per instance, so the cost is a process start per
+    manifest (about a second for the whole shipped sweep on Windows).
+    """
+    payload = json.dumps({"instance": instance, "schema": schema, "engine": engine})
+    try:
+        finished = subprocess.run(
+            [sys.executable, "-c", _CHILD_PROGRAM, str(Path(__file__).resolve())],
+            input=payload, capture_output=True, text=True, check=False,
+            timeout=_LIBRARY_PASS_BUDGET_SECONDS,
+            env={**os.environ, _ISOLATION_ENV: "1"})
+    except subprocess.TimeoutExpired:
+        raise SchemaError(
+            f"validating this instance did not finish within {_LIBRARY_PASS_BUDGET_SECONDS:g}s and the "
+            "isolated validator was killed; a pattern in the schema backtracks on it") from None
+    if finished.returncode != 0:
+        raise SchemaError(f"the isolated validator exited {finished.returncode}: {finished.stderr.strip()[:400]}")
+    answer = json.loads(finished.stdout)
+    if "schema_error" in answer:
+        raise SchemaError(answer["schema_error"])
+    return [Issue(item["path"], item["message"]) for item in answer["issues"]], answer["engine"]
+
+
 def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple[list[Issue], str]:
     """Return (issues, engine_used). engine: auto | jsonschema | builtin."""
     if engine not in ("auto", "jsonschema", "builtin"):
         raise ValueError(f"unknown engine {engine!r}")
+    if not _alarm_deliverable() and not os.environ.get(_ISOLATION_ENV):
+        # Nothing here can interrupt a match, so the whole pass moves into a child that can be
+        # killed. Inside that child the marker is set and the parent's timeout is the bound.
+        try:
+            return _validate_in_child(instance, schema, engine)
+        except (TypeError, ValueError, OSError):
+            # Not JSON-serializable, or no interpreter to spawn: validate here rather than refuse,
+            # and accept that this one pass has no bound. Reachable only off the main thread or on
+            # a platform without setitimer, never in CI.
+            pass
     use_library = engine == "jsonschema" or (engine == "auto" and jsonschema is not None)
     # One schema self-check for every engine - keyword shapes, $ref targets, regex portability and
     # the catastrophic-backtracking shape - so the library engine never accepts a schema that the
@@ -672,7 +823,14 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
             checker.checks(format_name)(lambda value, _check=check: not isinstance(value, str) or _check(value))
         validator = validator_class(schema, format_checker=checker)
         try:
-            raw_errors = list(validator.iter_errors(instance))
+            # python-jsonschema runs its own re matches and carries no timeout of its own, so the
+            # whole pass goes under one deadline: the guarantee holds for both engines.
+            with _match_deadline(_LIBRARY_PASS_BUDGET_SECONDS):
+                raw_errors = list(validator.iter_errors(instance))
+        except _MatchTimeout:
+            raise SchemaError(
+                f"validating this instance did not finish within {_LIBRARY_PASS_BUDGET_SECONDS:g}s and was "
+                "abandoned; a pattern in the schema backtracks on it") from None
         except RecursionError as exc:  # "$ref": "#" and friends never descend into the instance
             raise SchemaError("schema nesting deeper than the engine allows - a $ref cycle that never descends into the instance") from exc
         except Exception as exc:  # a $ref that does not resolve surfaces as a referencing error
@@ -699,10 +857,20 @@ def _reject_constant(token: str) -> Any:
     raise ValueError(f"non-finite number token {token!r} is not JSON")
 
 
+def _reject_overflowing_float(token: str) -> float:
+    # json.load silently maps a number too large for a double onto inf ("1e400"); inf is not a JSON
+    # number and System.Text.Json - the hub's binder - refuses the same token, so the file is
+    # unreadable here rather than valid with a value no consumer can hold.
+    value = float(token)
+    if not math.isfinite(value):
+        raise ValueError(f"number token {token!r} is out of range for a JSON number (it reads as {value})")
+    return value
+
+
 def load_json(path: Path, label: str) -> Any:
     try:
         with path.open(encoding="utf-8") as stream:
-            return json.load(stream, parse_constant=_reject_constant)
+            return json.load(stream, parse_constant=_reject_constant, parse_float=_reject_overflowing_float)
     except FileNotFoundError as exc:
         raise ValueError(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:
@@ -722,6 +890,17 @@ def _confined(repo_root: Path, relative: str, label: str) -> Path:
     return candidate
 
 
+def _ordinal_ignore_case(value: str) -> str:
+    """Fold `value` the way .NET's OrdinalIgnoreCase does, so both engines judge one manifest alike.
+
+    That comparer is a per-CHARACTER invariant uppercase (a simple mapping): it folds 'ς' onto 'Σ',
+    where str.lower() keeps them apart, and leaves 'ß' alone, where str.upper() expands it to 'SS'.
+    Uppercasing character by character and keeping any character whose uppercase is not a single
+    character reproduces it.
+    """
+    return "".join(upper if len(upper := character.upper()) == 1 else character for character in value)
+
+
 def _check_aihub_names(instance: Any) -> list[Issue]:
     """Provider keys and enabled CLI-agent names share ONE registry in the hub
     (AIHub.cs: `_byProvider[agent.Provider] = agent`, providers registered first): a CLI agent
@@ -737,7 +916,7 @@ def _check_aihub_names(instance: Any) -> list[Issue]:
         for key, entry in providers.items():
             if isinstance(entry, dict) and entry.get("enabled") is False:
                 continue  # ProviderFactory.CreateAll skips a disabled provider before registering it
-            owners.setdefault(str(key).lower(), f"providers.{key}")
+            owners.setdefault(_ordinal_ignore_case(str(key)), f"providers.{key}")
     agents = instance.get("cliAgents")
     if isinstance(agents, list):
         for index, agent in enumerate(agents):
@@ -746,12 +925,13 @@ def _check_aihub_names(instance: Any) -> list[Issue]:
             name = agent.get("name")
             if not isinstance(name, str):
                 continue
-            owner = owners.get(name.lower())
+            folded = _ordinal_ignore_case(name)
+            owner = owners.get(folded)
             if owner is None:
-                owners[name.lower()] = f"cliAgents[{index}]"
+                owners[folded] = f"cliAgents[{index}]"
             else:
                 issues.append(Issue(f"$.cliAgents[{index}].name",
-                                    f"{name!r} is already registered by {owner}; provider keys and CLI-agent names are one registry in the hub"))
+                                    f"'{name}' is already registered by {owner}; provider keys and CLI-agent names are one registry in the hub"))
     return issues
 
 
@@ -792,8 +972,105 @@ def _check_aihub_base_urls(instance: Any) -> list[Issue]:
     return issues
 
 
+def _chain_entries(instance: Any) -> list[tuple[str, list[Any]]]:
+    """(json path, chain) for routing.defaultChain and every routing.taskRouting entry."""
+    routing = instance.get("routing") if isinstance(instance, dict) else None
+    if not isinstance(routing, dict):
+        return []
+    chains: list[tuple[str, list[Any]]] = []
+    if isinstance(routing.get("defaultChain"), list):
+        chains.append(("$.routing.defaultChain", routing["defaultChain"]))
+    task_routing = routing.get("taskRouting")
+    if isinstance(task_routing, dict):
+        for key, chain in task_routing.items():
+            if isinstance(chain, list):
+                chains.append((f"$.routing.taskRouting.{key}", chain))
+    return chains
+
+
+def _check_aihub_chains(instance: Any) -> list[Issue]:
+    """A chain entry that names nothing, or a chain of nothing but disabled entries, is a dead
+    route that reads as configured: AIHub looks each entry up in the registry it built from
+    providers + enabled CLI agents and simply skips what is not there (AIHub.cs), so a typo
+    degrades the chain silently and an all-disabled chain fails every request it serves."""
+    issues: list[Issue] = []
+    if not isinstance(instance, dict):
+        return issues
+    known: set[str] = set()
+    live: set[str] = set()
+    providers = instance.get("providers")
+    if isinstance(providers, dict):
+        for key, entry in providers.items():
+            known.add(_ordinal_ignore_case(str(key)))
+            if not (isinstance(entry, dict) and entry.get("enabled") is False):
+                live.add(_ordinal_ignore_case(str(key)))
+    agents = instance.get("cliAgents")
+    if isinstance(agents, list):
+        for agent in agents:
+            name = agent.get("name") if isinstance(agent, dict) else None
+            if not isinstance(name, str):
+                continue
+            known.add(_ordinal_ignore_case(name))
+            if agent.get("enabled") is not False:
+                live.add(_ordinal_ignore_case(name))
+    if not known:
+        return issues  # nothing to resolve against; the schema's own required list reports that
+    for path, chain in _chain_entries(instance):
+        for index, entry in enumerate(chain):
+            if isinstance(entry, str) and _ordinal_ignore_case(entry) not in known:
+                issues.append(Issue(f"{path}[{index}]",
+                                    f"'{entry}' names neither a provider key nor a CLI agent in this file; "
+                                    "the hub skips an entry it cannot resolve"))
+        if chain and not any(isinstance(entry, str) and _ordinal_ignore_case(entry) in live for entry in chain):
+            issues.append(Issue(path, "no entry in this chain is an enabled provider or CLI agent; "
+                                      "every request routed here would fail with no backend to try"))
+    return issues
+
+
 def _check_aihub(instance: Any) -> list[Issue]:
-    return _check_aihub_names(instance) + _check_aihub_base_urls(instance)
+    return _check_aihub_names(instance) + _check_aihub_base_urls(instance) + _check_aihub_chains(instance)
+
+
+def _check_github_milestones(instance: Any) -> list[Issue]:
+    """apply-milestones.ps1 matches live milestones case-insensitively, so two entries differing
+    only by case would both target one milestone: the second PATCH overwrites the first."""
+    entries = instance.get("milestones") if isinstance(instance, dict) else instance
+    prefix = "$.milestones" if isinstance(instance, dict) else "$"
+    if not isinstance(entries, list):
+        return []
+    issues: list[Issue] = []
+    seen: dict[str, int] = {}
+    for index, entry in enumerate(entries):
+        title = entry.get("title") if isinstance(entry, dict) else None
+        if not isinstance(title, str):
+            continue
+        first = seen.setdefault(_ordinal_ignore_case(title), index)
+        if first != index:
+            issues.append(Issue(f"{prefix}[{index}].title",
+                                f"'{title}' repeats entry {first} ('{entries[first].get('title')}'); "
+                                "milestones are matched case-insensitively"))
+    return issues
+
+
+def _check_fleet_pools(instance: Any) -> list[Issue]:
+    """A pool name is an identity: start-fleet.ps1 derives the assignee prefix and the Hermes board
+    from it and scale-fleet.ps1 keys per-pool state by it, so two pools sharing a name share lanes
+    and one silently absorbs the other's work."""
+    pools = instance.get("pools") if isinstance(instance, dict) else None
+    if not isinstance(pools, list):
+        return []
+    issues: list[Issue] = []
+    seen: dict[str, int] = {}
+    for index, pool in enumerate(pools):
+        name = pool.get("name") if isinstance(pool, dict) else None
+        if not isinstance(name, str):
+            continue
+        first = seen.setdefault(_ordinal_ignore_case(name), index)
+        if first != index:
+            issues.append(Issue(f"$.pools[{index}].name",
+                                f"'{name}' repeats pool {first}; a pool name is its board, its assignee "
+                                "prefix and its scaling key"))
+    return issues
 
 
 def _check_github_labels(instance: Any) -> list[Issue]:
@@ -811,13 +1088,10 @@ def _check_github_labels(instance: Any) -> list[Issue]:
         name = entry.get("name") if isinstance(entry, dict) else None
         if not isinstance(name, str):
             continue
-        # .lower(), not .casefold(): the C# twin compares OrdinalIgnoreCase (simple case
-        # mapping), so casefold - which folds 'straße' onto 'strasse' - would make the two
-        # engines disagree about a manifest.
-        first = seen.setdefault(name.lower(), index)
+        first = seen.setdefault(_ordinal_ignore_case(name), index)
         if first != index:
             issues.append(Issue(f"{prefix}[{index}].name",
-                                f"{name!r} repeats entry {first} ({entries[first].get('name')!r}); GitHub matches label names case-insensitively"))
+                                f"'{name}' repeats entry {first} ('{entries[first].get('name')}'); GitHub matches label names case-insensitively"))
     return issues
 
 
@@ -840,7 +1114,7 @@ def _check_manifest_map(instance: Any) -> list[Issue]:
             continue
         first = seen.setdefault(_normalize_manifest_key(manifest), index)
         if first != index:
-            issues.append(Issue(f"$.mappings[{index}].manifest", f"{manifest!r} is already mapped by entry {first}; a manifest has exactly one schema"))
+            issues.append(Issue(f"$.mappings[{index}].manifest", f"'{manifest}' is already mapped by entry {first}; a manifest has exactly one schema"))
     return issues
 
 
@@ -850,6 +1124,8 @@ _SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
     "helios://config/schemas/aihub.schema.json": _check_aihub,
     "helios://config/schemas/github-labels.schema.json": _check_github_labels,
     "helios://config/schemas/manifests.schema.json": _check_manifest_map,
+    "helios://config/schemas/github-milestones.schema.json": _check_github_milestones,
+    "helios://config/schemas/fleet-topology.schema.json": _check_fleet_pools,
 }
 
 

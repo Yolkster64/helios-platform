@@ -364,11 +364,11 @@ internal static class JsonSchemaLite
             if (schema.TryGetProperty("enum", out var options)
                 && !options.EnumerateArray().Any(option => JsonEquals(instance, option)))
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is not one of {Canonical(options)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is not one of {Display(options)}"));
             }
             if (schema.TryGetProperty("const", out var constant) && !JsonEquals(instance, constant))
             {
-                errors.Add(new Issue(path, $"{Canonical(constant)} was expected"));
+                errors.Add(new Issue(path, $"{Display(constant)} was expected"));
             }
 
             switch (instance.ValueKind)
@@ -477,9 +477,9 @@ internal static class JsonSchemaLite
             {
                 errors.Add(new Issue(path, $"{Brief(instance)} is too long (maxLength {maxLength.GetInt32()})"));
             }
-            if (schema.TryGetProperty("pattern", out var pattern) && !Compile(pattern, path).IsMatch(value))
+            if (schema.TryGetProperty("pattern", out var pattern) && !Matches(Compile(pattern, path), value, path))
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} does not match {Canonical(pattern)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} does not match {Display(pattern)}"));
             }
             if (schema.TryGetProperty("format", out var format) && format.ValueKind == JsonValueKind.String)
             {
@@ -492,7 +492,7 @@ internal static class JsonSchemaLite
                 };
                 if (!ok)
                 {
-                    errors.Add(new Issue(path, $"{Brief(instance)} is not a {Canonical(format)}"));
+                    errors.Add(new Issue(path, $"{Brief(instance)} is not a {Display(format)}"));
                 }
             }
         }
@@ -509,13 +509,16 @@ internal static class JsonSchemaLite
             @"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
             RegexOptions.ECMAScript, RegexTimeout);
 
-        // The two catastrophic shapes, found by walking the pattern rather than by matching it
+        // Two catastrophic shapes, found by walking the pattern rather than by matching it
         // with another regex (a regex cannot skip character classes or count alternatives
         // reliably): a group whose whole content is ONE quantified atom, quantified again
         // (^(a+)+$, (\d*)*, ([a-z]+){2,}, (x{2,})+, (a+?)+), and a group carrying a top-level
         // alternation, quantified (^(a|aa)+$, (?:ab|a)*, (a|aa|aaa)+). Both backtrack
-        // exponentially; refused before the regex is built (this engine also runs every match
-        // under RegexTimeout). A group that must consume a literal each iteration - ([a-z]+/)*,
+        // exponentially; refused before the regex is built, with a message that names the mistake.
+        // This scan is NOT the safety guarantee - it only knows the shapes it enumerates, and
+        // ^(a+a+)+$ is not one of them. The guarantee is RegexTimeout: every match this engine runs
+        // is bounded by it whatever the pattern looks like (Matches below turns a timeout into a
+        // verdict, as _bounded does in the Python twin). A group that must consume a literal each iteration - ([a-z]+/)*,
         // (?:ab*)*c - is linear; a bounded quantifier - (a|b)? - is safe; and a '(' or '|' inside
         // a character class - [(a|b)+] - is a literal, not structure. The twin of
         // _catastrophic_shape in scripts/validation/validate_config_schemas.py.
@@ -551,11 +554,15 @@ internal static class JsonSchemaLite
             {
                 return (0, false); // not a quantifier, just a literal brace
             }
+            // TryParse, not Parse: {999999999999999999999999} is a repetition count no int holds and
+            // an OverflowException here would escape the schema self-check as a crash rather than a
+            // verdict. A count too large to parse is certainly greater than one.
             if (comma < 0)
             {
-                return (close - index + 1, int.Parse(low, CultureInfo.InvariantCulture) > 1);
+                return (close - index + 1, !int.TryParse(low, NumberStyles.None, CultureInfo.InvariantCulture, out var exact) || exact > 1);
             }
-            return (close - index + 1, high!.Length == 0 || int.Parse(high, CultureInfo.InvariantCulture) > 1);
+            return (close - index + 1, high!.Length == 0
+                || !int.TryParse(high, NumberStyles.None, CultureInfo.InvariantCulture, out var upper) || upper > 1);
         }
 
         private sealed class GroupFrame
@@ -676,6 +683,26 @@ internal static class JsonSchemaLite
             return null;
         }
 
+        /// <summary>
+        /// One match under the compiled pattern's Regex timeout. A pattern that backtracks is the
+        /// schema's problem and is reported as one, never as an exception out of the MCP tool; the
+        /// Python twin's _bounded says the same thing through SIGALRM.
+        /// </summary>
+        private static bool Matches(Regex regex, string value, string where)
+        {
+            try
+            {
+                return regex.IsMatch(value);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new SchemaException(
+                    $"{where}/pattern: matching '{regex}' did not finish within {RegexTimeout.TotalSeconds:0.#}s and was abandoned; " +
+                    "the pattern backtracks on this input - rewrite it (a character class, or a literal that must be " +
+                    "consumed each repetition, instead of a quantified group)");
+            }
+        }
+
         private static bool IsDateTime(string value) =>
             DateTimeShape.IsMatch(value)
             && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _);
@@ -691,19 +718,19 @@ internal static class JsonSchemaLite
             var value = instance.GetDouble();
             if (schema.TryGetProperty("minimum", out var minimum) && value < minimum.GetDouble())
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is less than the minimum of {Canonical(minimum)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is less than the minimum of {Display(minimum)}"));
             }
             if (schema.TryGetProperty("maximum", out var maximum) && value > maximum.GetDouble())
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is greater than the maximum of {Canonical(maximum)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is greater than the maximum of {Display(maximum)}"));
             }
             if (schema.TryGetProperty("exclusiveMinimum", out var exclusiveMinimum) && value <= exclusiveMinimum.GetDouble())
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is less than or equal to the minimum of {Canonical(exclusiveMinimum)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is less than or equal to the minimum of {Display(exclusiveMinimum)}"));
             }
             if (schema.TryGetProperty("exclusiveMaximum", out var exclusiveMaximum) && value >= exclusiveMaximum.GetDouble())
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is greater than or equal to the maximum of {Canonical(exclusiveMaximum)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is greater than or equal to the maximum of {Display(exclusiveMaximum)}"));
             }
         }
 
@@ -786,7 +813,7 @@ internal static class JsonSchemaLite
                 {
                     foreach (var candidate in patternProperties.EnumerateObject())
                     {
-                        if (Compile(JsonDocument.Parse($"\"{JsonEncodedText.Encode(candidate.Name)}\"").RootElement, path).IsMatch(member.Name))
+                        if (Matches(Compile(JsonDocument.Parse($"\"{JsonEncodedText.Encode(candidate.Name)}\"").RootElement, path), member.Name, path))
                         {
                             matched = true;
                             Validate(candidate.Value, member.Value, child, errors);
@@ -847,7 +874,9 @@ internal static class JsonSchemaLite
         {
             if (left.ValueKind == JsonValueKind.Number && right.ValueKind == JsonValueKind.Number)
             {
-                return left.GetDouble() == right.GetDouble();
+                // As written, not as doubles: 9007199254740992 and 9007199254740993 share one
+                // double. See CanonicalNumber.
+                return CanonicalNumber(left) == CanonicalNumber(right);
             }
             if (left.ValueKind is JsonValueKind.True or JsonValueKind.False
                 || right.ValueKind is JsonValueKind.True or JsonValueKind.False)
@@ -861,31 +890,74 @@ internal static class JsonSchemaLite
         private static string Brief(JsonElement element)
         {
             const int limit = 120;
-            var text = Canonical(element);
+            var text = Display(element);
             return text.Length <= limit ? text : text[..(limit - 3)] + "...";
         }
 
-        /// <summary>Compact JSON with object keys sorted, so equality and messages are order-independent.</summary>
-        private static string Canonical(JsonElement element)
+        /// <summary>Compact JSON, object keys sorted: the equality key, with numbers normalized exactly.</summary>
+        private static string Canonical(JsonElement element) => Render(element, exactNumbers: true);
+
+        /// <summary>The same shape for a message, where a number reads back as the manifest wrote it.</summary>
+        private static string Display(JsonElement element) => Render(element, exactNumbers: false);
+
+        private static string Render(JsonElement element, bool exactNumbers)
         {
             switch (element.ValueKind)
             {
                 case JsonValueKind.Object:
                     var members = element.EnumerateObject()
                         .OrderBy(member => member.Name, StringComparer.Ordinal)
-                        .Select(member => JsonSerializer.Serialize(member.Name) + ":" + Canonical(member.Value));
+                        .Select(member => JsonSerializer.Serialize(member.Name) + ":" + Render(member.Value, exactNumbers));
                     return "{" + string.Join(",", members) + "}";
                 case JsonValueKind.Array:
-                    return "[" + string.Join(",", element.EnumerateArray().Select(Canonical)) + "]";
+                    return "[" + string.Join(",", element.EnumerateArray().Select(item => Render(item, exactNumbers))) + "]";
                 case JsonValueKind.String:
                     // Compare the VALUE, not the source text: "\u0041" and "A" are the same string.
                     return JsonSerializer.Serialize(element.GetString());
                 case JsonValueKind.Number:
-                    // 1.0 and 1 are the same number to JSON Schema.
-                    return element.GetDouble().ToString("R", CultureInfo.InvariantCulture);
+                    return exactNumbers ? CanonicalNumber(element) : element.GetRawText();
                 default:
                     return element.GetRawText();
             }
         }
+
+        /// <summary>
+        /// Canonical text for a JSON number, exact for every token JSON can spell. 1, 1.0 and 1e0 are
+        /// one number and must share this text; 9007199254740992 and 9007199254740993 are two, and so
+        /// are 0 and 1e-29 - which is why neither double (it rounds the first pair together) nor
+        /// decimal (it rounds 1e-29 to zero) can produce it. The token is normalized arithmetically
+        /// instead: sign, the significant digits with leading and trailing zeros removed, and the
+        /// power of ten that scales them. Python's json keeps integers exact and compares numbers
+        /// numerically, so this is also what keeps the two engines agreeing about one manifest.
+        /// </summary>
+        private static string CanonicalNumber(JsonElement element)
+        {
+            var raw = element.GetRawText();
+            var negative = raw.StartsWith('-');
+            var body = negative ? raw[1..] : raw;
+            long exponent = 0;
+            var exponentAt = body.IndexOfAny(new[] { 'e', 'E' });
+            if (exponentAt >= 0)
+            {
+                if (!long.TryParse(body[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+                {
+                    return raw; // an exponent no long holds: the token as written is its own key
+                }
+                body = body[..exponentAt];
+            }
+            var point = body.IndexOf('.');
+            if (point >= 0)
+            {
+                exponent -= body.Length - point - 1;
+                body = string.Concat(body[..point], body[(point + 1)..]);
+            }
+            var digits = body.TrimStart('0');
+            var significant = digits.TrimEnd('0');
+            exponent += digits.Length - significant.Length;
+            return significant.Length == 0
+                ? "0"
+                : (negative ? "-" : "") + significant + "e" + exponent.ToString(CultureInfo.InvariantCulture);
+        }
+
     }
 }

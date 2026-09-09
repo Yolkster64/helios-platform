@@ -47,6 +47,16 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           REPO: ${{ github.repository }}
         run: |
+          # config/connectors.json declares linear.enabled; honour it here, or the switch
+          # would be documentation.
+          # `.linear.enabled // true` would NOT work: jq's alternative operator treats false
+          # exactly like null, so a disabled connector would sync anyway. Only an explicit false
+          # disables; absent, null or anything else leaves it enabled.
+          if [ "$(jq -r 'if .linear.enabled == false then "off" else "on" end' config/connectors.json)" = "off" ]; then
+            echo "linear.enabled is false in config/connectors.json — skipping."
+            exit 0
+          fi
+
           if [ -z "$LINEAR_API_KEY" ]; then
             echo "LINEAR_API_KEY is not configured — skipping (see config/connectors.json)."
             exit 0

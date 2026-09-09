@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using HELIOS.AIHub.Configuration;
 using HELIOS.Mcp;
 using ModelContextProtocol;
@@ -442,8 +443,11 @@ public sealed class McpConfigToolTests : IDisposable
     public void AihubProviderRules_ModelAndBaseUrl(string providerJson, bool expectedValid)
     {
         var root = CreateRepoRoot();
+        // "live" is here so the chain resolves to an enabled provider whatever the case under test
+        // does to "p": a chain of nothing but disabled names is its own finding (AihubChains).
         WriteManifest(root, "config/aihub.json", $$"""
-            { "providers": { "p": {{providerJson}} }, "routing": { "defaultChain": ["p"], "taskRouting": {} } }
+            { "providers": { "p": {{providerJson}}, "live": { "type": "anthropic", "apiKeyEnv": "ANTHROPIC_API_KEY" } },
+              "routing": { "defaultChain": ["live"], "taskRouting": {} } }
             """);
 
         var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
@@ -662,6 +666,119 @@ public sealed class McpConfigToolTests : IDisposable
 
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Theory]
+    // 9007199254740992 and 9007199254740993 are adjacent integers that share one double: reducing a
+    // JSON number to double here made them equal under enum, const and uniqueItems - and disagreed
+    // with the Python engine, whose integers stay exact.
+    [InlineData("""{ "enum": [9007199254740992] }""", "9007199254740993", false)]
+    [InlineData("""{ "enum": [9007199254740992] }""", "9007199254740992", true)]
+    [InlineData("""{ "const": 1 }""", "1.0", true)]
+    [InlineData("""{ "const": 1.0 }""", "1", true)]
+    [InlineData("""{ "type": "array", "uniqueItems": true }""", "[9007199254740992, 9007199254740993]", true)]
+    [InlineData("""{ "type": "array", "uniqueItems": true }""", "[1, 1.0]", false)]
+    // decimal cannot carry it either: 1e-29 rounds to zero there, and integers beyond decimal's
+    // range collapse through double. Normalizing the token arithmetically holds for both.
+    [InlineData("""{ "const": 0 }""", "1e-29", false)]
+    [InlineData("""{ "type": "array", "uniqueItems": true }""", "[0, 1e-29]", true)]
+    [InlineData("""{ "type": "array", "uniqueItems": true }""", "[1000000000000000000000000000000, 1000000000000000000000000000001]", true)]
+    [InlineData("""{ "const": 100 }""", "1e2", true)]
+    [InlineData("""{ "const": 100 }""", "1.0e2", true)]
+    public void JsonSchemaLite_ComparesNumbersAsWrittenNotAsDoubles(string schemaJson, string instanceJson, bool expectedValid)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_RepetitionCountTooLargeForAnInt_IsASchemaError()
+    {
+        // QuantifierAt used int.Parse: this count overflows it, and the overflow escaped the schema
+        // self-check as a crash rather than a verdict. The Python twin sees OverflowError from
+        // re.compile and reports the same way.
+        using var schema = JsonDocument.Parse("""{ "type": "string", "pattern": "a{999999999999999999999999}" }""");
+        using var instance = JsonDocument.Parse("\"a\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("invalid regex", ex.Message);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_BacktrackingPattern_IsAbandonedNotEndured()
+    {
+        // ^(a+a+)+$ is not a shape CatastrophicShape names - that is the point. A scanner knows
+        // only the shapes it enumerates; RegexTimeout bounds the match either way.
+        using var schema = JsonDocument.Parse("""{ "type": "string", "pattern": "^(a+a+)+$" }""");
+        using var instance = JsonDocument.Parse($"\"{new string('a', 40)}b\"");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("abandoned", ex.Message);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(30), $"took {started.Elapsed}");
+    }
+
+    [Theory]
+    // A chain entry the hub cannot resolve is skipped silently, so a typo degrades the chain and a
+    // chain of nothing but disabled names fails every request routed to it.
+    [InlineData("""["live"]""", true)]
+    [InlineData("""["parked", "cx"]""", true)]
+    [InlineData("""["parked"]""", false)]
+    [InlineData("""["typo"]""", false)]
+    [InlineData("""["live", "typo"]""", false)]
+    public void AihubRoutingChains_MustBeReachable(string chainJson, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", $$"""
+            { "providers": { "live": { "type": "ollama", "model": "llama3" }, "parked": { "type": "ollama", "model": "llama3", "enabled": false } },
+              "cliAgents": [ { "name": "cx", "command": "codex", "argsTemplate": "exec {prompt}" } ],
+              "routing": { "defaultChain": ["live"], "taskRouting": { "code_review": {{chainJson}} } } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("""{ "milestones": [ { "title": "Control fabric" }, { "title": "control FABRIC" } ] }""", "$.milestones[1].title")]
+    [InlineData("""[ { "title": "Owner setup" }, { "title": "owner setup" } ]""", "$[1].title")]
+    // OrdinalIgnoreCase folds 'ς' onto 'Σ'; the Python twin folds the same way (_ordinal_ignore_case).
+    [InlineData("""[ { "title": "\u03a3" }, { "title": "\u03c2" } ]""", "$[1].title")]
+    public void DuplicateMilestoneTitles_AreReportedCaseInsensitively(string manifestJson, string expectedPath)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/github/milestones.json", manifestJson);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/github/milestones.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { expectedPath }, doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
+    }
+
+    [Fact]
+    public void DuplicateFleetPoolNames_AreReported()
+    {
+        var root = CreateRepoRoot();
+        var topology = JsonNode.Parse(File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fleet", "fleet-topology.json")))!;
+        var pools = topology["pools"]!.AsArray();
+        pools.Add(JsonNode.Parse(pools[0]!.ToJsonString())!);
+        WriteManifest(root, "config/fleet/fleet-topology.json", topology.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fleet/fleet-topology.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Equal(new[] { $"$.pools[{pools.Count - 1}].name" },
+            doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).ToArray());
     }
 
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>

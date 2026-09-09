@@ -308,6 +308,8 @@ internal static class ManifestSemantics
     private const string AihubSchemaId = "helios://config/schemas/aihub.schema.json";
     private const string LabelsSchemaId = "helios://config/schemas/github-labels.schema.json";
     private const string ManifestsSchemaId = "helios://config/schemas/manifests.schema.json";
+    private const string MilestonesSchemaId = "helios://config/schemas/github-milestones.schema.json";
+    private const string FleetTopologySchemaId = "helios://config/schemas/fleet-topology.schema.json";
 
     public static IReadOnlyList<JsonSchemaLite.Issue> Check(JsonElement schema, JsonElement instance)
     {
@@ -319,9 +321,11 @@ internal static class ManifestSemantics
         }
         return id.GetString() switch
         {
-            AihubSchemaId => AihubNames(instance).Concat(AihubBaseUrls(instance)).ToList(),
+            AihubSchemaId => AihubNames(instance).Concat(AihubBaseUrls(instance)).Concat(AihubChains(instance)).ToList(),
             LabelsSchemaId => LabelNames(instance),
             ManifestsSchemaId => MappingKeys(instance),
+            MilestonesSchemaId => MilestoneTitles(instance),
+            FleetTopologySchemaId => FleetPoolNames(instance),
             _ => Array.Empty<JsonSchemaLite.Issue>(),
         };
     }
@@ -443,6 +447,185 @@ internal static class ManifestSemantics
             else
             {
                 seen[key] = position;
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// A chain entry that names nothing, or a chain of nothing but disabled entries, is a dead route
+    /// that reads as configured: AIHub resolves each entry against the registry it built from
+    /// providers plus enabled CLI agents and skips what is not there, so a typo degrades the chain
+    /// silently and an all-disabled chain fails every request routed to it. Mirrors the Python
+    /// engine's _check_aihub_chains.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> AihubChains(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object)
+        {
+            return issues;
+        }
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (instance.TryGetProperty("providers", out var providers) && providers.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var provider in providers.EnumerateObject())
+            {
+                known.Add(provider.Name);
+                var disabled = provider.Value.ValueKind == JsonValueKind.Object
+                    && provider.Value.TryGetProperty("enabled", out var providerEnabled)
+                    && providerEnabled.ValueKind == JsonValueKind.False;
+                if (!disabled)
+                {
+                    live.Add(provider.Name);
+                }
+            }
+        }
+        if (instance.TryGetProperty("cliAgents", out var agents) && agents.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var agent in agents.EnumerateArray())
+            {
+                if (agent.ValueKind != JsonValueKind.Object
+                    || !agent.TryGetProperty("name", out var name)
+                    || name.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+                known.Add(name.GetString()!);
+                if (!(agent.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.False))
+                {
+                    live.Add(name.GetString()!);
+                }
+            }
+        }
+        if (known.Count == 0)
+        {
+            return issues; // nothing to resolve against; the schema's required list reports that
+        }
+        foreach (var (path, chain) in Chains(instance))
+        {
+            var entries = chain.EnumerateArray().ToList();
+            for (var index = 0; index < entries.Count; index++)
+            {
+                if (entries[index].ValueKind == JsonValueKind.String && !known.Contains(entries[index].GetString()!))
+                {
+                    issues.Add(new JsonSchemaLite.Issue($"{path}[{index}]",
+                        $"'{entries[index].GetString()}' names neither a provider key nor a CLI agent in this file; the hub skips an entry it cannot resolve"));
+                }
+            }
+            if (entries.Count > 0 && !entries.Any(entry => entry.ValueKind == JsonValueKind.String && live.Contains(entry.GetString()!)))
+            {
+                issues.Add(new JsonSchemaLite.Issue(path,
+                    "no entry in this chain is an enabled provider or CLI agent; every request routed here would fail with no backend to try"));
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>routing.defaultChain and every routing.taskRouting entry, with its JSON path.</summary>
+    private static List<(string Path, JsonElement Chain)> Chains(JsonElement instance)
+    {
+        var chains = new List<(string, JsonElement)>();
+        if (!instance.TryGetProperty("routing", out var routing) || routing.ValueKind != JsonValueKind.Object)
+        {
+            return chains;
+        }
+        if (routing.TryGetProperty("defaultChain", out var defaultChain) && defaultChain.ValueKind == JsonValueKind.Array)
+        {
+            chains.Add(("$.routing.defaultChain", defaultChain));
+        }
+        if (routing.TryGetProperty("taskRouting", out var taskRouting) && taskRouting.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var entry in taskRouting.EnumerateObject())
+            {
+                if (entry.Value.ValueKind == JsonValueKind.Array)
+                {
+                    chains.Add(($"$.routing.taskRouting.{entry.Name}", entry.Value));
+                }
+            }
+        }
+        return chains;
+    }
+
+    /// <summary>
+    /// apply-milestones.ps1 matches live milestones case-insensitively, so two entries differing
+    /// only by case target one milestone and the second PATCH overwrites the first.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> MilestoneTitles(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        JsonElement entries;
+        string prefix;
+        if (instance.ValueKind == JsonValueKind.Object && instance.TryGetProperty("milestones", out var milestones))
+        {
+            entries = milestones;
+            prefix = "$.milestones";
+        }
+        else
+        {
+            entries = instance;
+            prefix = "$";
+        }
+        if (entries.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, (int Index, string Title)>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var entry in entries.EnumerateArray())
+        {
+            var position = index++;
+            if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("title", out var title) || title.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var text = title.GetString()!;
+            if (seen.TryGetValue(text, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"{prefix}[{position}].title",
+                    $"'{text}' repeats entry {first.Index} ('{first.Title}'); milestones are matched case-insensitively"));
+            }
+            else
+            {
+                seen[text] = (position, text);
+            }
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// A pool name is an identity: start-fleet.ps1 derives the assignee prefix and the Hermes board
+    /// from it and scale-fleet.ps1 keys per-pool state by it, so two pools sharing a name share
+    /// lanes and one silently absorbs the other's work.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> FleetPoolNames(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("pools", out var pools)
+            || pools.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var pool in pools.EnumerateArray())
+        {
+            var position = index++;
+            if (pool.ValueKind != JsonValueKind.Object || !pool.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var text = name.GetString()!;
+            if (seen.TryGetValue(text, out var first))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.pools[{position}].name",
+                    $"'{text}' repeats pool {first}; a pool name is its board, its assignee prefix and its scaling key"));
+            }
+            else
+            {
+                seen[text] = position;
             }
         }
         return issues;
