@@ -354,7 +354,9 @@ class ValidateAllDelegationTests(unittest.TestCase):
             self.assertEqual(pathlib.Path(loaded.__file__).resolve(),
                              (ROOT / "scripts" / "validation" / "validate_config_schemas.py").resolve())
 
-    def test_unloadable_trusted_validator_is_a_warning_not_a_crash(self) -> None:
+    def test_unloadable_trusted_validator_is_an_error_not_a_crash(self) -> None:
+        """The schema check is part of the sweep: a validator that cannot load must fail it
+        (exit 1), never leave it green with every mapped manifest unchecked."""
         va = self._load_validate_all()
         with tempfile.TemporaryDirectory() as temp:
             broken = pathlib.Path(temp) / "validate_config_schemas.py"
@@ -362,8 +364,9 @@ class ValidateAllDelegationTests(unittest.TestCase):
             va.trusted_validator = lambda: broken
             report = va.Report()
             va.check_config_schemas([ROOT / "config"], report)
-            self.assertEqual(report.errors, [])
-            self.assertTrue(any("schema check skipped" in w and "RuntimeError" in w for w in report.warnings), report.warnings)
+            self.assertEqual(report.checked, 0)
+            self.assertTrue(any("could not load the config schema validator" in e and "RuntimeError" in e for e in report.errors), report.errors)
+            self.assertFalse(any("schema check skipped" in w for w in report.warnings), report.warnings)
 
     def test_real_checkout_config_manifests_are_checked(self) -> None:
         va = self._load_validate_all()
@@ -432,3 +435,143 @@ class EngineParityTests(unittest.TestCase):
             for engine in target.available_engines():
                 with self.assertRaises(target.SchemaError, msg=f"{engine} {pattern}"):
                     target.validate_instance("abc", {"type": "string", "pattern": pattern}, engine=engine)
+
+
+class HardeningTests(unittest.TestCase):
+    """Round 4 of PR #252: the two engines refuse the same malformed schemas, read the same JSON,
+    stay inside the checkout, and enforce the rules a schema cannot express."""
+
+    def _cli(self, *args: str) -> tuple[int, str]:
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "validation" / "validate_config_schemas.py"), *args],
+                              capture_output=True, text=True, cwd=ROOT)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_cyclic_ref_is_a_schema_error_under_every_engine(self) -> None:
+        for schema in ({"$ref": "#"}, {"$defs": {"a": {"$ref": "#/$defs/b"}, "b": {"$ref": "#/$defs/a"}}, "$ref": "#/$defs/a"}):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(engine, schema)) as caught:
+                    target.validate_instance({"a": 1}, schema, engine=engine)
+                self.assertIn("cycle", str(caught.exception))
+        with tempfile.TemporaryDirectory() as temp:
+            s = pathlib.Path(temp) / "s.json"; m = pathlib.Path(temp) / "m.json"
+            s.write_text(json.dumps({"$ref": "#"}), encoding="utf-8"); m.write_text("{}", encoding="utf-8")
+            for engine in target.available_engines():
+                code, out = self._cli(str(m), "--schema", str(s), "--engine", engine)
+                self.assertEqual(code, 2, (engine, out))
+                self.assertNotIn("Traceback", out, engine)
+
+    def test_non_finite_json_constants_are_not_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            s = pathlib.Path(temp) / "s.json"; m = pathlib.Path(temp) / "m.json"
+            s.write_text(json.dumps({"type": "object", "properties": {"x": {"type": "number", "minimum": 0}}}), encoding="utf-8")
+            for token in ("NaN", "Infinity", "-Infinity"):
+                m.write_text('{"x": %s}' % token, encoding="utf-8")
+                code, out = self._cli(str(m), "--schema", str(s))
+                self.assertEqual(code, 1, (token, out))  # an unreadable manifest is an invalid manifest
+                self.assertIn("non-finite number token", out, token)
+            # ... and in a schema it is an unusable input (exit 2), never a silently accepted number.
+            s.write_text('{"type": "number", "minimum": NaN}', encoding="utf-8"); m.write_text("1", encoding="utf-8")
+            code, out = self._cli(str(m), "--schema", str(s))
+            self.assertEqual(code, 2, out)
+
+    def test_mapped_paths_are_confined_to_the_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp) / "tree"
+            (root / "config" / "schemas").mkdir(parents=True)
+            secret = pathlib.Path(temp) / "secret.json"
+            secret.write_text(json.dumps({"const": "TOP-SECRET-VALUE"}), encoding="utf-8")
+            (root / "config" / "thing.json").write_text("{}", encoding="utf-8")
+            for escaping in ("../secret.json", str(secret)):
+                (root / "config" / "schemas" / "manifests.json").write_text(json.dumps({
+                    "mappings": [{"manifest": "config/thing.json", "schema": escaping}]}), encoding="utf-8")
+                mapping = target.load_mappings(root)[0]
+                with self.assertRaises(ValueError, msg=escaping) as caught:
+                    target.validate_mapping(mapping, repo_root=root)
+                self.assertIn("outside the checkout", str(caught.exception))
+                self.assertNotIn("TOP-SECRET", str(caught.exception))
+            (root / "config" / "schemas" / "manifests.json").write_text(json.dumps({
+                "mappings": [{"manifest": "../secret.json", "schema": "config/schemas/manifests.json"}]}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                target.validate_mapping(target.load_mappings(root)[0], repo_root=root)
+
+    def test_date_time_requires_seconds_and_an_offset_under_every_engine(self) -> None:
+        schema = {"type": "object", "properties": {"t": {"type": "string", "format": "date-time"}}}
+        for engine in target.available_engines():
+            for bad in ("2026-09-06T12:00", "2026-09-06T12:00:00", "2026-09-06T12:00:00.5", "2026-09-06 12:00:00Z", "2026-09-06T25:00:00Z"):
+                issues, _ = target.validate_instance({"t": bad}, schema, engine=engine)
+                self.assertTrue(issues, (engine, bad))
+            for good in ("2026-09-06T12:00:00Z", "2026-09-06T12:00:00.250+02:00", "2026-09-06t12:00:00z", "2026-09-06T12:00:00-07:00"):
+                issues, _ = target.validate_instance({"t": good}, schema, engine=engine)
+                self.assertEqual(issues, [], (engine, good))
+
+    def test_nested_quantifier_patterns_are_refused_under_every_engine(self) -> None:
+        # The classic shape - a group that is one quantified atom, quantified again - is refused ...
+        for pattern in ("^(a+)+$", "^(?:\\d*)*$", "^([a-z]+){2,}$", "^(x{2,})+$", "^(a+?)+$"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(engine, pattern)) as caught:
+                    target.validate_instance("aaaaaaaaaaaaaaaaaaaaaaaaaaaab", {"type": "string", "pattern": pattern}, engine=engine)
+                self.assertIn("catastrophic backtracking", str(caught.exception))
+        # ... while a quantified group that must consume a literal each iteration is linear and
+        # stays accepted (the manifests map's repo-relative path pattern is exactly that shape).
+        for pattern, value in (("^[a-z]+(-[a-z]+)*$", "abc-def"),
+                               ("^([A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json$", "config/github/labels.json"),
+                               ("^(?:ab*)*c$", "abbbabc")):
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(value, {"type": "string", "pattern": pattern}, engine=engine)
+                self.assertEqual(issues, [], (engine, pattern))
+
+    def test_keyword_values_of_the_wrong_shape_are_schema_errors(self) -> None:
+        for schema in ({"minLength": "1"}, {"minimum": "0"}, {"required": "name"}, {"enum": []},
+                       {"uniqueItems": "yes"}, {"maxItems": -1}, {"minItems": True}, {"format": 3}):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(engine, schema)):
+                    target.validate_instance("x", schema, engine=engine)
+        with tempfile.TemporaryDirectory() as temp:
+            s = pathlib.Path(temp) / "s.json"; m = pathlib.Path(temp) / "m.json"
+            s.write_text(json.dumps({"type": "string", "minLength": "1"}), encoding="utf-8"); m.write_text('"x"', encoding="utf-8")
+            code, out = self._cli(str(m), "--schema", str(s), "--engine", "builtin")
+            self.assertEqual(code, 2, out)
+            self.assertNotIn("Traceback", out)
+
+    def test_aihub_provider_and_cli_agent_names_are_one_registry(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        with tempfile.TemporaryDirectory() as temp:
+            m = pathlib.Path(temp) / "aihub.json"
+            m.write_text(json.dumps({
+                "providers": {"codex": {"type": "openai", "model": "gpt-5.1-codex-max", "apiKeyEnv": "OPENAI_API_KEY"}},
+                "cliAgents": [{"name": "codex", "command": "codex", "argsTemplate": "exec {prompt}"},
+                              {"name": "claude-cli", "command": "claude", "argsTemplate": "-p {prompt}"},
+                              {"name": "claude-cli", "command": "claude", "argsTemplate": "-p {prompt}"},
+                              {"name": "claude-cli", "enabled": False}],
+                "routing": {"defaultChain": ["codex"], "taskRouting": {}}}), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(m, schema_path, engine=engine, repo_root=ROOT)
+                paths = sorted(issue.path for issue in result.issues)
+                self.assertEqual(paths, ["$.cliAgents[0].name", "$.cliAgents[2].name"], (engine, result.issues))
+                self.assertTrue(all("one registry" in issue.message for issue in result.issues), result.issues)
+            # The shipped hub configuration has no such collision under either engine.
+            for engine in target.available_engines():
+                shipped = target.validate_file(ROOT / "config" / "aihub.json", schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual(shipped.issues, [], engine)
+
+    def test_aihub_model_baseurl_and_disabled_cli_agent_rules(self) -> None:
+        schema = json.loads((ROOT / "config" / "schemas" / "aihub.schema.json").read_text(encoding="utf-8"))
+        base = {"providers": {"p": {"type": "ollama", "model": "llama3"}}, "routing": {"defaultChain": ["p"], "taskRouting": {}}}
+        cases = [
+            ({"providers": {"p": {"type": "ollama"}}}, ["$.providers.p"]),
+            ({"providers": {"p": {"type": "ollama", "enabled": False}}}, []),
+            ({"providers": {"p": {"type": "anthropic", "apiKeyEnv": "ANTHROPIC_API_KEY"}}}, []),
+            ({"providers": {"p": {"type": "openai", "model": "m", "baseUrl": "https://user:token@host/v1"}}}, ["$.providers.p.baseUrl"]),
+            ({"providers": {"p": {"type": "openai", "model": "m", "baseUrl": "https://host/v1?api-key=secret"}}}, ["$.providers.p.baseUrl"]),
+            ({"providers": {"p": {"type": "openai", "model": "m", "baseUrl": "https://host:8443/v1/"}}}, []),
+            ({"cliAgents": [{"name": None, "command": None, "argsTemplate": None, "enabled": False}]}, []),
+            ({"cliAgents": [{"enabled": False}]}, []),
+            ({"cliAgents": [{"name": "x", "command": "x", "argsTemplate": "run {prompt}"}]}, []),
+            ({"cliAgents": [{"name": None, "command": None, "argsTemplate": None}]}, ["$.cliAgents[0].argsTemplate", "$.cliAgents[0].command", "$.cliAgents[0].name"]),
+            ({"cliAgents": [{"name": "x", "command": "x", "argsTemplate": "no slot"}]}, ["$.cliAgents[0].argsTemplate"]),
+        ]
+        for overlay, expected in cases:
+            instance = {**base, **overlay}
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(instance, schema, engine=engine)
+                self.assertEqual(sorted(issue.path for issue in issues), expected, (engine, overlay, issues))

@@ -328,6 +328,11 @@ public sealed class McpConfigToolTests : IDisposable
     [InlineData("""{ "type": "string", "minLength": 2 }""", "\"e\u0301\"", true)]
     [InlineData("""{ "type": "string", "format": "date-time" }""", "\" 2026-09-07T23:00:00Z\"", false)]
     [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07T23:00:00Z\"", true)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07T23:00:00.250+02:00\"", true)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07t23:00:00z\"", true)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07T23:00\"", false)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07T23:00:00\"", false)]
+    [InlineData("""{ "type": "string", "format": "date-time" }""", "\"2026-09-07 23:00:00Z\"", false)]
     [InlineData("""{ "type": "string", "format": "date-time" }""", "\"Sept 7 2026 23:00\"", false)]
     public void JsonSchemaLite_ComparesValuesCountsCodePointsAndChecksDateTimeShape(string schemaJson, string instanceJson, bool expectedValid)
     {
@@ -337,6 +342,132 @@ public sealed class McpConfigToolTests : IDisposable
         var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
 
         Assert.Equal(expectedValid, issues.Count == 0);
+    }
+
+    [Theory]
+    [InlineData("^(a+)+$")]
+    [InlineData(@"^(?:\d*)*$")]
+    [InlineData("^([a-z]+){2,}$")]
+    [InlineData("^(x{2,})+$")]
+    [InlineData("^(a+?)+$")]
+    public void JsonSchemaLite_RefusesNestedQuantifiers(string pattern)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse("\"aaaaaaaaaaaaaaaaaaaaaaaaaaaab\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("catastrophic backtracking", ex.Message);
+    }
+
+    // A quantified group that must consume a literal on every iteration is linear, not the
+    // catastrophic shape - the manifests map's repo-relative path pattern is exactly that.
+    [Theory]
+    [InlineData("^[a-z]+(-[a-z]+)*$", "abc-def")]
+    [InlineData(@"^([A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.json$", "config/github/labels.json")]
+    [InlineData("^(?:ab*)*c$", "abbbabc")]
+    public void JsonSchemaLite_AcceptsLinearQuantifiedGroups(string pattern, string value)
+    {
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(new Dictionary<string, object> { ["type"] = "string", ["pattern"] = pattern }));
+        using var instance = JsonDocument.Parse(JsonSerializer.Serialize(value));
+
+        Assert.Empty(JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+    }
+
+    [Theory]
+    [InlineData("""{ "minLength": "1" }""")]
+    [InlineData("""{ "minimum": "0" }""")]
+    [InlineData("""{ "required": "name" }""")]
+    [InlineData("""{ "enum": [] }""")]
+    [InlineData("""{ "uniqueItems": "yes" }""")]
+    [InlineData("""{ "maxItems": -1 }""")]
+    [InlineData("""{ "minItems": 2.5 }""")]
+    [InlineData("""{ "format": 3 }""")]
+    public void JsonSchemaLite_RefusesKeywordValuesOfTheWrongShape(string schemaJson)
+    {
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse("\"x\"");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(() => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("must be", ex.Message);
+    }
+
+    [Fact]
+    public void MalformedKeywordValueInADraftSchema_IsAnActionableToolError()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/schemas/draft.schema.json", """{ "type": "object", "minProperties": "1" }""");
+        WriteManifest(root, "config/draft.json", "{}");
+
+        var ex = Assert.Throws<McpException>(() => HeliosConfigTools.BuildValidationJson("config/draft.json", "config/schemas/draft.schema.json", root));
+
+        Assert.Contains("not usable", ex.Message);
+        Assert.Contains("minProperties", ex.Message);
+    }
+
+    [Fact]
+    public void AihubProviderAndCliAgentNames_AreOneRegistry()
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", """
+            {
+              "providers": { "codex": { "type": "openai", "model": "gpt-5.1-codex-max", "apiKeyEnv": "OPENAI_API_KEY" } },
+              "cliAgents": [
+                { "name": "codex", "command": "codex", "argsTemplate": "exec {prompt}" },
+                { "name": "claude-cli", "command": "claude", "argsTemplate": "-p {prompt}" },
+                { "name": "claude-cli", "command": "claude", "argsTemplate": "-p {prompt}" },
+                { "name": "claude-cli", "enabled": false }
+              ],
+              "routing": { "defaultChain": ["codex"], "taskRouting": {} }
+            }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("valid").GetBoolean(), json);
+        var paths = doc.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetProperty("path").GetString()).OrderBy(p => p).ToList();
+        Assert.Equal(new[] { "$.cliAgents[0].name", "$.cliAgents[2].name" }, paths);
+    }
+
+    [Theory]
+    [InlineData("""{ "type": "ollama" }""", false)]
+    [InlineData("""{ "type": "ollama", "enabled": false }""", true)]
+    [InlineData("""{ "type": "anthropic", "apiKeyEnv": "ANTHROPIC_API_KEY" }""", true)]
+    [InlineData("""{ "type": "openai", "model": "m", "baseUrl": "https://user:token@host/v1" }""", false)]
+    [InlineData("""{ "type": "openai", "model": "m", "baseUrl": "https://host/v1?api-key=secret" }""", false)]
+    [InlineData("""{ "type": "openai", "model": "m", "baseUrl": "https://host:8443/v1/" }""", true)]
+    public void AihubProviderRules_ModelAndBaseUrl(string providerJson, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", $$"""
+            { "providers": { "p": {{providerJson}} }, "routing": { "defaultChain": ["p"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("""{ "name": null, "command": null, "argsTemplate": null, "enabled": false }""", true)]
+    [InlineData("""{ "enabled": false }""", true)]
+    [InlineData("""{ "name": "x", "command": "x", "argsTemplate": "run {prompt}" }""", true)]
+    [InlineData("""{ "name": null, "command": null, "argsTemplate": null }""", false)]
+    [InlineData("""{ "name": "x", "command": "x", "argsTemplate": "no slot" }""", false)]
+    public void AihubCliAgentRules_DisabledEntriesMayBeNull(string agentJson, bool expectedValid)
+    {
+        var root = CreateRepoRoot();
+        WriteManifest(root, "config/aihub.json", $$"""
+            { "providers": { "p": { "type": "ollama", "model": "llama3" } }, "cliAgents": [ {{agentJson}} ], "routing": { "defaultChain": ["p"], "taskRouting": {} } }
+            """);
+
+        var json = HeliosConfigTools.BuildValidationJson("config/aihub.json", null, root);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedValid, doc.RootElement.GetProperty("valid").GetBoolean());
     }
 
     [Theory]

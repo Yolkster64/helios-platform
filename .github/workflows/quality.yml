@@ -76,6 +76,9 @@ jobs:
   json-validate:
     name: JSON Validation
     runs-on: ubuntu-latest
+    # The schema engines refuse catastrophic regex shapes up front; this is the backstop so a
+    # pattern they do not recognise can stall a required job for minutes, never for hours.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       

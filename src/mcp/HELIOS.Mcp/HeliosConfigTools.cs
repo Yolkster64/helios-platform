@@ -82,6 +82,7 @@ public static class HeliosConfigTools
             using var stream = File.OpenRead(manifestFull);
             using var manifestDocument = JsonDocument.Parse(stream);
             errors.AddRange(JsonSchemaLite.Validate(schemaDocument.RootElement, manifestDocument.RootElement));
+            errors.AddRange(ManifestSemantics.Check(schemaDocument.RootElement, manifestDocument.RootElement));
         }
         catch (JsonException ex)
         {
@@ -285,5 +286,80 @@ public static class HeliosConfigTools
 
         [JsonPropertyName("message")]
         public string Message { get; init; } = "";
+    }
+}
+
+/// <summary>
+/// Rules a JSON Schema cannot express, keyed by the schema's <c>$id</c>. Mirrors
+/// <c>_SEMANTIC_CHECKS</c> in scripts/validation/validate_config_schemas.py so this tool, the CLI
+/// and CI give one verdict.
+/// </summary>
+internal static class ManifestSemantics
+{
+    private const string AihubSchemaId = "helios://config/schemas/aihub.schema.json";
+
+    public static IReadOnlyList<JsonSchemaLite.Issue> Check(JsonElement schema, JsonElement instance)
+    {
+        if (schema.ValueKind == JsonValueKind.Object
+            && schema.TryGetProperty("$id", out var id)
+            && id.ValueKind == JsonValueKind.String
+            && id.GetString() == AihubSchemaId)
+        {
+            return AihubNames(instance);
+        }
+        return Array.Empty<JsonSchemaLite.Issue>();
+    }
+
+    /// <summary>
+    /// Provider keys and enabled CLI-agent names share ONE registry in the hub (AIHub.cs:
+    /// <c>_byProvider[agent.Provider] = agent</c>, providers registered first): a CLI agent named
+    /// like a provider, or two enabled agents with one name, silently replaces the earlier entry
+    /// and every chain naming it reaches a different backend than configured. Compared
+    /// case-insensitively, the way chain entries are looked up.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> AihubNames(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object)
+        {
+            return issues;
+        }
+        var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (instance.TryGetProperty("providers", out var providers) && providers.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var provider in providers.EnumerateObject())
+            {
+                owners.TryAdd(provider.Name, $"providers.{provider.Name}");
+            }
+        }
+        if (instance.TryGetProperty("cliAgents", out var agents) && agents.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var agent in agents.EnumerateArray())
+            {
+                var position = index++;
+                if (agent.ValueKind != JsonValueKind.Object
+                    || (agent.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.False))
+                {
+                    continue; // a disabled entry is skipped by ProviderFactory.CreateAll before its name is read
+                }
+                if (!agent.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+                var text = name.GetString()!;
+                if (owners.TryGetValue(text, out var owner))
+                {
+                    issues.Add(new JsonSchemaLite.Issue(
+                        $"$.cliAgents[{position}].name",
+                        $"'{text}' is already registered by {owner}; provider keys and CLI-agent names are one registry in the hub"));
+                }
+                else
+                {
+                    owners[text] = $"cliAgents[{position}]";
+                }
+            }
+        }
+        return issues;
     }
 }

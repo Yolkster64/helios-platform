@@ -49,7 +49,7 @@
         "model": {
           "type": "string",
           "minLength": 1,
-          "description": "Default model, or the Azure OpenAI / Foundry DEPLOYMENT name."
+          "description": "Default model, or the Azure OpenAI / Foundry DEPLOYMENT name. Required for an enabled openai, azure-openai, github-models or ollama entry (see `if`/`then` below): those factory paths build a ChatClientAgent that has no runtime default and fails at request time without it (ChatClientAgent.cs); anthropic, anthropic-foundry and azure-foundry-agent carry their own defaults."
         },
         "apiKeyEnv": {
           "anyOf": [{ "$ref": "#/$defs/envName" }, { "const": "" }],
@@ -63,26 +63,31 @@
         "endpointEnv": { "$ref": "#/$defs/envName" },
         "baseUrl": {
           "type": "string",
-          "pattern": "^https?://",
-          "description": "Fixed base URL (github-models default, ollama default, anthropic-foundry override)."
+          "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
+          "description": "Fixed base URL (github-models default, ollama default, anthropic-foundry override): an absolute http(s) URL with a host and an optional path - no userinfo, query or fragment, so a credential cannot be committed here (the Foundry runtime rejects userinfo too). Keys and tokens are environment-variable NAMES in apiKeyEnv."
         }
-      }
+      },
+      "if": {
+        "allOf": [
+          { "properties": { "type": { "enum": ["openai", "azure-openai", "github-models", "ollama"] } }, "required": ["type"] },
+          { "not": { "properties": { "enabled": { "const": false } }, "required": ["enabled"] } }
+        ]
+      },
+      "then": { "required": ["model"] }
     },
     "cliAgent": {
       "type": "object",
-      "required": ["name", "command", "argsTemplate"],
+      "description": "An enabled entry must carry name, command and argsTemplate (the `else` branch). A disabled entry (enabled: false) is skipped by ProviderFactory.CreateAll before any field is read, so those three may be null or absent there - the shape the auth-contract tests keep for parked agents.",
       "properties": {
         "$comment": { "type": "string" },
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "name": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9-]*$" },
         "enabled": { "type": "boolean" },
         "command": {
-          "type": "string",
-          "minLength": 1,
+          "type": ["string", "null"],
           "description": "Executable resolved via PATH."
         },
         "argsTemplate": {
-          "type": "string",
-          "pattern": "\\{prompt\\}",
+          "type": ["string", "null"],
           "description": "Must carry the {prompt} slot; {model} is optional. The prompt is passed as one argv element, never through a shell."
         },
         "model": { "type": "string", "minLength": 1 },
@@ -91,6 +96,16 @@
           "minimum": 1,
           "maximum": 2147483,
           "description": "Handed to CancellationTokenSource.CancelAfter: 1 .. 2147483 seconds."
+        }
+      },
+      "if": { "properties": { "enabled": { "const": false } }, "required": ["enabled"] },
+      "then": {},
+      "else": {
+        "required": ["name", "command", "argsTemplate"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "command": { "type": "string", "minLength": 1 },
+          "argsTemplate": { "type": "string", "pattern": "\\{prompt\\}" }
         }
       }
     },

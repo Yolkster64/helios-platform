@@ -51,6 +51,10 @@ internal static class JsonSchemaLite
     internal static IReadOnlyList<Issue> Validate(JsonElement schemaRoot, JsonElement instance)
     {
         var validator = new Validator(schemaRoot);
+        // The self-check runs on every validation, like the Python engine's MiniValidator: a
+        // malformed keyword value or an unsafe pattern is a SchemaException before any instance
+        // keyword is evaluated, never an InvalidOperationException from the middle of a walk.
+        validator.CheckSchema();
         var issues = new List<Issue>();
         validator.Validate(schemaRoot, instance, "$", issues);
         return issues;
@@ -164,6 +168,53 @@ internal static class JsonSchemaLite
                     case "$ref":
                         Resolve(value, where);
                         break;
+                    // Keyword VALUES are checked here, once, so a malformed schema is a SchemaException
+                    // ("not usable" on the tool) instead of an InvalidOperationException from GetInt32
+                    // deep inside validation. Same rules as the Python engine's _walk_schema.
+                    case "minLength":
+                    case "maxLength":
+                    case "minItems":
+                    case "maxItems":
+                    case "minProperties":
+                    case "maxProperties":
+                        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var bound) || bound < 0)
+                        {
+                            throw new SchemaException($"{where}/{key}: must be a non-negative integer");
+                        }
+                        break;
+                    case "minimum":
+                    case "maximum":
+                    case "exclusiveMinimum":
+                    case "exclusiveMaximum":
+                        if (value.ValueKind != JsonValueKind.Number)
+                        {
+                            throw new SchemaException($"{where}/{key}: must be a number");
+                        }
+                        break;
+                    case "required":
+                        if (value.ValueKind != JsonValueKind.Array || value.EnumerateArray().Any(name => name.ValueKind != JsonValueKind.String))
+                        {
+                            throw new SchemaException($"{where}/required: must be an array of property names");
+                        }
+                        break;
+                    case "enum":
+                        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() == 0)
+                        {
+                            throw new SchemaException($"{where}/enum: must be a non-empty array");
+                        }
+                        break;
+                    case "uniqueItems":
+                        if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        {
+                            throw new SchemaException($"{where}/uniqueItems: must be a boolean");
+                        }
+                        break;
+                    case "format":
+                        if (value.ValueKind != JsonValueKind.String)
+                        {
+                            throw new SchemaException($"{where}/format: must be a string");
+                        }
+                        break;
                 }
             }
         }
@@ -199,6 +250,10 @@ internal static class JsonSchemaLite
                 if (unportable is not null)
                 {
                     throw new SchemaException($"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in '{text}'");
+                }
+                if (NestedQuantifier.IsMatch(text))
+                {
+                    throw new SchemaException($"{where}/pattern: a quantified group is itself quantified (catastrophic backtracking) in '{text}'");
                 }
                 try
                 {
@@ -440,8 +495,20 @@ internal static class JsonSchemaLite
 
         // RFC 3339 shape first (DateTimeOffset.TryParse is lenient: it takes surrounding
         // whitespace and many non-ISO spellings), then a real calendar/clock check.
+        // Date, 'T', hh:mm:ss (fraction optional) and a MANDATORY offset (Z or +-hh:mm): what
+        // jsonschema + rfc3339-validator and the Python engine accept, nothing more.
         private static readonly Regex DateTimeShape = new(
-            @"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?([Zz]|[+-][0-9]{2}:[0-9]{2})?$",
+            @"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
+            RegexOptions.ECMAScript, RegexTimeout);
+
+        // The classic catastrophic shape: a group whose whole content is ONE quantified atom (a
+        // character, an escape or a class) and which is quantified again - ^(a+)+$, (\d*)*, ([a-z]+){2,},
+        // (x{2,})+ - backtracks exponentially; refused by every engine before it runs (this one also
+        // runs under RegexTimeout). A group that ends in a literal - ([a-z]+/)* - is NOT this shape:
+        // every iteration must consume the literal, so the split is unambiguous and linear.
+        private const string Quantifier = @"(?:[+*]|\{[0-9]+(?:,[0-9]*)?\})";
+        private static readonly Regex NestedQuantifier = new(
+            @"\((?:\?:)?(?:\\.|\[(?:[^\]\\]|\\.)*\]|[^()\\\[\]])" + Quantifier + @"\??\)" + Quantifier,
             RegexOptions.ECMAScript, RegexTimeout);
 
         private static bool IsDateTime(string value) =>

@@ -152,11 +152,42 @@ def _check_date(value: str) -> bool:
     return True
 
 
-_DATE_TIME_SHAPE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?([Zz]|[+-][0-9]{2}:[0-9]{2})?$")
+# RFC 3339: date, 'T', hh:mm:ss (fraction optional) and a MANDATORY offset (Z or +-hh:mm).
+# A missing offset or missing seconds is what jsonschema + rfc3339-validator reject, so the
+# dependency-free engine and the C# twin reject it too.
+_DATE_TIME_SHAPE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$")
 
 # Constructs .NET, Python and ECMA-262 do not share; refused by name so the C# engine
 # (JsonSchemaLite, ECMAScript mode) and this one accept exactly the same patterns.
 _NON_PORTABLE_REGEX = ("\\A", "\\Z", "\\z", "\\G", "(?<=", "(?<!", "\\p{", "\\P{", "(?i)", "(?m)", "(?s)", "(?x)", "(?#")
+
+# The classic catastrophic shape: a group whose whole content is ONE quantified atom (a
+# character, an escape or a class) and which is quantified again - ^(a+)+$, (\d*)*, ([a-z]+){2,},
+# (x{2,})+ - backtracks exponentially on a non-matching string; Python's re has no timeout, so
+# it is refused up front (the C# twin refuses the same shape and also runs under a 2 s timeout).
+# A group that ends in a literal - ([a-z]+/)* - is NOT this shape: every iteration must consume
+# the literal, so the split is unambiguous and the match is linear.
+_QUANTIFIER = r"(?:[+*]|\{[0-9]+(?:,[0-9]*)?\})"
+_NESTED_QUANTIFIER = re.compile(
+    r"\((?:\?:)?(?:\\.|\[(?:[^\]\\]|\\.)*\]|[^()\\\[\]])" + _QUANTIFIER + r"\??\)" + _QUANTIFIER
+)
+
+# Nesting deeper than this means a $ref cycle that never descends into the instance
+# ("$ref": "#", or two $defs pointing at each other); real schemas nest a few dozen levels.
+_MAX_DEPTH = 256
+
+_INTEGER_KEYWORDS = ("minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties")
+_NUMBER_KEYWORDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
+
+
+def _unsafe_pattern(pattern: str) -> str | None:
+    """The reason a pattern is refused by every engine, or None when it is fine."""
+    unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
+    if unportable is not None:
+        return f"'{unportable}' is outside the portable (ECMA-262) regex subset"
+    if _NESTED_QUANTIFIER.search(pattern):
+        return "a quantified group is itself quantified (catastrophic backtracking)"
+    return None
 
 
 def _check_date_time(value: str) -> bool:
@@ -186,6 +217,7 @@ class MiniValidator:
     def __init__(self, schema: Any) -> None:
         self.root = schema
         self._regex: dict[str, re.Pattern[str]] = {}
+        self._depth = 0
         self.check_schema()
 
     # -- schema self-check ------------------------------------------------------------
@@ -230,18 +262,36 @@ class MiniValidator:
                 self._compile(value, where)
             elif key == "$ref":
                 self._resolve(value, where)
-            elif key == "format" and value not in _FORMATS:
-                # Unknown formats are annotations per the spec; nothing to assert.
-                pass
+            # Keyword VALUES are checked here, once, so a malformed schema is a SchemaError
+            # (exit 2 / "not usable") instead of a TypeError deep inside validation.
+            elif key in _INTEGER_KEYWORDS:
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise SchemaError(f"{where}/{key}: must be a non-negative integer")
+            elif key in _NUMBER_KEYWORDS:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise SchemaError(f"{where}/{key}: must be a number")
+            elif key == "required":
+                if not isinstance(value, list) or not all(isinstance(name, str) for name in value):
+                    raise SchemaError(f"{where}/required: must be an array of property names")
+            elif key == "enum":
+                if not isinstance(value, list) or not value:
+                    raise SchemaError(f"{where}/enum: must be a non-empty array")
+            elif key == "uniqueItems":
+                if not isinstance(value, bool):
+                    raise SchemaError(f"{where}/uniqueItems: must be a boolean")
+            elif key == "format":
+                if not isinstance(value, str):
+                    raise SchemaError(f"{where}/format: must be a string")
+                # Unknown formats are annotations per the spec; nothing else to assert.
 
     def _compile(self, pattern: Any, where: str) -> re.Pattern[str]:
         if not isinstance(pattern, str):
             raise SchemaError(f"{where}/pattern: must be a string")
         compiled = self._regex.get(pattern)
         if compiled is None:
-            unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
-            if unportable is not None:
-                raise SchemaError(f"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in {pattern!r}")
+            reason = _unsafe_pattern(pattern)
+            if reason is not None:
+                raise SchemaError(f"{where}/pattern: {reason} in {pattern!r}")
             try:
                 compiled = re.compile(pattern)
             except re.error as exc:
@@ -278,6 +328,18 @@ class MiniValidator:
         return not self.iter_errors(instance)
 
     def _validate(self, schema: Any, instance: Any, path: str, errors: list[Issue]) -> None:
+        # "$ref": "#" (or two $defs pointing at each other) recurses without ever descending
+        # into the instance; a RecursionError would take the CLI - or validate_all.py's whole
+        # sweep - down with a traceback. Past this depth the schema is the problem and says so.
+        self._depth += 1
+        try:
+            if self._depth > _MAX_DEPTH:
+                raise SchemaError(f"{path}: schema nesting deeper than {_MAX_DEPTH} levels - a $ref cycle that never descends into the instance")
+            self._validate_here(schema, instance, path, errors)
+        finally:
+            self._depth -= 1
+
+    def _validate_here(self, schema: Any, instance: Any, path: str, errors: list[Issue]) -> None:
         if schema is True:
             return
         if schema is False:
@@ -480,29 +542,16 @@ def _descend_alternatives(errors: Any) -> list[tuple[Any, str]]:
     return flattened
 
 
-def _refuse_non_portable_patterns(node: Any, where: str) -> None:
-    """Walk the schema once so the library engine refuses the same regex constructs the built-in
-    engine and the C# twin refuse (python-jsonschema would happily run `\\Z` or `(?i)`)."""
-    if isinstance(node, dict):
-        pattern = node.get("pattern")
-        if isinstance(pattern, str):
-            unportable = next((token for token in _NON_PORTABLE_REGEX if token in pattern), None)
-            if unportable is not None:
-                raise SchemaError(f"{where}/pattern: '{unportable}' is outside the portable (ECMA-262) regex subset in {pattern!r}")
-        for key, value in node.items():
-            if key not in ("enum", "const", "default", "examples"):
-                _refuse_non_portable_patterns(value, f"{where}/{key}")
-    elif isinstance(node, list):
-        for index, value in enumerate(node):
-            _refuse_non_portable_patterns(value, f"{where}/{index}")
-
-
 def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple[list[Issue], str]:
     """Return (issues, engine_used). engine: auto | jsonschema | builtin."""
     if engine not in ("auto", "jsonschema", "builtin"):
         raise ValueError(f"unknown engine {engine!r}")
     use_library = engine == "jsonschema" or (engine == "auto" and jsonschema is not None)
-    _refuse_non_portable_patterns(schema, "#")
+    # One schema self-check for every engine - keyword shapes, $ref targets, regex portability and
+    # the catastrophic-backtracking shape - so the library engine never accepts a schema that the
+    # built-in engine (and the C# twin, JsonSchemaLite.WalkSchema) refuses: python-jsonschema would
+    # happily run `\\Z`, `(?i)` or `^(a+)+$` and accepts `"enum": []`.
+    checked = MiniValidator(schema)
     if use_library:
         if jsonschema is None:
             raise SchemaError("python package 'jsonschema' is not installed; use --engine builtin")
@@ -520,6 +569,8 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
         validator = validator_class(schema, format_checker=checker)
         try:
             raw_errors = list(validator.iter_errors(instance))
+        except RecursionError as exc:  # "$ref": "#" and friends never descend into the instance
+            raise SchemaError("schema nesting deeper than the engine allows - a $ref cycle that never descends into the instance") from exc
         except Exception as exc:  # a $ref that does not resolve surfaces as a referencing error
             if any(token in type(exc).__name__ for token in ("Referencing", "RefResolution", "Unresolvable")):
                 raise SchemaError(f"schema $ref does not resolve: {exc}") from exc
@@ -531,21 +582,78 @@ def validate_instance(instance: Any, schema: Any, engine: str = "auto") -> tuple
                 key=lambda pair: (list(map(str, pair[0].absolute_path)), pair[1]))
         ]
         return issues, "jsonschema"
-    return MiniValidator(schema).iter_errors(instance), "builtin"
+    return checked.iter_errors(instance), "builtin"
 
 
 # --------------------------------------------------------------------------------------
 # Repo wiring
 # --------------------------------------------------------------------------------------
 
+def _reject_constant(token: str) -> Any:
+    # json.load accepts Python's NaN / Infinity / -Infinity spellings by default; they are not
+    # JSON, and System.Text.Json (the hub's binder) refuses the file. Treat them as unreadable.
+    raise ValueError(f"non-finite number token {token!r} is not JSON")
+
+
 def load_json(path: Path, label: str) -> Any:
     try:
         with path.open(encoding="utf-8") as stream:
-            return json.load(stream)
+            return json.load(stream, parse_constant=_reject_constant)
     except FileNotFoundError as exc:
         raise ValueError(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"{label} is not valid JSON: {path} (line {exc.lineno}: {exc.msg})") from exc
+    except ValueError as exc:  # _reject_constant
+        raise ValueError(f"{label} is not valid JSON: {path} ({exc})") from exc
+
+
+def _confined(repo_root: Path, relative: str, label: str) -> Path:
+    """`repo_root / relative`, refused when it resolves - symbolic links included - outside the
+    checkout: a manifests.json in a scanned tree is data and must not name files beyond that tree
+    (validate_all.py sweeps untrusted HELIOS-shaped trees with this engine)."""
+    root = repo_root.resolve()
+    candidate = (root / relative).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError(f"{label} '{relative}' resolves outside the checkout {root} and was refused")
+    return candidate
+
+
+def _check_aihub_names(instance: Any) -> list[Issue]:
+    """Provider keys and enabled CLI-agent names share ONE registry in the hub
+    (AIHub.cs: `_byProvider[agent.Provider] = agent`, providers registered first): a CLI agent
+    named like a provider, or two enabled agents with one name, silently replaces the earlier
+    entry and every chain naming it reaches a different backend than configured. Compared
+    case-insensitively, the way chain entries are looked up."""
+    issues: list[Issue] = []
+    if not isinstance(instance, dict):
+        return issues
+    owners: dict[str, str] = {}
+    providers = instance.get("providers")
+    if isinstance(providers, dict):
+        for key in providers:
+            owners.setdefault(str(key).lower(), f"providers.{key}")
+    agents = instance.get("cliAgents")
+    if isinstance(agents, list):
+        for index, agent in enumerate(agents):
+            if not isinstance(agent, dict) or agent.get("enabled") is False:
+                continue  # a disabled entry is skipped by ProviderFactory.CreateAll before its name is read
+            name = agent.get("name")
+            if not isinstance(name, str):
+                continue
+            owner = owners.get(name.lower())
+            if owner is None:
+                owners[name.lower()] = f"cliAgents[{index}]"
+            else:
+                issues.append(Issue(f"$.cliAgents[{index}].name",
+                                    f"{name!r} is already registered by {owner}; provider keys and CLI-agent names are one registry in the hub"))
+    return issues
+
+
+# Rules a schema cannot express, keyed by the schema's $id; mirrored by ManifestSemantics in
+# src/mcp/HELIOS.Mcp/HeliosConfigTools.cs so the MCP tool and CI agree.
+_SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
+    "helios://config/schemas/aihub.schema.json": _check_aihub_names,
+}
 
 
 def load_mappings(repo_root: Path = REPO_ROOT) -> list[Mapping]:
@@ -592,11 +700,16 @@ def validate_file(manifest_path: Path, schema_path: Path, engine: str = "auto",
         # A manifest that is not JSON is an invalid manifest, not a broken invocation.
         return Result(label, schema_label, False, [Issue("$", str(exc))], engine if engine != "auto" else "n/a")
     issues, used = validate_instance(instance, schema, engine)
+    semantic = _SEMANTIC_CHECKS.get(schema.get("$id", "")) if isinstance(schema, dict) else None
+    if semantic is not None:
+        issues = issues + semantic(instance)
     return Result(label, schema_label, not issues, issues, used)
 
 
 def validate_mapping(mapping: Mapping, engine: str = "auto", repo_root: Path = REPO_ROOT) -> Result:
-    return validate_file(repo_root / mapping.manifest, repo_root / mapping.schema, engine, repo_root)
+    manifest_path = _confined(repo_root, mapping.manifest, "manifest")
+    schema_path = _confined(repo_root, mapping.schema, "schema")
+    return validate_file(manifest_path, schema_path, engine, repo_root)
 
 
 def validate_all_mapped(engine: str = "auto", repo_root: Path = REPO_ROOT) -> list[Result]:

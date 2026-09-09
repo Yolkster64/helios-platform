@@ -335,7 +335,8 @@ def check_config_schemas(roots: list[Path], report: Report) -> None:
         return
     spec = importlib.util.spec_from_file_location("helios_validate_config_schemas", script)
     if spec is None or spec.loader is None:
-        report.warn(script, "could not load the config schema validator; schema check skipped")
+        report.error(script, "could not load the config schema validator; the schema check is part of this "
+                             "sweep, so the sweep fails until the validator loads again")
         return
     module = importlib.util.module_from_spec(spec)
     # Register before executing: the module's frozen dataclasses resolve their own
@@ -343,9 +344,10 @@ def check_config_schemas(roots: list[Path], report: Report) -> None:
     sys.modules[spec.name] = module
     try:
         spec.loader.exec_module(module)
-    except Exception as exc:  # a broken validator must not take the whole sweep down
+    except Exception as exc:  # a broken validator must not take the whole sweep down - nor pass it
         sys.modules.pop(spec.name, None)
-        report.warn(script, f"could not load the config schema validator ({type(exc).__name__}: {exc}); schema check skipped")
+        report.error(script, f"could not load the config schema validator ({type(exc).__name__}: {exc}); the schema "
+                             "check is part of this sweep, so the sweep fails until the validator loads again")
         return
     resolved_roots = [path.resolve() for path in roots]
     for repo_root in sorted(repo_roots):
