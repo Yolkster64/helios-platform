@@ -28,10 +28,13 @@
     },
     "desktop": {
       "name": "Desktop",
-      "purpose": "Native WinUI shell, profile controls and setup pages.",
+      "purpose": "Native application host, navigation, window lifecycle and package/build definition.",
       "paths": [
-        "src/gui",
-        "config/ui"
+        "src/gui/HELIOS.Shell/App.xaml",
+        "src/gui/HELIOS.Shell/App.xaml.cs",
+        "src/gui/HELIOS.Shell/MainWindow.xaml",
+        "src/gui/HELIOS.Shell/MainWindow.xaml.cs",
+        "src/gui/HELIOS.Shell/HELIOS.Shell.csproj"
       ],
       "testProfile": "desktop",
       "workflows": [
@@ -42,9 +45,103 @@
         "src/gui/HELIOS.Shell/HELIOS.Shell.csproj"
       ],
       "dependsOn": [
-        "core"
+        "core",
+        "gui"
       ],
       "releaseBoundary": "Windows build and packaging boundary; no installer publishing from this helper."
+    },
+    "gui": {
+      "name": "GUI",
+      "purpose": "Editable native views and reusable visual pieces, hosted by Desktop.",
+      "paths": [
+        "src/gui/HELIOS.Shell/Views",
+        "src/gui/HELIOS.Shell/ViewModels",
+        "src/gui/HELIOS.Shell/Themes",
+        "config/ui",
+        "src/gui/HELIOS.Shell/Controls",
+        "src/gui/HELIOS.Shell/Services/GuiWorkbenchCatalog.cs"
+      ],
+      "testProfile": "gui",
+      "workflows": [
+        ".github/workflows/gui-windows.yml",
+        ".github/workflows/component-contracts.yml"
+      ],
+      "artifacts": [
+        "src/gui/HELIOS.Shell/HELIOS.Shell.csproj"
+      ],
+      "dependsOn": [
+        "core"
+      ],
+      "releaseBoundary": "One shared native build validates every view. Piece selection limits edit scope only; Desktop owns the host/package and Cloud owns remote deployment.",
+      "pieces": {
+        "home": {
+          "name": "Home",
+          "purpose": "Project overview, connection status and starting actions.",
+          "paths": [
+            "src/gui/HELIOS.Shell/Views/ControlHomePage.xaml",
+            "src/gui/HELIOS.Shell/Views/ControlHomePage.xaml.cs",
+            "src/gui/HELIOS.Shell/ViewModels/ControlHomePageViewModel.cs"
+          ],
+          "linkedParts": [
+            "core",
+            "cloud"
+          ]
+        },
+        "aihub": {
+          "name": "AIHub",
+          "purpose": "Provider status and shared status-card presentation; backed by the AIHub API.",
+          "paths": [
+            "src/gui/HELIOS.Shell/Views/AIHubPage.xaml",
+            "src/gui/HELIOS.Shell/Views/AIHubPage.xaml.cs",
+            "src/gui/HELIOS.Shell/ViewModels/AIHubPageViewModel.cs",
+            "src/gui/HELIOS.Shell/Services/AIHubApiClient.cs",
+            "src/gui/HELIOS.Shell/Controls/StatusCard.xaml",
+            "src/gui/HELIOS.Shell/Controls/StatusCard.xaml.cs"
+          ],
+          "linkedParts": [
+            "core",
+            "fleet"
+          ]
+        },
+        "fabric": {
+          "name": "Fabric",
+          "purpose": "Unified connector and cloud/fleet integration status.",
+          "paths": [
+            "src/gui/HELIOS.Shell/Views/FabricControlPage.xaml",
+            "src/gui/HELIOS.Shell/Views/FabricControlPage.xaml.cs",
+            "src/gui/HELIOS.Shell/ViewModels/FabricControlPageViewModel.cs"
+          ],
+          "linkedParts": [
+            "core",
+            "cloud",
+            "fleet"
+          ]
+        },
+        "usb": {
+          "name": "USB",
+          "purpose": "Non-destructive USB plan editing, capacity checks and preview.",
+          "paths": [
+            "src/gui/HELIOS.Shell/Views/UsbSetupPage.xaml",
+            "src/gui/HELIOS.Shell/Views/UsbSetupPage.xaml.cs",
+            "src/gui/HELIOS.Shell/ViewModels/UsbSetupPageViewModel.cs"
+          ],
+          "linkedParts": [
+            "usb",
+            "core"
+          ]
+        },
+        "themes": {
+          "name": "Theme",
+          "purpose": "Shared colors, typography and visual tokens across native views.",
+          "paths": [
+            "src/gui/HELIOS.Shell/Themes",
+            "config/ui"
+          ],
+          "linkedParts": [
+            "desktop"
+          ]
+        }
+      }
     },
     "usb": {
       "name": "USB",
@@ -64,7 +161,7 @@
       ],
       "dependsOn": [
         "core",
-        "desktop"
+        "gui"
       ],
       "releaseBoundary": "Plan data only. No formatting, disk access, ISO writing, boot edits or legacy repair script execution."
     },

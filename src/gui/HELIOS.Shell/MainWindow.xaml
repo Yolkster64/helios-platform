@@ -27,6 +27,9 @@
             <NavigationViewItem x:Name="UsbNavItem" Content="USB setup" Tag="usb">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE88E;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
+            <NavigationViewItem x:Name="WorkbenchNavItem" Content="Workbench" Tag="workbench">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
             <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False"
                                 ToolTipService.ToolTip="Task-routing grid — roadmap PR6">
                 <NavigationViewItem.Icon>

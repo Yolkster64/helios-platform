@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List, plan or test five HELIOS parts in this reviewed checkout. Never deploy."""
+"""List, plan or test six HELIOS parts in this reviewed checkout. Never deploy."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/validation'))
 import validate_config_schemas as schema_validation
 
-PARTS = ('core', 'desktop', 'usb', 'cloud', 'fleet')
+PARTS = ('core', 'desktop', 'gui', 'usb', 'cloud', 'fleet')
+GUI_PIECES = ('home', 'aihub', 'fabric', 'usb', 'themes')
 
 
 class ComponentError(ValueError):
@@ -50,6 +51,12 @@ PROFILES = {
                               '/p:Configuration=Release', '/p:Platform=x64', '/m:1', '/nr:false',
                               '/p:UseSharedCompilation=false'), 1200, 'windows'),
     ),
+    'gui': (
+        Step('gui-contract', ('python', 'scripts/validation/validate_yolkster_cutover.py')),
+        Step('gui-native-build', ('msbuild', 'src/gui/HELIOS.Shell.sln', '/restore',
+                                 '/p:Configuration=Release', '/p:Platform=x64', '/m:1', '/nr:false',
+                                 '/p:UseSharedCompilation=false'), 1200, 'windows'),
+    ),
     'usb': (Step('usb-planner', DOTNET + ('--filter', 'FullyQualifiedName~UsbSetup'), 900, result='trx'),),
     'cloud': (
         Step('identity-plan', ('python', 'scripts/bootstrap/components.py', '_unittest', 'identity-plan')),
@@ -79,12 +86,19 @@ def _load(root: Path) -> dict:
         # Check this immutable code contract too; editing the schema cannot route a
         # different profile to a component or change the set of allowed parts.
         if set(data['parts']) != set(PARTS):
-            raise ComponentError('Component map must contain exactly the five supported parts.')
+            raise ComponentError('Component map must contain exactly the six supported parts.')
         for name, part in data['parts'].items():
             if part['testProfile'] != name:
                 raise ComponentError('Component map test profile differs from the fixed runner.')
-            for field in ('paths', 'artifacts', 'workflows'):
-                for path in part[field]:
+            records = [part]
+            if name == 'gui':
+                if set(part.get('pieces', {})) != set(GUI_PIECES):
+                    raise ComponentError('GUI must contain exactly the supported edit pieces.')
+                records.extend(part['pieces'].values())
+            elif 'pieces' in part:
+                raise ComponentError('Only GUI supports piece selectors.')
+            for record in records:
+                for path in [path for field in ('paths', 'artifacts', 'workflows') for path in record.get(field, [])]:
                     candidate = Path(path)
                     if candidate.is_absolute() or '..' in candidate.parts or not (root / candidate).resolve().is_relative_to(root):
                         raise ComponentError('Component paths must stay inside the repository.')
@@ -95,8 +109,28 @@ def _load(root: Path) -> dict:
 
 def _name(name: str) -> str:
     if not isinstance(name, str) or name.lower() not in PARTS:
-        raise ComponentError('Choose one part: core, desktop, usb, cloud or fleet.')
+        raise ComponentError('Choose one part: core, desktop, gui, usb, cloud or fleet.')
     return name.lower()
+
+
+def _piece(name: str, piece: str | None) -> str | None:
+    if piece is None:
+        return None
+    if name != 'gui' or not isinstance(piece, str):
+        raise ComponentError('Piece selection is available only for GUI.')
+    value = piece.lower()
+    if value == 'theme':
+        value = 'themes'
+    if value not in GUI_PIECES:
+        raise ComponentError('Choose a GUI piece: home, aihub, fabric, usb or themes.')
+    return value
+
+
+def list_gui_pieces(root: Path = ROOT) -> dict:
+    gui = _load(root)['parts']['gui']
+    return {'schemaVersion': 1, 'part': 'gui', 'status': 'planned', 'executed': False,
+            'pieces': [{'id': name, **gui['pieces'][name]} for name in GUI_PIECES],
+            'testScope': 'The shared native build compiles every GUI view; pieces select edit scope only.'}
 
 
 def _steps(name: str) -> list[dict]:
@@ -111,11 +145,14 @@ def list_parts(root: Path = ROOT) -> dict:
             'parts': [{'id': name, **data['parts'][name]} for name in PARTS]}
 
 
-def plan_part(name: str, root: Path = ROOT) -> dict:
+def plan_part(name: str, root: Path = ROOT, piece: str | None = None) -> dict:
     name = _name(name)
+    piece = _piece(name, piece)
     data = _load(root)
     part = data['parts'][name]
-    missing = sorted({path for field in ('paths', 'artifacts', 'workflows') for path in part[field]
+    selected = {'id': piece, **part['pieces'][piece]} if piece else None
+    edit_paths = selected['paths'] if selected else part['paths']
+    missing = sorted({path for path in [*part['paths'], *edit_paths, *part['artifacts'], *part['workflows']]
                       if not (root / path).exists()})
     deployment = {'executed': False, 'automaticApply': False, 'boundary': part['releaseBoundary']}
     if name in ('cloud', 'fleet'):
@@ -125,7 +162,11 @@ def plan_part(name: str, root: Path = ROOT) -> dict:
                           authority='Protected environment approval and current repository instructions; this helper never dispatches.')
     return {'schemaVersion': 1, 'repository': data['repository'], 'part': name,
             'status': 'incomplete' if missing else 'planned', 'executed': False,
-            'details': part, 'missingPaths': missing, 'tests': _steps(name), 'deployment': deployment,
+            'details': part, 'selectedPiece': selected, 'editPaths': edit_paths,
+            'linkedParts': selected['linkedParts'] if selected else part['dependsOn'],
+            'testScope': ('The shared native build compiles every GUI view; piece selection limits edit scope only.'
+                          if name == 'gui' else 'Fixed focused checks for this part; shared dependencies may also compile.'),
+            'missingPaths': missing, 'tests': _steps(name), 'deployment': deployment,
             'note': 'A targeted check does not replace required repository CI, prove live service access or authorize a release.'}
 
 
@@ -199,6 +240,7 @@ def _execute(step: Step, root: Path, result_dir: Path) -> dict:
     env = {**os.environ, 'CI': 'true', 'GIT_TERMINAL_PROMPT': '0', 'GH_PROMPT_DISABLED': '1',
            'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'DOTNET_SKIP_FIRST_TIME_EXPERIENCE': '1',
            'NUGET_EXE_NO_PROMPT': 'true', 'NUGET_CREDENTIALPROVIDER_NONINTERACTIVE': 'true',
+           'POWERSHELL_TELEMETRY_OPTOUT': '1', 'POWERSHELL_UPDATECHECK': 'Off',
            'PYTHONPATH': str(root / 'src/ai/python')}
     options = {'cwd': root, 'env': env, 'shell': False, 'stdin': subprocess.DEVNULL,
                'stdout': sys.stderr, 'stderr': sys.stderr}
@@ -225,17 +267,17 @@ def _execute(step: Step, root: Path, result_dir: Path) -> dict:
             **({'reason': 'No successful nonempty test receipt.'} if code == 0 and not passed else {})}
 
 
-def test_part(name: str, root: Path = ROOT) -> dict:
+def test_part(name: str, root: Path = ROOT, piece: str | None = None) -> dict:
     # API callers may inspect another source snapshot; execution is confined to
     # this helper's reviewed repository. There is intentionally no --repo CLI.
     if root.resolve() != ROOT:
         raise ComponentError('Tests run only from this helper\'s reviewed repository.')
-    plan = plan_part(name, root)
+    plan = plan_part(name, root, piece=piece)
     name = plan['part']
     if plan['missingPaths']:
         return {**plan, 'status': 'unavailable', 'results': [], 'reason': 'Required component files are missing.'}
     if any(step.platform == 'windows' for step in PROFILES[name]) and os.name != 'nt':
-        return {**plan, 'status': 'unavailable', 'results': [], 'reason': 'Desktop validation requires Windows and Visual Studio MSBuild.'}
+        return {**plan, 'status': 'unavailable', 'results': [], 'reason': 'Native Desktop/GUI validation requires Windows and Visual Studio MSBuild.'}
     results = []
     for step in PROFILES[name]:
         with tempfile.TemporaryDirectory(prefix='helios-component-') as temporary:
@@ -273,14 +315,16 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest='action')
     sub.add_parser('list')
     for action in ('plan', 'test'):
-        sub.add_parser(action).add_argument('name', choices=PARTS, type=str.lower)
+        command = sub.add_parser(action)
+        command.add_argument('name', choices=PARTS, type=str.lower)
+        command.add_argument('--piece', choices=(*GUI_PIECES, 'theme'), type=str.lower)
     sub.add_parser('_unittest', help=argparse.SUPPRESS).add_argument('profile', choices=tuple(UNITTEST_MODULES))
     args = parser.parse_args(argv)
     if args.action == '_unittest':
         return _run_unittest(args.profile)
     try:
         result = list_parts() if args.action in (None, 'list') else \
-            plan_part(args.name) if args.action == 'plan' else test_part(args.name)
+            plan_part(args.name, piece=args.piece) if args.action == 'plan' else test_part(args.name, piece=args.piece)
         print(json.dumps(result, indent=2))
         return 0 if result['status'] in ('planned', 'passed') else 2
     except ComponentError as error:

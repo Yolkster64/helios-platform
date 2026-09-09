@@ -13,7 +13,9 @@ namespace HELIOS.Shell;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-    public MainWindow()
+    public MainWindow() : this(false) { }
+
+    public MainWindow(bool openWorkbench)
     {
         InitializeComponent();
 
@@ -28,8 +30,8 @@ public sealed partial class MainWindow : Window
             ReadinessVisuals.Attach(root);
         }
 
-        ContentFrame.Navigate(typeof(ControlHomePage));
-        Nav.SelectedItem = HomeNavItem;
+        ContentFrame.Navigate(openWorkbench ? typeof(WorkbenchPage) : typeof(ControlHomePage));
+        Nav.SelectedItem = openWorkbench ? WorkbenchNavItem : HomeNavItem;
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -45,6 +47,7 @@ public sealed partial class MainWindow : Window
             "aihub" => typeof(AIHubPage),
             "fabric" => typeof(FabricControlPage),
             "usb" => typeof(UsbSetupPage),
+            "workbench" => typeof(WorkbenchPage),
             _ => null,
         };
         if (page is not null && ContentFrame.CurrentSourcePageType != page)
@@ -58,6 +61,7 @@ public sealed partial class MainWindow : Window
         // Home shortcuts and navigation-pane clicks share one selection state.
         Nav.SelectedItem = args.SourcePageType == typeof(ControlHomePage) ? HomeNavItem
             : args.SourcePageType == typeof(FabricControlPage) ? FabricNavItem
-            : args.SourcePageType == typeof(UsbSetupPage) ? UsbNavItem : AIHubNavItem;
+            : args.SourcePageType == typeof(UsbSetupPage) ? UsbNavItem
+            : args.SourcePageType == typeof(WorkbenchPage) ? WorkbenchNavItem : AIHubNavItem;
     }
 }

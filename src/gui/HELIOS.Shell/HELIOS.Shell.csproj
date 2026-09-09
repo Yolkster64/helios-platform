@@ -38,6 +38,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="../../../config/components.json" Link="components.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../../config/control-project.json" Link="control-project.json"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

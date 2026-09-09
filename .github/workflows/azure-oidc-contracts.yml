@@ -26,10 +26,20 @@ jobs:
   offline-azure-target:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # Keep contract runs offline, including PowerShell's own startup checks.
+      POWERSHELL_TELEMETRY_OPTOUT: '1'
+      POWERSHELL_UPDATECHECK: 'Off'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # The first PowerShell process on a cold hosted runner previously exhausted
+      # one test's 20-second case limit. Initialize that same installed runtime
+      # separately; preserve the per-case timeout and every contract assertion.
+      - name: Initialize PowerShell before timed contract cases
+        timeout-minutes: 1
+        run: pwsh -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
       - name: Verify both shells against inert Azure CLI
         run: python3 -m unittest discover -s scripts/bootstrap/tests -p test_azure_oidc_target.py -v
 

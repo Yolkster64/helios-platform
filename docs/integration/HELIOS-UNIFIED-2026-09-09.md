@@ -173,3 +173,34 @@ tracked template apart from compiler metadata. The real Fleet component command
 passed 53 .NET and 45 Python tests; the real Cloud component passed 53 identity
 and OIDC tests plus both Bicep compilations. Native Windows CI remains the
 authoritative Desktop compilation check; no GUI launch or USB write is claimed.
+
+## GUI workbench and linked pieces
+
+The next user-directed extension separates **GUI** from **Desktop**, making six
+parts. GUI's Home, AIHub, Fabric, USB and themes entries point to their source and
+linked Core/Cloud/Fleet/USB contracts in the same component manifest. Desktop
+keeps the Windows host and package. Piece selection narrows editing; GUI tests
+compile the shared native project, not a fictitious independent application.
+
+`connect.sh workbench [PIECE] --open` prepares a preserved human worktree using
+the existing workspace registry and opens its themed editor workspace. Omitting
+`--open` is unattended; `--json` reports the result. VS Code tasks expose part
+tests, GUI builds and native fixture preview. The native `--workbench` startup
+opens sample states, a shared status control and local theme previews. Real
+runtime-page navigation is an explicit separate action. The Workbench reads
+the installed component manifest as inert display data and does not execute its
+paths or claim live CI, deployment or account readiness.
+
+At prior head `269d58a`, Windows compilation and the Desktop artifact succeeded.
+The Azure OIDC CI gate hit its first PowerShell cold-start timeout with the other
+33 assertions passing. The workflow now warms the installed PowerShell runtime
+before the unchanged bounded offline tests; it does not increase their timeout
+or bypass an assertion. The new GUI workbench needs its own current-head checks.
+
+Local combined Workbench validation passed **844 AIHub tests**, with no failures
+or skips, and the Release solution built with zero warnings/errors. The added
+metadata parser contributes 15 portable cases. The launcher plus OIDC gate passed
+86 tests; component and schema suites passed 124 tests; all 16 manifests and
+161 existing editor-theme contrast pairs passed. The native fixture page and
+shared status control still require Windows compilation and interactive visual
+checks; portable metadata tests are not a screenshot or a GUI-run receipt.

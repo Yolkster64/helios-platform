@@ -39,6 +39,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="4  Validate" Style="{StaticResource HeliosTitleTextBlockStyle}" />
                     <TextBlock Text="Check the hub and its providers, then review workflow results. An open project link does not confirm runtime authentication or fleet availability." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <Button Content="Open GUI Workbench" Click="OnOpenWorkbench" />
                     <Button Content="Open AI Hub status" Click="OnOpenAIHub" />
                 </StackPanel>
             </Border>

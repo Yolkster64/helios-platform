@@ -2,7 +2,7 @@
 
 | Directory | What it is |
 |---|---|
-| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. Home with the shared Connect → Unify → Automate → Validate flow, AI Hub status, Fabric connections bound to `helios-ai-api`, and offline USB setup planning. |
+| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. Home with the shared Connect → Unify → Automate → Validate flow, AI Hub status, Fabric connections bound to `helios-ai-api`, offline USB setup planning, and a local GUI Workbench. |
 | `HELIOS.Shell.sln` | The shell's **own** solution and its only build entry point. |
 | `MonadoBlade.GUI/` | Orphaned WPF experiment (no csproj references it). Mined for design intent only — do not build, extend, or port code from it. Quarantine to `legacy/` is a PR2 item. |
 
@@ -30,6 +30,16 @@ Fabric restores the original four view/view-model files from PR #186, source com
 The Home and Fabric navigation items stay synchronized when Home shortcuts are used.
 Home scrolls at narrow sizes; the navigation pane collapses automatically. Both pages
 use the existing semantic theme brushes and type ramp, including high contrast.
+
+## GUI Workbench
+
+Open **Workbench** from navigation or Home to inspect fixed local UI states,
+preview palette/brightness changes and see each GUI piece's source/dependency map.
+`HELIOS.Shell.exe --workbench` opens fixtures directly without creating a runtime
+page. The reusable status card is shared with AIHub. Component metadata comes from
+`config/components.json`, copied beside the executable; it never becomes an
+execution command. See [GUI Workbench](../../docs/GUI_WORKBENCH.md) for the complete
+edit, Hot Reload, test and build loop.
 
 ## USB and profile setup
 

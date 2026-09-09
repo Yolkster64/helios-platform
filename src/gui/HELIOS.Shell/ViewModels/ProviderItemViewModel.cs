@@ -17,6 +17,8 @@ public sealed record ProviderItemViewModel(
     public static ProviderItemViewModel From(ProviderStatusDto dto) =>
         new(dto.Name, dto.Kind, dto.Model, dto.Readiness, dto.Detail);
 
+    public string TitleDisplay => $"{Name} · {Kind}";
+
     /// <summary>Model name, or a dash when the provider has no model configured.</summary>
     public string ModelDisplay => string.IsNullOrWhiteSpace(Model) ? "—" : Model;
 

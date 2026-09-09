@@ -52,13 +52,64 @@ class EntryPointTests(unittest.TestCase):
 
     def test_parts_and_targeted_checks_preserve_a_single_component_argument(self):
         with patch.object(connect, "run", return_value=0) as run:
-            self.assertEqual(self.invoke(["parts"])[0], 0)
-            self.assertEqual(run.call_args.args[1][-1:], ["list"])
-            self.assertEqual(self.invoke(["parts", "usb"])[0], 0)
-            self.assertEqual(run.call_args.args[1][-2:], ["plan", "usb"])
+            code, out, _ = self.invoke(["parts"])
+            self.assertEqual(code, 0)
+            self.assertIn("GUI", out)
+            self.assertLess(len(out.splitlines()), 12)
+            code, out, _ = self.invoke(["parts", "usb", "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(out)["part"], "usb")
+            run.assert_not_called()
             self.assertEqual(self.invoke(["test", "usb"])[0], 0)
             self.assertEqual(run.call_args.args[1][-2:], ["test", "usb"])
+            self.assertEqual(self.invoke(["test", "gui", "--piece", "usb"])[0], 0)
+            self.assertEqual(run.call_args.args[1][-4:], ["test", "gui", "--piece", "usb"])
             self.assertEqual(self.invoke(["test", "usb", "--apply"])[0], 2)
+
+    def test_invalid_workbench_piece_cannot_create_a_workspace(self):
+        with patch.object(connect, "run", side_effect=AssertionError("no process")):
+            for piece in ("../outside", "--apply", "gui;touch sentinel"):
+                self.assertEqual(self.invoke(["workbench", piece])[0], 2)
+
+    def test_workbench_json_does_not_open_an_editor_implicitly(self):
+        report = {"status": "existing", "editorStarted": False, "servicesStarted": False,
+                  "deploymentExecuted": False, "workspace": {"path": "/preserved", "branch": "workspace/human/gui-workbench"}}
+        with patch.object(connect, "prepare_workbench", return_value=report) as prepare, \
+             patch.object(connect, "run", side_effect=AssertionError("no editor without --open")):
+            code, out, _ = self.invoke(["workbench", "usb", "--json"])
+        self.assertEqual(code, 0)
+        prepare.assert_called_once_with("usb")
+        self.assertEqual(json.loads(out), report)
+
+    def test_missing_editor_preserves_workbench_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "workspace.code-workspace"
+            workspace.write_text('{}')
+            report = {"status": "created", "editorWorkspace": str(workspace), "editorStarted": False,
+                      "workspace": {"path": directory, "branch": "workspace/human/gui-workbench"}}
+            with patch.object(connect, "prepare_workbench", return_value=report), \
+                 patch.object(connect, "run", side_effect=connect.ConnectionError("missing")):
+                code, out, _ = self.invoke(["workbench", "--open", "--json"])
+            self.assertEqual(code, 2)
+            actual = json.loads(out)
+            self.assertEqual(actual["status"], "created")
+            self.assertFalse(actual["editorStarted"])
+            self.assertTrue(workspace.is_file())
+
+    def test_windows_code_uses_native_cli_without_batch_parsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shim = root / "bin/code.cmd"
+            shim.parent.mkdir()
+            shim.write_text('never execute this shim')
+            (root / "Code.exe").touch()
+            cli = root / "resources/app/out/cli.js"
+            cli.parent.mkdir(parents=True)
+            cli.touch()
+            with patch.object(connect, "WINDOWS", True), patch.object(connect.shutil, "which", return_value=str(shim)):
+                command, env = connect.native("code")
+            self.assertEqual(command, [str(root / "Code.exe"), str(cli)])
+            self.assertEqual(env["ELECTRON_RUN_AS_NODE"], "1")
 
     def test_default_inventory_is_offline_and_never_exposes_values(self):
         secret = "sentinel-private-value-do-not-display"

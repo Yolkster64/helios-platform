@@ -46,13 +46,34 @@ clone over it or discard another contributor's changes.
 
 ## Work on one part
 
-The source stays in **one HELIOS repository**, with five independently checked
-parts: **Core, Desktop, USB, Cloud and Fleet**. `connect.sh parts` lists them;
+The source stays in **one HELIOS repository**, with six parts:
+**Core, Desktop, GUI, USB, Cloud and Fleet**. `connect.sh parts` lists them;
 `connect.sh parts desktop` shows the Desktop setup, checks and release boundary;
 `connect.sh test usb` runs the portable USB planner tests. See
 [project parts](PROJECT_PARTS.md) for dependencies and existing workflows.
 Each part keeps its own build or deployment artifact without copying the main
 repository into competing products.
+
+GUI owns Home, AIHub, Fabric, USB and themes; Desktop owns their Windows host
+and package. The pieces link to Core, Cloud, Fleet and USB through one component
+map. They share the same native build, so choosing a piece narrows the edit scope
+without pretending it is a separately compiled or deployed application.
+
+```bash
+bash connect.sh workbench --open
+bash connect.sh parts gui --piece usb
+bash connect.sh test gui --piece usb
+```
+
+Workbench prepares an isolated local branch and opens the existing themed VS Code
+workspace when `--open` is supplied. Omit `--open` for unattended preparation;
+add `--json` for a receipt. An optional piece name, such as `workbench usb`, creates
+that piece's separate working area. Reruns preserve edits and do not reset an old
+workspace to new source. In VS Code, **Run Task → HELIOS: GUI preview (Windows)**
+builds the native shell and opens its local sample workbench. Fixtures and theme
+previews make it possible to change controls without service accounts. Visual
+Studio MSBuild and Windows App SDK prerequisites still apply. See
+[GUI Workbench](GUI_WORKBENCH.md) for the edit, preview, test and package loop.
 
 The native Desktop includes the [USB setup wizard](USB_SETUP.md), using the same
 portable planner available through `helios_usb_plan_get`. It proposes installation
@@ -112,6 +133,8 @@ startup reports missing consent or credentials rather than waiting on a hidden p
 | List independently testable project parts | `connect.sh parts` |
 | Inspect one part's setup and release plan | `connect.sh parts desktop` |
 | Run one part's checks | `connect.sh test usb` |
+| Prepare an isolated GUI editing workspace | `connect.sh workbench --open` |
+| Inspect one GUI piece | `connect.sh parts gui --piece home` |
 | Open a coding client in this project | `connect.sh claude`, `connect.sh codex`, `connect.sh copilot` |
 | Inspect provider routing | `connect.sh ai routing` |
 | Prepare Azure OIDC / Key Vault / runtime identity | `connect.sh identity --json` |

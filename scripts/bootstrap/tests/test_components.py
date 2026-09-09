@@ -19,7 +19,7 @@ SPEC.loader.exec_module(components)
 class ComponentPlanTests(unittest.TestCase):
     def test_fixed_parts_remain_in_one_repository(self):
         plan = components.list_parts(ROOT)
-        self.assertEqual([part['id'] for part in plan['parts']], ['core', 'desktop', 'usb', 'cloud', 'fleet'])
+        self.assertEqual([part['id'] for part in plan['parts']], ['core', 'desktop', 'gui', 'usb', 'cloud', 'fleet'])
         self.assertEqual(plan['repository'], 'Yolkster64/helios-platform')
         self.assertEqual(plan['sourcePolicy'], 'single-repository')
         self.assertFalse(plan['executed'])
@@ -51,6 +51,47 @@ class ComponentPlanTests(unittest.TestCase):
                 self.assertFalse(plan['executed'])
                 self.assertFalse(plan['deployment']['executed'])
                 self.assertFalse(plan['deployment']['automaticApply'])
+
+    def test_gui_piece_map_is_shared_and_fixed(self):
+        pieces = components.list_gui_pieces(ROOT)
+        self.assertEqual([piece['id'] for piece in pieces['pieces']], ['home', 'aihub', 'fabric', 'usb', 'themes'])
+        self.assertFalse(pieces['executed'])
+        manifest = json.loads((ROOT / 'config/components.json').read_text())
+        for piece in pieces['pieces']:
+            self.assertEqual(piece['paths'], manifest['parts']['gui']['pieces'][piece['id']]['paths'])
+            self.assertTrue(all((ROOT / path).resolve().is_relative_to(ROOT) for path in piece['paths']))
+        self.assertIn('gui', manifest['parts']['desktop']['dependsOn'])
+
+    def test_gui_piece_selects_edit_scope_with_one_shared_build(self):
+        home = components.plan_part('gui', ROOT, piece='home')
+        theme = components.plan_part('gui', ROOT, piece='themes')
+        self.assertNotEqual(home['editPaths'], theme['editPaths'])
+        self.assertEqual(home['selectedPiece']['id'], 'home')
+        self.assertEqual(home['editPaths'], home['selectedPiece']['paths'])
+        self.assertEqual(home['tests'], theme['tests'])
+        self.assertIn('every GUI view', home['testScope'])
+        self.assertFalse(home['deployment']['automaticApply'])
+        self.assertNotIn('workflow', home['deployment'])
+        self.assertEqual(components.plan_part('gui', ROOT, piece='theme')['selectedPiece']['id'], 'themes')
+
+    def test_gui_piece_cannot_select_other_parts_or_arbitrary_commands(self):
+        with patch.object(components, '_execute', side_effect=AssertionError('invalid selector executed')):
+            for part, piece in [('cloud', 'home'), ('gui', 'home;whoami'), ('gui', '../home'), ('gui', ['home'])]:
+                with self.subTest(part=part, piece=piece), self.assertRaises(components.ComponentError):
+                    components.test_part(part, ROOT, piece=piece)
+
+    def test_gui_schema_rejects_new_or_traversing_pieces(self):
+        manifest = json.loads((ROOT / 'config/components.json').read_text())
+        schema = json.loads((ROOT / 'config/schemas/components.schema.json').read_text())
+        for mutate in (
+            lambda value: value['parts']['gui']['pieces'].update(shell=value['parts']['gui']['pieces']['home']),
+            lambda value: value['parts']['gui']['pieces']['home'].update(paths=['../outside']),
+            lambda value: value['parts']['core'].update(pieces=value['parts']['gui']['pieces']),
+        ):
+            candidate = copy.deepcopy(manifest)
+            mutate(candidate)
+            issues, _ = components.schema_validation.validate_instance(candidate, schema, 'builtin')
+            self.assertTrue(issues)
 
     def test_cloud_and_fleet_refer_to_protected_read_only_workflow_defaults(self):
         for name in ('cloud', 'fleet'):

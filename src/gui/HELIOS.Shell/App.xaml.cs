@@ -33,7 +33,8 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
+        var workbench = Environment.GetCommandLineArgs().Skip(1).Contains("--workbench", StringComparer.Ordinal);
+        _window = new MainWindow(workbench);
         _window.Activate();
     }
 
@@ -53,6 +54,7 @@ public partial class App : Application
         services.AddTransient<ControlHomePageViewModel>();
         services.AddTransient<FabricControlPageViewModel>();
         services.AddTransient<UsbSetupPageViewModel>();
+        services.AddTransient<WorkbenchPageViewModel>();
 
         return services.BuildServiceProvider();
     }

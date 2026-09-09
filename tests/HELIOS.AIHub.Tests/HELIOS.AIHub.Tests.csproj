@@ -24,6 +24,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Portable metadata contract only; the Windows XAML build stays separate. -->
+  <ItemGroup>
+    <Compile Include="../../src/gui/HELIOS.Shell/Services/GuiWorkbenchCatalog.cs" Link="GuiWorkbench/GuiWorkbenchCatalog.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/ai/HELIOS.AIHub/HELIOS.AIHub.csproj" />
     <ProjectReference Include="../../src/ai/HELIOS.AIHub.Api/HELIOS.AIHub.Api.csproj" />

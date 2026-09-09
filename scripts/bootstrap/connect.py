@@ -28,8 +28,10 @@ HELP = """HELIOS — Connect → Unify → Automate → Validate
   connect.sh start [--json]        Unattended tools, build, workspaces and saved-session checks
   connect.sh start --serve         Prepare, then run the shared MCP bridge in foreground
   connect.sh project                Shared project and destination map
-  connect.sh parts [NAME]          Core, Desktop, USB, Cloud and Fleet setup/test/release plans
-  connect.sh test NAME             Run one part's fixed local checks
+  connect.sh parts [NAME] [--json] Core, Desktop, GUI, USB, Cloud and Fleet plans
+  connect.sh parts gui --piece NAME  Home, AIHub, Fabric, USB or themes edit scope
+  connect.sh test NAME [--piece NAME]  Run the part's fixed local checks
+  connect.sh workbench [PIECE] [--open] [--json]  Prepare an isolated GUI editing workspace
   connect.sh auth status [--json]   Explicit bounded CLI authentication checks
   connect.sh identity [--strict]   Offline Azure OIDC, runtime identity and Key Vault plan
   connect.sh login github|azure|claude|codex
@@ -79,6 +81,116 @@ def identity_plan():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.build_plan()
+
+
+def maintained_helper(name):
+    """Only the launcher-owned component/workspace modules are executable."""
+    if name not in ("components", "agent_workspace"):
+        raise ConnectionError("Unsupported shared helper.")
+    path = Path(__file__).resolve().with_name(name + ".py")
+    if not path.is_file():
+        raise ConnectionError("The shared helper is missing from this checkout.")
+    spec = importlib.util.spec_from_file_location("helios_" + name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def part_arguments(args, *, allow_empty=False):
+    args = list(args)
+    as_json = "--json" in args
+    if as_json:
+        args.remove("--json")
+    if not args and allow_empty:
+        return None, None, as_json
+    if len(args) == 1 and not args[0].startswith("-"):
+        return args[0], None, as_json
+    if len(args) == 3 and args[0] == "gui" and args[1] == "--piece" and not args[2].startswith("-"):
+        return args[0], args[2], as_json
+    raise ConnectionError("Use parts [NAME] [--json], or parts/test gui --piece NAME.")
+
+
+def show_parts(report, as_json=False):
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return
+    if "parts" in report:
+        print("HELIOS — one repository, six parts")
+        for part in report["parts"]:
+            print(f"  {part['name']:<8} {part['purpose']}")
+        print("\nUse connect.sh parts gui, connect.sh test usb, or connect.sh workbench.")
+        return
+    print(report["details"]["name"] + " — " + report["details"]["purpose"])
+    selected = report.get("selectedPiece")
+    if selected:
+        print("Piece: " + selected["name"])
+    for path in report.get("editPaths", report["details"]["paths"]):
+        print("  " + path)
+    if report["part"] == "gui" and not selected:
+        print("Pieces: " + ", ".join(report["details"].get("pieces", {})))
+    if report.get("testScope"):
+        print("Test scope: " + report["testScope"])
+    print("Release: " + report["details"]["releaseBoundary"])
+    if report["missingPaths"]:
+        print("Missing: " + ", ".join(report["missingPaths"]))
+
+
+def prepare_workbench(piece=None):
+    components = maintained_helper("components")
+    try:
+        plan = components.plan_part("gui", root=ROOT, piece=piece)
+    except components.ComponentError as error:
+        raise ConnectionError(str(error)) from None
+    if plan["missingPaths"]:
+        raise ConnectionError("GUI source is incomplete; inspect connect.sh parts gui before creating a workbench.")
+    workspaces = maintained_helper("agent_workspace")
+    name = "gui-workbench" + ("-" + plan["selectedPiece"]["id"] if piece else "")
+    try:
+        result = workspaces.execute(ROOT, "create", name, "human")
+    except workspaces.WorkspaceError as error:
+        raise ConnectionError(str(error)) from None
+    workspace = Path(result["workspace"]["path"])
+    return {"status": result["status"], "workspace": result["workspace"],
+            "editorWorkspace": str(workspace / "workspace.code-workspace"),
+            "editPaths": plan["editPaths"], "selectedPiece": plan.get("selectedPiece"),
+            "editorStarted": False, "servicesStarted": False, "deploymentExecuted": False,
+            "note": "Existing edits and branches are preserved. New workspaces start at committed HEAD; uncommitted files are not copied."}
+
+
+def workbench(args):
+    args = list(args)
+    as_json, open_editor = "--json" in args, "--open" in args
+    for option in ("--json", "--open"):
+        if option in args:
+            args.remove(option)
+    if len(args) > 1 or (args and args[0].startswith("-")):
+        raise ConnectionError("Use workbench [home|aihub|fabric|usb|themes] [--open] [--json].")
+    report = prepare_workbench(args[0] if args else None)
+    code = 0
+    if open_editor:
+        if not Path(report["editorWorkspace"]).is_file():
+            report["editorError"] = "This existing workspace lacks workspace.code-workspace; update its branch before opening."
+            code = 2
+        else:
+            try:
+                code = run("code", ["--new-window", report["editorWorkspace"]],
+                           quiet=True, timeout=30, noninteractive=True)
+                report["editorStarted"] = code == 0
+                if code:
+                    report["editorError"] = "The editor did not confirm startup; the workspace is preserved."
+            except ConnectionError:
+                code = 2
+                report["editorError"] = "VS Code's code command is unavailable. Open editorWorkspace in your editor."
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print("HELIOS GUI workbench: " + report["status"])
+        print("Open: " + report["editorWorkspace"])
+        print("Branch: " + report["workspace"]["branch"])
+        print("Edit: " + ", ".join(report["editPaths"]))
+        print("In VS Code: Run Task → HELIOS: GUI preview (Windows).")
+        print(report.get("editorError", report["note"]))
+    return code
 
 
 def config(path):
@@ -169,6 +281,13 @@ def native(name):
     path = Path(candidate)
     if not WINDOWS or path.suffix.lower() not in (".cmd", ".bat"):
         return [str(path)], {}
+    if name == "code" and path.name.lower() == "code.cmd":
+        # microsoft/vscode resources/win32/bin/code.cmd uses Electron's CLI
+        # script; invoke the same native layout without a batch command string.
+        binary = path.parent.parent / "Code.exe"
+        script = path.parent.parent / "resources/app/out/cli.js"
+        if binary.is_file() and script.is_file():
+            return [str(binary), str(script)], {"ELECTRON_RUN_AS_NODE": "1", "VSCODE_DEV": ""}
     native_exe = shutil.which(name + ".exe")
     if native_exe:
         return [native_exe], {}
@@ -449,14 +568,22 @@ def main(args=None):
         if command == "project" and not args:
             print(json.dumps(config("config/control-project.json"), indent=2))
             return 0
-        if command == "parts" and len(args) <= 1:
+        if command == "parts":
+            name, piece, as_json = part_arguments(args, allow_empty=True)
+            components = maintained_helper("components")
+            try:
+                report = components.plan_part(name, root=ROOT, piece=piece) if name else components.list_parts(root=ROOT)
+            except components.ComponentError as error:
+                raise ConnectionError(str(error)) from None
+            show_parts(report, as_json)
+            return 2 if report.get("missingPaths") else 0
+        if command == "test":
+            name, piece, _ = part_arguments(args)
             path = "scripts/bootstrap/components.py"
             require(path)
-            return run(sys.executable, [str(ROOT / path), *(["plan", args[0]] if args else ["list"])])
-        if command == "test" and len(args) == 1:
-            path = "scripts/bootstrap/components.py"
-            require(path)
-            return run(sys.executable, [str(ROOT / path), "test", args[0]])
+            return run(sys.executable, [str(ROOT / path), "test", name, *(["--piece", piece] if piece else [])])
+        if command == "workbench":
+            return workbench(args)
         if command == "identity" and args in ([], ["--json"], ["--strict"], ["--json", "--strict"], ["--strict", "--json"]):
             report = identity_plan()
             print(json.dumps(report, indent=2))
