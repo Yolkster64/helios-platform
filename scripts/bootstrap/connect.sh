@@ -66,6 +66,9 @@ usage: bash scripts/bootstrap/connect.sh [options]
                       codex foundry connectors workspace agents fleet m365 verify
   -h, --help          this text
 
+  HELIOS_PWSH         the interpreter to run the .ps1 lanes with, when it is
+                      somewhere neither .tools/pwsh/pwsh nor PATH will find
+
 Cloud Shell is the intended home: paste one line there and answer at most five
 prompts. See docs/CONNECT.md.
 USAGE
@@ -112,8 +115,12 @@ skipped() { [ -n "${skip[$1]:-}" ]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# HELIOS_PWSH names the interpreter to run the .ps1 lanes with, for a host that keeps
+# PowerShell somewhere neither of the two guesses below will find - and it is what the
+# offline suite points at a shim, so the contracts here can be tested without a network.
 pwsh_bin=""
-for candidate in "$REPO_ROOT/.tools/pwsh/pwsh" pwsh; do
+for candidate in "${HELIOS_PWSH:-}" "$REPO_ROOT/.tools/pwsh/pwsh" pwsh; do
+    [ -n "$candidate" ] || continue
     if [ -x "$candidate" ] || have "$candidate"; then pwsh_bin="$candidate"; break; fi
 done
 

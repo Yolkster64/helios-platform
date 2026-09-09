@@ -15,6 +15,9 @@ on:
       - 'scripts/bootstrap/connect-github-app.ps1'
       - 'scripts/verify/tests/test_connect_devices.ps1'
       - 'scripts/verify/tests/test_connect_github_app.ps1'
+      - 'scripts/bootstrap/connect.ps1'
+      - 'scripts/bootstrap/connect.sh'
+      - 'scripts/verify/tests/test_connect.ps1'
       - '.github/workflows/auth-contracts.yml'
   push:
     branches: [main]
@@ -31,6 +34,9 @@ on:
       - 'scripts/bootstrap/connect-github-app.ps1'
       - 'scripts/verify/tests/test_connect_devices.ps1'
       - 'scripts/verify/tests/test_connect_github_app.ps1'
+      - 'scripts/bootstrap/connect.ps1'
+      - 'scripts/bootstrap/connect.sh'
+      - 'scripts/verify/tests/test_connect.ps1'
       - '.github/workflows/auth-contracts.yml'
 
 permissions:
@@ -59,3 +65,10 @@ jobs:
         run: |
           ./scripts/verify/tests/test_connect_devices.ps1
           ./scripts/verify/tests/test_connect_github_app.ps1
+      # The one connect command, both twins, with their .ps1 children pointed at a shim
+      # through HELIOS_PWSH: proves a read-only run mutates nothing, never reaches
+      # auto-login.ps1 (which can replace the az profile), and reads each lane's state from
+      # the report rather than from an exit code.
+      - name: Verify the connect orchestrator contracts
+        shell: pwsh
+        run: ./scripts/verify/tests/test_connect.ps1
