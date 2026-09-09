@@ -512,8 +512,17 @@ if (-not (Test-Skipped 'verify')) {
     # still a change to a checkout that had none.
     # New-TemporaryFile, not a name built from $PID: a predictable path in a world-writable
     # directory can be pre-created as a symlink, and the write below would follow it.
+    # first-run writes its own durable state under .helios/ whether or not -VerifyOnly was
+    # passed, so a read-only run of THIS script would create a directory in the checkout by
+    # way of its child. HELIOS_STATE_DIR sends that state to a temporary directory instead,
+    # removed below with the report.
+    $verifyState = $null
+    $savedStateDirEnv = $env:HELIOS_STATE_DIR
     if ($readOnly) {
         $reportPath = (New-TemporaryFile).FullName
+        $verifyState = Join-Path ([IO.Path]::GetTempPath()) ('helios-firstrun-state-' + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $verifyState -Force | Out-Null
+        $env:HELIOS_STATE_DIR = $verifyState
     }
     else {
         New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
@@ -539,7 +548,11 @@ if (-not (Test-Skipped 'verify')) {
     # The report has been read, so the temporary copy has done its job: a run that promises to
     # change nothing leaves nothing behind, in the temp directory either. The bash twin does
     # the same with its mktemp file.
-    if ($readOnly) { Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue }
+    if ($readOnly) {
+        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+        if ($verifyState) { Remove-Item -LiteralPath $verifyState -Recurse -Force -ErrorAction SilentlyContinue }
+        $env:HELIOS_STATE_DIR = $savedStateDirEnv
+    }
     if ($code -ne 0 -and $code -ne 2) { Add-Lane verify 'failed' "first-run.ps1 -VerifyOnly exited $code" }
     elseif ($null -eq $readReport) {
         Add-Lane verify 'failed' `

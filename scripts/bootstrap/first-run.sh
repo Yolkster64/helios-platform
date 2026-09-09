@@ -50,6 +50,10 @@
 #   bash scripts/bootstrap/first-run.sh --json               # the state JSON only on stdout
 #   bash scripts/bootstrap/first-run.sh --skip-setup         # skip step 5 (setup-everything)
 #   bash scripts/bootstrap/first-run.sh --managed-identity   # forward -UseManagedIdentity
+#
+# HELIOS_STATE_DIR relocates this run's state away from the checkout's .helios/, for a caller
+# that must leave the checkout untouched (connect.sh --status points it at a temporary
+# directory). The state is written either way; only where changes.
 #   bash scripts/bootstrap/first-run.sh --connect            # step 0: both device codes in one sitting
 #
 # Exit codes: 0 = the chain ran (needs-owner lanes NEVER gate — they ARE the
@@ -92,8 +96,13 @@ else
   environment="local"
 fi
 
-state_dir="$repo_root/.helios/bootstrap"
-state_file="$repo_root/.helios/bootstrap-state.json"
+# HELIOS_STATE_DIR relocates this run's state. The default is the checkout's .helios/, which
+# is where the durable record belongs - but a caller that promises to change nothing
+# (connect.sh --status) needs the report without a new directory appearing in the checkout,
+# and this run writes its state whether or not --verify-only was passed.
+helios_state_root="${HELIOS_STATE_DIR:-$repo_root/.helios}"
+state_dir="$helios_state_root/bootstrap"
+state_file="$helios_state_root/bootstrap-state.json"
 mkdir -p "$state_dir"
 chain_log="$state_dir/first-run.log"
 steps_file="$state_dir/steps.tsv"
@@ -577,7 +586,7 @@ for index, (title, lines) in enumerate(items, start=1):
         print("       " + line)
 print("")
 print("Account creation and MFA cannot be automated: every login above needs the owner's own browser session and second factor; this script only prepares and verifies.")
-print("State written: .helios/bootstrap-state.json (raw reports: .helios/bootstrap/*.json)")
+print("State written: %s (raw reports: %s/*.json)" % (state_file, state_dir))
 PY
   then
     echo "first-run: internal failure — the state merge failed (see $chain_log)" >&2
@@ -612,7 +621,7 @@ else
     say "       pwsh scripts/bootstrap/provision-github-secrets.ps1    # repository secrets/variables by name"
     say ""
     say "Account creation and MFA cannot be automated: every login needs the owner's own browser session and second factor."
-    say "State written: .helios/bootstrap-state.json (steps only)"
+    say "State written: $state_file (steps only)"
   fi
 fi
 

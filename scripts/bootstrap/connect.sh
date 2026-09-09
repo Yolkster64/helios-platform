@@ -607,7 +607,16 @@ if ! skipped verify; then
         mkdir -p "$STATE_DIR"
         verify_json="$STATE_DIR/connect-firstrun.json"
     fi
-    PATH="$verify_path" bash "$REPO_ROOT/scripts/bootstrap/first-run.sh" --verify-only --json >"$verify_json" 2>/dev/null
+    # first-run writes its own durable state under .helios/ whether or not --verify-only was
+    # passed, so a read-only run of THIS script would create a directory in the checkout by
+    # way of its child. HELIOS_STATE_DIR sends that state to a temporary directory instead,
+    # removed below with the report.
+    verify_state=""
+    if [ "$verify_only" -eq 1 ]; then
+        verify_state=$(mktemp -d "${TMPDIR:-/tmp}/helios-firstrun-state-XXXXXX") || verify_state=""
+    fi
+    HELIOS_STATE_DIR="${verify_state:-${HELIOS_STATE_DIR:-}}" PATH="$verify_path" \
+        bash "$REPO_ROOT/scripts/bootstrap/first-run.sh" --verify-only --json >"$verify_json" 2>/dev/null
     rc=$?
     # --json carries the verdict in the document, not in the exit code (it exits 0
     # whether or not lanes are outstanding), so read the lanes rather than $?.
@@ -643,7 +652,10 @@ PYVERIFY
             "bash scripts/bootstrap/first-run.sh --verify-only   # the full report, one command per lane"
     fi
     say "   exit $rc; outstanding: ${outstanding:-none}"
-    [ "$verify_only" -eq 1 ] && rm -f "$verify_json"
+    if [ "$verify_only" -eq 1 ]; then
+        rm -f "$verify_json"
+        [ -n "$verify_state" ] && rm -rf "$verify_state"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

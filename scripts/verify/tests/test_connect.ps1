@@ -64,8 +64,21 @@ $stateDir = Join-Path $root '.helios'
 $stateFile = Join-Path $stateDir 'connect-state.json'
 $reportFile = Join-Path $stateDir 'connect-firstrun.json'
 # An empty .helios/ appearing in a checkout that had none is a change too, so the state
-# directory's own existence is part of the read-only contract.
-$stateDirExisted = Test-Path -LiteralPath $stateDir
+# directory is part of the read-only contract - and not only its existence. On a developer's
+# machine .helios/ is already there, so an existence check alone has no teeth locally and
+# only fails in CI; the CONTENTS are compared, which is what catches a child writing into an
+# existing .helios/ (first-run.sh does exactly that unless it is told where to put its state).
+function Get-StateDirEntries {
+    # Name AND content: first-run OVERWRITES .helios/bootstrap-state.json rather than adding
+    # to it, so comparing the set of paths alone would call a rewritten state file unchanged.
+    if (-not (Test-Path -LiteralPath $stateDir)) { return '<absent>' }
+    $entries = foreach ($item in Get-ChildItem -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue) {
+        if ($item.PSIsContainer) { "$($item.FullName)/" }
+        else { "$($item.FullName) $((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash)" }
+    }
+    return (($entries | Sort-Object) -join "`n")
+}
+$stateDirBefore = Get-StateDirEntries
 
 # The real interpreter, captured before `pwsh` on PATH means the shim: the ps1 twin has to be
 # run by something that is actually PowerShell.
@@ -148,8 +161,15 @@ exit 1
         #    temporary copy, and a temporary copy that is never deleted is a file left behind.
         Assert-Equal $before.State (Get-Fingerprint $stateFile) "$($twin.Name) read-only wrote the state file"
         Assert-Equal $before.Report (Get-Fingerprint $reportFile) "$($twin.Name) read-only wrote a first-run report"
-        Assert-Equal $stateDirExisted (Test-Path -LiteralPath $stateDir) `
-            "$($twin.Name) read-only created the .helios state directory"
+        # Named differences, not two full snapshots: the message lands in a CI log, where a
+        # dump of every path and hash buries the one entry that moved.
+        $stateDirAfter = Get-StateDirEntries
+        if ($stateDirAfter -ne $stateDirBefore) {
+            $changed = (Compare-Object ($stateDirBefore -split "`n") ($stateDirAfter -split "`n") |
+                ForEach-Object { "$($_.SideIndicator) $(($_.InputObject -split ' ')[0])" } | Sort-Object -Unique) -join '; '
+            throw "$($twin.Name) read-only changed what is under the .helios state directory: $changed"
+        }
+        $script:cases++
         # ($strays | ForEach-Object Name), not $strays.Name: member enumeration over an EMPTY
         # array throws under Set-StrictMode -Version Latest, so the message built for a failure
         # would itself fail on the passing path.

@@ -84,6 +84,10 @@ pwsh scripts/bootstrap/first-run.ps1 -Json | ConvertFrom-Json
 Exit codes: 0 = the chain ran (needs-owner lanes NEVER gate — they ARE the
 checklist); 1 = internal failure (no PowerShell executable resolvable for the
 children, or the state file could not be written).
+
+HELIOS_STATE_DIR relocates this run's state away from the checkout's .helios/, for a
+caller that must leave the checkout untouched (connect.ps1 -Status points it at a
+temporary directory). The state is written either way; only where changes.
 #>
 [CmdletBinding()]
 param(
@@ -131,8 +135,13 @@ function Get-OptionalProperty {
 $pwshCommand = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $pwshExe = if ($pwshCommand) { $pwshCommand.Source } else { [Environment]::ProcessPath }
 
-$stateDir = Join-Path $repoRoot '.helios' 'bootstrap'
-$stateFile = Join-Path $repoRoot '.helios' 'bootstrap-state.json'
+# HELIOS_STATE_DIR relocates this run's state. The default is the checkout's .helios/, which
+# is where the durable record belongs - but a caller that promises to change nothing
+# (connect.ps1 -Status) needs the report without a new directory appearing in the checkout,
+# and this run writes its state whether or not -VerifyOnly was passed.
+$stateRoot = if ($env:HELIOS_STATE_DIR) { $env:HELIOS_STATE_DIR } else { Join-Path $repoRoot '.helios' }
+$stateDir = Join-Path $stateRoot 'bootstrap'
+$stateFile = Join-Path $stateRoot 'bootstrap-state.json'
 $null = New-Item -ItemType Directory -Path $stateDir -Force
 $chainLog = Join-Path $stateDir 'first-run.log'
 Set-Content -LiteralPath $chainLog -Value '' -NoNewline
@@ -574,7 +583,7 @@ try {
     }
     Write-Report ''
     Write-Report 'Account creation and MFA cannot be automated: every login above needs the owner''s own browser session and second factor; this script only prepares and verifies.'
-    Write-Report 'State written: .helios/bootstrap-state.json (raw reports: .helios/bootstrap/*.json)'
+    Write-Report "State written: $stateFile (raw reports: $stateDir/*.json)"
 
     if ($internalFailure) {
         [Console]::Error.WriteLine('first-run: internal failure — no PowerShell 7 executable could be resolved for the child steps; the checklist names the install.')
