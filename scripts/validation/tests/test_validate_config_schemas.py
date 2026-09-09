@@ -1543,3 +1543,46 @@ class Round10bTests(unittest.TestCase):
         spelled = topology([{} for _ in range(5)], {"poolSize": decimal.Decimal("64.0")})
         self.assertIn("worker processes together",
                       " ".join(issue.message for issue in target._check_fleet_capacity(spelled)))
+
+
+class Round11Tests(unittest.TestCase):
+    """Round 11 of PR #252: an error message renders only as far as the message will show it."""
+
+    def test_a_message_does_not_render_the_whole_instance(self) -> None:
+        # Brief built the entire canonical form and sliced it afterwards, so one failing branch
+        # against a large instance paid for a full serialization to print 120 characters - and
+        # every branch of an allOf paid again, all inside the evaluation budget.
+        instance = {f"k{index}": "y" * 200 for index in range(200_000)}
+        started = time.monotonic()
+        text = target._brief(instance)
+        self.assertLessEqual(len(text), 120)
+        self.assertLess(time.monotonic() - started, 5)
+        # A long scalar is the same cost by another route.
+        started = time.monotonic()
+        self.assertLessEqual(len(target._brief("z" * 5_000_000)), 120)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_short_values_read_exactly_as_before(self) -> None:
+        # The bound must not change any message a manifest actually produces.
+        for value in ({"a": 1, "b": [1, 2]}, [1, 2, 3], "x", 1.5, None, True, {}, []):
+            self.assertEqual(target._brief(value), target._canonical(value), value)
+
+    def test_many_failing_branches_stay_cheap(self) -> None:
+        # 2,000 false allOf branches against a large instance: the schema is well inside the
+        # evaluation budget, so only the rendering bound keeps this finite.
+        schema = {"allOf": [{"type": "string"} for _ in range(2_000)]}
+        instance = {f"k{index}": "y" * 200 for index in range(20_000)}
+        started = time.monotonic()
+        issues, _ = target.validate_instance(instance, schema, engine="builtin")
+        self.assertEqual(len(issues), 2_000)
+        self.assertTrue(all(len(issue.message) < 200 for issue in issues))
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_the_schemas_own_values_are_bounded_too(self) -> None:
+        # `enum` and `const` render the SCHEMA's value into the message, which is just as unbounded.
+        issues, _ = target.validate_instance("no", {"enum": ["y" * 200_000, "b"]}, engine="builtin")
+        self.assertEqual(len(issues), 1)
+        self.assertLess(len(issues[0].message), 400)
+        issues, _ = target.validate_instance("no", {"const": "y" * 200_000}, engine="builtin")
+        self.assertEqual(len(issues), 1)
+        self.assertLess(len(issues[0].message), 400)

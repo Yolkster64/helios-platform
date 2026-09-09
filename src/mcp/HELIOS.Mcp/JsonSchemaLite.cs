@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -515,11 +516,11 @@ internal static class JsonSchemaLite
 
             if (schema.TryGetProperty("enum", out var options) && !EnumContains(options, instance, path))
             {
-                errors.Add(new Issue(path, $"{Brief(instance)} is not one of {Display(options)}"));
+                errors.Add(new Issue(path, $"{Brief(instance)} is not one of {Brief(options)}"));
             }
             if (schema.TryGetProperty("const", out var constant) && !JsonEquals(instance, constant))
             {
-                errors.Add(new Issue(path, $"{Display(constant)} was expected"));
+                errors.Add(new Issue(path, $"{Brief(constant)} was expected"));
             }
 
             switch (instance.ValueKind)
@@ -1295,12 +1296,99 @@ internal static class JsonSchemaLite
             return left.CanonicalKey == Canonical(right);
         }
 
-        /// <summary>Canonical form for messages: a whole manifest quoted back is noise, not a hint.</summary>
+        /// <summary>
+        /// Canonical form for messages: a whole manifest quoted back is noise, not a hint.
+        /// </summary>
+        /// <remarks>
+        /// Rendered only as far as the message will show. Display()ing the whole value and slicing
+        /// it afterwards meant a failing branch against a large instance paid for a full
+        /// serialization to print 120 characters — and every branch of an allOf paid again, so a
+        /// schema well inside the evaluation budget could ask for terabytes of rendering, in a
+        /// synchronous server with no whole-request deadline. The walk stops as soon as it has more
+        /// than it will keep, so the cost of a message is the size of the message.
+        /// </remarks>
         private static string Brief(JsonElement element)
         {
             const int limit = 120;
-            var text = Display(element);
-            return text.Length <= limit ? text : text[..(limit - 3)] + "...";
+            var builder = new StringBuilder();
+            RenderBounded(builder, element, limit);
+            return builder.Length <= limit ? builder.ToString() : builder.ToString(0, limit - 3) + "...";
+        }
+
+        /// <summary>
+        /// Appends Display()'s rendering of <paramref name="element"/>, stopping once it passes
+        /// <paramref name="limit"/>. Object members are NOT sorted here: sorting means reading every
+        /// member of a large object before the first character is emitted, which is the cost this
+        /// exists to avoid, and a message does not need a canonical order. Canonical() remains the
+        /// complete, sorted form used for equality.
+        /// </summary>
+        private static void RenderBounded(StringBuilder builder, JsonElement element, int limit)
+        {
+            if (builder.Length > limit)
+            {
+                return;
+            }
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    builder.Append('{');
+                    var firstMember = true;
+                    foreach (var member in element.EnumerateObject())
+                    {
+                        if (builder.Length > limit)
+                        {
+                            break;
+                        }
+                        if (!firstMember)
+                        {
+                            builder.Append(',');
+                        }
+                        firstMember = false;
+                        builder.Append(JsonSerializer.Serialize(member.Name)).Append(':');
+                        RenderBounded(builder, member.Value, limit);
+                    }
+                    builder.Append('}');
+                    break;
+                case JsonValueKind.Array:
+                    builder.Append('[');
+                    var firstItem = true;
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        if (builder.Length > limit)
+                        {
+                            break;
+                        }
+                        if (!firstItem)
+                        {
+                            builder.Append(',');
+                        }
+                        firstItem = false;
+                        RenderBounded(builder, item, limit);
+                    }
+                    builder.Append(']');
+                    break;
+                case JsonValueKind.String:
+                    // A long string is a scalar, but serializing it whole is the same cost by
+                    // another route. The cut keeps whole characters: slicing between the halves of
+                    // a surrogate pair would leave a lone surrogate for the encoder to replace, so
+                    // a truncated message could differ from the Python twin's by a character it
+                    // never contained.
+                    var text = element.GetString() ?? "";
+                    if (text.Length > limit)
+                    {
+                        var cut = limit + 1;
+                        if (char.IsHighSurrogate(text[cut - 1]))
+                        {
+                            cut--;
+                        }
+                        text = text[..cut];
+                    }
+                    builder.Append(JsonSerializer.Serialize(text));
+                    break;
+                default:
+                    builder.Append(element.GetRawText());
+                    break;
+            }
         }
 
         /// <summary>Compact JSON, object keys sorted: the equality key, with numbers normalized exactly.</summary>

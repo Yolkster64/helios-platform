@@ -1522,6 +1522,58 @@ public sealed class McpConfigToolTests : IDisposable
             HeliosConfigTools.BuildValidationJson("config/fabric/helios-fabric.v1.json", null, root));
     }
 
+    [Fact]
+    public void JsonSchemaLite_AMessageDoesNotRenderTheWholeInstance()
+    {
+        // Brief() Display()ed the whole value and sliced it afterwards, so one failing branch
+        // against a large instance paid for a full serialization to print 120 characters — and
+        // every branch of an allOf paid again, in a server with no whole-request deadline.
+        var members = string.Join(", ", Enumerable.Range(0, 20_000).Select(i => $"\"k{i}\": \"{new string('y', 200)}\""));
+        var branches = string.Join(", ", Enumerable.Range(0, 2_000).Select(_ => "{ \"type\": \"string\" }"));
+        using var schema = JsonDocument.Parse($"{{ \"allOf\": [ {branches} ] }}");
+        using var instance = JsonDocument.Parse($"{{ {members} }}");
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        Assert.Equal(2_000, issues.Count);
+        Assert.All(issues, issue => Assert.True(issue.Message.Length < 200, issue.Message));
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(20), $"took {started.Elapsed}");
+    }
+
+    [Theory]
+    [InlineData("""{ "type": "string" }""", """{ "a": 1, "b": [1, 2] }""")]
+    [InlineData("""{ "type": "string" }""", "[1, 2, 3]")]
+    [InlineData("""{ "type": "string" }""", "1.5")]
+    [InlineData("""{ "type": "string" }""", "{}")]
+    [InlineData("""{ "type": "object" }""", "\"x\"")]
+    public void JsonSchemaLite_ShortValuesReadExactlyAsBefore(string schemaJson, string instanceJson)
+    {
+        // The bound must not change any message a manifest actually produces: a short value still
+        // appears in full, and still round-trips as JSON.
+        using var schema = JsonDocument.Parse(schemaJson);
+        using var instance = JsonDocument.Parse(instanceJson);
+
+        var issues = JsonSchemaLite.Validate(schema.RootElement, instance.RootElement);
+
+        var quoted = Assert.Single(issues).Message.Split(" is not of type ")[0];
+        using var reparsed = JsonDocument.Parse(quoted);   // throws if the render was truncated
+        Assert.Equal(JsonDocument.Parse(instanceJson).RootElement.ValueKind, reparsed.RootElement.ValueKind);
+    }
+
+    [Fact]
+    public void JsonSchemaLite_TheSchemasOwnValuesAreBoundedToo()
+    {
+        // `enum` and `const` render the SCHEMA's value into the message, just as unbounded.
+        var big = new string('y', 200_000);
+        using var enumSchema = JsonDocument.Parse(JsonSerializer.Serialize(new { @enum = new[] { big, "b" } }));
+        using var constSchema = JsonDocument.Parse(JsonSerializer.Serialize(new { @const = big }));
+        using var instance = JsonDocument.Parse("\"no\"");
+
+        Assert.True(Assert.Single(JsonSchemaLite.Validate(enumSchema.RootElement, instance.RootElement)).Message.Length < 400);
+        Assert.True(Assert.Single(JsonSchemaLite.Validate(constSchema.RootElement, instance.RootElement)).Message.Length < 400);
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {

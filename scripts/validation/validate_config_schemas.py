@@ -230,9 +230,64 @@ def _canonical_key(value: Any) -> str:
 
 
 def _brief(value: Any, limit: int = 120) -> str:
-    """Canonical form for messages: a whole manifest quoted back is noise, not a hint."""
-    text = _canonical(value)
+    """Canonical form for messages: a whole manifest quoted back is noise, not a hint.
+
+    Rendered only as far as the message will show. Building the whole canonical form and slicing
+    it afterwards meant a failing branch against a large instance paid for a full serialization to
+    print 120 characters - and every branch of an allOf paid again, so a schema well inside the
+    evaluation budget could ask for terabytes of rendering. The walk stops as soon as it has more
+    than it will keep, so the cost of a message is the size of the message.
+    """
+    parts: list[str] = []
+    _render_into(parts, value, limit, 0)
+    text = "".join(parts)
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _render_into(parts: list[str], value: Any, limit: int, length: int) -> int:
+    """Append _canonical's rendering of `value` to `parts` and return the new length, stopping as
+    soon as it passes `limit`.
+
+    Object keys are NOT sorted here: sorting means reading every key of a large object before the
+    first character is emitted, which is the cost this exists to avoid, and a message does not need
+    a canonical order. _canonical and _canonical_key remain the complete, sorted forms used for
+    equality and for anything that must round-trip.
+    """
+    if length > limit:
+        return length
+    if isinstance(value, dict):
+        parts.append("{")
+        length += 1
+        for index, (key, item) in enumerate(value.items()):
+            if length > limit:
+                break
+            if index:
+                parts.append(",")
+                length += 1
+            rendered = f"{json.dumps(key)}:"
+            parts.append(rendered)
+            length += len(rendered)
+            length = _render_into(parts, item, limit, length)
+        parts.append("}")
+        return length + 1
+    if isinstance(value, list):
+        parts.append("[")
+        length += 1
+        for index, item in enumerate(value):
+            if length > limit:
+                break
+            if index:
+                parts.append(",")
+                length += 1
+            length = _render_into(parts, item, limit, length)
+        parts.append("]")
+        return length + 1
+    if isinstance(value, str) and len(value) > limit:
+        # A long string is a scalar, but rendering it whole is the same cost by another route.
+        value = value[: limit + 1]
+    rendered = _canonical(value)
+    parts.append(rendered)
+    return length + len(rendered)
 
 
 def _json_equal(left: Any, right: Any) -> bool:
@@ -865,9 +920,9 @@ class MiniValidator:
                 return  # type mismatches make the remaining keywords meaningless
 
         if "enum" in schema and not self._enum_contains(schema["enum"], instance, path):
-            errors.append(Issue(path, f"{_brief(instance)} is not one of {_canonical(schema['enum'])}"))
+            errors.append(Issue(path, f"{_brief(instance)} is not one of {_brief(schema['enum'])}"))
         if "const" in schema and not _json_equal(instance, schema["const"]):
-            errors.append(Issue(path, f"{_canonical(schema['const'])} was expected"))
+            errors.append(Issue(path, f"{_brief(schema['const'])} was expected"))
 
         if isinstance(instance, str):
             self._validate_string(schema, instance, path, errors)
