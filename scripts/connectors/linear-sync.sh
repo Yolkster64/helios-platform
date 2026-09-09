@@ -119,7 +119,7 @@ fi
 # client-side check over a fixed first:10 page could miss the right
 # mirror once enough same-number mirrors exist, and a duplicate
 # would then be created. Scope to the configured team and detect ambiguity.
-existing=$(gql 'query($team:ID!,$t:String!,$u:String!){ issues(filter:{team:{id:{eq:$team}}, title:{startsWith:$t}, description:{contains:$u}}, includeArchived:true, first:2){ nodes { id description archivedAt project { id } } } }' \
+existing=$(gql 'query($team:ID!,$t:String!,$u:String!){ issues(filter:{team:{id:{eq:$team}}, title:{startsWith:$t}, description:{contains:$u}}, includeArchived:true, first:2){ nodes { id description archivedAt project { id } state { type } } } }' \
   "$(jq -n --arg team "$team_id" --arg t "$prefix" --arg u "$ISSUE_URL" '{team:$team,t:$t,u:$u}')")
 existing_count=$(jq -er '.data.issues.nodes | if type == "array" then length else error("missing issue list") end' <<< "$existing")
 if [ "$existing_count" -gt 1 ]; then
@@ -134,9 +134,39 @@ if [ "$existing_count" -eq 1 ] && ! jq -e --arg project "$project_id" --arg url 
   echo "::error::Existing mirror is archived, invalid or outside the configured project; reconcile it before syncing."
   exit 1
 fi
+if [ "$existing_count" -eq 1 ]; then
+  # Linear reserves the "duplicate" workflow type for consolidated issues.
+  # Never revive or rewrite one, even for delayed GitHub events. Ordinary
+  # completed/canceled issues still follow GitHub's current lifecycle state.
+  if ! existing_state=$(jq -er '.data.issues.nodes[0].state.type |
+      select(. == "triage" or . == "backlog" or . == "unstarted" or
+             . == "started" or . == "completed" or . == "canceled" or . == "duplicate")' <<< "$existing"); then
+    echo "::error::Existing mirror has no recognized workflow state; sync stopped before any mutation."
+    exit 1
+  fi
+  if [ "$existing_state" = "duplicate" ]; then
+    echo "Linear counterpart is marked Duplicate; preserving its consolidation without mutation."
+    exit 0
+  fi
+fi
 if [ -z "$existing_id" ] && [[ "$EVENT_ACTION" =~ ^(unlabeled|closed|reopened|edited)$ ]]; then
   echo "No Linear counterpart; no mutation required."
   exit 0
+fi
+
+# Resolve lifecycle destinations before labels can be created. Missing states
+# or failed state reads must leave both the issue and its labels untouched.
+state_id=''
+if [[ "$EVENT_ACTION" =~ ^(closed|reopened)$ ]] ||
+   { [ -z "$existing_id" ] && [ "$ISSUE_STATE" = "closed" ]; }; then
+  state_type=$([ "$ISSUE_STATE" = "closed" ] && echo completed || echo unstarted)
+  if ! state_id=$(gql 'query($id:String!){ team(id:$id){ states { nodes { id type position } } } }' \
+      "$(jq -n --arg id "$team_id" '{id:$id}')" |
+      jq -er --arg t "$state_type" '.data.team.states.nodes | map(select(.type==$t)) |
+        sort_by(.position) | .[0].id | select(type == "string" and length > 0)'); then
+    echo "::error::Team has no readable '$state_type' workflow state; sync stopped before any mutation."
+    exit 1
+  fi
 fi
 
 # Resolve the mapped Linear labels for this issue's CURRENT GitHub
@@ -189,9 +219,7 @@ case "$EVENT_ACTION" in
     create_state='{}'
     if [ "$ISSUE_STATE" = "closed" ]; then
       # A delayed label event may be creating an already-closed issue.
-      done_id=$(gql 'query($id:String!){ team(id:$id){ states { nodes { id type position } } } }' \
-        "$(jq -n --arg id "$team_id" '{id:$id}')" | jq -er '.data.team.states.nodes | map(select(.type=="completed")) | sort_by(.position) | .[0].id // empty')
-      create_state=$(jq -n --arg id "$done_id" '{stateId:$id}')
+      create_state=$(jq -n --arg id "$state_id" '{stateId:$id}')
     fi
     created=$(gql 'mutation($input:IssueCreateInput!){ issueCreate(input:$input){ success issue { id identifier url project { id } } } }' \
       "$(jq -n --arg teamId "$team_id" --arg projectId "$project_id" --arg title "${prefix}${ISSUE_TITLE}" \
@@ -233,18 +261,8 @@ case "$EVENT_ACTION" in
     # not order them, so a delayed 'closed' run could re-complete an
     # issue that was already reopened. Failed live reads stop before any write.
     live_state=$ISSUE_STATE
-    state_type=$([ "$live_state" = "closed" ] && echo completed || echo unstarted)
-    state_id=$(gql 'query($id:String!){ team(id:$id){ states { nodes { id type position } } } }' \
-      "$(jq -n --arg id "$team_id" '{id:$id}')" |
-      jq -r --arg t "$state_type" \
-        '.data.team.states.nodes | map(select(.type==$t)) | sort_by(.position) | .[0].id // empty')
-    if [ -n "$state_id" ]; then
-      gql 'mutation($id:String!, $stateId:String!){ issueUpdate(id:$id, input:{stateId:$stateId}){ success } }' \
-        "$(jq -n --arg id "$existing_id" --arg stateId "$state_id" '{id:$id, stateId:$stateId}')" > /dev/null
-    else
-      echo "::error::Team has no '$state_type' workflow state; sync stopped."
-      exit 1
-    fi
+    gql 'mutation($id:String!, $stateId:String!){ issueUpdate(id:$id, input:{stateId:$stateId}){ success } }' \
+      "$(jq -n --arg id "$existing_id" --arg stateId "$state_id" '{id:$id, stateId:$stateId}')" > /dev/null
     # State replacement is repeatable. Avoid appending duplicate comments on
     # workflow retries or comments describing a stale event rather than live state.
     echo "Synced current GitHub state '$live_state' to the Linear issue."

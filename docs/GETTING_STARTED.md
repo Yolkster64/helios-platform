@@ -1,9 +1,12 @@
 # Getting started with HELIOS
 
-This is the five-minute path from `git clone` to a working `helios-ai ask`, for three kinds
-of reader: someone with only a GitHub account, someone with a ChatGPT/Codex login, and the
-repository owner with an Azure tenant. Everything here was run from a Linux shell against
-this repository; nothing needs a paid API key to reach the first answer.
+For the normal automatic path, use **[Start HELIOS](CONNECT.md)** and
+`bash connect.sh start --serve` (PowerShell: `./connect.ps1 start --serve`).
+That guide owns the first-run experience and shared project map.
+
+This page keeps the detailed provider examples for when you choose to activate a
+particular service. The examples can invoke models and require that service's
+access; a successful local startup does not require a paid model API key.
 
 ## What HELIOS is
 

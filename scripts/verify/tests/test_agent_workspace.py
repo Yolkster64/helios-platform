@@ -56,6 +56,37 @@ class AgentWorkspaceTests(unittest.TestCase):
         self.assertEqual(before, set(self.repo.rglob("*")))
         self.assertFalse(self.base.exists())
 
+    def test_nested_git_remains_noninteractive_after_environment_sanitization(self):
+        with patch.dict(os.environ, {"GIT_DIR": "/wrong", "GIT_TERMINAL_PROMPT": "1",
+                                     "GIT_ALLOW_PROTOCOL": "https", "GIT_ASKPASS": "/prompt"}):
+            git = work.Git()
+        self.assertNotIn("GIT_DIR", git.env)
+        self.assertEqual(git.env["GIT_TERMINAL_PROMPT"], "0")
+        self.assertEqual(git.env["GIT_ALLOW_PROTOCOL"], "")
+        self.assertEqual(git.env["GCM_INTERACTIVE"], "Never")
+        with patch.object(work.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = ""
+            git.run(self.repo, "status", "--porcelain")
+            self.assertIs(run.call_args.kwargs["stdin"], subprocess.DEVNULL)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable remote fixture")
+    def test_missing_partial_clone_blob_does_not_start_remote_helper(self):
+        marker = self.root / "remote-was-started"
+        helper = self.root / "remote-probe"
+        helper.write_text("#!/bin/sh\ntouch " + shlex.quote(str(marker)) + "\nexit 1\n")
+        helper.chmod(0o755)
+        self.git("config", "remote.origin.url", "ext::" + str(helper).replace(" ", "% "))
+        self.git("config", "remote.origin.promisor", "true")
+        self.git("config", "extensions.partialClone", "origin")
+        self.git("config", "protocol.ext.allow", "always")
+        blob = self.git("rev-parse", "HEAD:hello.txt").strip()
+        (self.repo / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+        # The helper must fail locally, not authenticate or fetch implicitly.
+        self.assertEqual(self.command("create", "claude", "--agent", "claude")[0], 2)
+        self.assertFalse(marker.exists())
+        self.assertEqual((self.repo / "hello.txt").read_text(), "committed content\n")
+
     def test_create_uses_head_and_keeps_dirty_source_and_worktree_separate(self):
         (self.repo / "hello.txt").write_text("uncommitted source edits\n")
         (self.repo / "private-untracked.txt").write_text("untracked fixture\n")

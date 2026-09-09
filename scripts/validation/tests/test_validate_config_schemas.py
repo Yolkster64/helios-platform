@@ -1025,3 +1025,236 @@ class Round7Tests(unittest.TestCase):
 
             walk(document, "#")
             self.assertEqual(unbounded, [], f"{schema_file.name} has integer fields with no upper bound")
+
+
+class Round8Tests(unittest.TestCase):
+    """Round 8 of PR #252: shorthand classes that mean one thing in both engines, patternProperties
+    keys that are compiled, semantics bound to the schema file rather than to an editable `$id`,
+    and three more rules a schema cannot express."""
+
+    def test_shorthand_classes_are_ascii_in_both_engines(self) -> None:
+        # ECMA-262 (and the C# engine's ECMAScript mode) read \\d \\w \\s as ASCII; Python's default
+        # is Unicode, so the same manifest would be valid in CI and invalid through the MCP tool.
+        for pattern, value, expected_valid in (("^\\d+$", "123", True), ("^\\d+$", "٣٤", False),
+                                               ("^\\w+$", "abc", True), ("^\\w+$", "é", False),
+                                               ("^\\S+$", "a b", True)):
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(value, {"type": "string", "pattern": pattern}, engine=engine)
+                self.assertEqual(not issues, expected_valid, (engine, pattern, value, issues))
+
+    def test_a_pattern_properties_key_is_compiled(self) -> None:
+        # With an instance that has no properties, nothing else would ever compile the key, and the
+        # schema would pass as usable while python-jsonschema refuses it.
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError, msg=engine) as caught:
+                target.validate_instance({}, {"type": "object", "patternProperties": {"[": {}}}, engine=engine)
+            self.assertIn("pattern", str(caught.exception).lower())
+
+    def test_case_insensitive_aliases_of_known_keys_are_refused(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        base: dict[str, Any] = {
+            "providers": {"live": {"type": "ollama", "model": "llama3"}},
+            "routing": {"defaultChain": ["live"], "taskRouting": {}},
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "aihub.json"
+            for overlay, expected in (
+                    ({}, []),
+                    ({"Providers": None}, ["$.Providers"]),
+                    ({"Routing": {}}, ["$.Routing"]),
+                    # 'LIVE' also fails the map's own propertyNames pattern, so both issues stand.
+                    ({"providers": {"live": {"type": "ollama", "model": "llama3"}, "LIVE": {"type": "ollama", "model": "m"}}},
+                     ["$.providers", "$.providers.LIVE"]),
+                    ({"providers": {"live": {"type": "ollama", "model": "llama3", "Type": "openai"}}},
+                     ["$.providers.live.Type"])):
+                instance = json.loads(json.dumps(base))
+                instance.update(overlay)
+                manifest.write_text(json.dumps(instance), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual([issue.path for issue in result.issues], expected, (engine, overlay, result.issues))
+
+    def test_duplicate_watchlist_pull_requests_are_reported(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "absorption-pr-watchlist.schema.json"
+        watchlist = json.loads((ROOT / "config" / "absorption" / "pr-watchlist.json").read_text(encoding="utf-8"))
+        candidates = watchlist["candidates"] if isinstance(watchlist, dict) else watchlist
+        candidates.append(json.loads(json.dumps(candidates[0])))
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "pr-watchlist.json"
+            manifest.write_text(json.dumps(watchlist), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual([issue.path for issue in result.issues],
+                                 [f"$.candidates[{len(candidates) - 1}].pr"], (engine, result.issues))
+
+    def test_semantics_follow_the_schema_file_not_its_id(self) -> None:
+        # Removing or mistyping one `$id` line used to switch every semantic rule off silently.
+        # The rule is now the schema FILE — but a file name alone is not identity, so it only
+        # counts for a schema that lives in this checkout's config/schemas/.
+        schema = json.loads((ROOT / "config" / "schemas" / "aihub.schema.json").read_text(encoding="utf-8"))
+        schema.pop("$id", None)
+        instance = {"providers": {"codex": {"type": "ollama", "model": "llama3"}},
+                    "cliAgents": [{"name": "codex", "command": "codex", "argsTemplate": "exec {prompt}"}],
+                    "routing": {"defaultChain": ["codex"], "taskRouting": {}}}
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "config" / "schemas").mkdir(parents=True)
+            shipped = root / "config" / "schemas" / "aihub.schema.json"
+            shipped.write_text(json.dumps(schema), encoding="utf-8")
+            manifest = root / "config" / "aihub.json"
+            manifest.write_text(json.dumps(instance), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, shipped, engine=engine, repo_root=root)
+                self.assertEqual([issue.path for issue in result.issues], ["$.cliAgents[0].name"], (engine, result.issues))
+            # The same file name somewhere else in the tree, with no HELIOS $id, is just a schema:
+            # its name must not attach this repository's rules to it.
+            elsewhere = root / "scratch"
+            elsewhere.mkdir()
+            (elsewhere / "aihub.schema.json").write_text(json.dumps(schema), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, elsewhere / "aihub.schema.json", engine=engine, repo_root=root)
+                self.assertEqual(result.issues, [], (engine, result.issues))
+        # And every shipped schema still carries the `$id` its file name implies, so the fallback
+        # for an unmapped schema keeps working.
+        for schema_file in sorted((ROOT / "config" / "schemas").glob("*.schema.json")):
+            document = json.loads(schema_file.read_text(encoding="utf-8"))
+            self.assertEqual(document.get("$id"), f"helios://config/schemas/{schema_file.name}", schema_file.name)
+
+    def test_title_prefix_needs_a_marker_before_the_slot(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "connectors.schema.json"
+        connectors = json.loads((ROOT / "config" / "connectors.json").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "connectors.json"
+            for prefix, expected_valid in (("[GH-{number}] ", True), ("{number}", False),
+                                           ("{number} [GH]", False), ("GH-", False),
+                                           ("[GH-{number}]-{number} ", False)):
+                connectors["linear"]["titlePrefix"] = prefix
+                manifest.write_text(json.dumps(connectors), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual(result.valid, expected_valid, (engine, prefix, result.issues))
+
+
+class Round8ParityTests(unittest.TestCase):
+    """The parity gaps the local reviewer found inside round 8: the library engine decides
+    pattern coverage and formats for itself, a nested dialect would hand a subtree back to it,
+    and three rules read a value rather than a spelling."""
+
+    def test_additional_properties_uses_the_same_matcher(self) -> None:
+        # The library decides which properties patternProperties covers with its own Unicode
+        # matcher: overriding patternProperties alone left a property matched there and validated
+        # nowhere, so `additionalProperties: false` never fired.
+        schema = {"type": "object", "patternProperties": {"^\\d+$": {"type": "integer"}},
+                  "additionalProperties": False}
+        for instance, expected_valid in (({"123": 4}, True), ({"٣": "wrong"}, False), ({"x": 1}, False)):
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(instance, schema, engine=engine)
+                self.assertEqual(not issues, expected_valid, (engine, instance, issues))
+
+    def test_a_nested_dialect_is_refused(self) -> None:
+        # python-jsonschema re-selects a validator for a subschema that declares its own $schema,
+        # which would drop this module's regex and number rules for that subtree.
+        schema = {"properties": {"x": {"$schema": "https://json-schema.org/draft/2020-12/schema",
+                                       "pattern": "^\\d+$"}}}
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError, msg=engine) as caught:
+                target.validate_instance({"x": "٣"}, schema, engine=engine)
+            self.assertIn("root of a schema", str(caught.exception))
+
+    def test_only_this_modules_formats_are_checked(self) -> None:
+        # The library's default checker also validates "regex", "uri" and more when their optional
+        # packages are present, and would refuse a manifest both other engines accept.
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance("[", {"type": "string", "format": "regex"}, engine=engine)
+            self.assertEqual(issues, [], engine)
+            issues, _ = target.validate_instance("not a date", {"type": "string", "format": "date"}, engine=engine)
+            self.assertEqual(len(issues), 1, engine)
+
+    def test_an_offset_is_a_real_offset(self) -> None:
+        # fromisoformat normalizes +15:60 into +16:00 rather than refusing it; the shape fixes each
+        # field's width, not its range, and the C# twin reads the digits.
+        for value, expected_valid in (("2026-01-01T00:00:00+15:00", True), ("2026-01-01T00:00:00+23:59", True),
+                                      ("2026-01-01T00:00:00+15:60", False), ("2026-01-01T00:00:00+24:00", False),
+                                      ("2026-01-01T00:00:00Z", True)):
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(value, {"type": "string", "format": "date-time"}, engine=engine)
+                self.assertEqual(not issues, expected_valid, (engine, value, issues))
+
+    def test_metadata_keys_are_not_binder_collisions(self) -> None:
+        # $comment and $schema bind to nothing, so a differently cased spelling cannot replace a
+        # section - it is an unknown key, which this schema tolerates on purpose.
+        schema_path = ROOT / "config" / "schemas" / "aihub.schema.json"
+        instance = {"$Comment": "harmless metadata",
+                    "providers": {"live": {"type": "ollama", "model": "llama3"}},
+                    "routing": {"defaultChain": ["live"], "taskRouting": {}}}
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "aihub.json"
+            manifest.write_text(json.dumps(instance), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual(result.issues, [], (engine, result.issues))
+
+    def test_a_pull_request_number_is_a_value_not_a_spelling(self) -> None:
+        schema_path = ROOT / "config" / "schemas" / "absorption-pr-watchlist.schema.json"
+        watchlist = json.loads((ROOT / "config" / "absorption" / "pr-watchlist.json").read_text(encoding="utf-8"))
+        candidates = watchlist["candidates"] if isinstance(watchlist, dict) else watchlist
+        twin = json.loads(json.dumps(candidates[0]))
+        twin["pr"] = float(twin["pr"])   # 191.0 is the same pull request as 191
+        candidates.append(twin)
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "pr-watchlist.json"
+            manifest.write_text(json.dumps(watchlist), encoding="utf-8")
+            for engine in target.available_engines():
+                result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                self.assertEqual([issue.path for issue in result.issues],
+                                 [f"$.candidates[{len(candidates) - 1}].pr"], (engine, result.issues))
+
+    def test_a_whitespace_only_loop_marker_is_refused(self) -> None:
+        # linear-sync.yml derives the guard with `sed 's/{number}.*//'`; a marker of whitespace
+        # collapses to the empty string in command substitution and the guard stops working.
+        schema_path = ROOT / "config" / "schemas" / "connectors.schema.json"
+        connectors = json.loads((ROOT / "config" / "connectors.json").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = pathlib.Path(temp) / "connectors.json"
+            for prefix, expected_valid in (("[GH-{number}] ", True), ("\n{number}", False),
+                                           ("   {number}", False), ("x{number}", True)):
+                connectors["linear"]["titlePrefix"] = prefix
+                manifest.write_text(json.dumps(connectors), encoding="utf-8")
+                for engine in target.available_engines():
+                    result = target.validate_file(manifest, schema_path, engine=engine, repo_root=ROOT)
+                    self.assertEqual(result.valid, expected_valid, (engine, repr(prefix), result.issues))
+
+
+class Round9Tests(unittest.TestCase):
+    """Round 9 of PR #252: pattern-property matching is charged to the work budget, and the
+    fleet's capacity fields carry an operational ceiling rather than an int one."""
+
+    def test_pattern_property_matching_is_charged_to_the_budget(self) -> None:
+        # P patterns against N keys is P×N matches; only _validate used to touch the budget, so a
+        # large pair could spend millions of matches against one instance evaluation.
+        patterns = {f"^a{index}[0-9]*$": {} for index in range(2000)}
+        instance = {f"b{index}": 1 for index in range(2000)}
+        started = time.monotonic()
+        with self.assertRaises(target.SchemaError) as caught:
+            target.validate_instance(instance, {"type": "object", "patternProperties": patterns}, engine="builtin")
+        self.assertIn("keyword evaluations", str(caught.exception))
+        self.assertLess(time.monotonic() - started, 60)
+        # An ordinary manifest is nowhere near it: the shipped map has a handful of patterns.
+        issues, _ = target.validate_instance({"a1": 1}, {"type": "object", "patternProperties": {"^a[0-9]$": {}}},
+                                             engine="builtin")
+        self.assertEqual(issues, [])
+
+    def test_fleet_capacity_fields_have_an_operational_ceiling(self) -> None:
+        schema = json.loads((ROOT / "config" / "schemas" / "fleet-topology.schema.json").read_text(encoding="utf-8"))
+        base = json.loads((ROOT / "config" / "fleet" / "fleet-topology.json").read_text(encoding="utf-8"))
+        for field, value, expected_valid in (("maxLocalLanes", 64, True), ("maxLocalLanes", 65, False),
+                                             ("minLocalLanes", 65, False),
+                                             ("maxBurstLanes", 256, True), ("maxBurstLanes", 257, False),
+                                             ("maxBurstLanes", 2147483647, False),
+                                             # a queue depth is a threshold, not a capacity
+                                             ("scaleUpQueueDepth", 100000, True)):
+            topology = json.loads(json.dumps(base))
+            topology["defaults"]["autoscaling"][field] = value
+            for engine in target.available_engines():
+                issues, _ = target.validate_instance(topology, schema, engine=engine)
+                self.assertEqual(not issues, expected_valid, (engine, field, value, issues))

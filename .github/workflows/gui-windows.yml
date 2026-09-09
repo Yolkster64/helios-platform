@@ -1,10 +1,10 @@
 name: HELIOS Windows shell
 on:
   pull_request:
-    paths: ['src/gui/**', 'config/control-project.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', '.github/workflows/gui-windows.yml']
+    paths: ['src/gui/**', 'config/control-project.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', 'nuget.config', '.github/workflows/gui-windows.yml']
   push:
     branches: [main]
-    paths: ['src/gui/**', 'config/control-project.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', '.github/workflows/gui-windows.yml']
+    paths: ['src/gui/**', 'config/control-project.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', 'nuget.config', '.github/workflows/gui-windows.yml']
   workflow_dispatch:
 permissions:
   contents: read

@@ -67,7 +67,9 @@ project instructions and plugins from its starting commit. It does not install
 software, authenticate the client, or activate a plugin in ChatGPT. Git hooks and
 checkout filters are suppressed during creation; LFS files therefore remain pointer
 files until you explicitly prepare their content. Dependencies and submodules are
-also a separate setup step.
+also a separate setup step. Workspace creation never fetches missing partial-clone
+objects or prompts for credentials; prepare the source objects before retrying if
+Git reports an incomplete local checkout.
 
 Rerunning the same command returns the existing workspace after checking its registry
 ownership, path, branch and Git common directory. It preserves local edits and does

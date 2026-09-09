@@ -101,6 +101,7 @@ public sealed class RemoteMcpTests : IDisposable
         Assert.Throws<McpException>(() => repository.Fetch("../../secret"));
         Assert.Throws<McpException>(() => repository.Fetch("https://example.com"));
         Assert.Throws<McpException>(() => repository.ReadFixedFile(".env"));
+        Assert.Throws<McpException>(() => repository.Fetch("config/aihub.json"));
         File.WriteAllText(Path.Combine(_root, "config", "control-project.json"), new string('x', RemoteRepository.MaxDocumentBytes + 1));
         Assert.Throws<McpException>(() => repository.Fetch("project"));
     }
@@ -115,6 +116,81 @@ public sealed class RemoteMcpTests : IDisposable
         Assert.Contains("review:csharp", routing);
         Assert.DoesNotContain("TEST_SECRET", routing);
         Assert.Throws<McpException>(() => repository.Search(new string('x', 201)));
+    }
+
+    [Theory]
+    [InlineData("shared-work", "plugins/helios-connect/skills/helios-work/SKILL.md")]
+    [InlineData("chatgpt-return", "docs/mcp/WORKSPACE_AGENT_RETURN.md")]
+    [InlineData("hybrid", "docs/architecture/HYBRID_EXECUTION.md")]
+    [InlineData("fleet-guide", "docs/architecture/HERMES_FLEET_AND_XCORE.md")]
+    [InlineData("plugins", "docs/mcp/PLUGIN_SETUP.md")]
+    [InlineData("aihub-unity", ".claude/skills/aihub-unity/SKILL.md")]
+    [InlineData("absorption", "docs/absorption/START_HERE.md")]
+    public void RemoteClientsCanResolvePacketReferencesAndIdentifyTheReturnedSnapshot(string id, string path)
+    {
+        var fullPath = Path.Combine(_root, path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        const string original = "Shared context: 修正 → review\n";
+        File.WriteAllText(fullPath, original);
+        var repository = new RemoteRepository(Options());
+
+        // Task packets supply paths, so search must resolve an exact source path
+        // even when it is absent from the document title and its body.
+        using var search = JsonDocument.Parse(repository.Search(path));
+        Assert.Contains(search.RootElement.GetProperty("results").EnumerateArray(),
+            result => result.GetProperty("id").GetString() == id);
+        using var fetched = JsonDocument.Parse(repository.Fetch(id));
+        Assert.Equal(original, fetched.RootElement.GetProperty("text").GetString());
+        var metadata = fetched.RootElement.GetProperty("metadata");
+        Assert.Equal(path, metadata.GetProperty("path").GetString());
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(original))).ToLowerInvariant(),
+            metadata.GetProperty("sha256").GetString());
+        Assert.False(metadata.GetProperty("liveServiceReceipt").GetBoolean());
+
+        File.WriteAllText(fullPath, original + "updated");
+        using var changed = JsonDocument.Parse(repository.Fetch(id));
+        Assert.NotEqual(metadata.GetProperty("sha256").GetString(),
+            changed.RootElement.GetProperty("metadata").GetProperty("sha256").GetString());
+    }
+
+    [Fact]
+    public void EveryPublishedCatalogSourceExistsAndFitsTheRemoteLimit()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null && !File.Exists(Path.Combine(current.FullName, "HELIOS.sln"))) current = current.Parent;
+        Assert.NotNull(current);
+        var config = Config();
+        config["HELIOS_REPO_ROOT"] = current!.FullName;
+        var repository = new RemoteRepository(Options(config));
+        foreach (var id in RemoteRepository.Documents.Keys)
+        {
+            using var fetched = JsonDocument.Parse(repository.Fetch(id));
+            Assert.False(string.IsNullOrWhiteSpace(fetched.RootElement.GetProperty("text").GetString()));
+        }
+        Assert.DoesNotContain(RemoteRepository.Documents.Values, document => document.Path == "config/aihub.json");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewCatalogSourcesRejectLinkedFilesAndParentDirectories(bool linkParent)
+    {
+        if (OperatingSystem.IsWindows()) return; // Linux CI exercises links without special privileges.
+        var physical = Path.Combine(_root, "physical");
+        Directory.CreateDirectory(physical);
+        File.WriteAllText(Path.Combine(physical, "WORKSPACE_AGENT_RETURN.md"), "TEST_SECRET_DO_NOT_RETURN");
+        var docs = Directory.CreateDirectory(Path.Combine(_root, "docs")).FullName;
+        var mcp = Path.Combine(docs, "mcp");
+        if (linkParent) Directory.CreateSymbolicLink(mcp, physical);
+        else
+        {
+            Directory.CreateDirectory(mcp);
+            File.CreateSymbolicLink(Path.Combine(mcp, "WORKSPACE_AGENT_RETURN.md"),
+                Path.Combine(physical, "WORKSPACE_AGENT_RETURN.md"));
+        }
+        var error = Assert.Throws<McpException>(() => new RemoteRepository(Options()).Fetch("chatgpt-return"));
+        Assert.Contains("Linked project documents", error.Message);
+        Assert.DoesNotContain("TEST_SECRET", error.Message);
     }
 
     [Fact]

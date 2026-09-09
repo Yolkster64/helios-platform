@@ -170,9 +170,20 @@ The default HTTP catalog contains `search`, `fetch`, `helios_project_get`,
 `helios_agent_catalog_get` and `helios_task_packet_get`. Only the
 explicit Claude opt-in adds `helios_claude_ask`. Remote requests cannot provide
 filesystem paths, executable names, CLI flags, resume IDs or arbitrary URLs.
-Search/fetch serve nine fixed repository documents, each limited to 128 KiB;
-their GitHub links point to main and the returned metadata identifies checkout
-content. Fleet configuration is not evidence that workers are running.
+Search/fetch serve a fixed allowlist of repository sources, each limited to
+128 KiB, including the canonical work skill, hybrid and fleet guides, plugin
+setup, Workspace Agent return setup, and absorption/learning guides. A remote
+client can search the exact source path from its task packet and fetch the
+returned catalog ID without a local checkout. Source paths are searchable;
+they are never accepted as fetch IDs or opened outside the allowlist.
+
+Each fetch returns a SHA-256 of its UTF-8 text in `metadata.sha256`, so both
+clients can compare the context they actually received. GitHub links still
+point to main; that link alone does not identify the host checkout's revision.
+Raw `config/aihub.json` is not fetchable: the routing tool returns only the
+existing selected routing fields. Missing sources and linked files are refused;
+the host must still use a trusted, reviewed checkout. Serving a source or storing
+a handoff does not dispatch an agent or prove that a fleet worker is running.
 
 Run the real SDK/JWT/HTTP and inert-process tests with:
 

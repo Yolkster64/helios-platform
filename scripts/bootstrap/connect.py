@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -23,6 +24,8 @@ MAX_CONFIG = 256 * 1024
 HELP = """HELIOS — Connect → Unify → Automate → Validate
 
   connect.sh [status] [--json]       Offline inventory (default)
+  connect.sh start [--json]        Unattended tools, build, workspaces and saved-session checks
+  connect.sh start --serve         Prepare, then run the shared MCP bridge in foreground
   connect.sh project                Shared project and destination map
   connect.sh auth status [--json]   Explicit bounded CLI authentication checks
   connect.sh login github|azure|claude|codex
@@ -44,8 +47,16 @@ HELP = """HELIOS — Connect → Unify → Automate → Validate
 
 Windows: pwsh -NoProfile -File ./connect.ps1 with the same arguments.
 Python 3.10+ is required. Missing lanes do not prevent the offline inventory.
+Start requires Git and the .NET 10 SDK. With PowerShell/npm it installs missing coding CLIs.
+Optional tools and service logins never gate the core.
 ChatGPT sign-in is not an OpenAI API key. App credentials stay with their apps.
 """
+AUTH_PROBES = {
+    "github": ("gh", ["auth", "status", "--hostname", "github.com"]),
+    "azure": ("az", ["account", "get-access-token", "--output", "none"]),
+    "claude": ("claude", ["auth", "status"]),
+    "codex": ("codex", ["login", "status"]),
+}
 
 
 class ConnectionError(Exception):
@@ -174,20 +185,78 @@ def native(name):
     raise ConnectionError("Install a native executable for " + name + "; this batch-wrapper layout is unsupported.")
 
 
-def run(name, args, *, timeout=None, quiet=False, stderr_output=False, additions=None):
+def run(name, args, *, timeout=None, quiet=False, stderr_output=False, additions=None,
+        noninteractive=False):
     command, extra = native(name)
     env = dict(os.environ)
     env.update(extra)
     env.update(additions or {})
+    if noninteractive:
+        env.update({"CI": "true", "NO_COLOR": "1", "GH_PROMPT_DISABLED": "1",
+                    "GIT_TERMINAL_PROMPT": "0", "DOTNET_NOLOGO": "1",
+                    "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+                    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+                    "NUGET_EXE_NO_PROMPT": "true",
+                    "NUGET_CREDENTIALPROVIDER_NONINTERACTIVE": "true"})
     try:
-        return subprocess.run(command + list(args), cwd=ROOT, env=env, shell=False,
-                              timeout=timeout, check=False,
-                              stdout=subprocess.DEVNULL if quiet else sys.stderr if stderr_output else None,
-                              stderr=subprocess.DEVNULL if quiet else None).returncode
+        options = {"cwd": ROOT, "env": env, "shell": False,
+                   "stdin": subprocess.DEVNULL if noninteractive else None,
+                   "stdout": subprocess.DEVNULL if quiet else sys.stderr if stderr_output else None,
+                   "stderr": subprocess.DEVNULL if quiet else None}
+        if noninteractive and timeout is not None:
+            # A setup process can spawn npm, compiler or Git children. A timed-out
+            # parent alone is not a stopped setup; bound and terminate its tree.
+            taskkill = native("taskkill.exe")[0] if WINDOWS else None
+            if WINDOWS:
+                options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                options["start_new_session"] = True
+            child = subprocess.Popen(command + list(args), **options)
+            try:
+                return child.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                return 124 if stop_process_tree(child, taskkill) else 125
+            except KeyboardInterrupt:
+                stop_process_tree(child, taskkill)
+                raise
+        return subprocess.run(command + list(args), timeout=timeout, check=False, **options).returncode
     except subprocess.TimeoutExpired:
         return 124
     except OSError:
         raise ConnectionError("The native command could not start; check its installation.") from None
+
+
+def stop_process_tree(child, taskkill):
+    """Stop the audited helper's ordinary descendants, then reap its parent.
+
+    Windows taskkill keeps tree cleanup out of shell parsing. A failed cleanup is
+    reported separately so automation never treats an uncertain stop as completed.
+    """
+    cleaned = False
+    try:
+        if taskkill is not None:
+            cleaned = subprocess.run([*taskkill, "/PID", str(child.pid), "/T", "/F"],
+                                     shell=False, stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     timeout=15, check=False).returncode == 0
+        else:
+            os.killpg(child.pid, signal.SIGKILL)
+            cleaned = True
+    except ProcessLookupError:
+        cleaned = True
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    finally:
+        # Also reap the parent when taskkill itself was unavailable or failed.
+        try:
+            child.kill()
+        except OSError:
+            pass
+        try:
+            child.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            cleaned = False
+    return cleaned
 
 
 def terminal():
@@ -198,6 +267,133 @@ def terminal():
 def require(path):
     if not (ROOT / path).exists():
         raise ConnectionError("Required checkout path is missing: " + path)
+
+
+def unattended_step(name, tool, argv, *, timeout, required, next_action):
+    """Only fixed public diagnostics escape a child; neither logs nor tokens do."""
+    try:
+        code = run(tool, argv, timeout=timeout, quiet=True, noninteractive=True)
+        status = "ready" if code == 0 else "timeout" if code == 124 else "cleanup-unverified" if code == 125 else "failed"
+    except ConnectionError:
+        code, status = 127, "unavailable"
+    if code == 125:
+        next_action = "Inspect remaining setup child processes before retrying. " + next_action
+    return {"name": name, "status": status, "exitCode": code, "required": required,
+            "nextAction": None if code == 0 else next_action}
+
+
+def auth_steps():
+    return [unattended_step("auth:" + name, tool, argv, timeout=15, required=False,
+                           next_action="Install/check " + tool + "; if sign-in is missing: connect.sh login " + name)
+            for name, (tool, argv) in AUTH_PROBES.items()]
+
+
+def install_coding_tools():
+    """Reuse the installation-only helper; do not run the broader login/setup chain."""
+    if all(shutil.which(tool) for tool in ("claude", "codex", "copilot")):
+        return []
+    action = "Install/check PowerShell 7 and Node.js/npm, then rerun connect.sh start."
+    installer = "scripts/bootstrap/setup-ai-clis.ps1"
+    if not all(shutil.which(tool) for tool in ("pwsh", "npm")):
+        return [{"name": "coding-tools", "status": "unavailable", "exitCode": 127,
+                 "required": False, "nextAction": action}]
+    if not (ROOT / installer).is_file():
+        return [{"name": "coding-tools", "status": "failed", "exitCode": 2,
+                 "required": False, "nextAction": "Restore scripts/bootstrap/setup-ai-clis.ps1 and rerun connect.sh start."}]
+    return [unattended_step("coding-tools", "pwsh",
+                             ["-NoProfile", "-NonInteractive", "-File", str(ROOT / installer), "-Skip", "gh"],
+                             timeout=600, required=False,
+                             next_action="Check npm installation permissions/network, then rerun connect.sh start.")]
+
+
+def prepare_start():
+    """Finite preparation, using existing validation and workspace ownership rules.
+
+    Successful preparation is not a running server or a verified cloud integration.
+    The existing workspace registry is the only persisted setup state. Reruns build
+    incrementally and preserve worktree branches and edits instead of resetting them.
+    """
+    steps = []
+    connection_inventory = {}
+    validate = "scripts/validation/validate_config_schemas.py"
+    workspace = "scripts/bootstrap/agent_workspace.py"
+    try:
+        for path in (validate, workspace, "HELIOS.sln", "src/mcp/HELIOS.RemoteMcp"):
+            require(path)
+        # Parse the public launch inputs before doing any build or workspace work.
+        connection_inventory = inventory()
+        roles = config("config/agent-catalog.json")["roles"]
+        if not isinstance(roles, list) or not roles or not all(isinstance(role, str) for role in roles):
+            raise ConnectionError("The agent catalog has no valid role list.")
+    except (ConnectionError, KeyError, TypeError, ValueError, OSError):
+        steps.append({"name": "configuration", "status": "failed", "exitCode": 2,
+                      "required": True, "nextAction": "Restore the complete reviewed checkout and rerun connect.sh start."})
+    else:
+        steps.append(unattended_step("configuration", sys.executable,
+                                     [str(ROOT / validate), "--engine", "builtin", "--json"],
+                                     timeout=60, required=True,
+                                     next_action="python3 scripts/validation/validate_config_schemas.py --engine builtin"))
+    if steps[0]["exitCode"] == 0:
+        steps.append(unattended_step("build", "dotnet",
+                                     ["build", str(ROOT / "HELIOS.sln"), "-c", "Release", "--nologo",
+                                      "-m:1", "-nodeReuse:false", "-p:UseSharedCompilation=false"],
+                                     timeout=600, required=True,
+                                     next_action="Install/check the .NET 10 SDK, then run: dotnet build HELIOS.sln -c Release"))
+        steps.extend(install_coding_tools())
+        listed = unattended_step("workspaces:list", sys.executable,
+                                 [str(ROOT / workspace), "list"], timeout=120, required=True,
+                                 next_action="connect.sh workspace list")
+        steps.append(listed)
+        if listed["exitCode"] == 0:
+            for role in roles:
+                # The catalog owns roles; the existing helper owns validation,
+                # locking, fixed paths, branch ownership and idempotent creation.
+                name = "operator" if role == "human" else role
+                steps.append(unattended_step("workspace:" + name, sys.executable,
+                                             [str(ROOT / workspace), "create", name, "--agent", role],
+                                             timeout=120, required=True,
+                                             next_action="connect.sh workspace create " + name + " --agent " + role))
+    local_ready = any(step["name"] == "build" and step["exitCode"] == 0 for step in steps)
+    workspace_checks = [step for step in steps if step["name"].startswith(("workspace:", "workspaces:"))]
+    workspaces_ready = len(workspace_checks) > 1 and all(step["exitCode"] == 0 for step in workspace_checks)
+    prepared = local_ready and workspaces_ready
+    # Session checks are independent; a failed/missing optional service never
+    # prevents the local runtime from building or the workspaces from preparing.
+    authentication = auth_steps() if steps[0]["exitCode"] == 0 else []
+    steps.extend(authentication)
+    report = {"mode": "unattended-start", "status": "blocked" if not local_ready else
+              "ready" if prepared and all(step["exitCode"] == 0 for step in steps) else "partial",
+              "localCoreReady": local_ready, "workspacesReady": workspaces_ready,
+              "exitCode": 0 if prepared else 2, "runtimeState": "stopped",
+              "authenticationProbed": bool(authentication), "providerInferenceVerified": False,
+              "liveConnectorsVerified": False, "steps": steps,
+              "connectors": connection_inventory.get("connectors", {}),
+              "integrationGuide": "docs/CONNECT.md",
+              "nextAction": next((step["nextAction"] for step in steps
+                                  if step["required"] and step["exitCode"] != 0),
+                                 "connect.sh start --serve"),
+              "notes": ["Readiness covers local preparation and bounded CLI session checks only.",
+                        "Optional CLI/service gaps do not gate the local core; no login or model call was started.",
+                        "Missing coding CLIs are installed with the existing helper when PowerShell/npm are available.",
+                        "Existing workspaces keep their branches, commits and edits; agents were not launched.",
+                        "SharePoint/Outlook adapters, hosted access and real fleet execution need separate runtime verification."]}
+    return report
+
+
+def show_start(report, as_json):
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return
+    print("HELIOS — unattended preparation: " + report["status"])
+    for step in report["steps"]:
+        print("  " + step["name"] + ": " + step["status"] + " (exit " + str(step["exitCode"]) + ")")
+    print("\nLocal core: " + ("built" if report["localCoreReady"] else "blocked") +
+          "; runtime: stopped; live connectors and inference: unverified.")
+    print("Integration setup and the two-way ChatGPT return path: " + report["integrationGuide"])
+    print("Next: " + report["nextAction"])
+    for step in report["steps"]:
+        if not step["required"] and step["nextAction"]:
+            print("Optional " + step["name"].removeprefix("auth:") + ": " + step["nextAction"])
 
 
 def endpoint(value):
@@ -232,18 +428,20 @@ def main(args=None):
         if command == "project" and not args:
             print(json.dumps(config("config/control-project.json"), indent=2))
             return 0
+        if command == "start" and args in ([], ["--json"], ["--serve"]):
+            report = prepare_start()
+            show_start(report, args == ["--json"])
+            if args == ["--serve"] and report["localCoreReady"]:
+                print("Starting the shared MCP bridge in the foreground; Ctrl+C stops it.", flush=True)
+                return run("dotnet", ["run", "--project", str(ROOT / "src/mcp/HELIOS.RemoteMcp"),
+                                      "-c", "Release", "--no-launch-profile", "--no-build"],
+                           noninteractive=True, additions={"HELIOS_REPO_ROOT": str(ROOT)})
+            return report["exitCode"]
         if command == "auth" and args in (["status"], ["status", "--json"]):
-            probes = {"github": ("gh", ["auth", "status", "--hostname", "github.com"]),
-                      "azure": ("az", ["account", "get-access-token", "--output", "none"]),
-                      "claude": ("claude", ["auth", "status"]),
-                      "codex": ("codex", ["login", "status"])}
-            states = {}
-            for name, (tool, argv) in probes.items():
-                try:
-                    code = run(tool, argv, timeout=15, quiet=True)
-                    states[name] = "authenticated-cli" if code == 0 else "unverified"
-                except ConnectionError:
-                    states[name] = "unavailable"
+            states = {step["name"].removeprefix("auth:"):
+                      "authenticated-cli" if step["exitCode"] == 0 else
+                      "unavailable" if step["status"] == "unavailable" else "unverified"
+                      for step in auth_steps()}
             print(json.dumps({"authenticationProbed": True, "cliSessions": states,
                               "providerInferenceVerified": False}, indent=2))
             return 0 if all(v == "authenticated-cli" for v in states.values()) else 2

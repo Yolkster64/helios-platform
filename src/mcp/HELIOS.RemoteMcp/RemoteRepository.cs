@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HELIOS.AIHub.Fabric;
@@ -21,17 +22,49 @@ public sealed class RemoteRepository(RemoteMcpOptions options)
             ["project"] = ("Shared HELIOS project map", "config/control-project.json"),
             ["fabric"] = ("HELIOS Fabric contract", "config/fabric/helios-fabric.v1.json"),
             ["fleet"] = ("Hermes and XCore fleet topology", "config/fleet/fleet-topology.json"),
+            ["shared-work"] = ("Canonical HELIOS work skill", "plugins/helios-connect/skills/helios-work/SKILL.md"),
+            ["agent-catalog"] = ("Shared agent roles and task templates", "config/agent-catalog.json"),
+            ["plugins"] = ("ChatGPT, Claude, Codex and Copilot plugin setup", "docs/mcp/PLUGIN_SETUP.md"),
+            ["workspace-plugin"] = ("HELIOS workspace plugin", "plugins/helios-connect/README.md"),
+            ["operator-plugin"] = ("HELIOS operator plugin", "plugins/helios-operator/README.md"),
+            ["chatgpt-return"] = ("Claude to ChatGPT Workspace Agent return path", "docs/mcp/WORKSPACE_AGENT_RETURN.md"),
+            ["chatgpt-import"] = ("ChatGPT context import and provenance", "docs/imports/chatgpt/README.md"),
+            ["hybrid"] = ("Local and Azure hybrid execution", "docs/architecture/HYBRID_EXECUTION.md"),
+            ["fleet-guide"] = ("Hermes, XCore and tandem learning guide", "docs/architecture/HERMES_FLEET_AND_XCORE.md"),
+            ["aihub-unity"] = ("AIHub routing, combinations and learning skill", ".claude/skills/aihub-unity/SKILL.md"),
+            ["model-pairing"] = ("AIHub model and tool pairing", ".claude/skills/aihub-unity/references/model-and-tool-pairing.md"),
+            ["combo-calculus"] = ("AIHub combination scoring and learning", ".claude/skills/aihub-unity/references/combo-calculus.md"),
+            ["model-cost"] = ("AIHub model strengths and recorded cost guidance", ".claude/skills/aihub-unity/references/model-strengths-and-cost.md"),
+            ["language-roles"] = ("AIHub language responsibilities", "docs/architecture/AIHUB_LANGUAGE_ROLES.md"),
+            ["azure-skill"] = ("HELIOS Azure infrastructure skill", ".claude/skills/iac-azure/SKILL.md"),
+            ["bicep-tooling"] = ("HELIOS Bicep validation guidance", ".claude/skills/iac-azure/references/bicep-tooling.md"),
+            ["terraform-tooling"] = ("HELIOS Terraform validation guidance", ".claude/skills/iac-azure/references/terraform-azurerm.md"),
+            ["infra-guide"] = ("HELIOS Bicep infrastructure guide", "infra/README.md"),
+            ["terraform-guide"] = ("HELIOS Terraform ownership guide", "infra/terraform/README.md"),
+            ["bicep"] = ("HELIOS Bicep resource definitions", "infra/main.bicep"),
+            ["terraform"] = ("HELIOS Terraform resource definitions", "infra/terraform/main.tf"),
+            ["deployment-workflow"] = ("HELIOS protected deployment workflow", ".github/workflows/helios-deploy.yml"),
+            ["owner-setup"] = ("HELIOS identity and owner setup", "docs/OWNER_START_HERE.md"),
+            ["connector-activation"] = ("HELIOS connector activation", "docs/architecture/CONNECTOR_ACTIVATION.md"),
+            ["absorption"] = ("Absorption and learning starting guide", "docs/absorption/START_HERE.md"),
+            ["absorption-pipeline"] = ("Absorption pipeline and learning boundaries", "docs/architecture/ABSORPTION_PIPELINE.md"),
+            ["absorption-learnings"] = ("Absorption epics and retained learnings", "docs/absorption/EPICS_AND_LEARNINGS.md"),
         };
 
     public string Fetch(string id)
     {
         if (string.IsNullOrEmpty(id) || !Documents.TryGetValue(id, out var document))
             throw new McpException("Unknown document ID. Use search to find an allowed HELIOS document.");
+        var text = ReadFixedFile(document.Path);
         return JsonSerializer.Serialize(new
         {
-            id, title = document.Title, text = ReadFixedFile(document.Path),
+            id, title = document.Title, text,
             url = DocumentUrl(document.Path),
-            metadata = new { path = document.Path, source = "trusted checkout", liveServiceReceipt = false },
+            metadata = new
+            {
+                path = document.Path, source = "trusted checkout", liveServiceReceipt = false,
+                sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant(),
+            },
         });
     }
 
@@ -44,7 +77,9 @@ public sealed class RemoteRepository(RemoteMcpOptions options)
             // Search reads only the same catalog that fetch can return.
             try
             {
-                return pair.Value.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                return pair.Key.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    pair.Value.Path.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    pair.Value.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     ReadFixedFile(pair.Value.Path).Contains(query, StringComparison.OrdinalIgnoreCase);
             }
             catch (McpException) { return false; }

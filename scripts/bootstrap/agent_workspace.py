@@ -51,13 +51,21 @@ class Git:
         # Ambient Git directory/config overrides must not redirect this operation.
         self.env = {key: value for key, value in os.environ.items()
                     if not key.startswith("GIT_")}
+        # Workspace preparation is local and unattended, including on partial
+        # clones. Reapply these after removing ambient Git overrides. The empty
+        # protocol allowlist also blocks lazy fetch on older Git versions.
+        self.env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "",
+                         "GCM_INTERACTIVE": "Never", "SSH_ASKPASS": "",
+                         "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": ""})
         self.options = ["-c", "core.hooksPath=" + os.devnull,
-                        "-c", "core.fsmonitor=false", "-c", "branch.autoSetupMerge=false"]
+                        "-c", "core.fsmonitor=false", "-c", "branch.autoSetupMerge=false",
+                        "-c", "core.askPass=", "-c", "credential.helper="]
 
     def run(self, repo: Path, *args: str, allow_missing: bool = False) -> str:
         try:
             result = subprocess.run(["git", *self.options, "-C", str(repo), *args],
                                     env=self.env, capture_output=True, text=True,
+                                    stdin=subprocess.DEVNULL,
                                     encoding="utf-8", errors="strict", timeout=60,
                                     check=False)
         except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:

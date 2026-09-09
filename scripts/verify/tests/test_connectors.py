@@ -26,9 +26,9 @@ log = pathlib.Path(os.environ["CALL_LOG"])
 if pathlib.Path(sys.argv[0]).name == "gh":
     if args[0] == "api":
         if scenario == "github_down": sys.exit(1)
-        issue = {"title":"Current title", "html_url":"https://github.com/example/repo/issues/7", "state":"open", "labels":[{"name":"bug"}]}
+        issue = {"title":"Current title", "html_url":"https://github.com/example/repo/issues/7", "state":os.environ.get("LIVE_STATE", "open"), "labels":[{"name":"bug"}]}
         if scenario == "remove_last": issue["labels"] = []
-        if scenario == "create_closed": issue["state"] = "closed"
+        if scenario.startswith("create_closed"): issue["state"] = "closed"
         if scenario == "mirror_title": issue["title"] = "[GH-7] Current title"
         if scenario == "duplicate_label": issue["labels"].append({"name":"duplicate"})
         print(json.dumps(issue))
@@ -55,12 +55,25 @@ elif "project(" in q:
 elif "issues(" in q:
     assert v["team"] == "team" and v["u"].endswith("/issues/7")
     assert "includeArchived:true" in q
-    nodes = [] if scenario in {"create", "create_closed", "no_mirror", "wrong_create_project", "missing_create_id"} else [{"id":"existing", "description":v["u"],"archivedAt":None,"project":{"id":"3a4dee89-2c83-4bbd-a067-4e6cfbcb308a"}}]
+    assert "state { type }" in q
+    nodes = [] if scenario in {"create", "create_closed", "create_closed_missing_target_state", "no_mirror", "wrong_create_project", "missing_create_id"} else [{"id":"existing", "description":v["u"],"archivedAt":None,"project":{"id":"3a4dee89-2c83-4bbd-a067-4e6cfbcb308a"},"state":{"type":"unstarted"}}]
     if scenario == "wrong_mirror_project": nodes[0]["project"]["id"] = "other"
     if scenario == "archived_mirror": nodes[0]["archivedAt"] = "2026-01-01"
     if scenario == "duplicate": nodes *= 2
+    if scenario == "explicit_duplicate": nodes[0]["state"]["type"] = "duplicate"
+    if scenario == "normal_canceled": nodes[0]["state"]["type"] = "canceled"
+    if scenario == "normal_completed": nodes[0]["state"]["type"] = "completed"
+    if scenario == "missing_mirror_state": del nodes[0]["state"]
+    if scenario == "null_mirror_state": nodes[0]["state"] = None
+    if scenario == "empty_mirror_state": nodes[0]["state"] = {}
+    if scenario == "unknown_mirror_state": nodes[0]["state"]["type"] = "unknown"
+    if scenario == "mirror_state_error":
+        print(json.dumps({"data":{"issues":{"nodes":nodes}}, "errors":[{"message":"secret-must-not-appear"}]})); sys.exit(0)
     data = {"issues":{"nodes":nodes}}
-elif "issueLabels(" in q: data = {"issueLabels":{"nodes":[{"id":"label"}]}}
+elif "issueLabels(" in q:
+    data = {"issueLabels":{"nodes":[] if scenario in {"explicit_duplicate", "missing_target_state", "invalid_target_id", "target_state_error", "create_closed_missing_target_state"} else [{"id":"label"}]}}
+elif "issueLabelCreate(" in q:
+    data = {"issueLabelCreate":{"success":True,"issueLabel":{"id":"label"}}}
 elif "issueCreate(" in q:
     assert v["input"]["title"] == "[GH-7] Current title"
     if scenario == "create_closed": assert v["input"]["stateId"] == "done"
@@ -70,6 +83,10 @@ elif "issueCreate(" in q:
     if scenario == "missing_create_id": del data["issueCreate"]["issue"]["id"]
 elif "team(" in q:
     data = {"team":{"states":{"nodes":[{"id":"todo","type":"unstarted","position":1},{"id":"done","type":"completed","position":2}]}}}
+    if scenario in {"missing_target_state", "create_closed_missing_target_state"}: data["team"]["states"]["nodes"] = []
+    if scenario == "invalid_target_id": data["team"]["states"]["nodes"][0]["id"] = None
+    if scenario == "target_state_error":
+        print(json.dumps({"data":data, "errors":[{"message":"secret-must-not-appear"}]})); sys.exit(0)
 elif "issueUpdate(" in q:
     data = {"issueUpdate":{"success":scenario != "mutation_false"}}
     if scenario == "mutation_missing": data = {"issueUpdate":{}}
@@ -80,7 +97,7 @@ print(json.dumps({"data":data}))
 
 @unittest.skipUnless(shutil.which("bash") and shutil.which("jq"), "bash and jq required")
 class LinearTests(unittest.TestCase):
-    def run_sync(self, scenario="create", action="labeled", enabled=True, key=True):
+    def run_sync(self, scenario="create", action="labeled", enabled=True, key=True, live_state="open"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "config").mkdir()
@@ -98,7 +115,7 @@ class LinearTests(unittest.TestCase):
             env = {"PATH":str(root) + os.pathsep + os.environ["PATH"], "SCENARIO":scenario,
                    "CALL_LOG":str(log), "REPO":"example/repo", "ISSUE_NUMBER":"7",
                    "ISSUE_TITLE":"stale title", "ISSUE_STATE":"closed", "ISSUE_LABELS":"stale",
-                   "EVENT_ACTION":action}
+                   "EVENT_ACTION":action, "LIVE_STATE":live_state}
             if key: env["LINEAR_API_KEY"] = "inert-test-key"
             result = subprocess.run(["bash", str(ROOT / "scripts/connectors/linear-sync.sh")], cwd=root, env=env, capture_output=True, text=True, timeout=20)
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -136,6 +153,44 @@ class LinearTests(unittest.TestCase):
         result, calls = self.run_sync("duplicate_label", "closed")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[-1]["variables"]["stateId"], "todo")
+
+    def test_explicit_linear_duplicate_is_never_recreated_or_mutated(self):
+        for action in ["opened", "edited", "labeled", "unlabeled", "closed", "reopened"]:
+            for live_state in ["open", "closed"]:
+                with self.subTest(action=action, live_state=live_state):
+                    result, calls = self.run_sync("explicit_duplicate", action, live_state=live_state)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("marked Duplicate", result.stdout)
+                    self.assertFalse(any(c.get("query", "").startswith("mutation") or "github_comment" in c for c in calls))
+                    self.assertFalse(any("issueLabels(" in c.get("query", "") for c in calls))
+
+    def test_missing_or_failed_mirror_state_read_stops_before_mutation(self):
+        for scenario in ["missing_mirror_state", "null_mirror_state", "empty_mirror_state", "unknown_mirror_state", "mirror_state_error"]:
+            with self.subTest(scenario=scenario):
+                result, calls = self.run_sync(scenario)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any(c.get("query", "").startswith("mutation") for c in calls))
+                self.assertFalse(any("issueLabels(" in c.get("query", "") for c in calls))
+                self.assertNotIn("secret-must-not-appear", result.stdout + result.stderr)
+
+    def test_missing_or_failed_target_state_read_stops_before_label_creation(self):
+        for scenario, action in [("missing_target_state", "reopened"), ("invalid_target_id", "reopened"),
+                                 ("target_state_error", "closed"), ("create_closed_missing_target_state", "labeled")]:
+            with self.subTest(scenario=scenario):
+                result, calls = self.run_sync(scenario, action)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any(c.get("query", "").startswith("mutation") for c in calls))
+                self.assertNotIn("secret-must-not-appear", result.stdout + result.stderr)
+
+    def test_normal_canceled_and_completed_mirrors_keep_lifecycle_sync(self):
+        for scenario in ["normal_canceled", "normal_completed"]:
+            for action, live_state, destination in [("closed", "closed", "done"), ("reopened", "open", "todo")]:
+                with self.subTest(scenario=scenario, action=action):
+                    result, calls = self.run_sync(scenario, action, live_state=live_state)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    mutations = [c for c in calls if c.get("query", "").startswith("mutation")]
+                    self.assertEqual(len(mutations), 1)
+                    self.assertEqual(mutations[0]["variables"], {"id":"existing", "stateId":destination})
 
     def test_project_and_team_fail_before_any_mutation(self):
         for scenario in ["archived_team", "missing_project", "archived_project", "wrong_team", "team_page_incomplete", "wrong_mirror_project", "archived_mirror"]:

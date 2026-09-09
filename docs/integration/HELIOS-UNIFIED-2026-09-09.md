@@ -67,3 +67,56 @@ All 15 GitHub workflows passed at `e0d39603b80cdaf2f46050290b5a547a4e774041`,
 including 678 AIHub tests, the native Windows shell, Linux/Windows launcher
 and plugin tests, and Bicep/Terraform validation. The later shared-catalog
 addition requires its own current-head CI result on PR #253.
+
+
+## Automatic start and project simplification
+
+The existing `connect.sh` / `connect.ps1` now accepts `start --serve`: validate
+public manifests, build the shared runtime, install missing coding clients using
+the existing installer when PowerShell/npm are present, prepare the seven
+workspaces, check existing CLI sessions, then serve the same HTTP MCP bridge.
+`start --json` is the finite automation form. Missing optional services stay
+visible without preventing the local core from serving. Required SDK/Python/Git
+prerequisites are reported; no login or model call is hidden inside startup.
+
+The remote source catalog exposes the maintained shared work skill, plugin and
+return setup, hybrid architecture, fleet and absorption guidance through fixed
+IDs. Each fetch reports a hash of the returned text, so clients can compare the
+same source instead of relying on stale chat summaries. This is shared context
+and transport; it does not attach to a private Claude browser session or register
+a ChatGPT endpoint without the account connection.
+
+Linear and the existing Slack canvas now lead with six linked work areas and one
+next delivery. Their previous content is retained in the existing
+[project history](https://linear.app/641974/document/helios-project-history-cd013339de52).
+Learning and absorption stay first-class work areas. Explicit Linear Duplicate
+states are preserved by the connector before any label or state mutation.
+Thirty-eight exact duplicate issue pairs now use Linear's native Duplicate
+relationship; their GitHub twins closed through the native integration. The
+active queue decreased from 175 to 137 while all 229 records and the original
+epic states/descriptions remain. The pair mapping is in the same project history.
+
+PRs [#136](https://github.com/Yolkster64/helios-platform/pull/136) and
+[#148](https://github.com/Yolkster64/helios-platform/pull/148) were closed as
+superseded by #253 after verifying their implementations were retained. Closing
+the standalone proposals does not claim #253 has landed. #186's missing
+`nuget.config` Windows workflow trigger is restored here; its broader WinUI
+provider-boundary finding remains separate work.
+
+Claude's subsequent fixes through `2e0ab623e5dcacf81e988714f73f389eb005b814`
+are incorporated with their history preserved. At inspection, #252 remained open
+against main, all 13 workflows passed, and all 55 review threads were resolved.
+It had not merged, so #253 stays stacked on that branch and remains a draft.
+
+Local verification of the combined runtime: 734 AIHub tests passed, none skipped;
+Release solution build: zero warnings/errors; Python spoke: 101 passed; all 15
+manifests and the cutover contract passed. The combined schema suite passed 99
+tests; startup, workspaces, connector and return-helper suites passed 114 tests
+plus 109 subtests; the plugin suite passed six tests. They exercise inert services,
+real temporary Git workspaces and termination of timed-out child processes.
+Full current-head CI remains authoritative for Windows and Bicep; the available
+local Bicep executable failed bundle loading.
+
+All 16 reattached inputs match the SHA-256 values already recorded in the source
+audit. Their recovery and learning intent remains preserved; no recovered script
+was executed by this simplification.
