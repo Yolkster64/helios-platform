@@ -2,6 +2,7 @@ using HELIOS.Shell.Helpers;
 using HELIOS.Shell.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using Windows.Graphics;
 
 namespace HELIOS.Shell;
@@ -27,13 +28,8 @@ public sealed partial class MainWindow : Window
             ReadinessVisuals.Attach(root);
         }
 
-        // Land on the dashboard: navigate the frame FIRST, then select the nav item.
-        // SelectionChanged does not fire for a programmatic pre-layout selection on
-        // all WinUI versions — but on versions where it DOES fire synchronously, the
-        // handler's own CurrentSourcePageType guard now sees AIHubPage already
-        // current and skips the double navigation (review finding).
-        ContentFrame.Navigate(typeof(AIHubPage));
-        Nav.SelectedItem = AIHubNavItem;
+        ContentFrame.Navigate(typeof(ControlHomePage));
+        Nav.SelectedItem = HomeNavItem;
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -43,10 +39,23 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Only the AI Hub page exists in this bootstrap; Routing/Fleet items are disabled.
-        if (tag == "aihub" && ContentFrame.CurrentSourcePageType != typeof(AIHubPage))
+        var page = tag switch
         {
-            ContentFrame.Navigate(typeof(AIHubPage));
+            "home" => typeof(ControlHomePage),
+            "aihub" => typeof(AIHubPage),
+            "fabric" => typeof(FabricControlPage),
+            _ => null,
+        };
+        if (page is not null && ContentFrame.CurrentSourcePageType != page)
+        {
+            ContentFrame.Navigate(page);
         }
+    }
+
+    private void OnContentFrameNavigated(object sender, NavigationEventArgs args)
+    {
+        // Home shortcuts and navigation-pane clicks share one selection state.
+        Nav.SelectedItem = args.SourcePageType == typeof(ControlHomePage) ? HomeNavItem
+            : args.SourcePageType == typeof(FabricControlPage) ? FabricNavItem : AIHubNavItem;
     }
 }

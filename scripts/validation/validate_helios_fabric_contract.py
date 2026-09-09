@@ -185,13 +185,13 @@ def validate_contract(
         ensure(isinstance(linear, dict), "connectors.linear must be an object", errors)
         if isinstance(slack, dict):
             ensure(
-                slack.get("workspaceId") == "T0BAFGSNY5P",
-                "connectors.slack.workspaceId must remain T0BAFGSNY5P",
+                slack.get("workspaceId") == "T0B8Z1H0MV1",
+                "connectors.slack.workspaceId must remain T0B8Z1H0MV1",
                 errors,
             )
             ensure(
-                slack.get("conversationId") == "D0BB80HRZFA",
-                "connectors.slack.conversationId must remain D0BB80HRZFA",
+                slack.get("conversationId") == "C0BHWDBHG1W",
+                "connectors.slack.conversationId must remain C0BHWDBHG1W",
                 errors,
             )
         if isinstance(linear, dict):

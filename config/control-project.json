@@ -1,0 +1,71 @@
+{
+  "$schema": "./schemas/control-project.schema.json",
+  "projectId": "helios-control",
+  "name": "HELIOS",
+  "repository": "Yolkster64/helios-platform",
+  "repositoryUrl": "https://github.com/Yolkster64/helios-platform",
+  "coreLanguage": "C#/.NET 10",
+  "steps": [
+    "Connect",
+    "Unify",
+    "Automate",
+    "Validate"
+  ],
+  "routingConfig": "config/aihub.json",
+  "connectorConfig": "config/connectors.json",
+  "eventContract": "contracts/integration-event.v1.schema.json",
+  "integrations": {
+    "github": {
+      "role": "Code, PRs and automation",
+      "tokenEnv": "GH_TOKEN"
+    },
+    "linear": {
+      "role": "One project for all HELIOS work",
+      "projectUrl": "https://linear.app/641974/project/helios-4f592efea071",
+      "apiKeyEnv": "LINEAR_API_KEY"
+    },
+    "slack": {
+      "role": "Coordination and workflow outcomes",
+      "canvasUrl": "https://helios-xk97943.slack.com/docs/T0B8Z1H0MV1/F0BGVRND8GK",
+      "webhookUrlEnv": "SLACK_WEBHOOK_URL"
+    },
+    "sharepoint": {
+      "role": "Evidence documents; runtime adapter pending",
+      "folderUrlEnv": "HELIOS_SHAREPOINT_FOLDER_URL"
+    },
+    "outlook": {
+      "role": "Correspondence; runtime adapter pending",
+      "mailboxEnv": "HELIOS_OUTLOOK_MAILBOX"
+    },
+    "azure": {
+      "role": "Cloud Shell, workload identity and Key Vault",
+      "vaultUriEnv": "AZURE_KEY_VAULT_URI",
+      "tenantIdEnv": "AZURE_TENANT_ID",
+      "subscriptionIdEnv": "AZURE_SUBSCRIPTION_ID"
+    },
+    "bridge": {
+      "role": "Shared MCP with optional bounded Claude requests",
+      "publicOriginEnv": "HELIOS_REMOTE_PUBLIC_ORIGIN",
+      "authModeEnv": "HELIOS_REMOTE_AUTH_MODE",
+      "claudeExecutableEnv": "HELIOS_REMOTE_CLAUDE_EXECUTABLE"
+    },
+    "chatgpt": {
+      "role": "Published Workspace Agent return conversation",
+      "tokenEnv": "HELIOS_WORKSPACE_AGENT_TOKEN",
+      "channelIdEnv": "HELIOS_WORKSPACE_AGENT_CHANNEL_ID"
+    }
+  },
+  "policy": {
+    "productionEnabled": false,
+    "automaticDeliveryEnabled": false,
+    "credentialValuesAllowed": false,
+    "chatgptLoginIsApiKey": false
+  },
+  "handoffFields": [
+    "repository",
+    "sourceSha",
+    "correlationId",
+    "eventId",
+    "links"
+  ]
+}

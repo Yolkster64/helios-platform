@@ -93,8 +93,8 @@ $targets = @(
     [pscustomobject]@{ Name = 'AZURE_CLIENT_ID'; Kind = 'variable'; Why = 'OIDC app (client) id - helios-deploy.yml vars.AZURE_CLIENT_ID' }
     [pscustomobject]@{ Name = 'AZURE_TENANT_ID'; Kind = 'variable'; Why = 'tenant id - helios-deploy.yml vars.AZURE_TENANT_ID' }
     [pscustomobject]@{ Name = 'AZURE_SUBSCRIPTION_ID'; Kind = 'variable'; Why = 'subscription id - helios-deploy.yml vars.AZURE_SUBSCRIPTION_ID' }
-    [pscustomobject]@{ Name = 'LINEAR_API_KEY'; Kind = 'secret'; Why = 'linear-sync.yml (skips green without it)' }
-    [pscustomobject]@{ Name = 'SLACK_WEBHOOK_URL'; Kind = 'secret'; Why = 'notify-slack.yml (skips green without it)' }
+    [pscustomobject]@{ Name = 'LINEAR_API_KEY'; Kind = 'secret'; Why = 'linear-sync.yml (enabled connector fails without it)' }
+    [pscustomobject]@{ Name = 'SLACK_WEBHOOK_URL'; Kind = 'secret'; Why = 'notify-slack.yml (enabled connector fails without it)' }
     [pscustomobject]@{ Name = 'COPILOT_DISPATCH_TOKEN'; Kind = 'secret'; Why = 'copilot-dispatch.yml (fine-grained PAT: Issues + Pull requests write)' }
     [pscustomobject]@{ Name = 'HELIOS_ADMIN_TOKEN'; Kind = 'secret'; Why = 'governance-apply.yml admin writes (fine-grained PAT: Administration, Contents, Issues, Pull requests, Pages RW + Metadata R)' }
 )

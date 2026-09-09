@@ -1,5 +1,7 @@
 # HELIOS Control Agent Contract
 
+Start with [the shared connection guide](docs/CONNECT.md): one HELIOS project, coding clients, Cloud Shell, AIHub and the two-way handoff.
+
 The current repository is `Yolkster64/helios-platform`; the reviewed target is an in-place rename to `Yolkster64/helios-control`. `Yolkster64/helios-gui` is the separate native desktop target. Agents must not create a competing canonical copy.
 
 ## Required local gates

@@ -1,0 +1,28 @@
+name: Azure OIDC Target Contracts
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/bootstrap/azure-oidc-setup.*'
+      - 'scripts/bootstrap/tests/test_azure_oidc_target.py'
+      - '.github/workflows/azure-oidc-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/bootstrap/azure-oidc-setup.*'
+      - 'scripts/bootstrap/tests/test_azure_oidc_target.py'
+      - '.github/workflows/azure-oidc-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-azure-target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify both shells against inert Azure CLI
+        run: python3 -m unittest discover -s scripts/bootstrap/tests -p test_azure_oidc_target.py -v

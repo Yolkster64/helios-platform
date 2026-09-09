@@ -1,0 +1,20 @@
+{
+  "name": "personal",
+  "interface": {
+    "displayName": "HELIOS Workspace"
+  },
+  "plugins": [
+    {
+      "name": "helios-connect",
+      "source": {
+        "source": "local",
+        "path": "./plugins/helios-connect"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

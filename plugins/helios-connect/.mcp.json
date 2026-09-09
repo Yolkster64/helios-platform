@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "helios": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["scripts/mcp_stdio.py"],
+      "cwd": ".",
+      "env_vars": ["HELIOS_REPO_ROOT"],
+      "startup_timeout_sec": 120
+    }
+  }
+}

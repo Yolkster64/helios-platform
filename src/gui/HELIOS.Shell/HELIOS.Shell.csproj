@@ -37,6 +37,11 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="../../../config/control-project.json" Link="control-project.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!--
     No explicit <Page>/<ApplicationDefinition> items: with UseWinUI=true the Windows App
     SDK targets glob *.xaml automatically (App.xaml as ApplicationDefinition, the rest as

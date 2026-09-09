@@ -82,10 +82,13 @@ az deployment group create -g rg-helios-ai \
 
 CI: `.github/workflows/infra-validate.yml` compiles + lints the Bicep, checks
 `arm/main.json` freshness against it, and runs `terraform fmt`/`validate` on every PR
-touching `infra/**` (all offline, no subscription). `.github/workflows/helios-deploy.yml` deploys on push to `main`
-(or dispatch with a what-if option) and skips gracefully when the `AZURE_CLIENT_ID` /
-`AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` Actions variables are absent — see the
-OIDC section for how those come to exist without any stored secret.
+touching `infra/**` (all offline, no subscription). The deployment workflow is
+manual only, runs from `main` under protected environment `azure-dev`, and defaults
+to what-if. It requires five explicit environment variables:
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+`AZURE_RESOURCE_GROUP` and `AZURE_LOCATION`. Missing values fail before Azure login.
+Apply additionally requires `what_if=false` and `deploy_confirmed=true`; no push
+can deploy and the workflow never creates a resource group.
 
 ## Fleet burst capacity (VMSS)
 
@@ -239,66 +242,43 @@ data-plane role this template manages.
 
 ## OIDC identity (GitHub Actions → Azure)
 
-`helios-deploy.yml` authenticates with **federated identity — no cloud credential is
-stored anywhere**: not in the repo, not in GitHub secrets. A one-time, re-runnable
-bootstrap (`scripts/bootstrap/azure-oidc-setup.sh`, PowerShell twin
-`azure-oidc-setup.ps1` wrapping the same az calls) creates:
+The setup twins `scripts/bootstrap/azure-oidc-setup.sh` and `.ps1` are read-only
+by default and require explicit tenant, subscription, resource group and vault
+parameters. They verify the active account, exact resource IDs and RBAC vault mode
+without changing the Azure CLI account. The [owner checklist](../docs/OWNER_START_HERE.md#4-azure-oidc-for-deploys)
+contains both commands and the Cloud Shell / provider-key handoff.
 
-- App registration **`helios-github-deploy`** + service principal — with **no client
-  secret**, so there is nothing to leak, expire, or rotate.
-- Three **federated credentials** (issuer `https://token.actions.githubusercontent.com`,
-  audience `api://AzureADTokenExchange`) trusting exactly these subjects:
+Only an explicitly requested `--apply` / `-Apply` can create the deploy app and
+service principal, add scoped Contributor / Key Vault Secrets Officer grants,
+and create this federation:
 
-  | Subject | Used by |
-  |---|---|
-  | `repo:Yolkster64/helios-platform:ref:refs/heads/main` | `helios-deploy.yml` on push to `main` and `workflow_dispatch` runs *from* `main` (a dispatch from another branch presents that branch's ref and fails login) |
-  | `repo:Yolkster64/helios-platform:environment:production` | pre-provisioned for adding `environment: production` (an approval gate) to the deploy job — a job that declares an environment presents this subject *instead of* the branch one |
+| Setting | Value |
+| --- | --- |
+| Issuer | `https://token.actions.githubusercontent.com` |
+| Audience | `api://AzureADTokenExchange` |
+| Subject | `repo:Yolkster64/helios-platform:environment:azure-dev` |
+| GitHub environment | `azure-dev`, required reviewers and `main` only |
 
-  There is deliberately **no `pull_request` subject**: this principal holds deploy
-  rights, and a PR can modify workflow code — trusting the generic PR subject would
-  hand any PR with `id-token: write` a path to those rights. Infra PR validation
-  stays offline (`infra-validate.yml`); if PR jobs ever genuinely need Azure, create
-  a separate identity with read-only scope for them. Re-running the setup script
-  removes the credential if an earlier revision created it.
+The bootstrap refuses production, creates no branch or pull-request trust, and
+only removes legacy named branch/PR/production credentials during explicit Apply.
+It prints all five `gh variable set --env azure-dev` commands. It does not create
+GitHub protections, issue a cloud client secret or deploy the template.
 
-- **`Contributor` scoped to `rg-helios-ai` only** — enough to run
-  `az deployment group create` for this template; deliberately not subscription-wide,
-  so the identity cannot create resource groups, touch other workloads, or assign
-  roles. Narrowing further (e.g. per-resource data roles) breaks template deployment
-  itself, which needs control-plane writes across the RG.
-- **`Key Vault Secrets Officer` scoped to `kv-helios-jcut` only** — `main.bicep`
-  conditionally creates `Microsoft.KeyVault/vaults/secrets` on an RBAC-mode vault,
-  and ARM authorizes those writes against *data-plane* RBAC, so `Contributor` alone
-  fails with Forbidden the moment a secure param (`anthropicApiKey`, …) is passed.
+At runtime only the deploy job has `id-token: write`. `azure/login@v2` exchanges
+that job's OIDC token using the pinned audience. The workflow validates the active
+subscription, tenant, Enabled state and existing resource-group ID/location before
+either what-if or apply. It never creates groups or falls back to historical
+subscription, resource-group, location or credential values.
 
-At run time the workflow's `permissions: id-token: write` lets the runner mint a
-short-lived GitHub OIDC token; `azure/login@v2` exchanges it for an Entra token that
-expires in minutes and never exists outside the run. The three values the workflow
-needs — `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — are
-identifiers, not secrets; set them as **Actions variables** (the script prints the
-exact `gh variable set` one-liners). The workflow targets `rg-helios-ai` (override
-with the `AZURE_RESOURCE_GROUP` / `AZURE_LOCATION` repo variables) and only attempts
-`az group create` when the RG is missing, since the RG-scoped principal cannot
-create it. `azure/login` pins `audience: api://AzureADTokenExchange`, and deploy
-custody records are allowlisted JSON summaries + digests (not raw payload archives).
-What-if mode is read-only and fails if the resource group does not already exist.
+A manual `main` run defaults to `what_if=true`. Apply requires a separate manual
+run with `what_if=false`, `deploy_confirmed=true` and protected-environment approval.
+The confirmation records the operator's decision; it does not cryptographically
+bind this run to a previous plan. Custody records preserve allowlisted summaries,
+input digests and failure evidence; raw Azure output is discarded.
 
-Boundaries and operations:
-
-- **One-time elevated clicks:** the bootstrap must run as a human who can create app
-  registrations (Application Developer or the tenant's default user setting) and
-  assign roles on the two scopes (Owner or User Access Administrator on
-  `rg-helios-ai`). CI itself never needs those rights.
-- **CI never passes `principalId`** to the template: the role assignments it would
-  create require rights beyond `Contributor`; personal RBAC grants are the
-  interactive `azure-up.sh` path's job.
-- **Rotation / revocation:** there is no secret to rotate. To revoke, delete the app
-  (`az ad app delete --id <AZURE_CLIENT_ID>`) — deploys stop immediately. To
-  re-establish, re-run `azure-oidc-setup.sh` and update the `AZURE_CLIENT_ID`
-  variable (a recreated app has a new appId).
-- **Verify:** `az role assignment list --assignee <AZURE_CLIENT_ID> --all -o table`,
-  then dispatch the workflow from `main` with `what_if=true` as a read-only
-  rehearsal before letting a push deploy.
+Keep `principalId` unset for CI unless a separately reviewed identity can assign
+roles. The deploy principal's Contributor role does not grant that authority.
+Fleet and learning resources remain governed by their existing opt-in parameters.
 
 ## Outputs
 

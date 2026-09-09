@@ -1,5 +1,7 @@
 # HELIOS Control
 
+Start with [the shared connection guide](docs/CONNECT.md): one HELIOS project, coding clients, Cloud Shell, AIHub and the two-way handoff.
+
 Enterprise Windows management and multi-agent control platform. The current repository is `Yolkster64/helios-platform`; after the reviewed in-place cutover it becomes `Yolkster64/helios-control`. Do not create a competing canonical copy.
 
 The stack is C#/.NET 10 + PowerShell 7, with a multi-LLM hub under `src/ai`, an MCP server under `src/mcp`, Azure/Foundry infrastructure under `infra`, and the active native desktop shell under `src/gui`.

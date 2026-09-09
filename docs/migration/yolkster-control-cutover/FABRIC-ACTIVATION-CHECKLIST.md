@@ -5,7 +5,7 @@ Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fa
 - [x] Record Cutover/Fabric PR #154 merge SHA and required-check evidence for issue #184.
 - [x] Validate Fabric schema and instance contract.
 - [x] Verify `helios_fabric_plan_get` and catalog contract wiring.
-- [ ] Connect Slack workspace `T0BAFGSNY5P` and resolve `D0BB80HRZFA`.
+- [ ] Verify runtime Slack delivery in workspace `T0B8Z1H0MV1`, channel `C0BHWDBHG1W`.
 - [ ] Keep JOH-208 and HC-029 synchronized idempotently.
 - [ ] Publish runbook/checklist/topology/checksums to SharePoint and re-read uploads.
 - [ ] Configure GitHub OIDC and Azure DevOps WIF mirror after rename.
@@ -28,14 +28,21 @@ Reference contract: `/home/runner/work/helios-platform/helios-platform/config/fa
 
 ## Slack receipt
 
-- Workspace: `T0BAFGSNY5P`
-- Conversation: `D0BB80HRZFA`
+- Workspace: `T0B8Z1H0MV1`
+- Channel: `C0BHWDBHG1W` (`#helios-control-plane`)
 - Message permalink or timestamp: `pending`
-- Verification note: `pending`
+- Operator canvas: [HELIOS control plane](https://helios-xk97943.slack.com/docs/T0B8Z1H0MV1/F0BGVRND8GK)
+- Verification note (2026-09-09): the existing operator canvas was updated with
+  the single HELIOS project and setup flow. Runtime bot/webhook delivery remains
+  unverified; a canvas edit is not a message-delivery receipt.
+- Historical target from the 2026-09-06 packet: workspace `T0BAFGSNY5P`,
+  conversation `D0BB80HRZFA`. Its message receipt was pending. These identifiers
+  remain here as history and are no longer the activation destination.
 
 ## Linear receipt
 
 - Team: `JOH`
+- Current project: [HELIOS](https://linear.app/641974/project/helios-4f592efea071)
 - Issue: `JOH-208`
 - Sync evidence (Linear URL + GitHub comment URL): `https://linear.app/641974/issue/JOH-208` + `https://github.com/Yolkster64/helios-platform/issues/184#issuecomment-5555420685`
 - Idempotency re-run note: `Linkback exists; explicit connector re-run evidence is still pending.`

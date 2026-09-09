@@ -66,6 +66,11 @@
       "manifest": "templates/manifest-milestones.json",
       "schema": "config/schemas/github-milestones.schema.json",
       "consumer": "templates/README.md (copy target: config/github/milestones.json)"
+    },
+    {
+      "manifest": "config/control-project.json",
+      "schema": "config/schemas/control-project.schema.json",
+      "consumer": "scripts/bootstrap/connect.py, src/gui/HELIOS.Shell/Views/ControlHomePage.xaml.cs"
     }
   ]
 }

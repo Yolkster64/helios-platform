@@ -38,8 +38,8 @@
   },
   "connectors": {
     "slack": {
-      "workspaceId": "T0BAFGSNY5P",
-      "conversationId": "D0BB80HRZFA",
+      "workspaceId": "T0B8Z1H0MV1",
+      "conversationId": "C0BHWDBHG1W",
       "receiptPath": "docs/migration/yolkster-control-cutover/FABRIC-ACTIVATION-CHECKLIST.md#slack-receipt"
     },
     "linear": {
@@ -105,7 +105,7 @@
     },
     {
       "id": "slack-workspace-bind",
-      "title": "Connect Slack workspace T0BAFGSNY5P and conversation D0BB80HRZFA with a message receipt.",
+      "title": "Connect Slack workspace T0B8Z1H0MV1 and conversation C0BHWDBHG1W with a message receipt.",
       "status": "pending",
       "category": "connectors",
       "owner": "repo-owner",

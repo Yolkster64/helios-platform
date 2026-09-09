@@ -64,14 +64,28 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     data = yaml.safe_load(text) or {}
 
+    triggers = data.get("on", data.get(True)) or {}
+    _require(set(triggers) == {"workflow_dispatch"}, "deploy workflow must only allow workflow_dispatch")
+    inputs = (triggers["workflow_dispatch"] or {}).get("inputs") or {}
+    _require((inputs.get("what_if") or {}).get("default") is True,
+             "what_if must default to true")
+    _require((inputs.get("deploy_confirmed") or {}).get("default") is False,
+             "deploy_confirmed must default to false")
     permissions = data.get("permissions") or {}
-    _require(permissions.get("id-token") == "write", "deploy workflow must grant id-token: write")
-    _require(permissions.get("contents") == "read", "deploy workflow must keep contents: read")
-
+    _require(permissions == {"contents": "read"}, "workflow must keep contents: read and grant no global id-token")
     jobs = data.get("jobs") or {}
     deploy_job = jobs.get("deploy")
     _require(isinstance(deploy_job, dict), "deploy workflow must define jobs.deploy")
-    _ensure_permissions_are_read_only(deploy_job, "deploy job")
+    _require(deploy_job.get("if") == "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+             "deploy job must require manual dispatch from main")
+    _require(deploy_job.get("environment") == "azure-dev", "deploy job must use protected azure-dev environment")
+    _require(deploy_job.get("permissions") == {"contents": "read", "id-token": "write"},
+             "only deploy job must grant id-token: write with contents: read")
+    expected_variables = ("AZURE_CLIENT_ID", "AZURE_TENANT_ID", "AZURE_SUBSCRIPTION_ID",
+                          "AZURE_RESOURCE_GROUP", "AZURE_LOCATION")
+    for name in expected_variables:
+        _require((deploy_job.get("env") or {}).get(name) == "${{ vars." + name + " }}",
+                 "deploy target must require explicit variable " + name)
     steps = deploy_job.get("steps") or []
     _require(isinstance(steps, list) and steps, "jobs.deploy.steps must be a non-empty list")
 
@@ -79,6 +93,11 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     creds_run = str(creds.get("run", ""))
     _require("configured=false" in creds_run and "configured=true" in creds_run,
              "OIDC configuration step must explicitly emit configured=true/false")
+
+    _require("DEPLOY_CONFIRMED" in creds_run and "exit 1" in creds_run,
+             "apply must reject absent explicit confirmation")
+    for name in expected_variables:
+        _require(name in creds_run, "OIDC guard must check " + name)
 
     login = _find_step(steps, "Azure Login (OIDC)")
     _ensure_action(login, "azure/login", "deploy workflow must authenticate via azure/login")
@@ -89,19 +108,17 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     _require(audience == "api://AzureADTokenExchange",
              "azure/login must pin audience api://AzureADTokenExchange")
 
-    ensure_rg = _find_step(steps, "Ensure resource group for deploy")
-    ensure_rg_if = str(ensure_rg.get("if", ""))
-    _require("steps.creds.outputs.configured == 'true'" in ensure_rg_if,
-             "resource-group creation must be gated by OIDC configuration")
-    _require("github.event_name == 'push'" in ensure_rg_if,
-             "resource-group creation must be limited to push deploys")
-    _require("!inputs.what_if" not in ensure_rg_if,
-             "resource-group creation must not include workflow_dispatch deploy mode")
+    _require("az group create" not in text, "workflow must never create a resource group")
+    _require("secrets.AZURE_" not in text, "workflow must not use legacy secret fallbacks")
+    target = _find_step(steps, "Verify Azure deployment target")
+    target_run = str(target.get("run", ""))
+    for evidence in ("az account show", "tenantId", '"Enabled"', "az group show", ".location", "expectedId"):
+        _require(evidence in target_run, "target precheck must verify account, tenant, group and location")
 
     what_if = _find_step(steps, "What-if (sanitized custody record)")
     what_if_if = str(what_if.get("if", ""))
     what_if_run = str(what_if.get("run", ""))
-    _require("workflow_dispatch" in what_if_if and "inputs.what_if" in what_if_if,
+    _require("workflow_dispatch" in what_if_if and "inputs.what_if" in what_if_if and "steps.target.outputs.verified == 'true'" in what_if_if,
              "what-if step must be restricted to workflow_dispatch + what_if=true")
     _require("--result-format ResourceIdOnly" in what_if_run,
              "what-if custody must use ResourceIdOnly output to avoid sensitive payload capture")
@@ -117,8 +134,8 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     deploy = _find_step(steps, "Deploy Helios Infra (sanitized custody record)")
     deploy_if = str(deploy.get("if", ""))
     deploy_run = str(deploy.get("run", ""))
-    _require("github.event_name == 'push'" in deploy_if and "github.event_name == 'workflow_dispatch'" in deploy_if and "!inputs.what_if" in deploy_if,
-             "deploy step must explicitly guard non-what-if deploys to workflow_dispatch")
+    _require(deploy_if == "steps.creds.outputs.configured == 'true' && steps.target.outputs.verified == 'true' && github.event_name == 'workflow_dispatch' && !inputs.what_if && inputs.deploy_confirmed",
+             "deploy step must require verified target, manual dispatch and explicit confirmation")
     _require("record-deploy-" in deploy_run,
              "deploy step must write a dedicated custody record")
     _require("--query" in deploy_run and "provisioningState" in deploy_run,
@@ -130,12 +147,12 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     _require("trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT" in deploy_run,
              "deploy step must clean up raw temp output files")
 
-    precheck = _find_step(steps, "Verify what-if resource group exists")
+    precheck = target
     precheck_run = str(precheck.get("run", ""))
-    _require("record-what-if-precheck-" in precheck_run,
-             "what-if resource-group precheck must retain failure evidence")
+    _require("record-target-precheck-" in precheck_run,
+             "target precheck must retain failure evidence")
     _require(str(RECORD_SCRIPT.relative_to(ROOT)) in precheck_run,
-             "what-if resource-group precheck must use the shared deploy custody record helper")
+             "target precheck must use the shared deploy custody record helper")
 
     seal = _find_step(steps, "Seal custody manifest")
     seal_if = str(seal.get("if", ""))

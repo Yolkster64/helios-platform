@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/control-project.schema.json",
+  "title": "HELIOS shared control project",
+  "type": "object",
+  "properties": {
+    "projectId": {
+      "const": "helios-control"
+    },
+    "name": {
+      "const": "HELIOS"
+    },
+    "repository": {
+      "const": "Yolkster64/helios-platform"
+    },
+    "repositoryUrl": {
+      "const": "https://github.com/Yolkster64/helios-platform"
+    },
+    "coreLanguage": {
+      "const": "C#/.NET 10"
+    },
+    "steps": {
+      "const": [
+        "Connect",
+        "Unify",
+        "Automate",
+        "Validate"
+      ]
+    },
+    "routingConfig": {
+      "const": "config/aihub.json"
+    },
+    "connectorConfig": {
+      "const": "config/connectors.json"
+    },
+    "eventContract": {
+      "const": "contracts/integration-event.v1.schema.json"
+    },
+    "policy": {
+      "const": {
+        "productionEnabled": false,
+        "automaticDeliveryEnabled": false,
+        "credentialValuesAllowed": false,
+        "chatgptLoginIsApiKey": false
+      }
+    },
+    "handoffFields": {
+      "const": [
+        "repository",
+        "sourceSha",
+        "correlationId",
+        "eventId",
+        "links"
+      ]
+    },
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "github": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "tokenEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "tokenEnv"
+          ],
+          "additionalProperties": false
+        },
+        "linear": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "projectUrl": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#@ :]+/[^?#@ ]*$"
+            },
+            "apiKeyEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "projectUrl",
+            "apiKeyEnv"
+          ],
+          "additionalProperties": false
+        },
+        "slack": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "canvasUrl": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#@ :]+/[^?#@ ]*$"
+            },
+            "webhookUrlEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "canvasUrl",
+            "webhookUrlEnv"
+          ],
+          "additionalProperties": false
+        },
+        "sharepoint": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "folderUrlEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "folderUrlEnv"
+          ],
+          "additionalProperties": false
+        },
+        "outlook": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "mailboxEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "mailboxEnv"
+          ],
+          "additionalProperties": false
+        },
+        "azure": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "vaultUriEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "tenantIdEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "subscriptionIdEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "vaultUriEnv",
+            "tenantIdEnv",
+            "subscriptionIdEnv"
+          ],
+          "additionalProperties": false
+        },
+        "bridge": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "publicOriginEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "authModeEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "claudeExecutableEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "publicOriginEnv",
+            "authModeEnv",
+            "claudeExecutableEnv"
+          ],
+          "additionalProperties": false
+        },
+        "chatgpt": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "tokenEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "channelIdEnv": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          "required": [
+            "role",
+            "tokenEnv",
+            "channelIdEnv"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "github",
+        "linear",
+        "slack",
+        "sharepoint",
+        "outlook",
+        "azure",
+        "bridge",
+        "chatgpt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "projectId",
+    "name",
+    "repository",
+    "repositoryUrl",
+    "coreLanguage",
+    "steps",
+    "routingConfig",
+    "connectorConfig",
+    "eventContract",
+    "policy",
+    "handoffFields",
+    "$schema",
+    "integrations"
+  ],
+  "additionalProperties": false
+}

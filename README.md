@@ -1,5 +1,7 @@
 # HELIOS Platform
 
+Start with [the shared connection guide](docs/CONNECT.md): one HELIOS project, coding clients, Cloud Shell, AIHub and the two-way handoff.
+
 HELIOS is an active Windows-platform and multi-LLM integration project owned at
 [`Yolkster64/helios-platform`](https://github.com/Yolkster64/helios-platform). The
 currently buildable cross-platform slice combines a .NET 10 AI hub, F# policy logic, an

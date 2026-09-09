@@ -132,6 +132,15 @@ class ShippedManifestMutationTests(unittest.TestCase):
     def test_connectors_typo_key(self) -> None:
         self._assert_invalid("config/connectors.json", '"notifyOn"', '"notifyon"', "slack")
 
+    def test_connectors_project_requires_uuid(self) -> None:
+        self._assert_invalid("config/connectors.json", '"3a4dee89-2c83-4bbd-a067-4e6cfbcb308a"', '"HELIOS"', "projectId")
+
+    def test_connectors_project_cannot_be_omitted(self) -> None:
+        self._assert_invalid("config/connectors.json", '"projectId": "3a4dee89-2c83-4bbd-a067-4e6cfbcb308a",', '', "linear")
+
+    def test_connectors_control_channel_requires_channel_id(self) -> None:
+        self._assert_invalid("config/connectors.json", '"C0BHWDBHG1W"', '"#helios-control-plane"', "controlPlane")
+
     def test_fork_watch_unknown_signal(self) -> None:
         self._assert_invalid("config/fork-watch.json", '"signals": ["releases", "commits"]', '"signals": ["releases", "tags"]', "signals")
 

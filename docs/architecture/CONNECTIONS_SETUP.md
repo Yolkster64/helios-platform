@@ -97,7 +97,7 @@ or Key Vault.
 
 | Connection | What flows | Carried by (in this repo) | Repo-side config needed |
 |---|---|---|---|
-| GitHub Actions ↔ Azure | OIDC deploy of `infra/main.bicep`, no stored cloud secret | `.github/workflows/helios-deploy.yml` + `scripts/bootstrap/azure-oidc-setup.sh`/`.ps1` | 3 Actions **variables** (below) |
+| GitHub Actions ↔ Azure | OIDC deploy of `infra/main.bicep`, no stored cloud secret | `.github/workflows/helios-deploy.yml` + `scripts/bootstrap/azure-oidc-setup.sh`/`.ps1` | 5 protected `azure-dev` environment **variables** (below) |
 | GitHub ↔ ChatGPT/Codex | Auto PR reviews, `@codex` commands | Nothing — connection lives at chatgpt.com (Codex settings) | None (`AGENTS.md` is read by Codex) |
 | GitHub ↔ Copilot | Inline/CLI agent, auto review requests, coding-agent assignment | `.github/workflows/copilot-dispatch.yml`, `config/aihub.json` `copilot` cliAgent, `.github/copilot-instructions.md` | Optional `COPILOT_DISPATCH_TOKEN` secret |
 | GitHub ↔ Claude | Claude Code sessions, `claude-cli` routing, MCP tools | `CLAUDE.md`, `.claude/skills/`, `config/aihub.json` `claude-cli` cliAgent, `.mcp.json` | None |
@@ -108,40 +108,44 @@ or Key Vault.
 
 ## GitHub Actions ↔ Azure (OIDC, no stored credential)
 
-`scripts/bootstrap/azure-oidc-setup.sh` (PowerShell twin `azure-oidc-setup.ps1`,
-same `az` calls) creates, idempotently:
+`scripts/bootstrap/azure-oidc-setup.sh` (PowerShell twin `azure-oidc-setup.ps1`)
+defaults to a read-only plan. Supply the tenant, subscription, existing resource
+group and RBAC-enabled Key Vault explicitly. The active Azure account must
+match; the script does not change your selected account. After reviewing the
+plan, an authorized administrator can add `--apply` / `-Apply` to create:
 
 - app registration **`helios-github-deploy`** + service principal — **no client
   secret is ever created**;
-- federated credentials trusting GitHub's OIDC issuer for exactly **two**
-  subjects: `repo:Yolkster64/helios-platform:ref:refs/heads/main` and
-  `repo:…:environment:production`. Deliberately **no `pull_request` subject**
-  (a PR can rewrite its own workflow; PR validation stays offline in
-  `.github/workflows/infra-validate.yml`) — the script even deletes that
-  credential if an older revision created it;
+- one federated credential for
+  `repo:Yolkster64/helios-platform:environment:azure-dev`. Production is disabled.
+  Apply also removes the known legacy `github-main`, `github-pull-request` and
+  `github-env-production` credentials if present; the read-only plan removes nothing;
 - **Contributor** scoped to the resource group only, plus **Key Vault Secrets
   Officer** scoped to the provider-key vault only (data-plane RBAC for the
   vault-secret writes `infra/main.bicep` performs).
 
 It finishes by printing the values for the exact settings
 `.github/workflows/helios-deploy.yml` reads — set them as Actions
-**variables** (identifiers, not secrets), with `gh variable set` one-liners
+**variables in the protected `azure-dev` environment** (identifiers, not secrets),
+with `gh variable set --env azure-dev` one-liners
 printed ready to paste:
 
 | Setting | Kind | Read by `helios-deploy.yml` as |
 |---|---|---|
-| `AZURE_CLIENT_ID` | variable (required) | `vars.AZURE_CLIENT_ID` (falls back to `secrets.AZURE_CLIENT_ID`, then the older `secrets.AZURE_OIDC_CLIENT_ID` alias — legacy locations, strictly last) |
-| `AZURE_TENANT_ID` | variable (required) | `vars.AZURE_TENANT_ID` (same fallback) |
-| `AZURE_SUBSCRIPTION_ID` | variable (required) | `vars.AZURE_SUBSCRIPTION_ID` (same fallback) |
-| `AZURE_RESOURCE_GROUP` | variable (optional) | defaults to `rg-helios-ai` |
-| `AZURE_LOCATION` | variable (optional) | defaults to `eastus2` |
+| `AZURE_CLIENT_ID` | variable (required) | `vars.AZURE_CLIENT_ID` |
+| `AZURE_TENANT_ID` | variable (required) | `vars.AZURE_TENANT_ID` |
+| `AZURE_SUBSCRIPTION_ID` | variable (required) | `vars.AZURE_SUBSCRIPTION_ID` |
+| `AZURE_RESOURCE_GROUP` | variable (required) | `vars.AZURE_RESOURCE_GROUP` |
+| `AZURE_LOCATION` | variable (required) | `vars.AZURE_LOCATION` |
 
-Graceful skip: the workflow's "Check Azure OIDC configuration" step exits green
-with a `::notice::` whenever `AZURE_CLIENT_ID` is unset, so forks and
-pre-bootstrap clones never see a red deploy check. Order matters: run
-`scripts/bootstrap/azure-up.sh` first (the OIDC script refuses to run until the
-resource group exists). Verify by dispatching **Helios Platform Deploy** *from
-`main`* (the federated subject is branch-scoped) with `what_if=true`.
+The workflow runs only when explicitly dispatched from `main`, behind the
+`azure-dev` protected environment. Missing configuration fails before Azure
+login. It verifies the subscription, tenant, resource-group ID and location
+before deployment; it does not create a resource group. Start with the default
+`what_if=true`. Applying requires `what_if=false` and `deploy_confirmed=true`
+after a successful what-if review. Required reviewers and main-only deployment
+branches must be configured by the repository administrator; YAML alone does
+not establish those protections. See [owner setup](../OWNER_START_HERE.md).
 
 ## GitHub ↔ ChatGPT / Codex
 
@@ -240,20 +244,28 @@ No owner action and no secrets beyond each developer's own `claude` login
 ## GitHub ↔ Linear and Slack
 
 `config/connectors.json` is the single routing table (env-var names and routing
-only — never values). Two Actions secrets switch the connections on; without
-them **both workflows skip green** and can never be the red check.
+only — never values). `enabled: false` skips without contacting a service;
+an enabled connector with a missing credential fails its own workflow. This
+does not change the originating build's result. See
+[connector activation](CONNECTOR_ACTIVATION.md) for the setup and receipt steps.
 
 | Connection | Secret | Workflow | Fires when |
 |---|---|---|---|
-| Linear | `LINEAR_API_KEY` | `.github/workflows/linear-sync.yml` | Issue `opened`/`labeled`/`unlabeled`/`closed`/`reopened` **and** the issue carries a `linear.syncLabels` label (`bug`, `enhancement`, `infra`, `ai-hub`, `absorption`, `build-ci`); `unlabeled` also proceeds when the *last* sync label was just removed, so the mirror's labels empty instead of freezing |
+| Linear | `LINEAR_API_KEY` | `.github/workflows/linear-sync.yml` | Curated issue `opened`/`labeled` events can create a mirror; `edited`/`unlabeled`/`closed`/`reopened` also refresh existing mirrors from live GitHub title, labels and state |
 | Slack | `SLACK_WEBHOOK_URL` | `.github/workflows/notify-slack.yml` | `workflow_run` completion of the six workflows listed in it, filtered by `slack.notifyOn` (`always` vs `failures-and-recovery`) |
 
 Linear sync is one-directional (GitHub is the source of truth): mirrored issues
-get a `[GH-<n>]` title prefix into team `JOH` (`linear.teamKey` — must match
-your Linear workspace's team key or the sync warns and exits), label mapping
-per `githubLabelToLinear`, and close/reopen moves the Linear state. Enable
+get a `[GH-<n>]` title prefix into team `JOH` and the single
+[HELIOS project](https://linear.app/641974/project/helios-4f592efea071)
+(`linear.teamKey` and `linear.projectId`). Unavailable or archived targets,
+wrong team membership, ambiguous mirrors, and GraphQL errors stop before a
+write. Label mapping follows `githubLabelToLinear`; close/reopen follows the
+live GitHub state. Enable
 with `gh secret set LINEAR_API_KEY` / `gh secret set SLACK_WEBHOOK_URL`;
 routing changes are edits to `config/connectors.json`, never to the workflows.
+Slack recovery compares prior completed runs on the same workflow, branch,
+event and source repository. The webhook's installation determines its channel;
+the configured channel IDs are navigation metadata, not webhook routing.
 
 > **Owner action — disable Linear's own GitHub sync for team John.** Linear's
 > built-in GitHub integration must NOT also be linked to this repository for
@@ -671,7 +683,7 @@ are `scripts/bootstrap/README.md` and `scripts/github/README.md`.
 
 | Connection | Owner action required | Secret or setting | Verified by |
 |---|---|---|---|
-| Actions ↔ Azure | Run `scripts/bootstrap/azure-up.sh`, then `azure-oidc-setup.sh`; set the 3 variables (`provision-github-secrets.ps1 -Apply` from env vars of the same name, or the printed `gh variable set` lines) | Vars `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (optional `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`) | Dispatch **Helios Platform Deploy** from `main` with `what_if=true`; `az role assignment list --assignee <appId> --all` |
+| Actions ↔ Azure | Review the explicit-target OIDC plan, then authorize Apply and configure protected `azure-dev` | All 5 environment vars: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION` | Dispatch **Helios Platform Deploy** from `main` with `what_if=true`; retain its custody artifact |
 | ChatGPT/Codex | Connect the repo in Codex settings at chatgpt.com | None in this repo | Open a PR (auto-review) or comment `@codex review` |
 | Copilot reviews + coding agent | Have Copilot enabled for the repo; optionally mint the PAT | Optional secret `COPILOT_DISPATCH_TOKEN` | Open a non-draft PR (review request appears); label an issue `copilot` (agent assigned) |
 | Claude | None | None (dev's own `claude` login; `ANTHROPIC_API_KEY` via aihub flow) | `/mcp` in Claude Code; `helios-ai providers` |

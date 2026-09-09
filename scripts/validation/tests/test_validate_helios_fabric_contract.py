@@ -38,9 +38,23 @@ class FabricContractValidatorTests(unittest.TestCase):
 
     def test_fails_when_slack_workspace_drifted(self) -> None:
         self._validate_mutation(
-            '"workspaceId": "T0BAFGSNY5P"',
+            '"workspaceId": "T0B8Z1H0MV1"',
             '"workspaceId": "T0WRONG0000"',
-            "workspaceId must remain T0BAFGSNY5P",
+            "workspaceId must remain T0B8Z1H0MV1",
+        )
+
+    def test_fails_when_slack_channel_drifted(self) -> None:
+        self._validate_mutation(
+            '"conversationId": "C0BHWDBHG1W"',
+            '"conversationId": "D0BB80HRZFA"',
+            "conversationId must remain C0BHWDBHG1W",
+        )
+
+    def test_fails_when_historical_workspace_is_restored(self) -> None:
+        self._validate_mutation(
+            '"workspaceId": "T0B8Z1H0MV1"',
+            '"workspaceId": "T0BAFGSNY5P"',
+            "workspaceId must remain T0B8Z1H0MV1",
         )
 
     def test_fails_when_source_repository_drifted(self) -> None:

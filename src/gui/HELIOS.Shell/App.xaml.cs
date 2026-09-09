@@ -47,6 +47,8 @@ public partial class App : Application
         // Transient: each page instance gets its own VM, constructed on the UI thread so
         // it can capture the page's DispatcherQueue.
         services.AddTransient<AIHubPageViewModel>();
+        services.AddTransient<ControlHomePageViewModel>();
+        services.AddTransient<FabricControlPageViewModel>();
 
         return services.BuildServiceProvider();
     }
