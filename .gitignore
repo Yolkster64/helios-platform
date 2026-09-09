@@ -158,3 +158,6 @@ actions-runner/
 
 # scripts/verify/psa-gate.ps1 writes its record list here (uploaded as a CI artifact)
 ps-analysis.txt
+
+# Raw ChatGPT project export (docs/imports/chatgpt/README.md records what was taken from it).
+docs/imports/chatgpt/raw/
