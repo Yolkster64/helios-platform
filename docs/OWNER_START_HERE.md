@@ -12,12 +12,21 @@ values live in your shell, GitHub Actions secrets, or Azure Key Vault.
 
 ## Day-one checklist
 
-Run **`bash scripts/bootstrap/first-run.sh`** first (twin:
-`pwsh scripts/bootstrap/first-run.ps1`). It installs the CLIs, runs the logins it
-can (device codes you type), probes every lane and every repository secret by
-name, writes `.helios/bootstrap-state.json`, and ends by printing this list as a
-numbered checklist with the exact command per item. `--verify-only` is the
-read-only pass. Then:
+Run **`bash scripts/bootstrap/connect.sh`** first (twin:
+`pwsh scripts/bootstrap/connect.ps1`). It is the one command over everything on
+this page: it runs every lane it can without you — the two device codes, the
+GitHub App, OIDC, the vault, Codex, Foundry, the connector secrets by name — and
+ends with a numbered list of only what is left for you, one paste-able command
+each. `--status` reports the same table and changes nothing. Its page, including
+what each lane state means, is [`CONNECT.md`](CONNECT.md); exit 0 = nothing is
+left for you, 2 = owner items remain, 1 = a lane failed for a reason that is not
+yours to fix.
+
+`connect.sh` finishes by running **`first-run.sh --verify-only`**
+(twin: `first-run.ps1`), which is also the deeper report on its own: it installs
+the CLIs, runs the logins it can, probes every lane and every repository secret
+by name, and writes `.helios/bootstrap-state.json`. Either way the sections below
+are what those checklists point at:
 
 1. [Wire secrets through env vars / Key Vault](#1-secrets-env-vars-and-key-vault) — nothing works without provider credentials.
 2. [Flip the GitHub repository settings](#2-github-repository-settings) — Issues is already on; what remains is the variables, secrets, and the `production` environment.
@@ -146,6 +155,11 @@ Details: `infra/README.md` ("Fleet burst capacity (VMSS)") and
 `docs/architecture/HERMES_FLEET_AND_XCORE.md`.
 
 ## 6. Control fabric: the GitHub App
+
+`connect.sh` runs this lane for you — it starts the GitHub device flow itself and
+then calls `connect-github-app.ps1`, reporting the App as one row of its table
+([`CONNECT.md`](CONNECT.md)). The rest of this section is what that lane does and
+what the two clicks are, for when you want to run the pieces on their own.
 
 **One command**: `pwsh scripts/bootstrap/connect-devices.ps1` (from your own
 machine, Cloud Shell or a Codespace — never an agent container, whose transport
