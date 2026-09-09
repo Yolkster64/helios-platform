@@ -68,7 +68,6 @@ including 678 AIHub tests, the native Windows shell, Linux/Windows launcher
 and plugin tests, and Bicep/Terraform validation. The later shared-catalog
 addition requires its own current-head CI result on PR #253.
 
-
 ## Automatic start and project simplification
 
 The existing `connect.sh` / `connect.ps1` now accepts `start --serve`: validate
