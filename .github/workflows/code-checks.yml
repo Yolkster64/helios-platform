@@ -36,9 +36,34 @@ jobs:
           choco install powershell-core -y
         shell: pwsh
       
+      # continue-on-error: only "Run Unit Tests" below needs Pester, and a transient PSGallery
+      # lookup ("No match was found ... module name 'Pester'") used to fail this step, which has
+      # no continue-on-error, and take the whole job down - skipping the five substantive checks
+      # after it, which need no module at all. One registry blip should not cost the syntax,
+      # security, registry, path and documentation checks.
       - name: Install Pester
+        id: install-pester
+        continue-on-error: true
         run: |
-          Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck
+          $ErrorActionPreference = 'Stop'
+          # PSGallery is occasionally unreachable or unregistered on a fresh Windows runner;
+          # one retry turns the common transient into a non-event.
+          foreach ($attempt in 1..2) {
+            try {
+              if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+                Register-PSRepository -Default -ErrorAction Stop
+              }
+              Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck -ErrorAction Stop
+              Write-Host "Pester 5.4.0 installed (attempt $attempt)."
+              exit 0
+            }
+            catch {
+              Write-Host "::warning::Pester install attempt $attempt failed: $($_.Exception.Message)"
+              if ($attempt -lt 2) { Start-Sleep -Seconds 10 }
+            }
+          }
+          Write-Host "::warning::Pester could not be installed; the unit-test step will report that and the rest of this job still runs."
+          exit 1
         shell: pwsh
       
       - name: PowerShell Syntax Validation
@@ -256,25 +281,35 @@ jobs:
           Write-Host "║  Running Unit Tests                    ║"
           Write-Host "╚════════════════════════════════════════╝"
           
+          # The files first, then the module: this repository currently has no
+          # test-*-unit.ps1 at all, so "Pester is missing" is only worth saying when there
+          # was something it would have run.
           $TestFiles = Get-ChildItem -Recurse -Filter "test-*-unit.ps1"
-          
+
           if ($TestFiles.Count -eq 0) {
-            Write-Host "ℹ  No unit tests found, skipping"
+            Write-Host "ℹ  No test-*-unit.ps1 files in this repository, so there is nothing for Pester to run."
+            Write-Host "   The PowerShell suites that do run live in scripts/verify/tests/ and are"
+            Write-Host "   driven by their own workflows."
+            exit 0
           }
-          else {
-            foreach ($TestFile in $TestFiles) {
-              Write-Host ""
-              Write-Host "Running $($TestFile.Name)..."
-              
-              $Result = Invoke-Pester -Path $TestFile.FullName -PassThru -ErrorAction SilentlyContinue
-              
-              if ($Result.FailedCount -gt 0) {
-                Write-Host "❌ $($Result.FailedCount) test(s) failed"
-                exit 1
-              }
-              else {
-                Write-Host "✓ All tests passed"
-              }
+
+          if ('${{ steps.install-pester.outcome }}' -ne 'success') {
+            Write-Host "::warning::$($TestFiles.Count) unit test file(s) were found but Pester is not installed (its install step did not succeed), so they did not run."
+            exit 1
+          }
+
+          foreach ($TestFile in $TestFiles) {
+            Write-Host ""
+            Write-Host "Running $($TestFile.Name)..."
+
+            $Result = Invoke-Pester -Path $TestFile.FullName -PassThru -ErrorAction SilentlyContinue
+
+            if ($Result.FailedCount -gt 0) {
+              Write-Host "❌ $($Result.FailedCount) test(s) failed"
+              exit 1
+            }
+            else {
+              Write-Host "✓ All tests passed"
             }
           }
         shell: pwsh
@@ -287,11 +322,23 @@ jobs:
           Write-Host "║  Code Checks Summary                   ║"
           Write-Host "╚════════════════════════════════════════╝"
           Write-Host ""
-          Write-Host "✓ Syntax Validation: $(if ('${{ steps.syntax-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Security Scanning: $(if ('${{ steps.security-scan.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Registry Check: $(if ('${{ steps.registry-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Path Validation: $(if ('${{ steps.path-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
-          Write-Host "✓ Documentation: $(if ('${{ steps.doc-check.outcome }}' -eq 'success') { 'PASS' } else { 'FAIL' })"
+          # Three states, not two: a step that never ran is SKIPPED, and printing FAIL for it
+          # sent a reader looking for five failures that had not happened - the real failure was
+          # an earlier step, and these were skipped as its consequence.
+          function Format-Outcome([string]$Outcome) {
+            switch ($Outcome) {
+              'success' { 'PASS' }
+              'skipped' { 'SKIPPED (an earlier step failed, so this never ran)' }
+              ''        { 'SKIPPED (an earlier step failed, so this never ran)' }
+              default   { 'FAIL' }
+            }
+          }
+          Write-Host "  Syntax Validation: $(Format-Outcome '${{ steps.syntax-check.outcome }}')"
+          Write-Host "  Security Scanning: $(Format-Outcome '${{ steps.security-scan.outcome }}')"
+          Write-Host "  Registry Check:    $(Format-Outcome '${{ steps.registry-check.outcome }}')"
+          Write-Host "  Path Validation:   $(Format-Outcome '${{ steps.path-check.outcome }}')"
+          Write-Host "  Documentation:     $(Format-Outcome '${{ steps.doc-check.outcome }}')"
+          Write-Host "  Pester install:    $(Format-Outcome '${{ steps.install-pester.outcome }}')"
           Write-Host ""
         shell: pwsh
       

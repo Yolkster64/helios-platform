@@ -10,6 +10,8 @@ Use this page to find the documents that reflect the current engineering contrac
 
 | Need | Read |
 | --- | --- |
+| Connect everything — one command, and the short list of what only you can do | [CONNECT.md](CONNECT.md) |
+| Where the whole program stands: scope, done, in progress, to do | [PROGRAM.md](PROGRAM.md) |
 | New here: five minutes to a working `helios-ai ask` (three paths, no paid key) | [GETTING_STARTED.md](GETTING_STARTED.md) |
 | Zero-install: open the repo in a Codespace | [.github/CODESPACES_GUIDE.md](../.github/CODESPACES_GUIDE.md) |
 | Contributor setup, build, CLI, MCP | [PROJECT_SETUP.md](PROJECT_SETUP.md) |

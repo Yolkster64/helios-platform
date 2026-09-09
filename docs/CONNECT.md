@@ -30,7 +30,7 @@ needs nothing from you.
 **Azure OpenAI, Claude on Foundry and Foundry itself need no key.** They use your Azure
 sign-in. Nothing you type is ever written to a file or shown on screen.
 
-## The thirteen lanes, and who acts
+## The fourteen lanes, and who acts
 
 One run walks every surface this project has. Lanes 1–7 can act for you; lanes 8–12 only
 report, because what is left there is a click or a decision that is yours.
@@ -134,3 +134,21 @@ pwsh scripts/verify/rest-connect.ps1       # the same, checked against the live 
 
 Neither changes anything. Both name the environment variable or Key Vault secret a lane is
 missing, never its value.
+
+If a lane reports "PowerShell 7 is not on this host" and you know it is, set `HELIOS_PWSH`
+to the interpreter you want the `.ps1` lanes run with. Both twins honour it ahead of their
+own guesses: `.tools/pwsh/pwsh` in this checkout, then `pwsh` as the shell finds it
+(`connect.ps1` prefers the interpreter already running it, which a `PATH` lookup can miss).
+
+```bash
+HELIOS_PWSH=/opt/microsoft/powershell/7/pwsh bash scripts/bootstrap/connect.sh --status
+```
+
+The contracts on this page are tested on every change to either twin
+(`scripts/verify/tests/test_connect.ps1`, run by `.github/workflows/auth-contracts.yml`). The
+run reaches no network: `gh`, `az`, `codex` and every `.ps1` child are replaced by shims, and
+the bash orchestrators that do run for real reach the outside world only through those. What
+is proved:
+that a read-only run writes nothing and never reaches `auto-login.ps1`, that `--json` emits
+the report the run built, that a lane needing you always names a command, and that the two
+twins report the same lanes in the same order.

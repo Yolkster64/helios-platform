@@ -52,6 +52,10 @@
 #   bash scripts/bootstrap/first-run.sh --managed-identity   # forward -UseManagedIdentity
 #   bash scripts/bootstrap/first-run.sh --connect            # step 0: both device codes in one sitting
 #
+# HELIOS_STATE_DIR relocates this run's state away from the checkout's .helios/, for a caller
+# that must leave the checkout untouched (connect.sh --status points it at a temporary
+# directory). The state is written either way; only where changes.
+#
 # Exit codes: 0 = the chain ran (needs-owner lanes NEVER gate — they ARE the
 # checklist); 1 = internal failure (pwsh missing so no lane could be probed, or the
 # state file could not be written).
@@ -92,8 +96,13 @@ else
   environment="local"
 fi
 
-state_dir="$repo_root/.helios/bootstrap"
-state_file="$repo_root/.helios/bootstrap-state.json"
+# HELIOS_STATE_DIR relocates this run's state. The default is the checkout's .helios/, which
+# is where the durable record belongs - but a caller that promises to change nothing
+# (connect.sh --status) needs the report without a new directory appearing in the checkout,
+# and this run writes its state whether or not --verify-only was passed.
+helios_state_root="${HELIOS_STATE_DIR:-$repo_root/.helios}"
+state_dir="$helios_state_root/bootstrap"
+state_file="$helios_state_root/bootstrap-state.json"
 mkdir -p "$state_dir"
 chain_log="$state_dir/first-run.log"
 steps_file="$state_dir/steps.tsv"
@@ -252,10 +261,10 @@ vault_set=0
 [[ -n "${AZURE_KEY_VAULT_URI:-}" && -n "${AZURE_KEY_VAULT_URI// /}" ]] && vault_set=1
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! python3 - "$state_dir" "$state_file" "$environment" "$verify_flag" "$json_flag" "$vault_set" <<'PY'
+  if ! python3 - "$state_dir" "$state_file" "$environment" "$verify_flag" "$json_flag" "$vault_set" "$repo_root" <<'PY'
 import datetime, json, os, sys
 
-state_dir, state_file, environment, verify_flag, json_flag, vault_set = sys.argv[1:7]
+state_dir, state_file, environment, verify_flag, json_flag, vault_set, repo_root = sys.argv[1:8]
 verify_only = verify_flag == "1"
 json_mode = json_flag == "1"
 vault_present = vault_set == "1"
@@ -441,7 +450,9 @@ if not vault_present:
     # Executable lines, not a comment: azure-up.sh writes .helios/azure.env, and once
     # that file exists sourcing it IS the wiring; before it exists the provisioning
     # command (or an export pointing at an existing vault) is the step.
-    repo_root = os.path.dirname(os.path.dirname(state_dir))
+    # repo_root is PASSED IN, never derived from state_dir: HELIOS_STATE_DIR can put the
+    # state anywhere, and walking two levels up from a temporary directory named /tmp as the
+    # checkout - which then probes /tmp/.helios/azure.env, a path any local user can create.
     if os.path.isfile(os.path.join(repo_root, ".helios", "azure.env")):
         wiring_lines = ["source .helios/azure.env   # written by scripts/bootstrap/azure-up.sh; sets AZURE_KEY_VAULT_URI for this shell"]
     else:
@@ -577,7 +588,7 @@ for index, (title, lines) in enumerate(items, start=1):
         print("       " + line)
 print("")
 print("Account creation and MFA cannot be automated: every login above needs the owner's own browser session and second factor; this script only prepares and verifies.")
-print("State written: .helios/bootstrap-state.json (raw reports: .helios/bootstrap/*.json)")
+print("State written: %s (raw reports: %s/*.json)" % (state_file, state_dir))
 PY
   then
     echo "first-run: internal failure — the state merge failed (see $chain_log)" >&2
@@ -612,7 +623,7 @@ else
     say "       pwsh scripts/bootstrap/provision-github-secrets.ps1    # repository secrets/variables by name"
     say ""
     say "Account creation and MFA cannot be automated: every login needs the owner's own browser session and second factor."
-    say "State written: .helios/bootstrap-state.json (steps only)"
+    say "State written: $state_file (steps only)"
   fi
 fi
 

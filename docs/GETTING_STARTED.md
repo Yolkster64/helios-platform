@@ -35,6 +35,10 @@ make the first hour easier.
 Zero-install alternative: open the repository in a Codespace and skip the toolchain
 section entirely — see [`.github/CODESPACES_GUIDE.md`](../.github/CODESPACES_GUIDE.md).
 
+Want all of it at once instead of one path? `bash scripts/bootstrap/connect.sh` runs every
+lane it can without you and prints a numbered list of what is left —
+[CONNECT.md](CONNECT.md) is that one page.
+
 ## Prerequisites
 
 | Tool | Why | Check |

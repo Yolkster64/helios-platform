@@ -21,9 +21,14 @@ gh auth login --hostname github.com --web --scopes models:read
 source scripts/bootstrap/connect-github.sh   # exports GITHUB_MODELS_TOKEN -> github-models: Ready
 dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release -- ask "Say hello" --provider github-models
 
-# Owner: both device codes (gh + az) in one sitting, then the GitHub App and the rest
-pwsh scripts/bootstrap/connect-devices.ps1
+# Owner: one command for the rest - both device codes, the GitHub App, OIDC, the vault,
+# Codex, Foundry - ending in a numbered list of what is still yours to do
+bash scripts/bootstrap/connect.sh            # pwsh scripts/bootstrap/connect.ps1 on Windows
 ```
+
+Connecting everything is that one command: [docs/CONNECT.md](docs/CONNECT.md) says what it
+does without you, the short list of what only you can do, and how to read the lane table.
+`--status` reports the same table and changes nothing.
 
 New here? [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) is the five-minute path for
 three kinds of reader (GitHub only, ChatGPT/Codex, the owner with Azure) and says what not

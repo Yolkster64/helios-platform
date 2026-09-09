@@ -7,6 +7,8 @@ state.
 
 | Audience | Read first | Purpose |
 | --- | --- | --- |
+| Anyone connecting the platform | [CONNECT.md](CONNECT.md) | One command for GitHub, Azure, Foundry, the LLM CLIs and the connectors; the lane table and the owner's short list |
+| Anyone asking where this stands | [PROGRAM.md](PROGRAM.md) | The whole scope in one page: done, in progress, to do |
 | Newcomers | [GETTING_STARTED.md](GETTING_STARTED.md) | Three paths to a first `helios-ai ask`; what to expect without Azure |
 | Anyone without a toolchain | [.github/CODESPACES_GUIDE.md](../.github/CODESPACES_GUIDE.md) | The zero-install Codespace |
 | Contributors | [PROJECT_SETUP.md](PROJECT_SETUP.md) | Toolchain, build, test, CLI, MCP |

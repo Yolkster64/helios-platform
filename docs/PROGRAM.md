@@ -43,7 +43,7 @@ Every row is a lane of the one connect command, so the table and the script neve
 | Linear + Slack | needs you | Both workflows read one routing table, honour an `enabled: false` switch, and skip green without their secret; the Linear project and milestones are mirrored; the Slack channels exist with a status post | Two repository secrets by name, and the Linear sync switch. |
 | The hub (C#, F#, C++, Python, PowerShell) | done | Routing with the language dimension, tandem and compare, a learning store both local and in Azure with bounded reads, the F# score, the C++ online learner, the Python spoke, PowerShell wrappers, per-language reviewer agents and knowledge packs | Fleet learning v2 is queued. |
 | Fleets (Xcore-9 and Hermes) | done | Topology, local fleet up / seed / learn / down, the burst module with a clean preview, Hermes installers, fleet status through the tool set | Burst deployment on your word. Hermes lanes are stubs until its command line is installed on a host. |
-| Config authoring | running | JSON Schemas for every manifest, one map, editor bindings, templates, the `helios_config_validate` tool, a required CI job | Pull request #252, in its sixth review round. |
+| Config authoring | done | JSON Schemas for every manifest, one map, editor bindings, templates, the `helios_config_validate` tool, a required CI job | Merged in #252, after fourteen review rounds. |
 | Desktop shell (WinUI 3) | rebuild | The theme tokens and the metrics seam are merged | Phases three to six lived only in a session container and were lost when it restarted. They are rebuilt from the design documents; the Windows build stays your step. |
 
 ## Done and merged
@@ -59,24 +59,22 @@ an instruction-drift check, a parser sweep, and a secret scanner.
 | #244, #246 | Getting started and organization: the beginner's guide, wiki publishing with link rewriting, browser automation, label and milestone manifests |
 | #248 | Coverage: the language dimension in routing and learning, the validation sweep as a required job, an analyzer gate, reviewer agents |
 | #250 | Knowledge v2 and the absorption front door: deep per-language references, the unity skill with cost and combination reasoning |
+| #252 | Configuration schemas validated by three engines that must agree, the `helios_config_validate` tool, authoring templates, the themed workspace, and one command that connects everything |
 
 ## Up next, in order
 
-1. **#252, config schemas and the validation tool** — in its sixth review round. Thirty-nine
-   findings from the cloud reviewer fixed in both validation engines so far, plus twelve the
-   local reviewer found in those fixes. Merges when the review loop is clean.
-2. **Connect everything** — `connect.sh` and `connect.ps1` with all thirteen lanes,
-   [CONNECT.md](CONNECT.md), this page, and the rule for reviewing our own work when the cloud
-   reviewer is unavailable. Written and verified; it opens as a pull request the moment #252
-   merges, because this branch carries one change at a time.
-3. **GitHub control and identity, rebuilt** — custom rulesets, deployment environments, fork
+1. **The follow-up to #252** — the offline contract suite for both connect twins, which found
+   four more defects in the PowerShell one; the verdict table that renders a review when no
+   reviewer is available; a real fix for the red code-quality check; and the links that make
+   [CONNECT.md](CONNECT.md) findable from every entry point. Open as a pull request.
+2. **GitHub control and identity, rebuilt** — custom rulesets, deployment environments, fork
    sync, Projects and wiki manifests, Cloud Shell persistence, fleet host identity. The
    prepared change was lost with a session container and is rebuilt from the recorded design.
-4. **Desktop shell phases three to six, rebuilt** — the routing and fleet pages, effects, and
+3. **Desktop shell phases three to six, rebuilt** — the routing and fleet pages, effects, and
    the settings page. The Windows build is your step.
-5. **Fleet learning v2** — a vector learning store (decision record first), a code-survey
+4. **Fleet learning v2** — a vector learning store (decision record first), a code-survey
    ranking task, sandboxes, and a command-line upgrade pass.
-6. **Absorption cadence** — scheduled benchmarks with verdicts on the epics, and dashboard
+5. **Absorption cadence** — scheduled benchmarks with verdicts on the epics, and dashboard
    sections.
 
 ## The whole scope

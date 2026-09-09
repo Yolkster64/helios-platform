@@ -66,6 +66,11 @@ usage: bash scripts/bootstrap/connect.sh [options]
                       codex foundry connectors workspace agents fleet m365 verify
   -h, --help          this text
 
+  HELIOS_PWSH         the interpreter to run the .ps1 lanes with, when it is
+                      somewhere neither .tools/pwsh/pwsh nor PATH will find.
+                      Its DIRECTORY is also prepended to PATH for the verify
+                      lane, so first-run's children find the same PowerShell.
+
 Cloud Shell is the intended home: paste one line there and answer at most five
 prompts. See docs/CONNECT.md.
 USAGE
@@ -112,8 +117,12 @@ skipped() { [ -n "${skip[$1]:-}" ]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# HELIOS_PWSH names the interpreter to run the .ps1 lanes with, for a host that keeps
+# PowerShell somewhere neither of the two guesses below will find - and it is what the
+# offline suite points at a shim, so the contracts here can be tested without a network.
 pwsh_bin=""
-for candidate in "$REPO_ROOT/.tools/pwsh/pwsh" pwsh; do
+for candidate in "${HELIOS_PWSH:-}" "$REPO_ROOT/.tools/pwsh/pwsh" pwsh; do
+    [ -n "$candidate" ] || continue
     if [ -x "$candidate" ] || have "$candidate"; then pwsh_bin="$candidate"; break; fi
 done
 
@@ -600,7 +609,16 @@ if ! skipped verify; then
         mkdir -p "$STATE_DIR"
         verify_json="$STATE_DIR/connect-firstrun.json"
     fi
-    PATH="$verify_path" bash "$REPO_ROOT/scripts/bootstrap/first-run.sh" --verify-only --json >"$verify_json" 2>/dev/null
+    # first-run writes its own durable state under .helios/ whether or not --verify-only was
+    # passed, so a read-only run of THIS script would create a directory in the checkout by
+    # way of its child. HELIOS_STATE_DIR sends that state to a temporary directory instead,
+    # removed below with the report.
+    verify_state=""
+    if [ "$verify_only" -eq 1 ]; then
+        verify_state=$(mktemp -d "${TMPDIR:-/tmp}/helios-firstrun-state-XXXXXX") || verify_state=""
+    fi
+    HELIOS_STATE_DIR="${verify_state:-${HELIOS_STATE_DIR:-}}" PATH="$verify_path" \
+        bash "$REPO_ROOT/scripts/bootstrap/first-run.sh" --verify-only --json >"$verify_json" 2>/dev/null
     rc=$?
     # --json carries the verdict in the document, not in the exit code (it exits 0
     # whether or not lanes are outstanding), so read the lanes rather than $?.
@@ -613,7 +631,12 @@ try:
     report = json.load(open(sys.argv[1], encoding="utf-8"))
 except Exception:
     sys.exit(1)
-lanes = report.get("lanes", {})
+lanes = report.get("lanes")
+# An EMPTY lanes map is not "every lane ready": first-run emits exactly {} on its degraded
+# no-python3 path and whenever no child report could be merged, so reading it as readiness
+# gave a clean bill of health to a run that captured no lane state at all.
+if not isinstance(lanes, dict) or not lanes:
+    sys.exit(1)
 print(" ".join(sorted(name for name, lane in lanes.items()
                       if isinstance(lane, dict) and lane.get("state") not in ("ready", "ok"))))
 PYVERIFY
@@ -636,7 +659,10 @@ PYVERIFY
             "bash scripts/bootstrap/first-run.sh --verify-only   # the full report, one command per lane"
     fi
     say "   exit $rc; outstanding: ${outstanding:-none}"
-    [ "$verify_only" -eq 1 ] && rm -f "$verify_json"
+    if [ "$verify_only" -eq 1 ]; then
+        rm -f "$verify_json"
+        [ -n "$verify_state" ] && rm -rf "$verify_state"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

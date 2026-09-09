@@ -49,6 +49,11 @@
     Lane names to skip: persistence github app oidc secrets hub codex foundry
     connectors workspace agents fleet m365 verify.
 
+.NOTES
+    HELIOS_PWSH names the interpreter the .ps1 lanes are run with, for a host that keeps
+    PowerShell somewhere the two guesses (.tools/pwsh/pwsh in this checkout, then the
+    interpreter running this script) will not find.
+
 .EXAMPLE
     pwsh scripts/bootstrap/connect.ps1
 .EXAMPLE
@@ -98,6 +103,57 @@ function Test-Application {
     return $null -ne (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
 
+function Get-OptionalProperty {
+    # A property of a parsed report, or $Default when the report does not carry it. Same
+    # helper, same name, as scripts/verify/rest-connect.ps1 and the scripts/github/ family.
+    # It is not a convenience: under Set-StrictMode -Version Latest a plain $report.thing
+    # THROWS when `thing` is absent, so a guard written as `if ($null -ne $report.thing)`
+    # terminates the orchestrator on the very report it meant to tolerate.
+    param($Object, [string]$Name, $Default = $null)
+    if ($null -eq $Object) { return $Default }
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+    return $Default
+}
+
+function Test-Runnable {
+    # Can this candidate actually RUN a .ps1? Existence is not the question the bash twin
+    # asks - it asks `[ -x ]`, or `command -v` for a bare name - and a HELIOS_PWSH naming a
+    # non-executable file passed a plain Test-Path here and then killed the run at the first
+    # lane, which is the very failure the fallback below exists to avoid.
+    param([Parameter(Mandatory)][string]$Candidate)
+    if ($Candidate -notmatch '[\\/]') {
+        # A bare name is a PATH lookup, exactly as `command -v` treats it in the bash twin.
+        return $null -ne (Get-Command $Candidate -CommandType Application -ErrorAction SilentlyContinue)
+    }
+    $item = Get-Item -LiteralPath $Candidate -ErrorAction SilentlyContinue
+    if (-not $item -or $item.PSIsContainer) { return $false }
+    # Get-Command answers true for a non-executable file, so the mode is checked directly.
+    # Windows has no execute bit; there the file existing IS the test.
+    if ($IsWindows) { return $true }
+    return ($item.UnixMode -match '^.{3}x' -or $item.UnixMode -match 'x')
+}
+
+function Resolve-Pwsh {
+    # The interpreter the .ps1 lanes are run with. A bare `pwsh` is a PATH lookup, which can
+    # find a DIFFERENT PowerShell than the one running this script - so the interpreter this
+    # script is already running under is preferred over the search. HELIOS_PWSH is the explicit
+    # override, for a host that keeps PowerShell somewhere the guesses will not find, and it is
+    # what the offline suite points at a shim so these contracts can be tested without a network.
+    # Every candidate is checked before it is taken, including the override: a HELIOS_PWSH
+    # naming something that is not there would otherwise end the run at the first lane.
+    $exe = if ($IsWindows) { '.exe' } else { '' }
+    # The current process only counts if it IS a pwsh: this script can be dot-sourced into a
+    # host that embeds PowerShell, whose executable would run no .ps1 at all.
+    $current = [Environment]::ProcessPath
+    if ($current -and (Split-Path $current -Leaf) -notin @("pwsh$exe", 'pwsh')) { $current = $null }
+    foreach ($candidate in @($env:HELIOS_PWSH, (Join-Path $repoRoot ".tools/pwsh/pwsh$exe"), $current)) {
+        if ($candidate -and (Test-Runnable $candidate)) { return $candidate }
+    }
+    return 'pwsh'
+}
+$pwshBin = Resolve-Pwsh
+
 function Get-LaneReport {
     # Runs a repo script that speaks -Json and returns @{ Code; Outstanding } where Outstanding
     # is how much the report still wants from the owner, or $null when it cannot be read.
@@ -107,16 +163,24 @@ function Get-LaneReport {
     param([Parameter(Mandatory)][string]$RelativePath, [string[]]$Arguments = @())
     $full = Join-Path $repoRoot $RelativePath
     if (-not (Test-Path -LiteralPath $full)) { return @{ Code = 127; Outstanding = $null } }
-    $raw = & pwsh -NoProfile -File $full @Arguments 2>$null
+    $raw = & $pwshBin -NoProfile -File $full @Arguments 2>$null
     $code = $LASTEXITCODE
     try { $report = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop }
     catch { return @{ Code = $code; Outstanding = $null } }
-    if ($null -ne $report.ownerActions) { return @{ Code = $code; Outstanding = @($report.ownerActions).Count } }
-    if ($null -ne $report.lanes) {
-        $lanes = if ($report.lanes -is [System.Collections.IEnumerable] -and $report.lanes -isnot [string]) {
-            @($report.lanes)
-        } else { @($report.lanes.PSObject.Properties.Value) }
-        return @{ Code = $code; Outstanding = @($lanes | Where-Object { $_.state -notin @('ready', 'ok') }).Count }
+    $actions = Get-OptionalProperty $report 'ownerActions'
+    if ($null -ne $actions) { return @{ Code = $code; Outstanding = @($actions).Count } }
+    $reported = Get-OptionalProperty $report 'lanes'
+    if ($null -ne $reported) {
+        # ForEach-Object, not .PSObject.Properties.Value: member enumeration over an EMPTY
+        # property collection throws under Set-StrictMode -Version Latest, so a report
+        # carrying `"lanes": {}` killed the orchestrator instead of being read as no lanes.
+        $laneList = if ($reported -is [System.Collections.IEnumerable] -and $reported -isnot [string]) {
+            @($reported)
+        } else { @($reported.PSObject.Properties | ForEach-Object { $_.Value }) }
+        # A lane with no state of its own is not a resolved lane: it is counted as outstanding
+        # rather than read as one, so an unexpected report shape cannot report everything ready.
+        return @{ Code = $code
+                  Outstanding = @($laneList | Where-Object { (Get-OptionalProperty $_ 'state') -notin @('ready', 'ok') }).Count }
     }
     return @{ Code = $code; Outstanding = $null }
 }
@@ -127,7 +191,7 @@ function Invoke-Lane {
     param([Parameter(Mandatory)][string]$RelativePath, [string[]]$Arguments = @())
     $full = Join-Path $repoRoot $RelativePath
     if (-not (Test-Path -LiteralPath $full)) { return 127 }
-    & pwsh -NoProfile -File $full @Arguments *> $null
+    & $pwshBin -NoProfile -File $full @Arguments *> $null
     return $LASTEXITCODE
 }
 
@@ -171,7 +235,17 @@ Write-Line 'HELIOS — connect everything'
 Write-Line "surface: $surface   repo: $repoRoot"
 if ($readOnly) { Write-Line 'mode: read-only (nothing is changed)' }
 
-if ($surface -ne 'cloud-shell') {
+# The same cases as the bash twin, in the same order: acted on in Cloud Shell, and reported
+# as skipped everywhere else - including when you asked to skip it, since off-Cloud-Shell the
+# lane is skipped either way and both twins say so. Cloud Shell
+# persistence is clouddrive plumbing that cloud-shell-setup.sh owns and this twin does not
+# reimplement - but the lane is still REPORTED there, because two twins that describe
+# different lanes are two different products.
+if (-not (Test-Skipped 'persistence') -and $surface -eq 'cloud-shell') {
+    Add-Lane persistence 'needs-owner' 'Cloud Shell persistence is set up by the bash twin' `
+        'bash scripts/bootstrap/connect.sh   # in Cloud Shell, where clouddrive persistence lives'
+}
+elseif ($surface -ne 'cloud-shell') {
     Add-Lane persistence 'skipped' "not Azure Cloud Shell (surface: $surface)"
 }
 
@@ -255,7 +329,7 @@ if (-not (Test-Skipped 'secrets')) {
     }
     else {
         # -Apply is what writes; the prompt is masked and the value never reaches a file.
-        & pwsh -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/set-provider-secrets.ps1') -Apply
+        & $pwshBin -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/set-provider-secrets.ps1') -Apply
         $code = $LASTEXITCODE
         switch ($code) {
             0 { Add-Lane secrets 'ok' 'the keys you entered are stored in Key Vault by name' }
@@ -454,28 +528,72 @@ if (-not (Test-Skipped 'm365')) {
 # 13. Verify — one read-only pass, read as a report rather than as an exit code.
 if (-not (Test-Skipped 'verify')) {
     Write-Step '13. Verify'
-    if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
     # A temporary file, not a record: read-only runs put it where the OS reclaims it rather
-    # than leaving a new file in the checkout's .helios/ directory.
+    # than leaving a new file in the checkout's .helios/ directory - and the directory itself
+    # is only created on the path that writes into it, because creating an empty .helios/ is
+    # still a change to a checkout that had none.
     # New-TemporaryFile, not a name built from $PID: a predictable path in a world-writable
     # directory can be pre-created as a symlink, and the write below would follow it.
-    $reportPath = if ($readOnly) { (New-TemporaryFile).FullName }
-                  else { Join-Path $stateDir 'connect-firstrun.json' }
-    & pwsh -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/first-run.ps1') -VerifyOnly -Json 2>$null |
+    # first-run writes its own durable state under .helios/ whether or not -VerifyOnly was
+    # passed, so a read-only run of THIS script would create a directory in the checkout by
+    # way of its child. HELIOS_STATE_DIR sends that state to a temporary directory instead,
+    # removed below with the report.
+    $verifyState = $null
+    $savedStateDirEnv = $env:HELIOS_STATE_DIR
+    if ($readOnly) {
+        $reportPath = (New-TemporaryFile).FullName
+        $verifyState = Join-Path ([IO.Path]::GetTempPath()) ('helios-firstrun-state-' + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $verifyState -Force | Out-Null
+        # 0700, as the bash twin's mktemp -d already gives it. New-Item creates 0755, and the
+        # report underneath names the vault, the provider inventory and which secrets are
+        # missing - no secret VALUES, but reconnaissance, and on a shared runner or a
+        # multi-user host /tmp is readable by everyone. The parent's mode is what protects
+        # the tree; the files inside are 0644 in both twins.
+        if (-not $IsWindows) { & chmod 700 $verifyState }
+        $env:HELIOS_STATE_DIR = $verifyState
+    }
+    else {
+        New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
+        $reportPath = Join-Path $stateDir 'connect-firstrun.json'
+    }
+    & $pwshBin -NoProfile -File (Join-Path $repoRoot 'scripts/bootstrap/first-run.ps1') -VerifyOnly -Json 2>$null |
         Set-Content -LiteralPath $reportPath -Encoding utf8
     $code = $LASTEXITCODE
     $outstanding = @()
+    # $null, not @(): an empty list means "the report named no outstanding lane", and a report
+    # nobody could read must not be able to say that. The bash twin draws the same line.
+    $readReport = $null
     try {
         $report = Get-Content -LiteralPath $reportPath -Raw -ErrorAction Stop | ConvertFrom-Json
-        foreach ($lane in $report.lanes.PSObject.Properties) {
-            if ($lane.Value.state -notin @('ready', 'ok')) { $outstanding += $lane.Name }
+        $readReport = Get-OptionalProperty $report 'lanes'
+        # An EMPTY lanes map is not "every lane ready": first-run emits {} whenever no child
+        # report could be merged, so treating it as readiness gave a clean bill of health to
+        # a run that captured no lane state at all. It is read as unreadable, like the bash
+        # twin now does.
+        if ($null -ne $readReport -and @($readReport.PSObject.Properties).Count -eq 0) {
+            $readReport = $null
+        }
+        if ($null -ne $readReport) {
+            foreach ($lane in $readReport.PSObject.Properties) {
+                if ((Get-OptionalProperty $lane.Value 'state') -notin @('ready', 'ok')) { $outstanding += $lane.Name }
+            }
         }
     }
-    catch {
-        # An unreadable report is itself the finding; the exit code below reports it.
-        $outstanding = @()
+    catch { $readReport = $null }
+    # The report has been read, so the temporary copy has done its job: a run that promises to
+    # change nothing leaves nothing behind, in the temp directory either. The bash twin does
+    # the same with its mktemp file.
+    if ($readOnly) {
+        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+        if ($verifyState) { Remove-Item -LiteralPath $verifyState -Recurse -Force -ErrorAction SilentlyContinue }
+        $env:HELIOS_STATE_DIR = $savedStateDirEnv
     }
     if ($code -ne 0 -and $code -ne 2) { Add-Lane verify 'failed' "first-run.ps1 -VerifyOnly exited $code" }
+    elseif ($null -eq $readReport) {
+        Add-Lane verify 'failed' `
+            "first-run.ps1 exited $code but its -Json report could not be read, so no lane state is known" `
+            'pwsh scripts/bootstrap/first-run.ps1 -VerifyOnly   # read the report directly'
+    }
     elseif ($outstanding.Count -eq 0) { Add-Lane verify 'ok' 'first-run reports every lane ready' }
     else {
         Add-Lane verify 'needs-owner' "first-run still lists: $(($outstanding | Sort-Object) -join ' ')" `
@@ -485,7 +603,8 @@ if (-not (Test-Skipped 'verify')) {
 }
 
 # --- state + the one list ---------------------------------------------------
-if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
+# The directory is created by the branch that writes into it, below, and nowhere else: an
+# empty .helios/ appearing in a checkout that had none is a change like any other.
 $state = [pscustomobject]@{ surface = $surface; verifyOnly = [bool]$readOnly; lanes = $lanes }
 # -Status / -VerifyOnly say "runs nothing that changes anything", so they must not write the
 # durable record either. The report is still printed; only the side effect is withheld.
@@ -519,7 +638,16 @@ else {
             }
         }
         Write-Host ''
-        Write-Host '  State saved to .helios/connect-state.json — re-run this script and the list gets shorter.'
+        # The read-only branch matters: this line is what an owner reads, and saying the
+        # state was saved when the run deliberately wrote nothing contradicts the mode's
+        # whole promise - and names a file a clean checkout does not have. The bash twin
+        # already branched here.
+        if ($readOnly) {
+            Write-Host '  Read-only run: nothing was written. Run without -Status to save progress.'
+        }
+        else {
+            Write-Host '  State saved to .helios/connect-state.json — re-run this script and the list gets shorter.'
+        }
     }
     else {
         Write-Host ''

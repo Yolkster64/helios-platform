@@ -1,5 +1,19 @@
 # Bootstrap: browser auth + cross-LLM environment bring-up
 
+**Connecting for the first time? Start with `connect.sh`, not with this page.**
+
+```bash
+bash scripts/bootstrap/connect.sh              # pwsh scripts/bootstrap/connect.ps1 is the twin
+bash scripts/bootstrap/connect.sh --status     # the same lane table, changing nothing
+```
+
+`connect.sh` is the thin orchestrator over everything below — fourteen lanes from the
+GitHub and Azure device codes through the App, OIDC, the vault, Codex, Foundry and the
+connectors — and it ends in one numbered list of what only you can do. Its page is
+[`docs/CONNECT.md`](../../docs/CONNECT.md); exit 0 means nothing is left for you, 2 that
+owner items remain, 1 that a lane failed for a reason that is not yours to fix. The rest of
+this page is the pieces it runs, for when you want one lane on its own.
+
 One command stands up the whole cross-LLM shell in **Azure Cloud Shell** (the reference
 environment), **GitHub Codespaces**, or a **local** Linux/macOS shell:
 
