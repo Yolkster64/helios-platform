@@ -32,6 +32,19 @@ public static class HeliosFleetPlanTools
         "installed, or reconfigured, and pool chains change only by editing " +
         "config/fleet/fleet-topology.json.";
 
+    [McpServerTool(Name = "helios_fleet_readiness_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("Offline fleet readiness and activation dependencies: configured concurrency ceilings, transport, identity, tool and receipt requirements. Uses the same C# planner as fleet-readiness; never launches workers, initializes providers or reads learning credentials.")]
+    public static string GetFleetReadiness(
+        [Description("Optional local fleet-topology JSON path; omit for repository discovery.")] string? topologyPath = null)
+    {
+        var loaded = FleetTopology.TryLoad(string.IsNullOrWhiteSpace(topologyPath) ? null : topologyPath);
+        if (loaded.Topology is null)
+            return JsonSerializer.Serialize(new { available = false, runtimeVerified = false,
+                message = "Fleet topology is unavailable or malformed.", advisory = true });
+        return JsonSerializer.Serialize(new { available = true, plan = FleetReadinessService.Plan(loaded.Topology),
+            advisory = true });
+    }
+
     [McpServerTool(Name = "helios_fleet_plan_get", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Advisory fleet routing plan (same rows as `helios-ai fleet-plan --json`): for every pool x task type in config/fleet/fleet-topology.json, { pool, taskType, configuredChain, learnedChain, sampleCount, engine } — configuredChain exactly as the topology orders it, learnedChain the order the hub's learned routing would prefer from organic history, engine none|linear|neural, sampleCount the organic outcomes considered. Read-only and advisory: chains are config and are NEVER auto-applied. An empty learning history reports engine 'none' with the configured order; a missing topology returns a message, not an error.")]
     public static async Task<string> GetFleetPlan(

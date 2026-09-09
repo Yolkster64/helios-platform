@@ -3,21 +3,32 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- NavigationView shell (GUI_THEME_ANALYSIS.md): three pages planned — AI Hub
-         dashboard (implemented), Routing and Fleet (PR6 roadmap, disabled placeholders). -->
+    <!-- Home follows the shared project flow; specialized views stay one click away. -->
     <NavigationView
         x:Name="Nav"
-        PaneDisplayMode="Left"
+        PaneDisplayMode="Auto"
         IsBackButtonVisible="Collapsed"
         IsSettingsVisible="False"
         OpenPaneLength="220"
         SelectionChanged="OnNavSelectionChanged">
 
         <NavigationView.MenuItems>
+            <NavigationViewItem x:Name="HomeNavItem" Content="Home" Tag="home">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
             <NavigationViewItem x:Name="AIHubNavItem" Content="AI Hub" Tag="aihub">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE99A;" />
                 </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem x:Name="FabricNavItem" Content="Fabric" Tag="fabric">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem x:Name="UsbNavItem" Content="USB setup" Tag="usb">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE88E;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem x:Name="WorkbenchNavItem" Content="Workbench" Tag="workbench">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
             <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False"
                                 ToolTipService.ToolTip="Task-routing grid — roadmap PR6">
@@ -33,6 +44,6 @@
             </NavigationViewItem>
         </NavigationView.MenuItems>
 
-        <Frame x:Name="ContentFrame" Background="{ThemeResource SurfaceBrush}" />
+        <Frame x:Name="ContentFrame" Background="{ThemeResource SurfaceBrush}" Navigated="OnContentFrameNavigated" />
     </NavigationView>
 </Window>

@@ -70,7 +70,7 @@ public sealed class McpFabricPlanToolTests : IDisposable
                 "catalogReceiptPath": "docs"
               },
               "connectors": {
-                "slack": { "workspaceId": "T0BAFGSNY5P", "conversationId": "D0BB80HRZFA", "receiptPath": "docs" },
+                "slack": { "workspaceId": "T0B8Z1H0MV1", "conversationId": "C0BHWDBHG1W", "receiptPath": "docs" },
                 "linear": { "teamKey": "JOH", "issueKey": "JOH-208", "receiptPath": "docs" },
                 "sharePoint": { "documentRoot": "Helios/Governance", "receiptPath": "docs" }
               },

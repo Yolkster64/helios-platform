@@ -17,7 +17,7 @@ is the ledger's summary of what the upstream PRs were reaching for.
 | E2 | #15 | XCore9 evaluation service and runtime matrix | A bounded evaluation service, a governed runtime matrix with smoke evidence, scoring telemetry feeding policy gates | Open | Nothing ported; the watchlist marks upstream #222 `absorbed` with no port reference (treat as unverified); #294 and #253 are candidates | The natural home for "score each candidate"; expect path conflicts under `src/ai` |
 | E3 | #16 | Hermes/XCore contracts and specialization | Versioned federation contracts and per-pool specialization | Open | Nothing; our `config/fleet/fleet-topology.json` v2 is live | Reconcile fields into the live topology; never replace it |
 | E4 | #17 | Governed capability profiles and plan validation | Fail-closed capability profiles, JSON-Schema validation of plans, a 50-item capability backlog | Open | Nothing; #292, #295, #285 candidates | Validators and the taxonomy are the low-risk extract; #242 confirms three config files have no schema |
-| E5 | #18 | Azure activation hardening — MI→KV custody, OIDC | Managed-identity-to-Key-Vault binding, audience hardening, immutable plan/deploy custody | Closed via PR #191 (2026-09-06); ledger `absorbed (PR #191)` | Audience pin, sealed custody artifacts, `scripts/validation/validate_deploy_custody.py`, `deploy-hardening-contract.yml`; follow-ups #198, #199 merged; #197, #196, #190, #148 open for owner decision | Contract-tested workflow hardening lands well when scoped; unscoped follow-ups churn hundreds of files |
+| E5 | #18 | Azure activation hardening — MI→KV custody, OIDC | Managed-identity-to-Key-Vault binding, audience hardening, immutable plan/deploy custody | Closed 2026-09-06 when PR #191 merged (empty diff — the files landed through PR #199); ledger `absorbed (PR #199)` | Audience pin, sealed custody artifacts, `scripts/validation/validate_deploy_custody.py`, `deploy-hardening-contract.yml`; #198 also merged empty; #197, #196, #190, #148 open for owner decision | Contract-tested workflow hardening lands well when scoped; unscoped follow-ups churn hundreds of files |
 | E6 | #19 | Private Azure edge and segmented network | Governed private edge and segmentation beyond the zero-inbound NSG | Open | Nothing | Upstream targets Container Apps; we deploy Foundry + VMSS — pattern only, later |
 | E7 | #20 | Repository integrity and submodule governance | Integrity validator, declaration audit, fail-closed pinned-submodule gate | Open | Nothing | Dormant governance until a real submodule exists |
 | E8 | #21 | CI/test stabilization and test-ownership lanes | Unified test ownership, centralized tool versions, stable lanes | Open | Nothing directly (E24's preflight job and E27's lesson overlap) | Lane names differ; absorb the ownership map idea only |
@@ -70,7 +70,8 @@ result, and the guide says so in three places on purpose.
 
 **Small, bounded, one-epic pull requests land; large ones churn.** The Copilot coding
 agent closed E34, E24 and E32 in a single day (PRs #95, #96, #97, 2026-08-12) and E5
-three weeks later (PR #191), each with a handful of real files and a contract test.
+three weeks later (PR #199 carried the files; #191 closed the issue), each with a
+handful of real files and a contract test.
 The counter-examples are just as instructive: issue #229's triage found ten open PRs
 with an empty diff against `main` (a plan commit and nothing else) and one E5 follow-up
 (#197) touching 686 files, 683 of them Markdown blank-line churn. The forward plan's T8

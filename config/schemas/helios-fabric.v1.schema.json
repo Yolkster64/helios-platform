@@ -124,8 +124,8 @@
       "required": ["workspaceId", "conversationId", "receiptPath"],
       "additionalProperties": false,
       "properties": {
-        "workspaceId": { "type": "string", "const": "T0BAFGSNY5P" },
-        "conversationId": { "type": "string", "const": "D0BB80HRZFA" },
+        "workspaceId": { "type": "string", "const": "T0B8Z1H0MV1" },
+        "conversationId": { "type": "string", "const": "C0BHWDBHG1W" },
         "receiptPath": { "type": "string", "minLength": 1 }
       }
     },

@@ -1,0 +1,38 @@
+name: HELIOS Windows shell
+on:
+  pull_request:
+    paths: ['src/gui/**', 'src/ai/HELIOS.AIHub/Setup/**', 'config/control-project.json', 'config/components.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', 'nuget.config', '.github/workflows/gui-windows.yml']
+  push:
+    branches: [main]
+    paths: ['src/gui/**', 'src/ai/HELIOS.AIHub/Setup/**', 'config/control-project.json', 'config/components.json', 'config/ui/**', 'Directory.*.props', 'Directory.*.targets', 'global.json', 'nuget.config', '.github/workflows/gui-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # WinUI's PRI targets need the Visual Studio packaging tasks, which are
+      # absent from the dotnet SDK's MSBuild tool directory.
+      - uses: microsoft/setup-msbuild@v3
+        with:
+          msbuild-architecture: x64
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/validation/validate_yolkster_cutover.py
+      - run: msbuild src/gui/HELIOS.Shell.sln /restore /p:Configuration=Release /p:Platform=x64
+      - name: Package Desktop build for independent testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-desktop-win-x64
+          path: src/gui/HELIOS.Shell/bin/x64/Release/
+          if-no-files-found: error
+          retention-days: 7

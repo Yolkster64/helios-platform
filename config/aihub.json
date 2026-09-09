@@ -1,4 +1,5 @@
 {
+  "$schema": "./schemas/aihub.schema.json",
   "$comment": "HELIOS multi-LLM hub configuration. No secrets live here \u2014 only the names of environment variables (Key Vault secret names as fallback). Task routing chains are ordered: first entry is primary, the rest are fallbacks.",
   "providers": {
     "openai": {

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/fork-watch.schema.json",
+  "title": "HELIOS upstream watch list (config/fork-watch.json)",
+  "description": "Read by .github/workflows/fork-observation.yml (weekly, read-only digest). Mirrors that workflow's own preflight - `repos` non-empty, owner/name slugs, a non-blank `because`, signals drawn from the set it can fetch - so a bad entry fails here before it fails on the schedule. signals is required here (the workflow tolerates its absence but then has nothing to report for the repo).",
+  "type": "object",
+  "required": ["repos"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "repos": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/watchedRepo" }
+    }
+  },
+  "$defs": {
+    "watchedRepo": {
+      "type": "object",
+      "required": ["repo", "because", "signals"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "owner/name slug of a public GitHub repository."
+        },
+        "because": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Why it is watched and which HELIOS piece the signal feeds; printed in the digest."
+        },
+        "signals": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["releases", "commits"] }
+        }
+      }
+    }
+  }
+}

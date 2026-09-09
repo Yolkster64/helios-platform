@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/components.schema.json",
+  "title": "Six HELIOS project parts and GUI edit pieces; descriptive metadata only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "repository",
+    "sourcePolicy",
+    "parts"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schemas/components.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "repository": {
+      "const": "Yolkster64/helios-platform"
+    },
+    "sourcePolicy": {
+      "const": "single-repository"
+    },
+    "parts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "desktop",
+        "gui",
+        "usb",
+        "cloud",
+        "fleet"
+      ],
+      "properties": {
+        "core": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "core"
+                },
+                "name": {
+                  "const": "Core"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "pieces"
+                ]
+              }
+            }
+          ]
+        },
+        "desktop": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "desktop"
+                },
+                "name": {
+                  "const": "Desktop"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "pieces"
+                ]
+              }
+            }
+          ]
+        },
+        "gui": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "gui"
+                },
+                "name": {
+                  "const": "GUI"
+                }
+              }
+            },
+            {
+              "required": [
+                "pieces"
+              ]
+            }
+          ]
+        },
+        "usb": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "usb"
+                },
+                "name": {
+                  "const": "USB"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "pieces"
+                ]
+              }
+            }
+          ]
+        },
+        "cloud": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "cloud"
+                },
+                "name": {
+                  "const": "Cloud"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "pieces"
+                ]
+              }
+            }
+          ]
+        },
+        "fleet": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "fleet"
+                },
+                "name": {
+                  "const": "Fleet"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "pieces"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "purpose",
+        "paths",
+        "testProfile",
+        "workflows",
+        "artifacts",
+        "dependsOn",
+        "releaseBoundary"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 180,
+            "pattern": "^(\\.github|[A-Za-z0-9_-][A-Za-z0-9._-]*)(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+          }
+        },
+        "testProfile": {
+          "enum": [
+            "core",
+            "desktop",
+            "gui",
+            "usb",
+            "cloud",
+            "fleet"
+          ]
+        },
+        "workflows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^\\.github/workflows/[a-z0-9-]+\\.yml$"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 180,
+            "pattern": "^(\\.github|[A-Za-z0-9_-][A-Za-z0-9._-]*)(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+          }
+        },
+        "dependsOn": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "core",
+              "desktop",
+              "gui",
+              "usb",
+              "cloud",
+              "fleet"
+            ]
+          }
+        },
+        "releaseBoundary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 350
+        },
+        "pieces": {
+          "$ref": "#/$defs/guiPieces"
+        }
+      }
+    },
+    "guiPiece": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "purpose",
+        "paths",
+        "linkedParts"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 180,
+            "pattern": "^(\\.github|[A-Za-z0-9_-][A-Za-z0-9._-]*)(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+          }
+        },
+        "linkedParts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "core",
+              "desktop",
+              "gui",
+              "usb",
+              "cloud",
+              "fleet"
+            ]
+          }
+        }
+      }
+    },
+    "guiPieces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "home",
+        "aihub",
+        "fabric",
+        "usb",
+        "themes"
+      ],
+      "properties": {
+        "home": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/guiPiece"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "Home"
+                }
+              }
+            }
+          ]
+        },
+        "aihub": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/guiPiece"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "AIHub"
+                }
+              }
+            }
+          ]
+        },
+        "fabric": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/guiPiece"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "Fabric"
+                }
+              }
+            }
+          ]
+        },
+        "usb": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/guiPiece"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "USB"
+                }
+              }
+            }
+          ]
+        },
+        "themes": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/guiPiece"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "Theme"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

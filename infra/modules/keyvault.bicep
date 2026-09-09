@@ -13,6 +13,9 @@ param tags object = {}
 @description('Object ID of the principal granted Key Vault Secrets User. Empty string skips the role assignment.')
 param principalId string = ''
 
+@description('Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default.')
+param managedIdentityPrincipal bool = false
+
 @secure()
 param anthropicApiKey string = ''
 
@@ -71,6 +74,7 @@ resource secretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: principalId
+    ...(managedIdentityPrincipal ? { principalType: 'ServicePrincipal' } : {})
   }
 }
 

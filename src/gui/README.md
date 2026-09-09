@@ -2,9 +2,54 @@
 
 | Directory | What it is |
 |---|---|
-| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. NavigationView shell + AI Hub provider dashboard bound to `helios-ai-api`. |
+| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. Home with the shared Connect → Unify → Automate → Validate flow, AI Hub status, Fabric connections bound to `helios-ai-api`, offline USB setup planning, and a local GUI Workbench. |
 | `HELIOS.Shell.sln` | The shell's **own** solution and its only build entry point. |
 | `MonadoBlade.GUI/` | Orphaned WPF experiment (no csproj references it). Mined for design intent only — do not build, extend, or port code from it. Quarantine to `legacy/` is a PR2 item. |
+
+## One place to start
+
+The shell opens Home first. Its GitHub, Linear and Slack links come from
+`config/control-project.json`, copied beside the executable at build and publish time.
+The parser accepts manifests up to 64 KiB from the application directory and HTTPS links
+without embedded credentials, query strings or fragments. Invalid links stay disabled.
+
+Home copies `pwsh -NoProfile -File ./connect.ps1 status`; run it from the repository
+folder in PowerShell 7. It does not launch a shell or sign in on your behalf. The
+setup guide explains the shared Claude Code, Codex and API configuration.
+
+Fabric restores the original four view/view-model files from PR #186, source commit
+`673e3d1680aff026250e12bc428dcd55fb2dfc98`, with these corrections:
+
+- It uses the shell's injected `AIHubApiClient` and distinguishes a reachable API from
+  unverified provider authentication, connector delivery, and Hermes/XCore workers.
+- It shows local configuration presence without rendering environment values or URLs.
+- Copy buttons handle clipboard failure; browser actions report launch failure.
+- Setup is a copied command with potential identity changes explained. Verification
+  remains separately available as a read-only command.
+
+The Home and Fabric navigation items stay synchronized when Home shortcuts are used.
+Home scrolls at narrow sizes; the navigation pane collapses automatically. Both pages
+use the existing semantic theme brushes and type ramp, including high contrast.
+
+## GUI Workbench
+
+Open **Workbench** from navigation or Home to inspect fixed local UI states,
+preview palette/brightness changes and see each GUI piece's source/dependency map.
+`HELIOS.Shell.exe --workbench` opens fixtures directly without creating a runtime
+page. The reusable status card is shared with AIHub. Component metadata comes from
+`config/components.json`, copied beside the executable; it never becomes an
+execution command. See [GUI Workbench](../../docs/GUI_WORKBENCH.md) for the complete
+edit, Hot Reload, test and build loop.
+
+## USB and profile setup
+
+**USB setup** is available in navigation and from Home. It previews installation
+media from manually entered device data and lists the selected profile's recovery,
+vault, Dev Drive and other installed-system requirements. It uses the shared pure
+`UsbSetupPlanner` source from AIHub; no provider SDK, shell host, live disk scan or
+write adapter is loaded. All device confirmations start unknown and every input
+change clears the previous proposal. See [USB setup](../../docs/USB_SETUP.md) for
+contracts, bounds and the separate portable test command.
 
 ## Build (Windows only)
 
@@ -14,18 +59,25 @@ Requirements:
 - .NET 10 SDK (the repo-root `global.json` pins 10.0.100 with `rollForward:
   latestFeature`, so any newer 10.0.x band is accepted; the shell itself still
   targets `net8.0-windows10.0.19041.0`, which the .NET 10 SDK builds fine).
-- Visual Studio 2022 17.10+ with the **Windows application development** workload
-  (or plain `dotnet` CLI — the WinUI XAML compiler ships via the
-  `Microsoft.WindowsAppSDK` NuGet package, so VS is convenient but not mandatory).
+- Visual Studio or Build Tools with the **Windows application development** components
+  and MSBuild compatible with the repository's .NET 10 SDK. Build from Developer
+  PowerShell so the Visual Studio `MSBuild.exe` is on `PATH`.
 - To *run* the produced exe: the [Windows App SDK 1.6 runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
   must be installed, because the project is unpackaged (`WindowsPackageType=None`) and
   deliberately **not** self-contained (`WindowsAppSDKSelfContained` unset).
 
 ```powershell
-# from the repo root, on Windows
-dotnet build src/gui/HELIOS.Shell.sln -c Debug -p:Platform=x64
-dotnet run --project src/gui/HELIOS.Shell/HELIOS.Shell.csproj -p:Platform=x64
+# from the repo root, in Developer PowerShell on Windows
+msbuild src/gui/HELIOS.Shell.sln /restore /p:Configuration=Debug /p:Platform=x64
 ```
+
+Launch the built `HELIOS.Shell.exe` from its output directory, or start the project
+in Visual Studio. The native build uses Visual Studio MSBuild because Windows App
+SDK 1.6's PRI resource targets need its packaging tasks. The plain `dotnet build`
+toolchain can fail with `MSB4062` for `ExpandPriContent` before compiling application
+code. The Windows CI gate uses Microsoft's `setup-msbuild` action for the same
+toolchain. See [Microsoft's WinUI CI guidance](https://learn.microsoft.com/windows/apps/package-and-deploy/ci-for-winui3)
+and [setup-msbuild](https://github.com/microsoft/setup-msbuild).
 
 Point the dashboard at a running hub API first:
 
@@ -64,10 +116,11 @@ The one structural fact to internalize before a GUI PR: **the shell has its own 
 (`src/gui/HELIOS.Shell.sln`), built on Windows, while CI builds `HELIOS.sln` on Linux.**
 Consequences:
 
-- **No CI check compiles your GUI change today.** The `windows-latest` job that would
-  build `HELIOS.Shell.sln` is a roadmap item (below), not a present reality. Build and
-  run locally on Windows before opening the PR — a green PR page does not mean the shell
-  still compiles.
+- **Native compilation has its own Windows gate.** `.github/workflows/gui-windows.yml`
+  builds `HELIOS.Shell.sln` on Windows for GUI changes. Inspect that specific result;
+  Linux XML and architecture checks do not establish that XAML compiles or renders.
+  Validate startup, Home shortcuts, narrow windows, keyboard navigation and contrast
+  themes on Windows before release.
 - **GUI PRs must keep the root csproj glob guards intact.** The exact rule: the root
   `HELIOS.Platform.csproj` recursively globs `**/*.cs` (and, via WPF default items,
   `**/*.xaml`); `src/gui/**` must stay on its `<Compile Remove>` / `<Page Remove>`
@@ -109,9 +162,6 @@ Windows lane and can be built and CI-verified on any platform:
 
 ## Roadmap (PR6, per GUI_THEME_ANALYSIS.md / ROADMAP_MULTI_LLM.md)
 
-- **Windows CI**: a `windows-latest` job building `src/gui/HELIOS.Shell.sln` — a *new*
-  workflow, not a change to the existing Linux jobs. Deliberately not added yet to keep
-  this change-set out of `.github/workflows/`.
 - Routing page (editable task-routing grid) and Fleet page (Xcore-9s pool state); the
   NavigationView placeholders exist, disabled.
 - Provider metrics (latency, success rate, tokens) + Win2D sparklines once the hub

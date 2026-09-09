@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/aihub.schema.json",
+  "title": "HELIOS multi-LLM hub configuration (config/aihub.json, config/aihub.cloud.json)",
+  "description": "Bound 1:1 to src/ai/HELIOS.AIHub/Configuration/AIHubOptions.cs: providers (map of provider entries), cliAgents (list), routing (defaultChain + taskRouting) and learning. Property names, types and enums match the binder; required lists match what the hub dereferences without a fallback (provider.type, an agent's name / command / argsTemplate, a chain's entries) plus the two sections a hub cannot serve a request without (providers, routing — the binder defaults them to empty, which leaves every route with an empty chain). The binder ignores unknown keys (System.Text.Json default) and scripts/bootstrap/auth-doctor.ps1 only type-checks the keys it knows, so objects are deliberately NOT closed here - an unknown key is tolerated exactly as the runtime tolerates it. No secrets: credential fields hold environment-variable NAMES (Key Vault secret names as fallback).",
+  "type": "object",
+  "required": ["providers", "routing"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "providers": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Provider key (the name routing chains use) -> provider entry.",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/provider" }
+    },
+    "cliAgents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cliAgent" }
+    },
+    "routing": { "$ref": "#/$defs/routing" },
+    "learning": { "$ref": "#/$defs/learning" }
+  },
+  "$defs": {
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "The NAME of an environment variable; never its value."
+    },
+    "chain": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+      "description": "Ordered provider / CLI-agent names: first is primary, the rest are fallbacks. Every entry must name a provider key or a CLI agent declared in this file, and at least one of them must be enabled - the hub skips an entry it cannot resolve, so a typo degrades the chain silently and an all-disabled chain fails every request routed to it. A schema cannot see the other sections, so the validator checks that (validate_config_schemas.py `_check_aihub_chains`, ManifestSemantics.AihubChains)."
+    },
+    "provider": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["openai", "azure-openai", "anthropic", "anthropic-foundry", "github-models", "ollama", "azure-foundry-agent"],
+          "description": "Provider kind dispatched by ProviderFactory.CreateAll. The factory folds case before dispatch; this schema pins the canonical lower-case spelling so the shipped profiles, the docs and the bootstrap scripts (which compare the type untrimmed) stay greppable."
+        },
+        "enabled": { "type": "boolean" },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Default model, or the Azure OpenAI / Foundry DEPLOYMENT name. Required for an enabled openai, azure-openai, github-models or ollama entry (see `if`/`then` below): those factory paths build a ChatClientAgent that has no runtime default and fails at request time without it (ChatClientAgent.cs); anthropic, anthropic-foundry and azure-foundry-agent carry their own defaults."
+        },
+        "apiKeyEnv": {
+          "anyOf": [{ "$ref": "#/$defs/envName" }, { "const": "" }],
+          "description": "The NAME of the environment variable holding the key; an empty string selects Key-Vault-only resolution through apiKeySecretName (the shape scripts/bootstrap/auto-login.ps1 and auth-doctor.ps1 handle as a blank apiKeyEnv)."
+        },
+        "apiKeySecretName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]{1,127}$",
+          "description": "Key Vault secret NAME used when the env var is unset."
+        },
+        "endpointEnv": { "$ref": "#/$defs/envName" },
+        "baseUrl": {
+          "type": "string",
+          "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
+          "description": "Fixed base URL (github-models default, ollama default, anthropic-foundry override): an absolute http(s) URL with a host and an optional path - no userinfo, query or fragment, so a credential cannot be committed here (the Foundry runtime rejects userinfo too). Keys and tokens are environment-variable NAMES in apiKeyEnv."
+        }
+      },
+      "if": {
+        "allOf": [
+          { "properties": { "type": { "enum": ["openai", "azure-openai", "github-models", "ollama"] } }, "required": ["type"] },
+          { "not": { "properties": { "enabled": { "const": false } }, "required": ["enabled"] } }
+        ]
+      },
+      "then": { "required": ["model"] }
+    },
+    "cliAgent": {
+      "type": "object",
+      "description": "An enabled entry must carry name, command and argsTemplate (the `else` branch). A disabled entry (enabled: false) is skipped by ProviderFactory.CreateAll before any field is read, so those three may be null or absent there - the shape the auth-contract tests keep for parked agents.",
+      "properties": {
+        "$comment": { "type": "string" },
+        "name": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9-]*$" },
+        "enabled": { "type": "boolean" },
+        "command": {
+          "type": ["string", "null"],
+          "description": "Executable resolved via PATH."
+        },
+        "argsTemplate": {
+          "type": ["string", "null"],
+          "description": "Must carry the {prompt} slot; {model} is optional. The prompt is passed as one argv element, never through a shell."
+        },
+        "model": { "type": "string", "minLength": 1 },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483,
+          "description": "Handed to CancellationTokenSource.CancelAfter: 1 .. 2147483 seconds."
+        }
+      },
+      "if": { "properties": { "enabled": { "const": false } }, "required": ["enabled"] },
+      "then": {},
+      "else": {
+        "required": ["name", "command", "argsTemplate"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "command": { "type": "string", "minLength": 1 },
+          "argsTemplate": { "type": "string", "pattern": "\\{prompt\\}" }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "required": ["defaultChain", "taskRouting"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "defaultChain": { "$ref": "#/$defs/chain" },
+        "taskRouting": {
+          "type": "object",
+          "description": "Task type -> ordered chain. A key of the form <taskType>:<language> (e.g. code_generation:fsharp) is a language-qualified chain consulted before the bare task type; the language part is the normalized lower-case key TaskTypeRoutingStrategy.NormalizeLanguage produces (csharp, fsharp, cpp, python, powershell, bicep, yaml, json). One ':' at most - SplitRoutingKey splits at the first.",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]*(:[a-z][a-z0-9_-]*)?$" },
+          "additionalProperties": { "$ref": "#/$defs/chain" }
+        }
+      }
+    },
+    "learning": {
+      "type": "object",
+      "properties": {
+        "$comment": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["local", "azure", "hybrid"] },
+        "localPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSONL outcome log; a relative path anchors to the config root."
+        },
+        "tableEndpointEnv": { "$ref": "#/$defs/envName" },
+        "adaptiveRouting": {
+          "type": "boolean",
+          "description": "true lets recorded history reorder chains; false records only."
+        },
+        "historyWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "How many recorded outcomes a routing decision may read back. Bound to a C# int (LearningOptions.HistoryWindow): a larger value overflows the binder, which is a startup failure rather than a slow read."
+        }
+      }
+    }
+  }
+}

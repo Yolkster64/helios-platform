@@ -1,0 +1,4 @@
+interface:
+  display_name: "HELIOS Work"
+  short_description: "Shared HELIOS tasks, workspaces and handoffs"
+  default_prompt: "Use $helios-work to assign this HELIOS task and prepare its shared work packet."

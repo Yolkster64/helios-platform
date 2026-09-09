@@ -20,8 +20,10 @@ styles); its foregrounds consume only semantic tokens, never literal colors.
 
 ## Selection and persistence
 
-Per-profile pack selection **persists in local app settings**; the selection UI and
-the runtime pack-swap path land in P6 (`GUI_UPGRADE_PLAN.md` section 3). The swap
+Workbench can preview each bundled pack within its local sample surface. This
+preview does not persist settings or replace the application theme. Per-profile
+persistence and application-wide selection remain P6 work (`GUI_UPGRADE_PLAN.md`
+section 3). The swap
 contract: replace the merged token dictionary, then call
 `Helpers/ReadinessVisuals.Refresh(...)` — no brush may survive a pack switch stale.
 

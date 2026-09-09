@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/connectors.schema.json",
+  "title": "HELIOS connector wiring (config/connectors.json)",
+  "description": "Slack and Linear routing read by .github/workflows/notify-slack.yml (slack.notifyOn), .github/workflows/linear-sync.yml (linear.teamKey / titlePrefix / syncLabels / githubLabelToLinear) and scripts/bootstrap/auth-doctor.ps1 (the *Env names). The file carries environment-variable NAMES and routing choices only - never a webhook URL, token, or key (repo hard rule) - which is why every credential-shaped field is an UPPER_SNAKE env-var name. Objects are closed: those consumers read keys by exact name with jq / property access, so a misspelled key would otherwise be silently ignored.",
+  "type": "object",
+  "required": [
+    "slack",
+    "linear"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "$comment": {
+      "type": "string"
+    },
+    "slack": {
+      "$ref": "#/$defs/slack"
+    },
+    "linear": {
+      "$ref": "#/$defs/linear"
+    }
+  },
+  "$defs": {
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "The NAME of an environment variable (or GitHub secret); never its value."
+    },
+    "slack": {
+      "type": "object",
+      "required": [
+        "webhookUrlEnv",
+        "notifyOn"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "false makes notify-slack.yml skip every run (green, with the reason in the log) without touching the secret; absent means enabled. The workflow reads this field, so it is a real switch, not documentation."
+        },
+        "webhookUrlEnv": {
+          "const": "SLACK_WEBHOOK_URL",
+          "description": "Pinned to the name notify-slack.yml and auth-doctor.ps1 read verbatim (secrets.SLACK_WEBHOOK_URL): the workflow does not resolve this field, so any other name would be silently ignored. Change the workflow, the doctor and this constant together."
+        },
+        "botTokenEnv": {
+          "$ref": "#/$defs/envName"
+        },
+        "channels": {
+          "type": "object",
+          "description": "Logical channel key -> Slack channel name (#lowercase).",
+          "propertyNames": {
+            "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[a-z0-9._-]{1,80}$"
+          }
+        },
+        "notifyOn": {
+          "type": "object",
+          "description": "Workflow display name to notification policy. failures-and-recovery compares prior run metadata for the same workflow, branch, event and source repository; missing or unknown policy fails.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "always",
+              "failures-and-recovery"
+            ]
+          }
+        },
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^T[A-Z0-9]+$"
+        },
+        "channelIds": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^C[A-Z0-9]+$"
+          },
+          "description": "Installed channel identifiers for control-panel navigation. An incoming webhook uses its installation channel, not these values."
+        }
+      }
+    },
+    "linear": {
+      "type": "object",
+      "required": [
+        "apiKeyEnv",
+        "teamKey",
+        "titlePrefix",
+        "syncLabels",
+        "projectId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "false makes linear-sync.yml skip every issue event (green, with the reason in the log) without revoking the key; absent means enabled. The workflow reads this field, so it is a real switch, not documentation."
+        },
+        "apiKeyEnv": {
+          "const": "LINEAR_API_KEY",
+          "description": "Pinned to the name linear-sync.yml and auth-doctor.ps1 read verbatim (secrets.LINEAR_API_KEY); see webhookUrlEnv."
+        },
+        "teamKey": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*$",
+          "description": "Linear team key (the prefix of its issue identifiers)."
+        },
+        "titlePrefix": {
+          "type": "string",
+          "pattern": "^[^{}]*[^{}\\s][^{}]*\\{number\\}[^{}]*$",
+          "description": "Must carry a non-empty marker, then exactly one {number} slot: linear-sync.yml derives its loop guard from the text BEFORE the slot, so a prefix that starts with {number} yields an empty marker and the guard stops recognising this workflow's own mirrors - the duplicate-issue loop the runbook exists to prevent."
+        },
+        "syncLabels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "GitHub labels that make an issue eligible for sync."
+        },
+        "githubLabelToLinear": {
+          "type": "object",
+          "description": "GitHub label -> Linear label name.",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$",
+          "description": "Canonical Linear project UUID. The sync validates project availability and team membership before any mutation, then includes this ID on creation."
+        },
+        "projectUrl": {
+          "type": "string",
+          "pattern": "^https://linear\\.app/[a-zA-Z0-9_-]+/project/[a-zA-Z0-9_-]+$",
+          "description": "Public-shape navigation link for the canonical project; it grants no access."
+        }
+      }
+    }
+  }
+}

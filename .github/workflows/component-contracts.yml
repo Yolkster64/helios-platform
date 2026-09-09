@@ -1,0 +1,57 @@
+name: HELIOS project part contracts
+
+on:
+  pull_request:
+    paths:
+      - 'config/components.json'
+      - 'config/schemas/components.schema.json'
+      - 'config/schemas/manifests.json'
+      - 'scripts/bootstrap/components.py'
+      - 'scripts/bootstrap/tests/test_components.py'
+      - 'src/ai/HELIOS.AIHub/Setup/**'
+      - 'tests/HELIOS.AIHub.Tests/Setup/**'
+      - '.github/workflows/component-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/components.json'
+      - 'config/schemas/components.schema.json'
+      - 'config/schemas/manifests.json'
+      - 'scripts/bootstrap/components.py'
+      - 'scripts/bootstrap/tests/test_components.py'
+      - 'src/ai/HELIOS.AIHub/Setup/**'
+      - 'tests/HELIOS.AIHub.Tests/Setup/**'
+      - '.github/workflows/component-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  component-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/validation/validate_config_schemas.py --engine builtin config/components.json
+      - run: python3 -m unittest scripts.bootstrap.tests.test_components -v
+  usb-planner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test portable USB plans without disk operations
+        run: python3 scripts/bootstrap/components.py test usb

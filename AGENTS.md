@@ -1,5 +1,9 @@
 # HELIOS Control Agent Contract
 
+Start with [the shared connection guide](docs/CONNECT.md): one HELIOS project, coding clients, Cloud Shell, AIHub and the two-way handoff.
+
+For cross-client delegation, use the canonical [HELIOS work skill](plugins/helios-connect/skills/helios-work/SKILL.md) and the shared `helios_agent_catalog_get` / `helios_task_packet_get` tools. Each subagent gets one bounded task, its own worktree, and the same Linear issue/correlation context. These tools prepare work; they do not launch agents or authorize cloud changes.
+
 The current repository is `Yolkster64/helios-platform`; the reviewed target is an in-place rename to `Yolkster64/helios-control`. `Yolkster64/helios-gui` is the separate native desktop target. Agents must not create a competing canonical copy.
 
 ## Required local gates

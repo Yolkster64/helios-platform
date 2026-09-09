@@ -1,0 +1,121 @@
+{
+  "$schema": "./schemas/agent-catalog.schema.json",
+  "version": 1,
+  "projectId": "helios-control",
+  "roles": [
+    "chatgpt",
+    "claude",
+    "codex",
+    "copilot",
+    "hermes",
+    "xcore",
+    "human"
+  ],
+  "automaticExecution": false,
+  "runtimeVerified": false,
+  "sources": {
+    "canonicalSkill": "plugins/helios-connect/skills/helios-work/SKILL.md",
+    "agentProfiles": ".claude/agents",
+    "languageSkills": ".claude/skills",
+    "workspacePlugin": "plugins/helios-connect/README.md",
+    "operatorPlugin": "plugins/helios-operator/README.md",
+    "routing": "config/aihub.json",
+    "fleet": "config/fleet/fleet-topology.json",
+    "fleetGuide": "docs/architecture/HERMES_FLEET_AND_XCORE.md",
+    "hybridGuide": "docs/architecture/HYBRID_EXECUTION.md",
+    "workspaces": "docs/AGENT_WORKSPACES.md",
+    "handoffs": "docs/mcp/REMOTE_BRIDGE.md",
+    "bicep": "infra/main.bicep",
+    "terraform": "infra/terraform/main.tf",
+    "deploymentWorkflow": ".github/workflows/helios-deploy.yml",
+    "agentContract": "AGENTS.md"
+  },
+  "tasks": {
+    "implement": {
+      "routeTaskType": "code_generation",
+      "suggestedRole": "codex",
+      "sourceKeys": [
+        "canonicalSkill",
+        "agentContract",
+        "workspaces",
+        "languageSkills",
+        "agentProfiles",
+        "handoffs"
+      ],
+      "steps": [
+        "Choose an isolated task workspace and inspect the current code.",
+        "Implement the bounded change and run its required checks.",
+        "Return the commit, evidence, and remaining work through a shared handoff."
+      ],
+      "readinessNotes": [
+        "Provider sign-in and native tool access are verified separately from a configured route."
+      ]
+    },
+    "review": {
+      "routeTaskType": "code_review",
+      "suggestedRole": "claude",
+      "sourceKeys": [
+        "canonicalSkill",
+        "agentContract",
+        "agentProfiles",
+        "languageSkills",
+        "handoffs"
+      ],
+      "steps": [
+        "Inspect the exact source commit and the shared task packet.",
+        "Review correctness, boundaries, and relevant test evidence.",
+        "Return findings with source references; a review does not approve deployment."
+      ],
+      "readinessNotes": [
+        "A client-specific subagent definition is shared context; this packet does not start a reviewer or approve deployment."
+      ]
+    },
+    "hybrid-plan": {
+      "routeTaskType": "architecture_design",
+      "suggestedRole": "claude",
+      "sourceKeys": [
+        "canonicalSkill",
+        "agentContract",
+        "hybridGuide",
+        "bicep",
+        "terraform",
+        "deploymentWorkflow",
+        "fleet",
+        "handoffs"
+      ],
+      "steps": [
+        "Read the existing hybrid architecture and choose one owner for each resource.",
+        "Plan local and Azure placement using the existing Bicep or Terraform lane.",
+        "Return dependencies and validation evidence; this packet does not apply infrastructure."
+      ],
+      "readinessNotes": [
+        "Terraform currently defines Foundry, Key Vault and VMSS; it does not cover the Bicep learning-storage and AI Search resources.",
+        "The configured ARC burst target is not implemented by the current VMSS scaling script.",
+        "VMSS bootstrap workers and boards do not establish a shared hybrid task transport or prove real Hermes workers are running."
+      ]
+    },
+    "fleet-plan": {
+      "routeTaskType": "agent_fleet_dispatch",
+      "suggestedRole": "hermes",
+      "sourceKeys": [
+        "canonicalSkill",
+        "agentContract",
+        "fleet",
+        "fleetGuide",
+        "hybridGuide",
+        "agentProfiles",
+        "handoffs"
+      ],
+      "steps": [
+        "Read the configured Hermes and XCore topology and available runtime evidence.",
+        "Propose bounded task partitions, reviewer roles, and local or Azure placement.",
+        "Return the plan and missing prerequisites; this packet does not start workers."
+      ],
+      "readinessNotes": [
+        "Fleet topology is a declaration; verify actual processes and boards before reporting active capacity.",
+        "The current VMSS worker lane uses Python stubs and per-instance boards; shared local/cloud task transport remains unfinished.",
+        "Recovered engine and training prototypes do not establish runtime capacity or learned performance."
+      ]
+    }
+  }
+}

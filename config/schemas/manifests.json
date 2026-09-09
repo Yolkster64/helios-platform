@@ -1,0 +1,86 @@
+{
+  "$schema": "./manifests.schema.json",
+  "$comment": "Manifest -> JSON Schema map, the ONE place that says which schema validates which config file. Read by scripts/validation/validate_config_schemas.py (CI: quality.yml json-validate job; also called from .claude/skills/automation-wiring/scripts/validate_all.py) and by the helios_config_validate MCP tool (src/mcp/HELIOS.Mcp/HeliosConfigTools.cs). .vscode/settings.json json.schemas mirrors it for live editor validation; scripts/validation/tests/test_validate_config_schemas.py asserts the mirror is complete. Paths are repo-relative with forward slashes. `consumer` is documentation: the code that reads the manifest and therefore defines its shape.",
+  "mappings": [
+    {
+      "manifest": "config/schemas/manifests.json",
+      "schema": "config/schemas/manifests.schema.json",
+      "consumer": "scripts/validation/validate_config_schemas.py, src/mcp/HELIOS.Mcp/HeliosConfigTools.cs"
+    },
+    {
+      "manifest": "config/github/labels.json",
+      "schema": "config/schemas/github-labels.schema.json",
+      "consumer": "scripts/github/apply-labels.ps1"
+    },
+    {
+      "manifest": "config/github/milestones.json",
+      "schema": "config/schemas/github-milestones.schema.json",
+      "consumer": "scripts/github/apply-milestones.ps1"
+    },
+    {
+      "manifest": "config/connectors.json",
+      "schema": "config/schemas/connectors.schema.json",
+      "consumer": ".github/workflows/notify-slack.yml, .github/workflows/linear-sync.yml, scripts/bootstrap/auth-doctor.ps1"
+    },
+    {
+      "manifest": "config/fork-watch.json",
+      "schema": "config/schemas/fork-watch.schema.json",
+      "consumer": ".github/workflows/fork-observation.yml"
+    },
+    {
+      "manifest": "config/absorption/pr-watchlist.json",
+      "schema": "config/schemas/absorption-pr-watchlist.schema.json",
+      "consumer": "src/mcp/HELIOS.Mcp/HeliosStatusTools.cs, src/ai/HELIOS.AIHub.Cli/AbsorptionStatus.cs, scripts/absorption/absorb-pr.ps1, scripts/fleet/seed-absorption-tasks.ps1"
+    },
+    {
+      "manifest": "config/fleet/fleet-topology.json",
+      "schema": "config/schemas/fleet-topology.schema.json",
+      "consumer": "src/ai/HELIOS.AIHub/Fleet/FleetTopology.cs, scripts/fleet/start-fleet.ps1, scripts/fleet/scale-fleet.ps1"
+    },
+    {
+      "manifest": "config/aihub.json",
+      "schema": "config/schemas/aihub.schema.json",
+      "consumer": "src/ai/HELIOS.AIHub/Configuration/AIHubOptions.cs"
+    },
+    {
+      "manifest": "config/aihub.cloud.json",
+      "schema": "config/schemas/aihub.schema.json",
+      "consumer": "src/ai/HELIOS.AIHub/Configuration/AIHubOptions.cs (AIHUB_CONFIG=config/aihub.cloud.json)"
+    },
+    {
+      "manifest": "config/model-catalog.json",
+      "schema": "config/schemas/model-catalog.schema.json",
+      "consumer": "src/ai/HELIOS.AIHub/Configuration/ModelCatalog.cs, scripts/build/validate-model-catalog.py"
+    },
+    {
+      "manifest": "config/fabric/helios-fabric.v1.json",
+      "schema": "config/schemas/helios-fabric.v1.schema.json",
+      "consumer": "src/ai/HELIOS.AIHub/Fabric, scripts/validation/validate_helios_fabric_contract.py"
+    },
+    {
+      "manifest": "templates/manifest-labels.json",
+      "schema": "config/schemas/github-labels.schema.json",
+      "consumer": "templates/README.md (copy target: config/github/labels.json)"
+    },
+    {
+      "manifest": "templates/manifest-milestones.json",
+      "schema": "config/schemas/github-milestones.schema.json",
+      "consumer": "templates/README.md (copy target: config/github/milestones.json)"
+    },
+    {
+      "manifest": "config/control-project.json",
+      "schema": "config/schemas/control-project.schema.json",
+      "consumer": "scripts/bootstrap/connect.py, src/gui/HELIOS.Shell/Views/ControlHomePage.xaml.cs"
+    },
+    {
+      "manifest": "config/agent-catalog.json",
+      "schema": "config/schemas/agent-catalog.schema.json",
+      "consumer": "src/mcp/HELIOS.Mcp/HeliosAgentCatalogTools.cs; src/mcp/HELIOS.RemoteMcp/RemoteAgentCatalogTools.cs"
+    },
+    {
+      "manifest": "config/components.json",
+      "schema": "config/schemas/components.schema.json",
+      "consumer": "scripts/bootstrap/components.py"
+    }
+  ]
+}

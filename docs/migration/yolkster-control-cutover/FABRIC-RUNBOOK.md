@@ -4,6 +4,13 @@ This runbook operationalizes the executable Fabric contract at
 `/home/runner/work/helios-platform/helios-platform/config/fabric/helios-fabric.v1.json`.
 It is activation-only guidance: production stays disabled and `applyDefault=false`.
 
+The 2026-09-09 destination reconciliation uses the existing
+[HELIOS control-plane canvas](https://helios-xk97943.slack.com/docs/T0B8Z1H0MV1/F0BGVRND8GK)
+and [one HELIOS project](https://linear.app/641974/project/helios-4f592efea071).
+The 2026-09-06 workspace `T0BAFGSNY5P` and conversation `D0BB80HRZFA` are
+historical targets, retained in the checklist. The canvas has been updated;
+runtime message delivery still needs its own receipt.
+
 ## Contract wiring map
 
 1. **Schema contract**  
@@ -32,7 +39,8 @@ It is activation-only guidance: production stays disabled and `applyDefault=fals
    - `pwsh scripts/verify/stack-smoke.ps1 -Json > stack-smoke.fabric.json`
 4. Record merged Cutover/Fabric PR #154 evidence (tracking issue #184) in
    `FABRIC-ACTIVATION-CHECKLIST.md#pr-154-required-check-evidence`.
-5. Connect Slack workspace `T0BAFGSNY5P`, resolve `D0BB80HRZFA`, store receipt in
+5. Verify Slack workspace `T0B8Z1H0MV1` and channel `C0BHWDBHG1W`
+   (`#helios-control-plane`). After authorized runtime delivery, store its receipt in
    `FABRIC-ACTIVATION-CHECKLIST.md#slack-receipt`.
 6. Confirm `JOH-208` synchronization receipt in
    `FABRIC-ACTIVATION-CHECKLIST.md#linear-receipt`.

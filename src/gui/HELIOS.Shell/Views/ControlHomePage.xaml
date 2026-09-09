@@ -1,0 +1,48 @@
+<Page x:Class="HELIOS.Shell.Views.ControlHomePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{ThemeResource SurfaceBrush}">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="24" Spacing="16" MaxWidth="1000" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="6">
+                <TextBlock Text="HELIOS" Style="{StaticResource HeliosHeadlineTextBlockStyle}" Foreground="{ThemeResource HeliosAccentBrush}" />
+                <TextBlock Text="Connect → Unify → Automate → Validate" Style="{StaticResource HeliosTitleTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="1  Connect" Style="{StaticResource HeliosTitleTextBlockStyle}" />
+                    <TextBlock Text="Start with a local check. Sign in to each service once through its own supported setup." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind ViewModel.CheckCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <Button Content="Copy local check" Command="{x:Bind ViewModel.CopyCheckCommand}" />
+                    <Button Content="Plan USB and profile setup" Click="OnOpenUsbSetup" />
+                    <Button Content="Open setup guide" Command="{x:Bind ViewModel.OpenGuideCommand}" IsEnabled="{x:Bind ViewModel.HasRepository}" />
+                </StackPanel>
+            </Border>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="2  Unify" Style="{StaticResource HeliosTitleTextBlockStyle}" />
+                    <TextBlock Text="Keep tasks in one HELIOS project and use the Slack canvas for the shared handoff." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <Button Content="Open HELIOS in Linear" Command="{x:Bind ViewModel.OpenLinearCommand}" IsEnabled="{x:Bind ViewModel.HasLinear}" />
+                    <Button Content="Open Slack canvas" Command="{x:Bind ViewModel.OpenSlackCommand}" IsEnabled="{x:Bind ViewModel.HasSlack}" />
+                </StackPanel>
+            </Border>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="3  Automate" Style="{StaticResource HeliosTitleTextBlockStyle}" />
+                    <TextBlock Text="Claude Code, Codex, Copilot, Azure and the hybrid fleets share the repository. Check each connection before enabling a workflow." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <Button Content="Open GitHub repository" Command="{x:Bind ViewModel.OpenRepositoryCommand}" IsEnabled="{x:Bind ViewModel.HasRepository}" />
+                    <Button Content="Open Fabric connections" Click="OnOpenFabric" />
+                </StackPanel>
+            </Border>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="4  Validate" Style="{StaticResource HeliosTitleTextBlockStyle}" />
+                    <TextBlock Text="Check the hub and its providers, then review workflow results. An open project link does not confirm runtime authentication or fleet availability." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <Button Content="Open GUI Workbench" Click="OnOpenWorkbench" />
+                    <Button Content="Open AI Hub status" Click="OnOpenAIHub" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -32,9 +32,10 @@ at the HELIOS MCP server; no repo goes live with a red default-branch check.
 - **PR gate** (must be green): `dotnet-build.yml` (solution build + tests + CLI smoke),
   `infra-validate.yml` (offline Bicep compile/lint), `ci-validation.yml` + `quality.yml`
   (script/docs hygiene).
-- **Deploy**: `helios-deploy.yml` — OIDC (no stored cloud secrets), what-if on dispatch,
-  deploy on main-merge touching `infra/**`, graceful skip when the `AZURE_CLIENT_ID`/
-  `AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` federated credential isn't configured.
+- **Deploy**: `helios-deploy.yml` — OIDC (no stored cloud secrets), explicit dispatch
+  from `main` into protected `azure-dev`, with what-if enabled by default. All five
+  target variables are required. Apply needs `deploy_confirmed=true` after review;
+  missing configuration fails before login.
   The all-echo `deploy.yml` (client-secret fake deploy) is deleted; `helios-deploy.yml`
   is the only deploy lane.
 - **Status dashboards**: `status-dashboard.yml` collects **real** run metrics from the
@@ -164,19 +165,21 @@ pattern as model keys.
 
 ### Implemented wiring (this PR)
 
-The Actions-level wiring is live now, driven by one declarative file —
+The Actions-level wiring is implemented, driven by one declarative file —
 `config/connectors.json` (env-var names and routing only, never values):
 
 - **`notify-slack.yml`** listens via `workflow_run` to `.NET Build & Test`,
-  `Infra Validation`, `Python Spoke`, and `Helios Platform Deploy`, and posts
+  `Infra Validation`, `Python Spoke`, `Helios Platform Deploy`, `Absorption Benchmark`,
+  and `Docker Validation`, and posts
   outcomes to Slack. Per-workflow policy comes from `slack.notifyOn`
   (`always` vs `failures-and-recovery`); pipelines stay notification-agnostic.
 - **`linear-sync.yml`** mirrors GitHub issues carrying a `linear.syncLabels`
-  label into the configured Linear team (`[GH-<n>]`-prefixed, link-back comment
+  label into the configured Linear team and single HELIOS project (`[GH-<n>]`-prefixed, link-back comment
   on the GitHub issue; close/reopen is noted on the Linear side). One-directional:
   GitHub remains the source of truth.
-- **Graceful-skip contract**: with `SLACK_WEBHOOK_URL` / `LINEAR_API_KEY` unset,
-  both workflows exit green with a clear notice — they can never be the red check.
-  Enable with `gh secret set SLACK_WEBHOOK_URL` and `gh secret set LINEAR_API_KEY`.
+- **Visible readiness**: an explicitly disabled connector skips. An enabled
+  connector with `SLACK_WEBHOOK_URL` / `LINEAR_API_KEY` unset fails its own
+  workflow. Provision through `gh secret set SLACK_WEBHOOK_URL` and
+  `gh secret set LINEAR_API_KEY`; record actual delivery separately from tests.
 - PR4's HELIOS.Connectors consumes the same `config/connectors.json`, so enabling
   the service later changes no routing decisions, only who executes them.

@@ -1,0 +1,7 @@
+[mcp_servers.helios]
+command = "dotnet"
+args = ["run", "--project", "src/mcp/HELIOS.Mcp", "-c", "Release"]
+startup_timeout_sec = 120
+
+[mcp_servers.helios.env]
+HELIOS_REPO_ROOT = "."

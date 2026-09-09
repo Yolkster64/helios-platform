@@ -1,10 +1,11 @@
 # HELIOS MCP Server — Evaluation
 
-Fourteen read-only, single-answer questions for evaluating whether an LLM can drive the
+Fifteen read-only, single-answer questions for evaluating whether an LLM can drive the
 HELIOS MCP server (per the MCP builder evaluation methodology). Every question is
 answerable using only non-destructive tools (`helios_ai_status`, `helios_providers_list`,
-`helios_task_routing_get`, `helios_infra_validate`, `helios_foundry_agent_list`,
-`helios_azure_inventory_get`, `helios_auth_status_get`, `helios_fleet_plan_get`) against
+`helios_task_routing_get`, `helios_infra_validate`, `helios_config_validate`,
+`helios_foundry_agent_list`, `helios_azure_inventory_get`, `helios_auth_status_get`,
+`helios_fleet_plan_get`) against
 a fresh checkout with **no provider keys configured**, so answers are stable. Verify answers after config changes —
 they are tied to `config/aihub.json`.
 
@@ -68,6 +69,10 @@ and string-compare the final answer.
   <qa_pair>
     <question>On a fresh checkout with no learning history recorded, what engine does every helios_fleet_plan_get row report?</question>
     <answer>none</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>According to helios_config_validate, which schema file (repo-relative path) validates config/github/labels.json?</question>
+    <answer>config/schemas/github-labels.schema.json</answer>
   </qa_pair>
 </evaluation>
 ```

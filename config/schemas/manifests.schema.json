@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/manifests.schema.json",
+  "title": "HELIOS manifest-to-schema map (config/schemas/manifests.json)",
+  "description": "Each mapping names one repo-relative manifest and the config/schemas/*.schema.json file that validates it. Validated against itself by scripts/validation/validate_config_schemas.py so a malformed map fails the same gate it drives.",
+  "type": "object",
+  "required": ["mappings"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/mapping" }
+    }
+  },
+  "$defs": {
+    "repoRelativeJsonPath": {
+      "type": "string",
+      "description": "Forward slashes, no leading slash, no '..' or dot-prefixed segments, ends in .json.",
+      "pattern": "^([A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\\.json$"
+    },
+    "mapping": {
+      "type": "object",
+      "required": ["manifest", "schema"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest": { "$ref": "#/$defs/repoRelativeJsonPath" },
+        "schema": {
+          "type": "string",
+          "pattern": "^config/schemas/[A-Za-z0-9_-][A-Za-z0-9._-]*\\.schema\\.json$"
+        },
+        "consumer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Documentation only: the script, workflow, or binder that reads the manifest."
+        }
+      }
+    }
+  }
+}

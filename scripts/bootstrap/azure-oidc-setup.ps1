@@ -9,8 +9,8 @@ infra/main.bicep with NO stored cloud credential anywhere:
 
   * app registration "helios-github-deploy" + service principal — no client secret
     is ever created, so there is nothing to leak or rotate;
-  * federated credentials trusting GitHub's OIDC issuer for exactly three subjects:
-    the repo's main branch, pull requests, and the "production" environment;
+  * one federated credential trusting GitHub's OIDC issuer for the protected
+    azure-dev environment; production and branch trust are disabled;
   * Contributor scoped to the resource group ONLY (least privilege: the workflow
     deploys one template into one RG — nothing subscription-wide, and the identity
     cannot create resource groups or assign roles);
@@ -19,7 +19,7 @@ infra/main.bicep with NO stored cloud credential anywhere:
     and ARM authorizes those writes against DATA-plane RBAC, so Contributor alone
     fails with Forbidden the moment a secure param (anthropicApiKey, ...) is passed.
 
-Finishes by printing the three GitHub Actions VARIABLES to set on the repo
+Finishes by printing the five GitHub Actions VARIABLES to set on azure-dev
 (identifiers, not secrets) and the gh CLI one-liners. Never prints or stores a
 secret. Safe to re-run: every step checks for the existing object before creating.
 
@@ -28,19 +28,22 @@ tenant's default user setting) AND assign roles on the scopes below (Owner or Us
 Access Administrator on the resource group).
 
 .EXAMPLE
-pwsh scripts/bootstrap/azure-oidc-setup.ps1
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 -Tenant <id> -Subscription <id> -ResourceGroup <rg> -KeyVault <vault>
+# Read-only plan. Add -Apply only after reviewing the targets and permissions.
 
 .EXAMPLE
-pwsh scripts/bootstrap/azure-oidc-setup.ps1 -ResourceGroup my-rg -Repo me/fork -Subscription <id>
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 -ResourceGroup my-rg -Repo me/fork -Tenant <id> -Subscription <id> -KeyVault <vault>
 #>
 [CmdletBinding()]
 param(
     [string]$AppName = 'helios-github-deploy',
     [string]$Repo = 'Yolkster64/helios-platform',
-    [string]$Subscription = '784565d3-c82a-4dba-b947-fc354c08a89d',
-    [string]$ResourceGroup = 'rg-helios-ai',
-    [string]$KeyVault = 'kv-helios-jcut',
-    [string]$EnvironmentName = 'production'
+    [string]$Tenant = '',
+    [string]$Subscription = '',
+    [string]$ResourceGroup = '',
+    [string]$KeyVault = '',
+    [switch]$Apply,
+    [string]$EnvironmentName = 'azure-dev'
 )
 
 Set-StrictMode -Version Latest
@@ -59,18 +62,43 @@ function Invoke-Az {
     if ($null -ne $out) { ($out | Out-String).Trim() } else { '' }
 }
 
-& az account show --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw 'not logged in — run az login (or scripts/bootstrap/connect-azure.ps1) first.'
+if ($EnvironmentName -cne 'azure-dev') {
+    throw 'Only the protected azure-dev environment is supported; production is disabled.'
 }
-Invoke-Az @('account', 'set', '--subscription', $Subscription) | Out-Null
-$tenantId = Invoke-Az @('account', 'show', '--query', 'tenantId', '--output', 'tsv')
+if ($Repo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+    throw '-Repo must be an owner/repository name.'
+}
 
-# The role scope must exist before we grant on it; the RG is created by the stack
-# bring-up (scripts/bootstrap/azure-up.ps1), not by CI.
-& az group show --name $ResourceGroup --output none 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw "resource group $ResourceGroup not found in subscription $Subscription — deploy the stack first (scripts/bootstrap/azure-up.ps1) or pass -ResourceGroup."
+# Graph uses the active tenant. Verify it without rewriting the shared az profile.
+foreach ($target in @($Tenant, $Subscription, $ResourceGroup, $KeyVault)) {
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        throw 'Explicit -Tenant, -Subscription, -ResourceGroup and -KeyVault are required.'
+    }
+}
+$activeSubscription = Invoke-Az @('account', 'show', '--query', 'id', '--output', 'tsv')
+$tenantId = Invoke-Az @('account', 'show', '--query', 'tenantId', '--output', 'tsv')
+$accountState = Invoke-Az @('account', 'show', '--query', 'state', '--output', 'tsv')
+if ($activeSubscription -ine $Subscription -or $tenantId -ine $Tenant -or $accountState -cne 'Enabled') {
+    throw 'Active Azure subscription/tenant must match the explicit target and be Enabled. Review az account list and select the intended account first.'
+}
+$rgScope = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup"
+$rgId = Invoke-Az @('group', 'show', '--name', $ResourceGroup, '--subscription', $Subscription, '--query', 'id', '--output', 'tsv')
+$vaultId = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'id', '--output', 'tsv')
+$vaultTenant = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'properties.tenantId', '--output', 'tsv')
+$vaultRbac = Invoke-Az @('keyvault', 'show', '--name', $KeyVault, '--resource-group', $ResourceGroup, '--subscription', $Subscription, '--query', 'properties.enableRbacAuthorization', '--output', 'tsv')
+$resourceLocation = Invoke-Az @('group', 'show', '--name', $ResourceGroup, '--subscription', $Subscription, '--query', 'location', '--output', 'tsv')
+if (-not $resourceLocation -or $rgId -ine $rgScope -or $vaultId -ine "$rgScope/providers/Microsoft.KeyVault/vaults/$KeyVault" -or $vaultTenant -ine $Tenant -or $vaultRbac -ine 'true') {
+    throw 'Resource-group/vault identity, tenant or RBAC mode does not match the intended target.'
+}
+$appCount = Invoke-Az @('ad', 'app', 'list', '--display-name', $AppName, '--query', 'length(@)', '--output', 'tsv')
+if ($appCount -cnotin @('0','1')) { throw 'App registration lookup is ambiguous; choose a unique -AppName.' }
+Write-Host "Azure OIDC plan`nTenant: $tenantId`nSubscription: $Subscription`nResource group: $rgId`nKey Vault: $vaultId`nApp: $AppName"
+Write-Host "Trust: repo:${Repo}:environment:$EnvironmentName"
+Write-Host "Grants: Contributor on $rgId; Key Vault Secrets Officer on $vaultId"
+Write-Host 'Apply removes legacy github-main, github-pull-request and github-env-production credentials if present.'
+if (-not $Apply) {
+    Write-Host 'Plan only. No account, identity, permission or resource changes. Review before adding -Apply.'
+    return
 }
 
 # --- App registration (idempotent) ------------------------------------------------
@@ -82,10 +110,7 @@ if (-not $appId) {
 }
 else {
     Write-Host "App registration $AppName exists (appId $appId)."
-    $dupCount = [int](Invoke-Az @('ad', 'app', 'list', '--display-name', $AppName, '--query', 'length(@)', '--output', 'tsv'))
-    if ($dupCount -gt 1) {
-        Write-Warning "$dupCount app registrations named $AppName; using appId $appId."
-    }
+
 }
 
 # --- Service principal (idempotent) -----------------------------------------------
@@ -102,16 +127,19 @@ else {
 # The subject string must match what the workflow run presents EXACTLY, or login
 # fails with AADSTS70021/700213. A job that declares `environment:` presents the
 # environment subject instead of the branch one.
-$existingSubjects = @(
-    (Invoke-Az @('ad', 'app', 'federated-credential', 'list', '--id', $appId,
-        '--query', '[].subject', '--output', 'tsv')) -split "`n" | Where-Object { $_ }
-)
-
 function Add-FederatedCredential {
     param([string]$Name, [string]$Subject, [string]$Description)
-    if ($existingSubjects -contains $Subject) {
-        Write-Host "Federated credential for $Subject exists."
+    # A matching subject alone is insufficient; do not overwrite a conflict.
+    $conflicts = Invoke-Az @('ad', 'app', 'federated-credential', 'list', '--id', $appId,
+        '--query', "length([?name=='$Name' || subject=='$Subject'])", '--output', 'tsv')
+    $valid = Invoke-Az @('ad', 'app', 'federated-credential', 'list', '--id', $appId,
+        '--query', "length([?subject=='$Subject' && issuer=='$issuer' && length(audiences)==``1`` && audiences[0]=='$audience'])", '--output', 'tsv')
+    if ($conflicts -ceq '1' -and $valid -ceq '1') {
+        Write-Host "Federated credential for $Subject has the expected issuer and audience."
         return
+    }
+    if ($conflicts -cne '0' -or $valid -cne '0') {
+        throw 'Conflicting or ambiguous federated credential; review its name, subject, issuer and audience.'
     }
     Write-Host "Creating federated credential $Name ($Subject)..."
     $paramsFile = New-TemporaryFile
@@ -122,28 +150,31 @@ function Add-FederatedCredential {
     Remove-Item $paramsFile -Force
 }
 
-Add-FederatedCredential -Name 'github-main' -Subject "repo:${Repo}:ref:refs/heads/main" `
-    -Description 'helios-deploy.yml on push/dispatch from main'
 Add-FederatedCredential -Name "github-env-$EnvironmentName" -Subject "repo:${Repo}:environment:$EnvironmentName" `
     -Description "jobs declaring environment: $EnvironmentName"
 
 # Deliberately NO repo:...:pull_request credential: this principal holds deploy
 # rights, and a PR workflow is modifiable by the PR itself. PR validation stays
 # offline; a separate read-only identity is the path if PRs ever need Azure.
-# Remove the credential from earlier revisions of this script, if present.
-& az ad app federated-credential show --id $appId `
-    --federated-credential-id 'github-pull-request' --output none 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Invoke-Az @('ad', 'app', 'federated-credential', 'delete', '--id', $appId,
-        '--federated-credential-id', 'github-pull-request', '--output', 'none') | Out-Null
-    Write-Host "Removed the over-privileged 'github-pull-request' federated credential."
+# Only reached after explicit -Apply and all target preflight checks.
+foreach ($legacyName in @('github-main', 'github-pull-request', 'github-env-production')) {
+    $legacyCount = Invoke-Az @('ad', 'app', 'federated-credential', 'list', '--id', $appId,
+        '--query', "length([?name=='$legacyName'])", '--output', 'tsv')
+    if ($legacyCount -ceq '1') {
+        Invoke-Az @('ad', 'app', 'federated-credential', 'delete', '--id', $appId,
+            '--federated-credential-id', $legacyName, '--output', 'none') | Out-Null
+        Write-Host "Removed legacy '$legacyName' federated credential."
+    }
+    elseif ($legacyCount -cne '0') {
+        throw 'Ambiguous legacy credential lookup; cleanup did not complete.'
+    }
 }
 
 # --- Role assignments (idempotent, retried) ---------------------------------------
 function Set-RoleGrant {
     param([string]$Role, [string]$Scope)
     $existing = Invoke-Az @('role', 'assignment', 'list', '--assignee', $spId,
-        '--role', $Role, '--scope', $Scope, '--query', '[0].id', '--output', 'tsv')
+        '--role', $Role, '--scope', $Scope, '--subscription', $Subscription, '--query', '[0].id', '--output', 'tsv')
     if ($existing) {
         Write-Host "'$Role' on $Scope already assigned."
         return
@@ -155,7 +186,7 @@ function Set-RoleGrant {
         # (PrincipalNotFound), so retry with backoff instead of failing once.
         & az role assignment create --assignee-object-id $spId `
             --assignee-principal-type ServicePrincipal `
-            --role $Role --scope $Scope --output none
+            --role $Role --scope $Scope --subscription $Subscription --output none
         if ($LASTEXITCODE -eq 0) { return }
         Write-Host "  retry $attempt/5 (Entra/RBAC replication)..."
         Start-Sleep -Seconds ($attempt * 5)
@@ -163,37 +194,31 @@ function Set-RoleGrant {
     throw "failed to assign '$Role' on $Scope after 5 attempts."
 }
 
-$rgScope = "/subscriptions/$Subscription/resourceGroups/$ResourceGroup"
 Set-RoleGrant -Role 'Contributor' -Scope $rgScope
-
-$vaultId = & az keyvault show --name $KeyVault --resource-group $ResourceGroup --query id --output tsv 2>$null
-if ($LASTEXITCODE -ne 0) { $vaultId = '' }
-if ($vaultId) {
-    Set-RoleGrant -Role 'Key Vault Secrets Officer' -Scope $vaultId
-}
-else {
-    Write-Warning ("Key Vault $KeyVault not found in $ResourceGroup — skipping the Key Vault " +
-        'Secrets Officer grant. Re-run this script once the vault exists if deploys pass ' +
-        'provider API keys (main.bicep writes them as vault secrets, which needs data-plane ' +
-        'RBAC on an RBAC-mode vault).')
-}
+Set-RoleGrant -Role 'Key Vault Secrets Officer' -Scope $vaultId
 
 # --- Wiring instructions (identifiers only — never secrets) -----------------------
 Write-Host ''
 Write-Host 'Done. No client secret was created at any point in this setup.'
 Write-Host ''
-Write-Host "Set these on $Repo as GitHub Actions VARIABLES (identifiers, not secrets):"
+Write-Host "Set these on $Repo as protected environment azure-dev VARIABLES (identifiers, not secrets):"
 Write-Host "  AZURE_CLIENT_ID       = $appId"
 Write-Host "  AZURE_TENANT_ID       = $tenantId"
 Write-Host "  AZURE_SUBSCRIPTION_ID = $Subscription"
+Write-Host "  AZURE_RESOURCE_GROUP  = $ResourceGroup"
+Write-Host "  AZURE_LOCATION        = $resourceLocation"
 Write-Host ''
 Write-Host 'gh CLI one-liners:'
-Write-Host "  gh variable set AZURE_CLIENT_ID       --repo $Repo --body `"$appId`""
-Write-Host "  gh variable set AZURE_TENANT_ID       --repo $Repo --body `"$tenantId`""
-Write-Host "  gh variable set AZURE_SUBSCRIPTION_ID --repo $Repo --body `"$Subscription`""
+Write-Host "  gh variable set AZURE_CLIENT_ID       --repo $Repo --env azure-dev --body `"$appId`""
+Write-Host "  gh variable set AZURE_TENANT_ID       --repo $Repo --env azure-dev --body `"$tenantId`""
+Write-Host "  gh variable set AZURE_SUBSCRIPTION_ID --repo $Repo --env azure-dev --body `"$Subscription`""
+Write-Host ''
+Write-Host "  gh variable set AZURE_RESOURCE_GROUP --repo $Repo --env azure-dev --body `"$ResourceGroup`""
+Write-Host "  gh variable set AZURE_LOCATION --repo $Repo --env azure-dev --body `"$resourceLocation`""
 Write-Host ''
 Write-Host 'Verify the grants with:'
 Write-Host "  az role assignment list --assignee $appId --all --output table"
 Write-Host ''
-Write-Host "Then run 'Helios Platform Deploy' via workflow_dispatch FROM main (the federated"
-Write-Host 'subject is branch-scoped) with what_if=true for a read-only rehearsal.'
+Write-Host 'Protect azure-dev with required reviewers and main-only deployment branches.'
+Write-Host 'Then dispatch Helios Platform Deploy FROM main with what_if=true (read-only).'
+Write-Host 'Applying a reviewed plan also requires deploy_confirmed=true and what_if=false.'

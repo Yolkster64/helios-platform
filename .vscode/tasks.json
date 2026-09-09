@@ -5,6 +5,45 @@
   },
   "tasks": [
     {
+      "label": "HELIOS: Workbench",
+      "detail": "Prepare and open an isolated GUI editing branch; preserve existing edits.",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": ["scripts/bootstrap/connect.py", "workbench", "--open"],
+      "problemMatcher": []
+    },
+    {
+      "label": "HELIOS: Test part",
+      "detail": "Run a part's fixed checks. GUI uses the shared native build on Windows.",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": ["scripts/bootstrap/components.py", "test", "${input:heliosPart}"],
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "HELIOS: GUI build",
+      "detail": "Check GUI metadata and compile the existing WinUI project on Windows.",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": ["scripts/bootstrap/components.py", "test", "gui"],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "HELIOS: GUI preview (Windows)",
+      "detail": "Build then open local sample states in the native Workbench; no service login.",
+      "type": "process",
+      "command": "${workspaceFolder}/src/gui/HELIOS.Shell/bin/x64/Release/net8.0-windows10.0.19041.0/HELIOS.Shell.exe",
+      "args": ["--workbench"],
+      "dependsOn": "HELIOS: GUI build",
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "build",
       "detail": "dotnet build HELIOS.sln -c Release (AIHub + CLI + MCP + tests; what CI runs)",
       "type": "shell",
@@ -51,6 +90,15 @@
       "command": "pwsh",
       "args": ["-NoProfile", "-File", "scripts/bootstrap/auth-doctor.ps1"],
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "heliosPart",
+      "description": "Which HELIOS part should be checked?",
+      "type": "pickString",
+      "options": ["gui", "core", "desktop", "usb", "cloud", "fleet"],
+      "default": "gui"
     }
   ]
 }

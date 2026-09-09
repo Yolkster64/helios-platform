@@ -1,0 +1,77 @@
+<Page x:Class="HELIOS.Shell.Views.WorkbenchPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="using:HELIOS.Shell.Controls"
+      Background="{ThemeResource SurfaceBrush}">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="24" Spacing="16" MaxWidth="1100" HorizontalAlignment="Stretch">
+            <TextBlock Text="GUI Workbench" Style="{StaticResource HeliosHeadlineTextBlockStyle}" Foreground="{ThemeResource HeliosAccentBrush}" />
+            <TextBlock Text="Edit a piece → preview it → test GUI → build Desktop" Style="{StaticResource HeliosTitleTextBlockStyle}" TextWrapping="Wrap" />
+            <InfoBar IsOpen="True" IsClosable="False" Severity="Informational" Title="Local fixtures"
+                     Message="The preview uses fixed sample data. No API calls, account checks or deployments run here. Opening a runtime page is a separate action below." />
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="1  Choose a GUI piece" Style="{StaticResource HeliosTitleTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind ViewModel.CatalogStatus}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <ComboBox Header="Module" ItemsSource="{x:Bind ViewModel.Modules}" DisplayMemberPath="Name"
+                              SelectedIndex="{x:Bind ViewModel.SelectedModuleIndex, Mode=TwoWay}"
+                              IsEnabled="{x:Bind ViewModel.HasModules}" HorizontalAlignment="Stretch" />
+                    <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasModules}">
+                        <TextBlock Text="{x:Bind ViewModel.SelectedModule.Purpose, Mode=OneWay}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock Text="Source files" Style="{StaticResource HeliosBodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.SelectedModule.SourceDisplay, Mode=OneWay}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        <TextBlock Text="Connected project parts" Style="{StaticResource HeliosBodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.SelectedModule.DependenciesDisplay, Mode=OneWay}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock Text="{x:Bind ViewModel.SelectedModule.RuntimeNotice, Mode=OneWay}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                        <Button Content="{x:Bind ViewModel.SelectedModule.OpenLabel, Mode=OneWay}" Click="OnOpenModule" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="2  Preview controls and themes" Style="{StaticResource HeliosTitleTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="The status card below is the same control used on AI Hub. Edit Controls/StatusCard.xaml and use XAML Hot Reload on Windows." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <ComboBox Header="Sample state" ItemsSource="{x:Bind ViewModel.FixtureNames}" SelectedIndex="{x:Bind ViewModel.FixtureIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                    <ComboBox x:Name="ThemePackChoice" Header="Preview palette" SelectedIndex="0" SelectionChanged="OnPreviewThemeChanged" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Monado" />
+                        <ComboBoxItem Content="GitHub Dark" />
+                        <ComboBoxItem Content="Solar Light" />
+                        <ComboBoxItem Content="High Contrast tokens" />
+                    </ComboBox>
+                    <ComboBox x:Name="PreviewThemeChoice" Header="Preview brightness" SelectedIndex="0" SelectionChanged="OnPreviewThemeChanged" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Follow Windows" />
+                        <ComboBoxItem Content="Light" />
+                        <ComboBoxItem Content="Dark" />
+                    </ComboBox>
+                    <TextBlock x:Name="PreviewNotice" Text="Palette changes affect only the sample surface. Use a Windows contrast theme for a full accessibility check." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                    <Border x:Name="PreviewHost" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderStrongBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="SAMPLE DATA · NO RUNTIME CONNECTION" Style="{StaticResource HeliosBodyStrongTextBlockStyle}" Foreground="{ThemeResource HeliosAccentBrush}" TextWrapping="Wrap" />
+                            <controls:StatusCard x:Name="SampleCard" Heading="{x:Bind ViewModel.FixtureHeading, Mode=OneWay}"
+                                                 Subtitle="{x:Bind ViewModel.FixtureSubtitle, Mode=OneWay}"
+                                                 Detail="{x:Bind ViewModel.FixtureDetail, Mode=OneWay}"
+                                                 State="{x:Bind ViewModel.FixtureState, Mode=OneWay}" />
+                            <TextBox Header="Sample input" Text="Edit this local preview text" />
+                            <ToggleSwitch Header="Sample option" OnContent="Enabled locally" OffContent="Disabled locally" />
+                            <Slider Header="Sample level" Minimum="0" Maximum="100" Value="40" />
+                            <Button Content="Sample action" Click="OnSampleAction" Style="{StaticResource AccentButtonStyle}" />
+                            <TextBlock x:Name="SampleActionStatus" Text="The sample action only changes this message." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+            <Border Background="{ThemeResource CardSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="3  Test GUI, then build Desktop" Style="{StaticResource HeliosTitleTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="Test commands are displayed for your editor terminal. This page does not execute them or report their result." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind ViewModel.TestCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock Text="{x:Bind ViewModel.BuildCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock Text="Workflow definitions" Style="{StaticResource HeliosBodyStrongTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind ViewModel.WorkflowDisplay}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock Text="{x:Bind ViewModel.ReleaseBoundary}" Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="Live CI, native rendering, packaging and deployment status: not checked by Workbench." Style="{StaticResource HeliosBodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

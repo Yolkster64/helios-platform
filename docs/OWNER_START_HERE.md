@@ -19,8 +19,8 @@ name, writes `.helios/bootstrap-state.json`, and ends by printing this list as a
 numbered checklist with the exact command per item. `--verify-only` is the
 read-only pass. Then:
 
-1. [Wire secrets through env vars / Key Vault](#1-secrets-env-vars-and-key-vault) — nothing works without provider credentials.
-2. [Flip the GitHub repository settings](#2-github-repository-settings) — Issues is already on; what remains is the variables, secrets, and the `production` environment.
+1. [Wire configured provider access through env vars / Key Vault](#1-secrets-env-vars-and-key-vault) — offline planning works immediately; each remote provider needs its own account access.
+2. [Flip the GitHub repository settings](#2-github-repository-settings) — Issues is already on; what remains is the variables, secrets, and the protected `azure-dev` environment.
 3. [Set the connector secrets (Slack, Linear)](#3-connectors-slack-and-linear) per `config/connectors.json`.
 4. [Create the Azure OIDC deploy identity](#4-azure-oidc-for-deploys) with `scripts/bootstrap/azure-oidc-setup.sh`.
 5. [Decide on the fleet VMSS](#5-fleet-vmss-opt-in) — it is OFF by default and stays off until you opt in.
@@ -54,14 +54,14 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
   absorption epics from `docs/architecture/ABSORPTION_LEDGER.md` are issues
   #14–#53. Issues #54–#92 are Linear-loop duplicates awaiting closure (step 7).
 - **Actions variables** (Settings → Secrets and variables → Actions →
-  Variables) for the deploy workflow — these are identifiers, not secrets,
+  Variables) and **Environment variables** for deployment — these are identifiers, not secrets,
   which is why they are variables:
   - `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — printed
     (with ready-made `gh variable set` one-liners) by
     `scripts/bootstrap/azure-oidc-setup.sh` (step 4 below).
-  - Optional: `AZURE_RESOURCE_GROUP` (default `rg-helios-ai`) and
-    `AZURE_LOCATION` (default `eastus2`), read by
-    `.github/workflows/helios-deploy.yml`.
+  - `AZURE_RESOURCE_GROUP` and `AZURE_LOCATION` are also required. Set all five
+    in **Settings → Environments → azure-dev → Environment variables**, using
+    the reviewed bootstrap output. Deployment has no subscription, group or region defaults.
 - **Actions secrets** (Settings → Secrets and variables → Actions → Secrets):
   - `SLACK_WEBHOOK_URL` — used by `.github/workflows/notify-slack.yml`.
   - `LINEAR_API_KEY` — used by `.github/workflows/linear-sync.yml`.
@@ -70,18 +70,21 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
     token is minted (step 6).
   - `COPILOT_DISPATCH_TOKEN` — optional, for `copilot-dispatch.yml`
     (`docs/architecture/CONNECTIONS_SETUP.md` § GitHub ↔ Copilot).
-  - All of the above, plus the three variables, can be set from env vars of the
-    same name with `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply`
-    (dry run by default; values travel over stdin, never argv).
+  - Connector secrets can be set from env vars of the same name with
+    `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Apply` (dry run by
+    default; values travel over stdin). This existing helper writes repository
+    scope and only three Azure identifier variables; use the five environment
+    commands from the OIDC bootstrap for `azure-dev`.
   - `HELIOS_APP_PRIVATE_KEY` — the HELIOS GitHub App's private key, the
     durable admin credential of `governance-apply.yml`; stored together with
     the identifier variables `HELIOS_APP_CLIENT_ID`, `HELIOS_APP_ID` and
     `HELIOS_APP_SLUG` by `scripts/bootstrap/connect-github-app.ps1` (step 6);
     rotation is the key swap described there.
-- **Environment `production`** (Settings → Environments): the OIDC federated
-  credential is scoped to `environment:production`, so deploy jobs declaring it
-  can only get Azure tokens through this environment. Add required reviewers
-  here if you want a human approval gate on deploys.
+- **Environment `azure-dev`** (Settings → Environments): configure required
+  reviewers and restrict deployment branches to `main`. The only new deploy
+  federation subject is `repo:Yolkster64/helios-platform:environment:azure-dev`.
+  This repository change does not configure those live protections. Production
+  remains disabled.
 
 ## 3. Connectors: Slack and Linear
 
@@ -100,34 +103,151 @@ sync) are edited in `config/connectors.json` itself, not in the workflows.
 
 ## 4. Azure OIDC for deploys
 
-`scripts/bootstrap/azure-oidc-setup.sh` (PowerShell twin:
-`azure-oidc-setup.ps1`) creates the deploy identity with **no stored cloud
-credential anywhere** — no client secret exists to leak or rotate:
+### Automatic offline identity handoff
 
-- App registration `helios-github-deploy` + service principal.
-- Federated credentials trusting GitHub's OIDC issuer for exactly two
-  subjects: the repo's `main` branch and the `production` environment.
-  Deliberately **no** `pull_request` subject — a PR can rewrite its own
-  workflow, so PRs never get deploy rights (PR validation stays offline in
-  `infra-validate.yml`).
-- Contributor scoped to the resource group only, plus Key Vault Secrets
-  Officer scoped to the provider-key vault only (least privilege).
+`bash connect.sh identity --json` (or
+`python3 scripts/bootstrap/identity_plan.py --json`) produces a deterministic JSON
+plan from the configured target. Normal startup also prepares its identity summary.
+It never signs in, reads keys, calls Azure, creates identities or changes GitHub.
+Missing or malformed identifiers appear by variable name; `--strict` exits 2
+until the identifier inputs are complete. A `prepared` plan means format checks
+passed, with `liveVerified=false`; it does not mean the target or grants exist.
 
-Order matters: run `scripts/bootstrap/azure-up.sh` first (device-code login →
-resource group → `infra/main.bicep` deployment), because the OIDC script
-refuses to run until the resource group exists. It finishes by printing the
-three GitHub Actions variables to set (step 2 above). It is safe to re-run;
-every step checks for the existing object first.
+Set these **nonsecret identifiers** in the trusted shell: `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`,
+`AZURE_KEY_VAULT_NAME` and the **deployment** `AZURE_CLIENT_ID`. Tenant,
+subscription and identity IDs must be nonzero hyphenated UUIDs. The region is the
+Azure location name, for example `eastus2`, and still needs live verification.
+The five deployment variables remain on the protected GitHub `azure-dev`
+environment. `AZURE_KEY_VAULT_NAME` selects the existing RBAC vault for the plan
+and maps to Bicep `keyVaultName`; the runtime receives the `keyVaultUri` output.
 
-Then rehearse: run "Helios Platform Deploy" via `workflow_dispatch` **from
-`main`** (the federated subject is branch-scoped) with `what_if=true` for a
-read-only dry run.
+The plan contains one SHA-256, structured read-only verification commands,
+scoped deployment/runtime roles, and `bicep.parameterDocument`, a standard ARM
+parameters document containing only nonsecret values. Store a generated plan
+under the ignored `.helios/` directory when needed; it is review evidence, never
+an apply receipt. The document is a proposed **partial override** for
+`infra/main.bicep`; review it alongside the maintained model/capacity parameters
+before use. No timestamp, secret environment values or credential cache enters
+the digest. Bicep remains the owner; Terraform must keep separate state and
+resource ownership.
 
-To check auth state at any time without changing anything:
+The identity chain is:
+
+1. GitHub `workflow_dispatch` on `main`, through protected `azure-dev`, exchanges
+   its OIDC token for the deployment identity.
+2. Contributor on the selected resource group and Secrets Officer on the selected
+   vault permit their existing deployment/key duties. **Neither role can assign
+   runtime RBAC.** Review `Microsoft.Authorization/roleAssignments/write`
+   authority for the intended scopes separately; this helper never grants it.
+3. The opt-in Bicep `deployRuntimeIdentity=true` creates a user-assigned runtime
+   identity. Empty `principalId` and `learningStorePrincipalId` slots are filled
+   from that identity automatically: Key Vault Secrets User on the vault, Azure
+   AI User on the Foundry account created here, and Storage Table Data Contributor
+   when `deployLearningStorage=true`. Explicit existing principal values preserve
+   their grants and override these automatic slots.
+4. A reviewed host template must attach `runtimeManagedIdentityId` to the Azure
+   executor. Set **that host's** `AZURE_CLIENT_ID` from
+   `runtimeManagedIdentityClientId`, not the deployment client ID. AIHub's
+   `DefaultAzureCredential` uses the host identity for Key Vault, Foundry and
+   Azure learning storage. Identity creation does not start Hermes/XCore workers
+   or attach the identity to the existing fleet VMSS.
+
+`HELIOS_RUNTIME_IDENTITY_NAME` and `AZURE_LEARNING_STORAGE_ACCOUNT_NAME` optionally
+select existing naming conventions. The latter proposes a name without enabling
+storage; `deployLearningStorage=true` remains an explicit reviewed opt-in.
+`HELIOS_RUNTIME_PRINCIPAL_ID` instead proposes existing `principalId` and
+`learningStorePrincipalId` values without creating a new identity. An object ID
+alone does not identify its client ID, prove it is a managed identity, or prove
+access. Existing external Foundry accounts (`aiServiceAccountResourceId`) are
+passed through without new Foundry grants; review that external scope separately.
+
+The Bicep flag defaults to false, uses the stable resource-group suffix for names,
+and emits only resource/client/principal IDs. Model deployments, fleet VMs,
+provider keys, tenant consent and runtime attachment retain their own reviewed
+configuration. Offline CI compiles the templates and tests the plan without any
+Azure credentials.
+
+Sources checked September 9, 2026:
+[GitHub OIDC with Azure](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-azure),
+[Bicep role assignments](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/scenarios-rbac),
+[user-assigned identity resource](https://learn.microsoft.com/en-us/azure/templates/microsoft.managedidentity/2023-01-31/userassignedidentities).
+
+### Verify the live target before owner setup
+
+The Bash and PowerShell `azure-oidc-setup` twins start with a **read-only plan**.
+They require an explicit tenant, subscription, resource group and provider-key
+vault. Before any write they verify the active Azure account matches that tenant
+and subscription and is Enabled, the group and vault IDs match those targets,
+and the vault belongs to that tenant with RBAC enabled. Reusing federation checks
+the issuer and the exact single audience as well as the subject; conflicts stop
+Apply instead of being silently overwritten. The scripts never
+change the selected account, sign in, create a resource group or deploy a template.
+
+From your own terminal or Azure Cloud Shell, inspect `az account list -o table`.
+If needed, complete `az login --tenant <tenant-id>` and explicitly select
+`az account set --subscription <subscription-id>` yourself. Cloud Shell can
+already be signed in; its currently selected subscription still needs checking.
+Then run either plan:
 
 ```bash
-scripts/bootstrap/cloud-shell-setup.sh --verify-only   # gh + az, read-only
+bash scripts/bootstrap/azure-oidc-setup.sh --tenant <tenant-id> \
+  --subscription <subscription-id> --resource-group <group> --key-vault <vault>
 ```
+
+```powershell
+pwsh scripts/bootstrap/azure-oidc-setup.ps1 -Tenant <tenant-id> `
+  -Subscription <subscription-id> -ResourceGroup <group> -KeyVault <vault>
+```
+
+The existing group and RBAC vault are prerequisites. Review their provisioning
+separately if missing. After reviewing the target and permissions, an authorized
+owner may repeat the same command with `--apply` / `-Apply` to create or reuse:
+
+- App registration `helios-github-deploy` and service principal, without a client secret.
+- One GitHub federation subject: `repo:Yolkster64/helios-platform:environment:azure-dev`.
+- Contributor on the selected group and Key Vault Secrets Officer on that vault.
+
+Apply also removes the legacy named credentials `github-main`,
+`github-pull-request` and `github-env-production` if present. A plan only describes
+these removals. Other environments, including production, are refused before
+Azure is called. The script prints the five `gh variable set --env azure-dev`
+commands; it does not execute them or create GitHub environment protections.
+
+Once those protections and variables are configured, dispatch **Helios Platform
+Deploy** from `main` with `what_if=true`. A push never deploys. The workflow checks
+the authenticated tenant/subscription and existing group/location, then retains
+sanitized plan results. Applying a reviewed plan requires a separate manual
+run with `what_if=false` and `deploy_confirmed=true`, plus the protected environment's
+approval. This checkbox is an explicit operator assertion, not automated proof that
+a specific earlier plan was reviewed.
+
+### Provider keys, Cloud Shell and coding tools
+
+The existing provider scripts share `config/aihub.json` names. They do not create
+OpenAI or Anthropic platform credentials from a ChatGPT or Claude web sign-in.
+
+| Purpose | Existing entry point | What changes |
+| --- | --- | --- |
+| Inspect provider-key targets | `pwsh scripts/bootstrap/set-provider-secrets.ps1 -VaultUri https://<vault>.vault.azure.net/` | Dry run; reports names and source presence |
+| Store an existing key | Same command with `-Only openai-api-key -Apply` or `-Only anthropic-api-key -Apply` | Masked input; writes only the selected vault secret |
+| Store already supplied environment values | Same command with `-FromEnv -Apply` | Values travel through restricted temporary files, not command-line arguments |
+| Load keys into the current Bash shell | Set `AZURE_KEY_VAULT_URI`, then `source scripts/bootstrap/load-env-from-keyvault.sh` | Fetches keys into process environment; existing values remain unchanged |
+| Load/repair from PowerShell | `. scripts/bootstrap/auto-login.ps1` | Explicit invocation can repair cached auth and load configured vault keys into the shell |
+| Inspect GitHub connector credential names | `pwsh scripts/bootstrap/provision-github-secrets.ps1 -Json` | Reports source presence and accessible metadata |
+| Store supplied Slack/Linear credentials | Same helper with `-Apply` | Writes available values to Actions secrets over stdin; no API key creation |
+
+Run key-loading scripts only in a trusted shell on the reviewed checkout. Start
+Claude Code, Codex or Copilot from that same shell when they should inherit its
+provider environment. Native coding-tool account sign-ins and runtime API keys
+remain separate. The launcher and offline checks work without provider keys;
+missing keys leave those providers Unconfigured.
+
+The target-preflight portion was selectively recovered from PR #148
+(`5a8379174073071d87cdad46754f023e9d8565f3` against
+`b4486a03a3aeaa681fa88abfdcc188dfebf6c388`), then aligned with the current
+`azure-dev` deployment authority. No identity or cloud change is implied by this
+source integration.
 
 ## 5. Fleet VMSS opt-in
 

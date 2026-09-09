@@ -1,0 +1,37 @@
+{
+  "name": "helios-connect",
+  "version": "0.1.0+codex.20260909054402",
+  "description": "Use shared HELIOS task instructions and existing C# MCP tools from a trusted checkout in a Codex workspace.",
+  "author": {
+    "name": "HELIOS Development Team",
+    "url": "https://github.com/Yolkster64"
+  },
+  "homepage": "https://github.com/Yolkster64/helios-platform/blob/main/docs/mcp/PLUGIN_SETUP.md",
+  "repository": "https://github.com/Yolkster64/helios-platform",
+  "license": "MIT",
+  "keywords": [
+    "helios",
+    "mcp",
+    "codex",
+    "claude",
+    "aihub"
+  ],
+  "interface": {
+    "displayName": "HELIOS Connect",
+    "shortDescription": "One HELIOS tool surface for your coding workspace.",
+    "longDescription": "Connects to the existing HELIOS stdio MCP server using an explicitly selected trusted checkout. Reuses AIHub, Fabric planning and durable handoffs; carries no credentials and performs no automatic cloud activation.",
+    "developerName": "HELIOS Development Team",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Check HELIOS readiness and show the next connection step.",
+      "Show the HELIOS Fabric plan and pending handoffs."
+    ],
+    "brandColor": "#24D9E8"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

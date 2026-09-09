@@ -1,5 +1,6 @@
 {
-  "$comment": "Connector wiring for Slack and Linear. This file carries env-var NAMES and routing choices only — never tokens or webhook values (repo hard rule). The same names are read by the GitHub Actions notify/sync workflows today and by the HELIOS.Connectors service when it lands (ROADMAP_MULTI_LLM.md PR4), so there is exactly one place that says where notifications go.",
+  "$schema": "./schemas/connectors.schema.json",
+  "$comment": "Connector wiring for Slack and Linear. This file carries env-var NAMES and routing choices only \u2014 never tokens or webhook values (repo hard rule). The same names are read by the GitHub Actions notify/sync workflows today and by the HELIOS.Connectors service when it lands (ROADMAP_MULTI_LLM.md PR4), so there is exactly one place that says where notifications go.",
   "slack": {
     "enabled": true,
     "webhookUrlEnv": "SLACK_WEBHOOK_URL",
@@ -17,6 +18,10 @@
       "Python Spoke": "failures-and-recovery",
       "Absorption Benchmark": "always",
       "Docker Validation": "failures-and-recovery"
+    },
+    "workspaceId": "T0B8Z1H0MV1",
+    "channelIds": {
+      "controlPlane": "C0BHWDBHG1W"
     }
   },
   "linear": {
@@ -24,7 +29,14 @@
     "apiKeyEnv": "LINEAR_API_KEY",
     "teamKey": "JOH",
     "titlePrefix": "[GH-{number}] ",
-    "syncLabels": ["bug", "enhancement", "infra", "ai-hub", "absorption", "build-ci"],
+    "syncLabels": [
+      "bug",
+      "enhancement",
+      "infra",
+      "ai-hub",
+      "absorption",
+      "build-ci"
+    ],
     "githubLabelToLinear": {
       "bug": "Bug",
       "enhancement": "Feature",
@@ -32,6 +44,8 @@
       "ai-hub": "AIHub",
       "absorption": "Absorption",
       "build-ci": "BuildCI"
-    }
+    },
+    "projectId": "3a4dee89-2c83-4bbd-a067-4e6cfbcb308a",
+    "projectUrl": "https://linear.app/641974/project/helios-4f592efea071"
   }
 }
