@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": 1,
-  "observedAt": "2026-09-05",
+  "observedAt": "2026-09-06",
   "currentAuthority": {
     "repository": "Yolkster64/helios-platform",
     "branch": "main",
-    "planningBaseSha": "26829ea80e0d50258c6bd867eb155a2ffcca5dd5",
+    "planningBaseSha": "813a020f1fc0eaa9094d49406670d1c649154479",
     "forkParent": "M0nado/helios-platform",
     "renamePending": true
   },
