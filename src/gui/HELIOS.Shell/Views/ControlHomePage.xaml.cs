@@ -14,5 +14,6 @@ public sealed partial class ControlHomePage : Page
 
     public ControlHomePageViewModel ViewModel { get; }
     private void OnOpenAIHub(object sender, RoutedEventArgs e) => Frame.Navigate(typeof(AIHubPage));
+    private void OnOpenUsbSetup(object sender, RoutedEventArgs e) => Frame.Navigate(typeof(UsbSetupPage));
     private void OnOpenFabric(object sender, RoutedEventArgs e) => Frame.Navigate(typeof(FabricControlPage));
 }

@@ -1,10 +1,10 @@
 name: Shared connection entry point
 on:
   pull_request:
-    paths: ['connect.*', 'plugins/helios-connect/**', '.agents/plugins/marketplace.json', 'scripts/bootstrap/connect.py', 'scripts/bootstrap/workspace_agent_handoff.py', 'scripts/bootstrap/agent_workspace.py', 'scripts/verify/tests/test_connect_entrypoint.py', 'scripts/verify/tests/test_workspace_agent_handoff.py', 'scripts/verify/tests/test_agent_workspace.py', 'scripts/validation/tests/test_control_project_schema.py', 'config/**', '.codex/config.toml', '.vscode/settings.json', '.github/workflows/connect-entrypoint.yml']
+    paths: ['connect.*', 'plugins/helios-connect/**', '.agents/plugins/marketplace.json', 'scripts/bootstrap/connect.py', 'scripts/bootstrap/identity_plan.py', 'scripts/bootstrap/components.py', 'scripts/bootstrap/workspace_agent_handoff.py', 'scripts/bootstrap/agent_workspace.py', 'scripts/verify/tests/test_connect_entrypoint.py', 'scripts/verify/tests/test_workspace_agent_handoff.py', 'scripts/verify/tests/test_agent_workspace.py', 'scripts/validation/tests/test_control_project_schema.py', 'config/**', '.codex/config.toml', '.vscode/settings.json', '.github/workflows/connect-entrypoint.yml']
   push:
     branches: [main]
-    paths: ['connect.*', 'plugins/helios-connect/**', '.agents/plugins/marketplace.json', 'scripts/bootstrap/connect.py', 'scripts/bootstrap/workspace_agent_handoff.py', 'scripts/bootstrap/agent_workspace.py', 'scripts/verify/tests/test_connect_entrypoint.py', 'scripts/verify/tests/test_workspace_agent_handoff.py', 'scripts/verify/tests/test_agent_workspace.py', 'scripts/validation/tests/test_control_project_schema.py', 'config/**', '.codex/config.toml', '.vscode/settings.json', '.github/workflows/connect-entrypoint.yml']
+    paths: ['connect.*', 'plugins/helios-connect/**', '.agents/plugins/marketplace.json', 'scripts/bootstrap/connect.py', 'scripts/bootstrap/identity_plan.py', 'scripts/bootstrap/components.py', 'scripts/bootstrap/workspace_agent_handoff.py', 'scripts/bootstrap/agent_workspace.py', 'scripts/verify/tests/test_connect_entrypoint.py', 'scripts/verify/tests/test_workspace_agent_handoff.py', 'scripts/verify/tests/test_agent_workspace.py', 'scripts/validation/tests/test_control_project_schema.py', 'config/**', '.codex/config.toml', '.vscode/settings.json', '.github/workflows/connect-entrypoint.yml']
   workflow_dispatch:
 permissions:
   contents: read

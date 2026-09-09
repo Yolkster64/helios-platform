@@ -2,7 +2,7 @@
 
 | Directory | What it is |
 |---|---|
-| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. Home with the shared Connect → Unify → Automate → Validate flow, AI Hub status, and Fabric connections bound to `helios-ai-api`. |
+| `HELIOS.Shell/` | **The** WinUI 3 shell (Windows App SDK 1.6, net8.0-windows10.0.19041.0) — the GUI_THEME_ANALYSIS.md direction, bootstrapped ahead of roadmap PR6. Home with the shared Connect → Unify → Automate → Validate flow, AI Hub status, Fabric connections bound to `helios-ai-api`, and offline USB setup planning. |
 | `HELIOS.Shell.sln` | The shell's **own** solution and its only build entry point. |
 | `MonadoBlade.GUI/` | Orphaned WPF experiment (no csproj references it). Mined for design intent only — do not build, extend, or port code from it. Quarantine to `legacy/` is a PR2 item. |
 
@@ -30,6 +30,16 @@ Fabric restores the original four view/view-model files from PR #186, source com
 The Home and Fabric navigation items stay synchronized when Home shortcuts are used.
 Home scrolls at narrow sizes; the navigation pane collapses automatically. Both pages
 use the existing semantic theme brushes and type ramp, including high contrast.
+
+## USB and profile setup
+
+**USB setup** is available in navigation and from Home. It previews installation
+media from manually entered device data and lists the selected profile's recovery,
+vault, Dev Drive and other installed-system requirements. It uses the shared pure
+`UsbSetupPlanner` source from AIHub; no provider SDK, shell host, live disk scan or
+write adapter is loaded. All device confirmations start unknown and every input
+change clears the previous proposal. See [USB setup](../../docs/USB_SETUP.md) for
+contracts, bounds and the separate portable test command.
 
 ## Build (Windows only)
 

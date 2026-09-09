@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
             "home" => typeof(ControlHomePage),
             "aihub" => typeof(AIHubPage),
             "fabric" => typeof(FabricControlPage),
+            "usb" => typeof(UsbSetupPage),
             _ => null,
         };
         if (page is not null && ContentFrame.CurrentSourcePageType != page)
@@ -56,6 +57,7 @@ public sealed partial class MainWindow : Window
     {
         // Home shortcuts and navigation-pane clicks share one selection state.
         Nav.SelectedItem = args.SourcePageType == typeof(ControlHomePage) ? HomeNavItem
-            : args.SourcePageType == typeof(FabricControlPage) ? FabricNavItem : AIHubNavItem;
+            : args.SourcePageType == typeof(FabricControlPage) ? FabricNavItem
+            : args.SourcePageType == typeof(UsbSetupPage) ? UsbNavItem : AIHubNavItem;
     }
 }

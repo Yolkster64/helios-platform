@@ -138,8 +138,14 @@ param openaiApiKey string = ''
 @description('GitHub token for GitHub Models to store in Key Vault. Empty string means the secret is not created.')
 param githubModelsToken string = ''
 
-@description('Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created.')
+@description('Object ID granted Azure AI User and Key Vault Secrets User. Empty string skips grants unless deployRuntimeIdentity supplies the runtime identity.')
 param principalId string = ''
+
+@description('Create a reusable user-assigned managed identity for the Azure AIHub runtime and grant it existing scoped data roles when no explicit principal overrides are supplied. OFF by default; does not attach the identity to a host or authorize deployment.')
+param deployRuntimeIdentity bool = false
+
+@description('Name of the opt-in AIHub runtime managed identity. Empty string uses the deterministic resource-group suffix.')
+param runtimeManagedIdentityName string = ''
 
 // --- AI Search connection + agent capability host (opt-in) ------------------------
 // OFF by default so existing deployments are unchanged. Requires the account/project
@@ -213,7 +219,7 @@ param deployLearningStorage bool = false
 @description('Name for the learning storage account (3-24 lowercase letters and digits, globally unique). Empty string means a name is generated.')
 param learningStorageAccountName string = ''
 
-@description('Object ID of the principal granted Storage Table Data Contributor on the learning storage account, so the hub identity can write outcomes (shared-key auth is disabled — RBAC only). Empty string means no role assignment is created.')
+@description('Object ID granted Storage Table Data Contributor on the learning storage account (RBAC only). Empty string skips grants unless deployRuntimeIdentity supplies the runtime identity.')
 param learningStorePrincipalId string = ''
 
 // ---------------------------------------------------------------------------
@@ -228,6 +234,12 @@ var projectName = toLower(aiProjectName)
 var effectiveModelLocation = empty(modelLocation) ? location : modelLocation
 var effectiveKeyVaultName = empty(keyVaultName) ? 'kv-helios-${uniqueSuffix}' : keyVaultName
 var aiServiceExists = !empty(aiServiceAccountResourceId)
+var effectiveRuntimeIdentityName = empty(runtimeManagedIdentityName) ? 'id-helios-runtime-${uniqueSuffix}' : runtimeManagedIdentityName
+// Explicit legacy principals retain authority; the new identity fills empty slots only.
+var runtimeOwnsProviderAccess = deployRuntimeIdentity && empty(principalId)
+var runtimeOwnsLearningAccess = deployRuntimeIdentity && empty(learningStorePrincipalId)
+var effectivePrincipalId = runtimeOwnsProviderAccess ? runtimeIdentity!.outputs.principalId : principalId
+var effectiveLearningPrincipalId = runtimeOwnsLearningAccess ? runtimeIdentity!.outputs.principalId : learningStorePrincipalId
 
 // Both gates must open: the flag, and an SSH key (SSH-key-only auth means a VMSS
 // without a key would be undeployable anyway).
@@ -261,6 +273,17 @@ var allModelDeployments = concat(
 // Modules
 // ---------------------------------------------------------------------------
 
+// Reusable runtime principal; deployment OIDC remains a separate identity. Azure
+// resource attachment is intentionally owned by the host's reviewed template.
+module runtimeIdentity 'modules/runtime-identity.bicep' = if (deployRuntimeIdentity) {
+  name: 'runtime-identity-${uniqueSuffix}'
+  params: {
+    identityName: effectiveRuntimeIdentityName
+    location: location
+    tags: tags
+  }
+}
+
 module foundryAccount 'modules/ai-foundry-account.bicep' = if (!aiServiceExists) {
   name: 'foundry-account-${uniqueSuffix}'
   params: {
@@ -268,7 +291,8 @@ module foundryAccount 'modules/ai-foundry-account.bicep' = if (!aiServiceExists)
     location: effectiveModelLocation
     tags: tags
     modelDeployments: allModelDeployments
-    principalId: principalId
+    principalId: effectivePrincipalId
+    managedIdentityPrincipal: runtimeOwnsProviderAccess
     claudeOrganizationName: claudeOrganizationName
     claudeCountryCode: claudeCountryCode
     claudeIndustry: claudeIndustry
@@ -293,7 +317,8 @@ module keyVault 'modules/keyvault.bicep' = {
     keyVaultName: effectiveKeyVaultName
     location: location
     tags: tags
-    principalId: principalId
+    principalId: effectivePrincipalId
+    managedIdentityPrincipal: runtimeOwnsProviderAccess
     anthropicApiKey: anthropicApiKey
     openaiApiKey: openaiApiKey
     githubModelsToken: githubModelsToken
@@ -350,7 +375,8 @@ module learningStorage 'modules/learning-storage.bicep' = if (deployLearningStor
     storageAccountName: effectiveLearningStorageName
     location: location
     tags: tags
-    principalId: learningStorePrincipalId
+    principalId: effectiveLearningPrincipalId
+    managedIdentityPrincipal: runtimeOwnsLearningAccess
   }
 }
 
@@ -399,3 +425,18 @@ output fleetVmssName string = fleetVmssEnabled ? fleetVmss!.outputs.vmssName : '
 
 @description('Principal ID of the fleet VMSS system-assigned identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys (empty string when the VMSS is disabled).')
 output fleetVmssPrincipalId string = fleetVmssEnabled ? fleetVmss!.outputs.principalId : ''
+
+@description('Foundry account resource ID; an existing account is passed through, but this template does not add grants on an externally supplied account.')
+output aiServicesAccountId string = aiServiceExists ? aiServiceAccountResourceId : foundryAccount!.outputs.accountId
+
+@description('Learning storage resource ID; empty when its optional module is disabled.')
+output learningStorageAccountId string = deployLearningStorage ? learningStorage!.outputs.storageAccountId : ''
+
+@description('Resource ID of the opt-in runtime managed identity; attach this to a separately reviewed Azure executor. Empty when disabled.')
+output runtimeManagedIdentityId string = deployRuntimeIdentity ? runtimeIdentity!.outputs.id : ''
+
+@description('Object ID of the runtime managed identity; empty when disabled. Explicit principalId/learningStorePrincipalId override automatic grants for their own lanes.')
+output runtimeManagedIdentityPrincipalId string = deployRuntimeIdentity ? runtimeIdentity!.outputs.principalId : ''
+
+@description('Client ID for AZURE_CLIENT_ID on the runtime host, not the GitHub deployment identity; empty when disabled.')
+output runtimeManagedIdentityClientId string = deployRuntimeIdentity ? runtimeIdentity!.outputs.clientId : ''

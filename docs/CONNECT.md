@@ -46,6 +46,18 @@ clone over it or discard another contributor's changes.
 
 ## Work on one part
 
+The source stays in **one HELIOS repository**, with five independently checked
+parts: **Core, Desktop, USB, Cloud and Fleet**. `connect.sh parts` lists them;
+`connect.sh parts desktop` shows the Desktop setup, checks and release boundary;
+`connect.sh test usb` runs the portable USB planner tests. See
+[project parts](PROJECT_PARTS.md) for dependencies and existing workflows.
+Each part keeps its own build or deployment artifact without copying the main
+repository into competing products.
+
+The native Desktop includes the [USB setup wizard](USB_SETUP.md), using the same
+portable planner available through `helios_usb_plan_get`. It proposes installation
+media and profile requirements from supplied disk facts; it does not format disks.
+
 Keep **Connect → Unify → Automate → Validate** as the delivery sequence. Choose an
 existing issue in one of these areas and return the source commit and checks there.
 
@@ -97,8 +109,14 @@ startup reports missing consent or credentials rather than waiting on a hidden p
 
 | Need | Command |
 |---|---|
+| List independently testable project parts | `connect.sh parts` |
+| Inspect one part's setup and release plan | `connect.sh parts desktop` |
+| Run one part's checks | `connect.sh test usb` |
 | Open a coding client in this project | `connect.sh claude`, `connect.sh codex`, `connect.sh copilot` |
 | Inspect provider routing | `connect.sh ai routing` |
+| Prepare Azure OIDC / Key Vault / runtime identity | `connect.sh identity --json` |
+| Inspect fleet capacity and activation dependencies | `connect.sh fleet` |
+| Analyze recorded model outcomes offline | `connect.sh analyze --outcomes PATH --task code_review --json` |
 | Review advisory learning | `connect.sh learning` |
 | Compare explicitly selected models | `connect.sh combo "task" --providers claude-cli,codex` |
 | Check the ChatGPT return channel locally | `connect.sh return status` |
@@ -109,6 +127,39 @@ Model commands can consume the selected accounts' usage. Configured providers,
 packets and fleet declarations are not proof of running workers or successful
 inference. Adaptive routing remains off by default. Bicep and Terraform must not
 both own the same Azure target; the hybrid guide records their actual coverage.
+
+## Identity, evidence and fleet depth
+
+Startup includes an offline identity plan automatically. `connect.sh identity`
+shows the same plan separately: explicit target IDs, GitHub's `azure-dev` OIDC
+subject, deployment versus runtime identity, scoped Key Vault/Foundry/learning
+roles, Bicep parameters and the checks still needed. It hashes the plan so another
+client can identify the same input snapshot. `--strict` returns a failure for
+missing or invalid inputs. The plan does not create credentials or apply Azure.
+The optional Bicep runtime identity connects the resource grants in one template;
+attaching it to a runtime and validating access remain separate measured steps.
+See [owner setup](OWNER_START_HERE.md).
+
+`connect.sh fleet` reports configured concurrency ceilings and a dependency order
+for boards, identity, tools, workers, correlated task receipts and learning. It
+does not count declarations as running workers. The same C# calculation is
+available through `helios_fleet_readiness_get` on both MCP transports.
+
+`connect.sh analyze` reads an explicit local outcome JSONL file and reports
+provider/model/pool evidence, duplicate/conflicting IDs, success uncertainty and
+observed quality/cost/latency tradeoffs. Filter the exact task and optional language;
+unpaired outcomes cannot establish that two models complement each other.
+`helios_combo_analyze` accepts a small caller-supplied evidence batch on either
+MCP transport, using the same calculator without reading host files. See
+[combo analysis](architecture/COMBO_ANALYSIS.md) for the mathematics, input format
+and knowledge provenance. These diagnostics do not invoke models or change routing.
+
+The knowledge loop is **source → provenance → task → result → evaluation →
+advisory comparison → reviewed change**. Keep the uploaded engine catalog,
+training-loop concepts and recovery ideas in the existing source audit. Synthetic
+or imported results stay labelled; they do not become organic training evidence.
+Shared knowledge travels through the existing source hashes, task packets and
+handoff receipts rather than a second project or a copied credential store.
 
 The [integration handoff](integration/HELIOS-UNIFIED-2026-09-09.md) holds validation,
 provenance and remaining activation work. The [source audit](imports/recovery/SOURCE-AUDIT-2026-09-09.md)

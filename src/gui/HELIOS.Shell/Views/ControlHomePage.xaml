@@ -15,6 +15,7 @@
                     <TextBlock Text="Start with a local check. Sign in to each service once through its own supported setup." Style="{StaticResource HeliosBodyTextBlockStyle}" TextWrapping="Wrap" />
                     <TextBlock Text="{x:Bind ViewModel.CheckCommand}" Style="{StaticResource HeliosMonospaceTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <Button Content="Copy local check" Command="{x:Bind ViewModel.CopyCheckCommand}" />
+                    <Button Content="Plan USB and profile setup" Click="OnOpenUsbSetup" />
                     <Button Content="Open setup guide" Command="{x:Bind ViewModel.OpenGuideCommand}" IsEnabled="{x:Bind ViewModel.HasRepository}" />
                 </StackPanel>
             </Border>

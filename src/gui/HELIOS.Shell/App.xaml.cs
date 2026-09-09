@@ -1,3 +1,4 @@
+using HELIOS.AIHub.Setup;
 using HELIOS.Shell.Services;
 using HELIOS.Shell.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,13 +43,16 @@ public partial class App : Application
 
         // Shell rule (GUI_THEME_ANALYSIS.md): no logic in the shell. The only service is
         // the thin REST client over helios-ai-api; the hub itself stays out of process.
+        // USB planning shares pure contracts only; it has no I/O or device adapter.
         services.AddSingleton<AIHubApiClient>();
+        services.AddSingleton<UsbSetupPlanner>();
 
         // Transient: each page instance gets its own VM, constructed on the UI thread so
         // it can capture the page's DispatcherQueue.
         services.AddTransient<AIHubPageViewModel>();
         services.AddTransient<ControlHomePageViewModel>();
         services.AddTransient<FabricControlPageViewModel>();
+        services.AddTransient<UsbSetupPageViewModel>();
 
         return services.BuildServiceProvider();
     }

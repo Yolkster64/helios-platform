@@ -24,6 +24,9 @@
             <NavigationViewItem x:Name="FabricNavItem" Content="Fabric" Tag="fabric">
                 <NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" /></NavigationViewItem.Icon>
             </NavigationViewItem>
+            <NavigationViewItem x:Name="UsbNavItem" Content="USB setup" Tag="usb">
+                <NavigationViewItem.Icon><FontIcon Glyph="&#xE88E;" /></NavigationViewItem.Icon>
+            </NavigationViewItem>
             <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False"
                                 ToolTipService.ToolTip="Task-routing grid — roadmap PR6">
                 <NavigationViewItem.Icon>

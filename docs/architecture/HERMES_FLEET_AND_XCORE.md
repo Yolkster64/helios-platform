@@ -1,10 +1,69 @@
 # Hermes Fleets & Xcore-9s — Agent Fleet Design
 
-How HELIOS dispatches work to agent fleets: the Hermes Agent's kanban worker-lane system
-as the fleet runtime, and **four specialized Xcore-9 pools** — nine workers each, 36
-total — every pool with its own Hermes fleet, board, tool grant, and autoscaling policy.
+HELIOS declares **four specialized Xcore-9 pools** — nine worker slots each, 36
+configured slots — with per-pool Hermes boards, capability declarations and autoscaling
+policies. Those declarations do not establish running workers or authenticated providers.
 Topology is declarative in `config/fleet/fleet-topology.json`; live bring-up happens in
 the hermes/xcore repos (roadmap PR5). This PR ships the HELIOS-side contract and routing.
+
+## One offline readiness report
+
+```bash
+dotnet run --project src/ai/HELIOS.AIHub.Cli -c Release -- fleet-readiness --json
+```
+
+`FleetReadinessService.Plan` reads only the supplied topology. It does not initialize
+AIHub, open the learning store, check a login or probe a worker. The report names each
+pool's configured tasks, provider chain, tools, skills and agent roles; resolves pool
+defaults; checks invalid/ambiguous configuration; and produces a bounded activation
+dependency plan. The shared MCP surface is `helios_fleet_readiness_get`.
+
+| Pool | Worker slots | Aggregate planning ceiling | Local scale ceiling | Cloud scale ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| xcore-9-code | 9 | 6 | 4 | 5 |
+| xcore-9-infra | 9 | 4 | 3 | 4 |
+| xcore-9-review | 9 | 9 | 4 | 8 |
+| xcore-9-native | 9 | 3 | 3 | 0 |
+
+The aggregate ceiling is `min(poolSize, maxConcurrentLanes)` when an explicit lane
+limit exists. Local/cloud ceilings further apply the placement policy and share the
+aggregate ceiling: **do not add them**. The current topology yields 22 aggregate
+planning slots, not 22 active workers or a throughput estimate. Initial launch and
+workspace caps remain separate: `start-fleet.ps1` starts up to its effective pool size
+and Hermes lane cap, while `scale-fleet.ps1` reads the autoscaling policy. This report
+does not change either script. `verifiedConcurrentWorkers` and placement
+`verifiedWorkers` are explicitly `null`; `runtimeVerified` is always `false` here.
+
+Three shipped hybrid policies have independent local/burst maxima above their pool
+ceiling. The report exposes this as `aggregate-capacity`; an eventual cross-host
+dispatcher must enforce the shared budget. It also exposes `burst-target-mismatch`:
+topology says `arc`, while the implemented scaling hook targets Azure VMSS. A passing
+configuration check is separate from runtime readiness; these findings require
+implementation work before cloud placement can be called active.
+
+Each placement includes an explicit transport and identity requirement:
+
+- Local: same-host JSON board and claim lock, process identity verified by PID plus
+  start time, native provider sign-in and enforced tool restrictions.
+- Cloud: authenticated cross-host task/result transport and real Hermes bootstrap
+  remain unimplemented by the VMSS capacity hook. The worker needs its own managed
+  identity and scoped Key Vault/provider/data access. GitHub's deployment OIDC identity
+  does not supply a worker login, provider key, or permission to change Azure resources.
+
+`activationStages` is an ordered dependency graph of **required evidence**, not a
+dispatch plan. It starts with reviewed source SHA, shared skill hash, issue and
+correlation UUID. Knowledge inputs require citations/hashes and classification before
+use. Local board, provider/toolchain and real process evidence precede a correlated
+task receipt. Cloud stages additionally require a protected deployment receipt,
+runtime identity and authenticated transport. The graph includes only placements with
+configured capacity. The final per-placement evaluation step requires organic
+task/language-scoped measurements; fleet-lane and synthetic records stay tagged.
+
+The uploaded `hermes_xcore_training_loop.py` computes its quality and latency in
+`_execute_stub`; its loopback node declarations and the pseudo-runner are prototype
+inputs. They were inspected as data, not executed. Their synthetic scores cannot
+substitute for model quality, authenticated transport, learned knowledge or live
+worker receipts. The same distinction applies to a green fleet stub test.
 
 ## Architecture
 
@@ -22,7 +81,7 @@ board:         board:          board:           board:                │
  xcore-code     xcore-infra     xcore-review     xcore-native         │
 9 workers ea.  9 workers       9 workers        9 workers             │
 codex-led      claude-led      claude-led       claude-led            │
-hybrid ≤9      hybrid ≤9       hybrid ≤12       local ≤3              │
+hybrid ≤6      hybrid ≤4       hybrid ≤9        local ≤3              │
    │                │               ▲                │                │
    └────────────────┴───────────────┘────────────────┘                │
         handoffs go through boards, never pool-to-pool calls ─────────┘
@@ -36,9 +95,9 @@ each lane:  spawn  hermes -p <assignee> chat -q <prompt>
 
 | Pool | Does | Leads with | Lanes |
 |---|---|---|---|
-| **xcore-9-code** | Feature implementation, refactors, tests | Codex → OpenAI → Claude | hybrid, 2 local + 5 burst |
-| **xcore-9-infra** | Bicep/ARM, Terraform, Actions, config wiring | Claude → OpenAI | hybrid, 1 local + 6 burst |
-| **xcore-9-review** | Code review, security, long-context audit — judges, never authors | Claude → claude-cli | hybrid, 1 local + 8 burst |
+| **xcore-9-code** | Feature implementation, refactors, tests | Codex → OpenAI → Claude | hybrid, shared ceiling 6 |
+| **xcore-9-infra** | Bicep/ARM, Terraform, Actions, config wiring | Claude → OpenAI | hybrid, shared ceiling 4 |
+| **xcore-9-review** | Code review, security, long-context audit — judges, never authors | Claude → claude-cli | hybrid, shared ceiling 9 |
 | **xcore-9-native** | C++ perf/GPU/kernel, rendering, WinUI 3 shell | Claude → OpenAI → Codex | **local only**, ≤3 |
 
 Specialization is what makes the fleet worth more than 36 identical workers: each pool

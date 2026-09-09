@@ -25,6 +25,41 @@ class EntryPointTests(unittest.TestCase):
             code = connect.main(argv)
         return code, out.getvalue(), err.getvalue()
 
+    def test_identity_plan_is_offline_and_does_not_echo_secret_values(self):
+        secret = "identity-test-private-sentinel"
+        with patch.dict(os.environ, {"AZURE_CLIENT_SECRET": secret, "OPENAI_API_KEY": secret}, clear=True), \
+             patch.object(connect, "run", side_effect=AssertionError("identity plan must not execute")):
+            code, out, err = self.invoke(["identity", "--json"])
+            strict_code, _, _ = self.invoke(["identity", "--strict"])
+        self.assertEqual(code, 0)
+        self.assertEqual(strict_code, 2)
+        self.assertEqual(json.loads(out)["status"], "incomplete")
+        self.assertFalse(json.loads(out)["liveVerified"])
+        self.assertNotIn(secret, out + err)
+
+    def test_offline_analysis_and_fleet_use_the_shared_cli(self):
+        with patch.object(connect, "run", return_value=0) as run:
+            self.assertEqual(self.invoke(["analyze", "--outcomes", "path with spaces/history.jsonl", "--json"])[0], 0)
+            argv = run.call_args.args[1]
+            self.assertEqual(argv[argv.index("--") + 1:],
+                             ["combo-analyze", "--outcomes", "path with spaces/history.jsonl", "--json"])
+            self.assertEqual(self.invoke(["fleet"])[0], 0)
+            self.assertEqual(run.call_args.args[1][-3:], ["--", "fleet-readiness", "--json"])
+
+    def test_identity_rejects_mutation_options_before_execution(self):
+        with patch.object(connect, "run", side_effect=AssertionError("no command")):
+            self.assertEqual(self.invoke(["identity", "--apply"])[0], 2)
+
+    def test_parts_and_targeted_checks_preserve_a_single_component_argument(self):
+        with patch.object(connect, "run", return_value=0) as run:
+            self.assertEqual(self.invoke(["parts"])[0], 0)
+            self.assertEqual(run.call_args.args[1][-1:], ["list"])
+            self.assertEqual(self.invoke(["parts", "usb"])[0], 0)
+            self.assertEqual(run.call_args.args[1][-2:], ["plan", "usb"])
+            self.assertEqual(self.invoke(["test", "usb"])[0], 0)
+            self.assertEqual(run.call_args.args[1][-2:], ["test", "usb"])
+            self.assertEqual(self.invoke(["test", "usb", "--apply"])[0], 2)
+
     def test_default_inventory_is_offline_and_never_exposes_values(self):
         secret = "sentinel-private-value-do-not-display"
         with patch.dict(os.environ, {"OPENAI_API_KEY": secret, "LINEAR_API_KEY": secret}), patch.object(connect.subprocess, "run", side_effect=AssertionError("must stay offline")):

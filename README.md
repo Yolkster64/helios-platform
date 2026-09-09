@@ -20,6 +20,9 @@ serves the HELIOS MCP bridge. For a finite automation job, use `start --json`.
 Windows: `pwsh -NoProfile -File ./connect.ps1 start --serve`.
 
 **[One starting guide: commands, work areas and both directions](docs/CONNECT.md).**
+The five [project parts](docs/PROJECT_PARTS.md) are **Core, Desktop, USB, Cloud
+and Fleet**. Use `connect.sh parts` to see their setup and independent checks;
+`connect.sh test usb` tests the USB planner without touching a disk.
 Use its Cloud Shell clone command while the integration remains on its PR branch.
 Detailed provider examples remain in [Getting started](docs/GETTING_STARTED.md);
 full acceptance checks remain in [Test run playbook](docs/TEST_RUN_PLAYBOOK.md).

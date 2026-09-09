@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.46.1.21595",
-      "templateHash": "2549679529361897265"
+      "version": "0.47.16.16243",
+      "templateHash": "13754261617765523345"
     }
   },
   "definitions": {
@@ -235,7 +235,21 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Object ID of the principal granted Azure AI User and Key Vault Secrets User. Empty string means no role assignments are created."
+        "description": "Object ID granted Azure AI User and Key Vault Secrets User. Empty string skips grants unless deployRuntimeIdentity supplies the runtime identity."
+      }
+    },
+    "deployRuntimeIdentity": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Create a reusable user-assigned managed identity for the Azure AIHub runtime and grant it existing scoped data roles when no explicit principal overrides are supplied. OFF by default; does not attach the identity to a host or authorize deployment."
+      }
+    },
+    "runtimeManagedIdentityName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the opt-in AIHub runtime managed identity. Empty string uses the deterministic resource-group suffix."
       }
     },
     "deployAiSearchConnection": {
@@ -366,7 +380,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Object ID of the principal granted Storage Table Data Contributor on the learning storage account, so the hub identity can write outcomes (shared-key auth is disabled — RBAC only). Empty string means no role assignment is created."
+        "description": "Object ID granted Storage Table Data Contributor on the learning storage account (RBAC only). Empty string skips grants unless deployRuntimeIdentity supplies the runtime identity."
       }
     }
   },
@@ -377,6 +391,9 @@
     "effectiveModelLocation": "[if(empty(parameters('modelLocation')), parameters('location'), parameters('modelLocation'))]",
     "effectiveKeyVaultName": "[if(empty(parameters('keyVaultName')), format('kv-helios-{0}', variables('uniqueSuffix')), parameters('keyVaultName'))]",
     "aiServiceExists": "[not(empty(parameters('aiServiceAccountResourceId')))]",
+    "effectiveRuntimeIdentityName": "[if(empty(parameters('runtimeManagedIdentityName')), format('id-helios-runtime-{0}', variables('uniqueSuffix')), parameters('runtimeManagedIdentityName'))]",
+    "runtimeOwnsProviderAccess": "[and(parameters('deployRuntimeIdentity'), empty(parameters('principalId')))]",
+    "runtimeOwnsLearningAccess": "[and(parameters('deployRuntimeIdentity'), empty(parameters('learningStorePrincipalId')))]",
     "fleetVmssEnabled": "[and(parameters('deployFleetVmss'), not(equals(parameters('vmssAdminPublicKey'), '')))]",
     "aiSearchEnabled": "[and(parameters('deployAiSearchConnection'), not(variables('aiServiceExists')))]",
     "effectiveAiSearchName": "[if(empty(parameters('aiSearchServiceName')), format('srch-helios-{0}', variables('uniqueSuffix')), parameters('aiSearchServiceName'))]",
@@ -384,6 +401,77 @@
     "allModelDeployments": "[concat(createArray(createObject('name', parameters('modelName'), 'modelName', parameters('modelName'), 'format', parameters('modelFormat'), 'version', parameters('modelVersion'), 'skuName', parameters('modelSkuName'), 'capacity', parameters('modelCapacity'))), parameters('additionalModelDeployments'))]"
   },
   "resources": {
+    "runtimeIdentity": {
+      "condition": "[parameters('deployRuntimeIdentity')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('runtime-identity-{0}', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "identityName": {
+            "value": "[variables('effectiveRuntimeIdentityName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "16329888182835319211"
+            }
+          },
+          "parameters": {
+            "identityName": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128
+            },
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('identityName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            },
+            "clientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+            }
+          }
+        }
+      }
+    },
     "foundryAccount": {
       "condition": "[not(variables('aiServiceExists'))]",
       "type": "Microsoft.Resources/deployments",
@@ -407,8 +495,9 @@
           "modelDeployments": {
             "value": "[variables('allModelDeployments')]"
           },
-          "principalId": {
-            "value": "[parameters('principalId')]"
+          "principalId": "[if(variables('runtimeOwnsProviderAccess'), createObject('value', reference('runtimeIdentity').outputs.principalId.value), createObject('value', parameters('principalId')))]",
+          "managedIdentityPrincipal": {
+            "value": "[variables('runtimeOwnsProviderAccess')]"
           },
           "claudeOrganizationName": {
             "value": "[parameters('claudeOrganizationName')]"
@@ -427,8 +516,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "8082683581434139205"
+              "version": "0.47.16.16243",
+              "templateHash": "1471939867531058383"
             }
           },
           "definitions": {
@@ -498,6 +587,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Object ID of the principal granted Azure AI User on the account. Empty string skips the role assignment."
+              }
+            },
+            "managedIdentityPrincipal": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default."
               }
             },
             "claudeOrganizationName": {
@@ -625,10 +721,7 @@
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
               "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), parameters('principalId'), variables('azureAiUserRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiUserRoleId'))]",
-                "principalId": "[parameters('principalId')]"
-              },
+              "properties": "[shallowMerge(createArray(createObject('roleDefinitionId', subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiUserRoleId')), 'principalId', parameters('principalId')), if(parameters('managedIdentityPrincipal'), createObject('principalType', 'ServicePrincipal'), createObject())))]",
               "dependsOn": [
                 "account"
               ]
@@ -665,7 +758,10 @@
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "runtimeIdentity"
+      ]
     },
     "foundryProject": {
       "condition": "[not(variables('aiServiceExists'))]",
@@ -701,8 +797,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "8697996503144452484"
+              "version": "0.47.16.16243",
+              "templateHash": "12018488891396919111"
             }
           },
           "parameters": {
@@ -803,8 +899,9 @@
           "tags": {
             "value": "[parameters('tags')]"
           },
-          "principalId": {
-            "value": "[parameters('principalId')]"
+          "principalId": "[if(variables('runtimeOwnsProviderAccess'), createObject('value', reference('runtimeIdentity').outputs.principalId.value), createObject('value', parameters('principalId')))]",
+          "managedIdentityPrincipal": {
+            "value": "[variables('runtimeOwnsProviderAccess')]"
           },
           "anthropicApiKey": {
             "value": "[parameters('anthropicApiKey')]"
@@ -822,8 +919,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "13434989070385833621"
+              "version": "0.47.16.16243",
+              "templateHash": "18100759366813433299"
             }
           },
           "parameters": {
@@ -851,6 +948,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Object ID of the principal granted Key Vault Secrets User. Empty string skips the role assignment."
+              }
+            },
+            "managedIdentityPrincipal": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default."
               }
             },
             "anthropicApiKey": {
@@ -929,10 +1033,7 @@
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
               "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('principalId'), variables('keyVaultSecretsUserRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]",
-                "principalId": "[parameters('principalId')]"
-              },
+              "properties": "[shallowMerge(createArray(createObject('roleDefinitionId', subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId')), 'principalId', parameters('principalId')), if(parameters('managedIdentityPrincipal'), createObject('principalType', 'ServicePrincipal'), createObject())))]",
               "dependsOn": [
                 "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
               ]
@@ -949,7 +1050,10 @@
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "runtimeIdentity"
+      ]
     },
     "aiSearch": {
       "condition": "[variables('aiSearchEnabled')]",
@@ -990,8 +1094,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "7191530199009581892"
+              "version": "0.47.16.16243",
+              "templateHash": "13118321850916076716"
             }
           },
           "parameters": {
@@ -1231,8 +1335,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "10577496021233635545"
+              "version": "0.47.16.16243",
+              "templateHash": "18292003688286130469"
             }
           },
           "parameters": {
@@ -1603,8 +1707,9 @@
           "tags": {
             "value": "[parameters('tags')]"
           },
-          "principalId": {
-            "value": "[parameters('learningStorePrincipalId')]"
+          "principalId": "[if(variables('runtimeOwnsLearningAccess'), createObject('value', reference('runtimeIdentity').outputs.principalId.value), createObject('value', parameters('learningStorePrincipalId')))]",
+          "managedIdentityPrincipal": {
+            "value": "[variables('runtimeOwnsLearningAccess')]"
           }
         },
         "template": {
@@ -1613,8 +1718,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "10244318392283321143"
+              "version": "0.47.16.16243",
+              "templateHash": "2108528883899038900"
             }
           },
           "parameters": {
@@ -1644,6 +1749,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Object ID of the principal granted Storage Table Data Contributor on the account, so the hub identity can write outcomes (shared-key auth is disabled). Empty string skips the role assignment."
+              }
+            },
+            "managedIdentityPrincipal": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default."
               }
             }
           },
@@ -1692,10 +1804,7 @@
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
               "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageTableDataContributorRoleId'))]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageTableDataContributorRoleId'))]",
-                "principalId": "[parameters('principalId')]"
-              },
+              "properties": "[shallowMerge(createArray(createObject('roleDefinitionId', subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageTableDataContributorRoleId')), 'principalId', parameters('principalId')), if(parameters('managedIdentityPrincipal'), createObject('principalType', 'ServicePrincipal'), createObject())))]",
               "dependsOn": [
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
               ]
@@ -1715,10 +1824,20 @@
                 "description": "Name of the learning storage account."
               },
               "value": "[parameters('storageAccountName')]"
+            },
+            "storageAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the learning storage account, for scoped runtime access plans."
+              },
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "runtimeIdentity"
+      ]
     }
   },
   "outputs": {
@@ -1819,6 +1938,41 @@
         "description": "Principal ID of the fleet VMSS system-assigned identity — grant it roles (e.g. Key Vault Secrets User) if cloud lanes must read provider keys (empty string when the VMSS is disabled)."
       },
       "value": "[if(variables('fleetVmssEnabled'), reference('fleetVmss').outputs.principalId.value, '')]"
+    },
+    "aiServicesAccountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Foundry account resource ID; an existing account is passed through, but this template does not add grants on an externally supplied account."
+      },
+      "value": "[if(variables('aiServiceExists'), parameters('aiServiceAccountResourceId'), reference('foundryAccount').outputs.accountId.value)]"
+    },
+    "learningStorageAccountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Learning storage resource ID; empty when its optional module is disabled."
+      },
+      "value": "[if(parameters('deployLearningStorage'), reference('learningStorage').outputs.storageAccountId.value, '')]"
+    },
+    "runtimeManagedIdentityId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the opt-in runtime managed identity; attach this to a separately reviewed Azure executor. Empty when disabled."
+      },
+      "value": "[if(parameters('deployRuntimeIdentity'), reference('runtimeIdentity').outputs.id.value, '')]"
+    },
+    "runtimeManagedIdentityPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the runtime managed identity; empty when disabled. Explicit principalId/learningStorePrincipalId override automatic grants for their own lanes."
+      },
+      "value": "[if(parameters('deployRuntimeIdentity'), reference('runtimeIdentity').outputs.principalId.value, '')]"
+    },
+    "runtimeManagedIdentityClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client ID for AZURE_CLIENT_ID on the runtime host, not the GitHub deployment identity; empty when disabled."
+      },
+      "value": "[if(parameters('deployRuntimeIdentity'), reference('runtimeIdentity').outputs.clientId.value, '')]"
     }
   }
 }

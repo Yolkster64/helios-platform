@@ -96,6 +96,12 @@
         "/config/agent-catalog.json"
       ],
       "url": "./config/schemas/agent-catalog.schema.json"
+    },
+    {
+      "fileMatch": [
+        "/config/components.json"
+      ],
+      "url": "./config/schemas/components.schema.json"
     }
   ],
   "yaml.schemas": {

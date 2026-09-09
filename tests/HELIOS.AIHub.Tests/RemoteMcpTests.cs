@@ -5,6 +5,8 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using HELIOS.AIHub.Fleet;
+using HELIOS.Mcp;
 using HELIOS.RemoteMcp;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -118,6 +120,90 @@ public sealed class RemoteMcpTests : IDisposable
         Assert.Throws<McpException>(() => repository.Search(new string('x', 201)));
     }
 
+    [Fact]
+    public void FleetReadinessUsesOneCorePlanAcrossBothTransportsWithoutProviders()
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(_root, "config", "fleet"));
+        var path = Path.Combine(directory.FullName, "fleet-topology.json");
+        const string topologyJson = """{"version":2,"pools":[]}""";
+        File.WriteAllText(path, topologyJson);
+        using var remote = JsonDocument.Parse(new RemoteRepository(Options()).FleetReadiness());
+        using var local = JsonDocument.Parse(HeliosFleetPlanTools.GetFleetReadiness(path));
+        var expected = JsonSerializer.SerializeToElement(FleetReadinessService.Plan(new FleetTopology { Version = 2 }));
+        Assert.Equal(expected.GetRawText(), JsonSerializer.Serialize(remote.RootElement.GetProperty("plan")));
+        Assert.Equal(expected.GetRawText(), JsonSerializer.Serialize(local.RootElement.GetProperty("plan")));
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(topologyJson))).ToLowerInvariant(),
+            remote.RootElement.GetProperty("sha256").GetString());
+        Assert.True(remote.RootElement.GetProperty("advisory").GetBoolean());
+    }
+
+    [Fact]
+    public void FleetReadinessMalformedDocumentDoesNotEchoItsContents()
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(_root, "config", "fleet"));
+        var path = Path.Combine(directory.FullName, "fleet-topology.json");
+        File.WriteAllText(path, "{TEST_SECRET_DO_NOT_RETURN");
+        var error = Assert.Throws<McpException>(() => new RemoteRepository(Options()).FleetReadiness());
+        Assert.DoesNotContain("TEST_SECRET", error.Message);
+        using var local = JsonDocument.Parse(HeliosFleetPlanTools.GetFleetReadiness(path));
+        Assert.False(local.RootElement.GetProperty("available").GetBoolean());
+        Assert.DoesNotContain("TEST_SECRET", local.RootElement.GetRawText());
+    }
+
+    [Fact]
+    public void ComboEvidenceUsesTheSameOfflineCalculatorInBothTransports()
+    {
+        var local = HeliosComboAnalysisTools.Analyze("", "code_review");
+        var remote = new RemoteAgentCatalogTools(Options()).AnalyzeOutcomes("", "code_review");
+        Assert.Equal(local, remote);
+        using var report = JsonDocument.Parse(remote);
+        Assert.Empty(report.RootElement.GetProperty("Candidates").EnumerateArray());
+        Assert.NotEmpty(report.RootElement.GetProperty("EvidenceGaps").EnumerateArray());
+        Assert.DoesNotContain("TEST_SECRET", remote);
+    }
+
+    [Theory]
+    [InlineData("{TEST_SECRET_DO_NOT_RETURN", 200)]
+    [InlineData("", 0)]
+    [InlineData("", 201)]
+    public void ComboEvidenceRejectsMalformedOrUnboundedRequests(string evidence, int limit)
+    {
+        var error = Assert.Throws<McpException>(() =>
+            new RemoteAgentCatalogTools(Options()).AnalyzeOutcomes(evidence, "code_review", limit: limit));
+        Assert.DoesNotContain("TEST_SECRET", error.Message);
+    }
+
+    [Fact]
+    public void ComboEvidenceBoundsUtf8BeforeParsing()
+    {
+        var evidence = new string('修', HeliosComboAnalysisTools.MaxEvidenceBytes / 2);
+        Assert.Throws<McpException>(() => HeliosComboAnalysisTools.Analyze(evidence, "code_review"));
+    }
+
+    [Fact]
+    public void UsbPlanUsesSharedPlannerAndNeverGrantsExecutionFromCallerFlags()
+    {
+        var local = HeliosUsbSetupTools.GetUsbPlan("{}");
+        Assert.Equal(local, new RemoteAgentCatalogTools(Options()).UsbPlan("{}"));
+        using var plan = JsonDocument.Parse(local);
+        Assert.False(plan.RootElement.GetProperty("canExecute").GetBoolean());
+        Assert.False(plan.RootElement.GetProperty("isValid").GetBoolean());
+        Assert.Empty(plan.RootElement.GetProperty("mediaLayout").EnumerateArray());
+        Assert.Contains("caller-supplied", plan.RootElement.GetProperty("inventorySource").GetString());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"targetDisk\":{\"isSystemDisk\":true,\"isSystemDisk\":false}}")]
+    [InlineData("{\"canExecute\":true}")]
+    [InlineData("{\"profile\":0}")]
+    [InlineData("{TEST_SECRET")]
+    public void UsbPlanRejectsAmbiguousOrUnsupportedInput(string input)
+    {
+        var error = Assert.Throws<McpException>(() => HeliosUsbSetupTools.GetUsbPlan(input));
+        Assert.DoesNotContain("TEST_SECRET", error.Message);
+    }
+
     [Theory]
     [InlineData("shared-work", "plugins/helios-connect/skills/helios-work/SKILL.md")]
     [InlineData("chatgpt-return", "docs/mcp/WORKSPACE_AGENT_RETURN.md")]
@@ -126,6 +212,7 @@ public sealed class RemoteMcpTests : IDisposable
     [InlineData("plugins", "docs/mcp/PLUGIN_SETUP.md")]
     [InlineData("aihub-unity", ".claude/skills/aihub-unity/SKILL.md")]
     [InlineData("absorption", "docs/absorption/START_HERE.md")]
+    [InlineData("combo-analysis", "docs/architecture/COMBO_ANALYSIS.md")]
     public void RemoteClientsCanResolvePacketReferencesAndIdentifyTheReturnedSnapshot(string id, string path)
     {
         var fullPath = Path.Combine(_root, path);
@@ -257,13 +344,20 @@ public sealed class RemoteMcpTests : IDisposable
         using var tools = await RpcAsync(client, "tools/list", new { });
         var names = tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
             .Select(tool => tool.GetProperty("name").GetString()).ToArray();
-        Assert.Equal(12, names.Length);
+        Assert.Equal(15, names.Length);
         Assert.Contains("search", names); Assert.Contains("fetch", names);
+        Assert.Contains("helios_fleet_readiness_get", names); Assert.Contains("helios_combo_analyze", names);
+        Assert.Contains("helios_usb_plan_get", names);
         Assert.DoesNotContain("helios_ai_ask", names); Assert.DoesNotContain("helios_claude_ask", names);
         using var fetched = await RpcAsync(client, "tools/call", new { name = "fetch", arguments = new { id = "project" } });
         Assert.Contains("helios-control", fetched.RootElement.ToString());
         using var refused = await RpcAsync(client, "tools/call", new { name = "fetch", arguments = new { id = "../../.env" } });
         Assert.True(refused.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
+        using var analysis = await RpcAsync(client, "tools/call", new
+        {
+            name = "helios_combo_analyze", arguments = new { outcomesJsonl = "", taskType = "code_review" },
+        });
+        Assert.Contains("offline-advisory", analysis.RootElement.ToString());
     }
 
     [Fact]

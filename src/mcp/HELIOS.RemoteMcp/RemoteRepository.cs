@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HELIOS.AIHub.Fabric;
+using HELIOS.AIHub.Fleet;
 using ModelContextProtocol;
 
 namespace HELIOS.RemoteMcp;
@@ -34,6 +35,7 @@ public sealed class RemoteRepository(RemoteMcpOptions options)
             ["aihub-unity"] = ("AIHub routing, combinations and learning skill", ".claude/skills/aihub-unity/SKILL.md"),
             ["model-pairing"] = ("AIHub model and tool pairing", ".claude/skills/aihub-unity/references/model-and-tool-pairing.md"),
             ["combo-calculus"] = ("AIHub combination scoring and learning", ".claude/skills/aihub-unity/references/combo-calculus.md"),
+            ["combo-analysis"] = ("Offline evidence and uncertainty for AIHub combinations", "docs/architecture/COMBO_ANALYSIS.md"),
             ["model-cost"] = ("AIHub model strengths and recorded cost guidance", ".claude/skills/aihub-unity/references/model-strengths-and-cost.md"),
             ["language-roles"] = ("AIHub language responsibilities", "docs/architecture/AIHUB_LANGUAGE_ROLES.md"),
             ["azure-skill"] = ("HELIOS Azure infrastructure skill", ".claude/skills/iac-azure/SKILL.md"),
@@ -45,6 +47,8 @@ public sealed class RemoteRepository(RemoteMcpOptions options)
             ["terraform"] = ("HELIOS Terraform resource definitions", "infra/terraform/main.tf"),
             ["deployment-workflow"] = ("HELIOS protected deployment workflow", ".github/workflows/helios-deploy.yml"),
             ["owner-setup"] = ("HELIOS identity and owner setup", "docs/OWNER_START_HERE.md"),
+            ["project-parts"] = ("Core, Desktop, USB, Cloud and Fleet component guide", "docs/PROJECT_PARTS.md"),
+            ["usb-setup"] = ("HELIOS USB and profile setup wizard", "docs/USB_SETUP.md"),
             ["connector-activation"] = ("HELIOS connector activation", "docs/architecture/CONNECTOR_ACTIVATION.md"),
             ["absorption"] = ("Absorption and learning starting guide", "docs/absorption/START_HERE.md"),
             ["absorption-pipeline"] = ("Absorption pipeline and learning boundaries", "docs/architecture/ABSORPTION_PIPELINE.md"),
@@ -165,6 +169,24 @@ public sealed class RemoteRepository(RemoteMcpOptions options)
             return JsonSerializer.Serialize(new { plan, source = "config/fabric/helios-fabric.v1.json", advisory = true });
         }
         catch (JsonException) { throw new McpException("The Fabric contract is malformed."); }
+    }
+
+    public string FleetReadiness()
+    {
+        try
+        {
+            var text = ReadFixedFile("config/fleet/fleet-topology.json");
+            var topology = JsonSerializer.Deserialize<FleetTopology>(text,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new JsonException();
+            return JsonSerializer.Serialize(new
+            {
+                plan = FleetReadinessService.Plan(topology),
+                source = "config/fleet/fleet-topology.json",
+                sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant(),
+                advisory = true,
+            });
+        }
+        catch (JsonException) { throw new McpException("The fleet topology is malformed."); }
     }
 
     private static string DocumentUrl(string path) => $"https://github.com/Yolkster64/helios-platform/blob/main/{path}";

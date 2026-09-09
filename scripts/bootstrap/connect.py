@@ -7,6 +7,7 @@ HTTP requests. Explicit native commands retain their own identity and policy.
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -27,7 +28,10 @@ HELP = """HELIOS — Connect → Unify → Automate → Validate
   connect.sh start [--json]        Unattended tools, build, workspaces and saved-session checks
   connect.sh start --serve         Prepare, then run the shared MCP bridge in foreground
   connect.sh project                Shared project and destination map
+  connect.sh parts [NAME]          Core, Desktop, USB, Cloud and Fleet setup/test/release plans
+  connect.sh test NAME             Run one part's fixed local checks
   connect.sh auth status [--json]   Explicit bounded CLI authentication checks
+  connect.sh identity [--strict]   Offline Azure OIDC, runtime identity and Key Vault plan
   connect.sh login github|azure|claude|codex
   connect.sh setup [--verify-only]  Existing setup, verification first
   connect.sh setup --connect       Interactive full setup and logins
@@ -38,6 +42,8 @@ HELP = """HELIOS — Connect → Unify → Automate → Validate
   connect.sh cloud-shell --connect Interactive setup; skips inference smoke calls
   connect.sh combo [ARGS...]        Existing AIHub compare (explicit provider list)
   connect.sh learning              Advisory fleet plan from recorded outcomes
+  connect.sh fleet                 Offline fleet readiness and activation dependencies
+  connect.sh analyze [ARGS...]     Offline analysis of an explicit outcome JSONL file
   connect.sh ai [ARGS...]           Existing C# AIHub CLI
   connect.sh mcp                    Existing C# stdio MCP server
   connect.sh bridge                 Shared Streamable HTTP MCP, local by default
@@ -61,6 +67,18 @@ AUTH_PROBES = {
 
 class ConnectionError(Exception):
     pass
+
+
+def identity_plan():
+    # Load only the maintained sibling of this launcher, never a path supplied by
+    # a scanned checkout, a plugin packet or an environment variable.
+    path = Path(__file__).resolve().with_name("identity_plan.py")
+    if not path.is_file():
+        raise ConnectionError("The identity planner is missing from this checkout.")
+    spec = importlib.util.spec_from_file_location("helios_identity_plan", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_plan()
 
 
 def config(path):
@@ -368,6 +386,7 @@ def prepare_start():
               "authenticationProbed": bool(authentication), "providerInferenceVerified": False,
               "liveConnectorsVerified": False, "steps": steps,
               "connectors": connection_inventory.get("connectors", {}),
+              "identityPlan": identity_plan(),
               "integrationGuide": "docs/CONNECT.md",
               "nextAction": next((step["nextAction"] for step in steps
                                   if step["required"] and step["exitCode"] != 0),
@@ -390,6 +409,8 @@ def show_start(report, as_json):
     print("\nLocal core: " + ("built" if report["localCoreReady"] else "blocked") +
           "; runtime: stopped; live connectors and inference: unverified.")
     print("Integration setup and the two-way ChatGPT return path: " + report["integrationGuide"])
+    print("Azure identity plan: " + report["identityPlan"]["status"] +
+          "; details: connect.sh identity (no cloud changes).")
     print("Next: " + report["nextAction"])
     for step in report["steps"]:
         if not step["required"] and step["nextAction"]:
@@ -428,6 +449,18 @@ def main(args=None):
         if command == "project" and not args:
             print(json.dumps(config("config/control-project.json"), indent=2))
             return 0
+        if command == "parts" and len(args) <= 1:
+            path = "scripts/bootstrap/components.py"
+            require(path)
+            return run(sys.executable, [str(ROOT / path), *(["plan", args[0]] if args else ["list"])])
+        if command == "test" and len(args) == 1:
+            path = "scripts/bootstrap/components.py"
+            require(path)
+            return run(sys.executable, [str(ROOT / path), "test", args[0]])
+        if command == "identity" and args in ([], ["--json"], ["--strict"], ["--json", "--strict"], ["--strict", "--json"]):
+            report = identity_plan()
+            print(json.dumps(report, indent=2))
+            return 2 if "--strict" in args and report["status"] != "prepared" else 0
         if command == "start" and args in ([], ["--json"], ["--serve"]):
             report = prepare_start()
             show_start(report, args == ["--json"])
@@ -489,6 +522,10 @@ def main(args=None):
             return main(["ai", "compare", *args])
         if command == "learning" and not args:
             return main(["ai", "fleet-plan", "--json"])
+        if command == "fleet" and args in ([], ["--json"]):
+            return main(["ai", "fleet-readiness", "--json"])
+        if command == "analyze":
+            return main(["ai", "combo-analyze", *args])
         if command in ("ai", "mcp", "bridge"):
             if command == "bridge" and len(args) == 2 and args[0] == "connect":
                 return run("claude", ["mcp", "add", "--transport", "http", "helios-remote",

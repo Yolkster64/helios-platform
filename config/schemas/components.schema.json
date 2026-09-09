@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/components.schema.json",
+  "title": "Five HELIOS project parts; descriptive metadata only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "repository",
+    "sourcePolicy",
+    "parts"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./schemas/components.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "repository": {
+      "const": "Yolkster64/helios-platform"
+    },
+    "sourcePolicy": {
+      "const": "single-repository"
+    },
+    "parts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core",
+        "desktop",
+        "usb",
+        "cloud",
+        "fleet"
+      ],
+      "properties": {
+        "core": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "core"
+                },
+                "name": {
+                  "const": "Core"
+                }
+              }
+            }
+          ]
+        },
+        "desktop": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "desktop"
+                },
+                "name": {
+                  "const": "Desktop"
+                }
+              }
+            }
+          ]
+        },
+        "usb": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "usb"
+                },
+                "name": {
+                  "const": "USB"
+                }
+              }
+            }
+          ]
+        },
+        "cloud": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "cloud"
+                },
+                "name": {
+                  "const": "Cloud"
+                }
+              }
+            }
+          ]
+        },
+        "fleet": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/part"
+            },
+            {
+              "properties": {
+                "testProfile": {
+                  "const": "fleet"
+                },
+                "name": {
+                  "const": "Fleet"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "purpose",
+        "paths",
+        "testProfile",
+        "workflows",
+        "artifacts",
+        "dependsOn",
+        "releaseBoundary"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 180,
+            "pattern": "^(\\.github|[A-Za-z0-9_-][A-Za-z0-9._-]*)(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+          }
+        },
+        "testProfile": {
+          "enum": [
+            "core",
+            "desktop",
+            "usb",
+            "cloud",
+            "fleet"
+          ]
+        },
+        "workflows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^\\.github/workflows/[a-z0-9-]+\\.yml$"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 180,
+            "pattern": "^(\\.github|[A-Za-z0-9_-][A-Za-z0-9._-]*)(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+          }
+        },
+        "dependsOn": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "core",
+              "desktop",
+              "usb",
+              "cloud",
+              "fleet"
+            ]
+          }
+        },
+        "releaseBoundary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 350
+        }
+      }
+    }
+  }
+}

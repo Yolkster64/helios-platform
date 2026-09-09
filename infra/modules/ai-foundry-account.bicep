@@ -41,6 +41,9 @@ param modelDeployments modelDeployment[] = []
 @description('Object ID of the principal granted Azure AI User on the account. Empty string skips the role assignment.')
 param principalId string = ''
 
+@description('Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default.')
+param managedIdentityPrincipal bool = false
+
 @description('Legal entity name sent as modelProviderData.organizationName with every Anthropic-format deployment (Azure Marketplace attestation for Claude). Empty string skips the Anthropic-format entries of modelDeployments entirely.')
 param claudeOrganizationName string = ''
 
@@ -143,6 +146,7 @@ resource aiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAiUserRoleId)
     principalId: principalId
+    ...(managedIdentityPrincipal ? { principalType: 'ServicePrincipal' } : {})
   }
 }
 

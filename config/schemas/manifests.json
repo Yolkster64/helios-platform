@@ -76,6 +76,11 @@
       "manifest": "config/agent-catalog.json",
       "schema": "config/schemas/agent-catalog.schema.json",
       "consumer": "src/mcp/HELIOS.Mcp/HeliosAgentCatalogTools.cs; src/mcp/HELIOS.RemoteMcp/RemoteAgentCatalogTools.cs"
+    },
+    {
+      "manifest": "config/components.json",
+      "schema": "config/schemas/components.schema.json",
+      "consumer": "scripts/bootstrap/components.py"
     }
   ]
 }

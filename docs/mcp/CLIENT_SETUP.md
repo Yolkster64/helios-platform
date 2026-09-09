@@ -5,11 +5,14 @@ One tool surface for every agent. The HELIOS MCP server (stdio) exposes the mult
 `helios_ai_status`, `helios_providers_list`, `helios_optimal_provider_get`,
 `helios_task_routing_get`, `helios_engine_catalog_get`, `helios_engine_mix_recommend`,
 `helios_infra_validate`, `helios_config_validate`, `helios_azure_inventory_get`,
-`helios_auth_status_get`,
-`helios_fleet_plan_get`, `helios_fabric_plan_get`, `helios_foundry_agent_list`,
+`helios_auth_status_get`, `helios_combo_analyze`, `helios_usb_plan_get`,
+`helios_fleet_plan_get`, `helios_fleet_readiness_get`, `helios_fabric_plan_get`, `helios_foundry_agent_list`,
 `helios_foundry_agent_create`,
 `helios_operator_profile_get`, `helios_operator_profile_save`,
-`helios_operator_context_sync`, `helios_operator_next_steps_get`) to any MCP
+`helios_operator_context_sync`, `helios_operator_next_steps_get`,
+`helios_absorb_status_get`, `helios_fleet_status_get`,
+`helios_agent_catalog_get`, `helios_task_packet_get`,
+`helios_handoff_submit`, `helios_handoff_list`, `helios_handoff_fetch`) to any MCP
 client, so Claude Code, GitHub Copilot, Codex CLI, and Cursor all drive the same providers
 with the same routing table. This is the cross-LLM fabric: each assistant can delegate to
 whichever model is best for the task.

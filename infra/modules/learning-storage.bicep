@@ -34,6 +34,9 @@ param tags object = {}
 @description('Object ID of the principal granted Storage Table Data Contributor on the account, so the hub identity can write outcomes (shared-key auth is disabled). Empty string skips the role assignment.')
 param principalId string = ''
 
+@description('Set true only for a managed identity created in this deployment; pins ServicePrincipal to avoid Entra replication lookups. Legacy principal types remain unchanged by default.')
+param managedIdentityPrincipal bool = false
+
 // Storage Table Data Contributor — read/write/delete table data via RBAC.
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
@@ -72,14 +75,15 @@ resource outcomesTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2
 
 // Data-plane write access for the hub's identity, scoped to this account only. The
 // guid() seed is stable across deploys, so re-deployments converge on one assignment.
-// principalType is deliberately unpinned (mirroring modules/keyvault.bicep): the
-// principal may be a managed identity or an operator's user object ID.
+// Existing principal types remain unpinned. A newly created managed identity is
+// explicitly a ServicePrincipal to avoid eventual-consistency Graph lookups.
 resource tableDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
   name: guid(storageAccount.id, principalId, storageTableDataContributorRoleId)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageTableDataContributorRoleId)
     principalId: principalId
+    ...(managedIdentityPrincipal ? { principalType: 'ServicePrincipal' } : {})
   }
 }
 
@@ -88,3 +92,6 @@ output tableEndpoint string = storageAccount.properties.primaryEndpoints.table
 
 @description('Name of the learning storage account.')
 output storageAccountName string = storageAccount.name
+
+@description('Resource ID of the learning storage account, for scoped runtime access plans.')
+output storageAccountId string = storageAccount.id

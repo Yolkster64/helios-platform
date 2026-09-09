@@ -42,6 +42,12 @@
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Source-link the pure, portable planner without importing provider SDKs or a
+       disk-writing implementation into the Windows shell. One maintained source. -->
+  <ItemGroup>
+    <Compile Include="../../ai/HELIOS.AIHub/Setup/UsbSetupPlanner.cs" Link="Shared/UsbSetupPlanner.cs" />
+  </ItemGroup>
+
   <!--
     No explicit <Page>/<ApplicationDefinition> items: with UseWinUI=true the Windows App
     SDK targets glob *.xaml automatically (App.xaml as ApplicationDefinition, the rest as

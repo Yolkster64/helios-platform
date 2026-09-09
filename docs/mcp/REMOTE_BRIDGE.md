@@ -166,6 +166,7 @@ client-specific; the project instructions and handoff format are shared.
 
 The default HTTP catalog contains `search`, `fetch`, `helios_project_get`,
 `helios_task_routing_get`, `helios_fabric_plan_get`, `helios_fleet_topology_get`,
+`helios_fleet_readiness_get`, `helios_combo_analyze`, `helios_usb_plan_get`,
 `helios_bridge_status_get`, the three `helios_handoff_*` tools,
 `helios_agent_catalog_get` and `helios_task_packet_get`. Only the
 explicit Claude opt-in adds `helios_claude_ask`. Remote requests cannot provide

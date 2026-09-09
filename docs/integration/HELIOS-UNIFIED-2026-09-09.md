@@ -120,3 +120,56 @@ local Bicep executable failed bundle loading.
 All 16 reattached inputs match the SHA-256 values already recorded in the source
 audit. Their recovery and learning intent remains preserved; no recovered script
 was executed by this simplification.
+
+## Five parts, one HELIOS repository
+
+The next extension builds on published `9a7a3ee` and keeps Core, Desktop, USB,
+Cloud and Fleet in this repository. `bash connect.sh parts` lists them;
+`bash connect.sh parts usb` explains the USB boundary and
+`bash connect.sh test usb` runs its tests. The component map records existing
+sources, checks, artifacts and deployment ownership. Commands are fixed in the
+runner; configuration cannot add arbitrary executable commands. Missing tools,
+empty test suites and skipped tests cannot produce a passing component receipt.
+Cloud/Fleet deployment entries describe existing protected workflows and begin
+with an unexecuted what-if plan; the component runner does not dispatch them.
+
+Desktop adds a USB setup page with the same portable C# planner exposed by
+`helios_usb_plan_get` over stdio and HTTP MCP. Six existing profiles describe
+installation media and separate host-storage requirements. Unknown disk facts,
+system/boot disks, unverified images and infeasible FAT32 files block a layout
+proposal. Inventory is caller-supplied and unverified. A valid proposal remains
+review-only: there is no disk writer or Apply action. Windows CI builds a
+downloadable Desktop artifact for independent testing.
+
+`bash connect.sh identity --json` prepares a nonsecret OIDC/Key Vault plan from
+the current environment, and startup includes that plan without gating the
+local bridge on Azure access. Bicep can opt into a runtime managed identity and
+uses its principal for otherwise empty Key Vault/learning-store assignments;
+explicit existing principals remain authoritative. No identity is created by
+the launcher. Runtime attachment, existing-target verification and permission
+to write role assignments remain explicit activation requirements.
+
+`bash connect.sh fleet` and `helios_fleet_readiness_get` use the same pure fleet
+planner. Configured concurrency is separate from verified workers, and the
+report names the Arc/VMSS and cross-host bootstrap gaps. `bash connect.sh analyze`
+and `helios_combo_analyze` summarize supplied outcome evidence with provenance
+hashes, measured-field coverage, Wilson intervals and descriptive Pareto
+comparisons. Missing cost, paired-task correlations and learning evidence stay
+unknown. Analysis does not initialize providers, make model calls or mutate
+learning history. The uploaded learning scripts remain provenance inputs;
+synthetic scores and stub executions are not treated as trained models.
+
+The shared MCP source catalog includes the component, USB and combo guides.
+This extension continues the existing AIHub contracts rather than adding a
+second SDK runtime or a competing repository. Microsoft 365 adapters, remote
+account registration, real fleet provisioning and USB execution remain pending.
+
+Local validation of this extension passed 829 AIHub tests with no failures or
+skips, a Release solution build with zero warnings/errors, 101 Python-spoke
+tests, 118 launcher/workspace/connector/return tests, 74 bootstrap tests and 174
+configuration/deployment-contract tests. All 16 mapped manifests passed. Both
+Bicep entrypoints compiled offline; the generated ARM template matches the
+tracked template apart from compiler metadata. The real Fleet component command
+passed 53 .NET and 45 Python tests; the real Cloud component passed 53 identity
+and OIDC tests plus both Bicep compilations. Native Windows CI remains the
+authoritative Desktop compilation check; no GUI launch or USB write is claimed.

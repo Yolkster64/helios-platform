@@ -19,7 +19,7 @@ name, writes `.helios/bootstrap-state.json`, and ends by printing this list as a
 numbered checklist with the exact command per item. `--verify-only` is the
 read-only pass. Then:
 
-1. [Wire secrets through env vars / Key Vault](#1-secrets-env-vars-and-key-vault) — nothing works without provider credentials.
+1. [Wire configured provider access through env vars / Key Vault](#1-secrets-env-vars-and-key-vault) — offline planning works immediately; each remote provider needs its own account access.
 2. [Flip the GitHub repository settings](#2-github-repository-settings) — Issues is already on; what remains is the variables, secrets, and the protected `azure-dev` environment.
 3. [Set the connector secrets (Slack, Linear)](#3-connectors-slack-and-linear) per `config/connectors.json`.
 4. [Create the Azure OIDC deploy identity](#4-azure-oidc-for-deploys) with `scripts/bootstrap/azure-oidc-setup.sh`.
@@ -102,6 +102,78 @@ Routing choices (which workflows notify on failure vs. always, which labels
 sync) are edited in `config/connectors.json` itself, not in the workflows.
 
 ## 4. Azure OIDC for deploys
+
+### Automatic offline identity handoff
+
+`bash connect.sh identity --json` (or
+`python3 scripts/bootstrap/identity_plan.py --json`) produces a deterministic JSON
+plan from the configured target. Normal startup also prepares its identity summary.
+It never signs in, reads keys, calls Azure, creates identities or changes GitHub.
+Missing or malformed identifiers appear by variable name; `--strict` exits 2
+until the identifier inputs are complete. A `prepared` plan means format checks
+passed, with `liveVerified=false`; it does not mean the target or grants exist.
+
+Set these **nonsecret identifiers** in the trusted shell: `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`,
+`AZURE_KEY_VAULT_NAME` and the **deployment** `AZURE_CLIENT_ID`. Tenant,
+subscription and identity IDs must be nonzero hyphenated UUIDs. The region is the
+Azure location name, for example `eastus2`, and still needs live verification.
+The five deployment variables remain on the protected GitHub `azure-dev`
+environment. `AZURE_KEY_VAULT_NAME` selects the existing RBAC vault for the plan
+and maps to Bicep `keyVaultName`; the runtime receives the `keyVaultUri` output.
+
+The plan contains one SHA-256, structured read-only verification commands,
+scoped deployment/runtime roles, and `bicep.parameterDocument`, a standard ARM
+parameters document containing only nonsecret values. Store a generated plan
+under the ignored `.helios/` directory when needed; it is review evidence, never
+an apply receipt. The document is a proposed **partial override** for
+`infra/main.bicep`; review it alongside the maintained model/capacity parameters
+before use. No timestamp, secret environment values or credential cache enters
+the digest. Bicep remains the owner; Terraform must keep separate state and
+resource ownership.
+
+The identity chain is:
+
+1. GitHub `workflow_dispatch` on `main`, through protected `azure-dev`, exchanges
+   its OIDC token for the deployment identity.
+2. Contributor on the selected resource group and Secrets Officer on the selected
+   vault permit their existing deployment/key duties. **Neither role can assign
+   runtime RBAC.** Review `Microsoft.Authorization/roleAssignments/write`
+   authority for the intended scopes separately; this helper never grants it.
+3. The opt-in Bicep `deployRuntimeIdentity=true` creates a user-assigned runtime
+   identity. Empty `principalId` and `learningStorePrincipalId` slots are filled
+   from that identity automatically: Key Vault Secrets User on the vault, Azure
+   AI User on the Foundry account created here, and Storage Table Data Contributor
+   when `deployLearningStorage=true`. Explicit existing principal values preserve
+   their grants and override these automatic slots.
+4. A reviewed host template must attach `runtimeManagedIdentityId` to the Azure
+   executor. Set **that host's** `AZURE_CLIENT_ID` from
+   `runtimeManagedIdentityClientId`, not the deployment client ID. AIHub's
+   `DefaultAzureCredential` uses the host identity for Key Vault, Foundry and
+   Azure learning storage. Identity creation does not start Hermes/XCore workers
+   or attach the identity to the existing fleet VMSS.
+
+`HELIOS_RUNTIME_IDENTITY_NAME` and `AZURE_LEARNING_STORAGE_ACCOUNT_NAME` optionally
+select existing naming conventions. The latter proposes a name without enabling
+storage; `deployLearningStorage=true` remains an explicit reviewed opt-in.
+`HELIOS_RUNTIME_PRINCIPAL_ID` instead proposes existing `principalId` and
+`learningStorePrincipalId` values without creating a new identity. An object ID
+alone does not identify its client ID, prove it is a managed identity, or prove
+access. Existing external Foundry accounts (`aiServiceAccountResourceId`) are
+passed through without new Foundry grants; review that external scope separately.
+
+The Bicep flag defaults to false, uses the stable resource-group suffix for names,
+and emits only resource/client/principal IDs. Model deployments, fleet VMs,
+provider keys, tenant consent and runtime attachment retain their own reviewed
+configuration. Offline CI compiles the templates and tests the plan without any
+Azure credentials.
+
+Sources checked September 9, 2026:
+[GitHub OIDC with Azure](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-azure),
+[Bicep role assignments](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/scenarios-rbac),
+[user-assigned identity resource](https://learn.microsoft.com/en-us/azure/templates/microsoft.managedidentity/2023-01-31/userassignedidentities).
+
+### Verify the live target before owner setup
 
 The Bash and PowerShell `azure-oidc-setup` twins start with a **read-only plan**.
 They require an explicit tenant, subscription, resource group and provider-key

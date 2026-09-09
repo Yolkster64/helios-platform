@@ -38,6 +38,37 @@ public static class Program
         {
             return Fail("--config requires a path.");
         }
+        // Evidence analysis needs no hub, credentials, Azure store, or provider.
+        if (command == "combo-analyze")
+        {
+            return await ComboAnalysisCommand.ExecuteAsync(positionals, options, Console.Out, Console.Error)
+                .ConfigureAwait(false);
+        }
+        if (command == "fleet-readiness")
+        {
+            if (positionals.Count != 0
+                || FindUnexpectedOption(options, "config", "topology", "json") is not null)
+                return Fail("Usage: helios-ai fleet-readiness [--topology PATH] [--json]");
+            if (options.TryGetValue("topology", out var path) && string.IsNullOrWhiteSpace(path))
+                return Fail("--topology requires a path.");
+            if (!TryReadFlag(options, "json", out var asJson, out var flagError))
+                return Fail(flagError!);
+            var loaded = FleetTopology.TryLoad(path);
+            if (loaded.Topology is null) return Fail(loaded.Error!);
+            var report = FleetReadinessService.Plan(loaded.Topology);
+            if (asJson)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions));
+            }
+            else
+            {
+                Console.WriteLine($"Configured concurrency ceiling: {report.ConfiguredConcurrencyCeiling?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; verified workers: unknown");
+                foreach (var finding in report.Findings)
+                    Console.WriteLine($"{finding.Severity}: {finding.Pool ?? "fleet"}: {finding.Message}");
+                Console.WriteLine(report.Advisory);
+            }
+            return report.ConfigurationValid ? 0 : 1;
+        }
         var hub = AIHubService.CreateFromConfig(options.GetValueOrDefault("config"));
 
         switch (command)
@@ -411,6 +442,8 @@ public static class Program
               route <task-type> "<prompt>" [--system S] [--language L]  Route by task type (and optional language) with fallback
               tandem <task-type> "<prompt>" [--system S]               Run the whole chain concurrently (e.g. ChatGPT+Codex), report the learned winner
               compare "<prompt>" [--providers a,b,c]                   Fan out to several providers in parallel
+              combo-analyze --outcomes PATH --task TYPE
+                            [--language LANG] [--limit N] [--json]     Offline evidence/uncertainty/Pareto report; no model calls
               status                                                    Provider readiness (no network calls)
               providers                                                 Status as JSON
               routing                                                   Show the task-routing table
@@ -423,6 +456,7 @@ public static class Program
                                                                         configured provider chain (default topology:
                                                                         config/fleet/fleet-topology.json). Advisory only — topology
                                                                         changes are config edits, never made by this command
+              fleet-readiness [--topology PATH] [--json]                Offline capacity and activation evidence gaps; no provider initialization
               absorb-status                                             Upstream PR watchlist + benchmark reports as JSON (read-only)
               help                                                      This text
 

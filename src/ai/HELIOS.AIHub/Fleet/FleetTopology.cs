@@ -13,6 +13,38 @@ public sealed record HermesFleetOptions
     public int MaxConcurrentLanes { get; init; }
 }
 
+/// <summary>Nullable members preserve defaults when a pool overrides only one setting.</summary>
+public sealed record FleetAutoscalingOptions
+{
+    [JsonPropertyName("mode")]
+    public string? Mode { get; init; }
+
+    [JsonPropertyName("minLocalLanes")]
+    public int? MinLocalLanes { get; init; }
+
+    [JsonPropertyName("maxLocalLanes")]
+    public int? MaxLocalLanes { get; init; }
+
+    [JsonPropertyName("maxBurstLanes")]
+    public int? MaxBurstLanes { get; init; }
+
+    [JsonPropertyName("burstTarget")]
+    public string? BurstTarget { get; init; }
+}
+
+/// <summary>Only the defaults needed by the offline readiness planner.</summary>
+public sealed record FleetDefaults
+{
+    [JsonPropertyName("poolSize")]
+    public int? PoolSize { get; init; }
+
+    [JsonPropertyName("hermesFleet")]
+    public HermesFleetOptions? HermesFleet { get; init; }
+
+    [JsonPropertyName("autoscaling")]
+    public FleetAutoscalingOptions? Autoscaling { get; init; }
+}
+
 /// <summary>One specialized agent pool from the fleet topology.</summary>
 public sealed record FleetPool
 {
@@ -26,6 +58,21 @@ public sealed record FleetPool
     [JsonPropertyName("providerChain")]
     public IReadOnlyList<string> ProviderChain { get; init; } = Array.Empty<string>();
 
+    [JsonPropertyName("poolSize")]
+    public int? PoolSize { get; init; }
+
+    [JsonPropertyName("autoscaling")]
+    public FleetAutoscalingOptions? Autoscaling { get; init; }
+
+    [JsonPropertyName("tools")]
+    public IReadOnlyList<string> Tools { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("skills")]
+    public IReadOnlyList<string> Skills { get; init; } = Array.Empty<string>();
+
+    [JsonPropertyName("agents")]
+    public IReadOnlyList<string> Agents { get; init; } = Array.Empty<string>();
+
     [JsonPropertyName("hermesFleet")]
     public HermesFleetOptions? HermesFleet { get; init; }
 }
@@ -33,8 +80,8 @@ public sealed record FleetPool
 /// <summary>
 /// Read-only view of config/fleet/fleet-topology.json — the declarative agent-fleet
 /// layout (docs/architecture/HERMES_FLEET_AND_XCORE.md). Only the fields advisory
-/// consumers need are bound; everything else in the file (spawn contracts, autoscaling,
-/// tools, skills, agents, coordination) is deliberately left unread so topology edits
+/// consumers need are bound; execution-only fields (spawn contracts, workspace sizing,
+/// coordination) are deliberately left unread so topology edits
 /// never break readers. Nothing here writes the file: topology changes are config
 /// edits, never code.
 /// </summary>
@@ -42,6 +89,9 @@ public sealed record FleetTopology
 {
     [JsonPropertyName("version")]
     public int Version { get; init; }
+
+    [JsonPropertyName("defaults")]
+    public FleetDefaults? Defaults { get; init; }
 
     [JsonPropertyName("pools")]
     public IReadOnlyList<FleetPool> Pools { get; init; } = Array.Empty<FleetPool>();

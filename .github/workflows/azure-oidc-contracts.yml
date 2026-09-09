@@ -4,12 +4,18 @@ on:
   pull_request:
     paths:
       - 'scripts/bootstrap/azure-oidc-setup.*'
+      - 'scripts/bootstrap/identity_plan.py'
+      - 'scripts/bootstrap/tests/test_identity_plan.py'
+      - 'infra/**'
       - 'scripts/bootstrap/tests/test_azure_oidc_target.py'
       - '.github/workflows/azure-oidc-contracts.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/bootstrap/azure-oidc-setup.*'
+      - 'scripts/bootstrap/identity_plan.py'
+      - 'scripts/bootstrap/tests/test_identity_plan.py'
+      - 'infra/**'
       - 'scripts/bootstrap/tests/test_azure_oidc_target.py'
       - '.github/workflows/azure-oidc-contracts.yml'
 
@@ -26,3 +32,6 @@ jobs:
           persist-credentials: false
       - name: Verify both shells against inert Azure CLI
         run: python3 -m unittest discover -s scripts/bootstrap/tests -p test_azure_oidc_target.py -v
+
+      - name: Verify offline identity plan and runtime identity contract
+        run: python3 -m unittest discover -s scripts/bootstrap/tests -p test_identity_plan.py -v
