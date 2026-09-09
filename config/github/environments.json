@@ -1,0 +1,26 @@
+{
+  "$comment": "Deployment environment manifest for Yolkster64/helios-platform, applied by scripts/github/apply-environments.ps1 (GET-diff-then-apply, dry-run by default, never deletes an environment). CLAUDE.md states that GitHub protected environments remain deployment authority; this file is what that sentence points at, and .github/workflows/helios-deploy.yml names `production` on the job that runs `az deployment group create`. Reviewers are the one part a script cannot settle for you: GitHub resolves them to account and team IDs, so they are listed here by LOGIN and SLUG and the apply script reports any it cannot resolve as an owner action rather than guessing. No secret or token appears here - environment secrets are set by the owner with `gh secret set --env`, and this manifest carries only their NAMES.",
+  "environments": [
+    {
+      "name": "production",
+      "wait_timer": 0,
+      "prevent_self_review": true,
+      "reviewers": [
+        { "type": "User", "name": "Yolkster64" }
+      ],
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branches": ["main"]
+      },
+      "secretNames": [],
+      "variableNames": [
+        "AZURE_CLIENT_ID",
+        "AZURE_TENANT_ID",
+        "AZURE_SUBSCRIPTION_ID",
+        "AZURE_RESOURCE_GROUP",
+        "AZURE_LOCATION"
+      ],
+      "because": "The only environment that may run `az deployment group create`. A required reviewer here is what makes a deploy an owner decision rather than a consequence of a push to main; prevent_self_review keeps the pusher from approving their own deployment. The branch policy pins deployments to main so a feature branch cannot reach the tenant even by workflow_dispatch."
+    }
+  ]
+}

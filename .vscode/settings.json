@@ -35,6 +35,10 @@
       "url": "./config/schemas/github-milestones.schema.json"
     },
     {
+      "fileMatch": ["/config/github/environments.json"],
+      "url": "./config/schemas/github-environments.schema.json"
+    },
+    {
       "fileMatch": ["/config/connectors.json"],
       "url": "./config/schemas/connectors.schema.json"
     },

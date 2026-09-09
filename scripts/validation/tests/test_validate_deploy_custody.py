@@ -44,6 +44,29 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "gated by the OIDC configuration guard",
         )
 
+    def test_fails_when_the_deploy_job_leaves_the_protected_environment(self) -> None:
+        """The environment is the only thing standing between a push to main and the tenant.
+
+        CLAUDE.md calls protected environments the deployment authority, and until this
+        check existed nothing enforced that: the job ran `az deployment group create` with
+        no environment named at all, so the sentence was true only of the documentation.
+        """
+        self._validate_mutation(
+            "    environment: production",
+            "    # environment: production",
+            "protected `production` environment",
+        )
+
+    def test_fails_when_the_deploy_job_names_a_different_environment(self) -> None:
+        # A workflow naming an environment the repository does not have gets one with NO
+        # protection rules, so a renamed or misspelled environment is an ungated deploy that
+        # still looks gated in the YAML.
+        self._validate_mutation(
+            "    environment: production",
+            "    environment: prod",
+            "protected `production` environment",
+        )
+
     def test_fails_when_contents_permission_is_elevated(self) -> None:
         self._validate_mutation("  contents: read", "  contents: write", "keep contents: read")
 

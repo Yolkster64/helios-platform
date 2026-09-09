@@ -89,8 +89,23 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
     rotation is the key swap described there.
 - **Environment `production`** (Settings → Environments): the OIDC federated
   credential is scoped to `environment:production`, so deploy jobs declaring it
-  can only get Azure tokens through this environment. Add required reviewers
-  here if you want a human approval gate on deploys.
+  can only get Azure tokens through this environment.
+  `.github/workflows/helios-deploy.yml` declares it on the job that runs
+  `az deployment group create`, so a push to `main` touching `infra/` now waits
+  for this environment rather than deploying on its own.
+  **The protection rules are what make that wait mean something**, and they are a
+  manifest: [`config/github/environments.json`](../config/github/environments.json).
+  Preview what is missing, changing nothing:
+
+  ```bash
+  pwsh scripts/github/apply-environments.ps1            # dry run; prints every call
+  pwsh scripts/github/apply-environments.ps1 -Apply     # needs an admin credential
+  ```
+
+  Until it is applied the environment exists with **no protection rules at all** —
+  naming an environment GitHub does not have creates an unprotected one, so the gate
+  reads as present in the YAML and holds nothing back in reality. The dry run says so
+  in those words. Exit 0 means nothing is left for you, 2 that items remain.
 
 ## 3. Connectors: Slack and Linear
 

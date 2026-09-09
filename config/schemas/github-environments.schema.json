@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helios://config/schemas/github-environments.schema.json",
+  "title": "HELIOS GitHub deployment-environment manifest (config/github/environments.json)",
+  "description": "The shape scripts/github/apply-environments.ps1 reads: an object { $comment, environments: [...] }. An entry is closed - the script refuses an unknown key rather than silently ignoring a typo that would leave a protection rule unset. Only NAMES of secrets and variables appear; values are set by the owner with `gh secret set --env` / `gh variable set --env` and never live in this repository. Do not add a $schema key to the manifest itself: it is wired to this schema through .vscode/settings.json json.schemas, like the label and milestone manifests.",
+  "type": "object",
+  "required": ["environments"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "$comment": { "type": "string" },
+    "environments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/environment" }
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": ["name", "because"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.-]*$",
+          "description": "Matched against live environments case-insensitively. A workflow that names an environment GitHub does not have creates it with NO protection rules, so a typo here is a silently ungated deploy - which is why the name is pinned to a shape and the apply script reports what it matched."
+        },
+        "wait_timer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 43200,
+          "description": "Minutes to hold a deployment before it may run (GitHub's cap is 43200 = 30 days). 0 means no timer; the reviewer is the gate."
+        },
+        "prevent_self_review": {
+          "type": "boolean",
+          "description": "When true the person who triggered the deployment cannot approve it. Meaningful only when reviewers is non-empty."
+        },
+        "reviewers": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/reviewer" },
+          "description": "GitHub allows at most six reviewers per environment. An EMPTY list is a valid, deliberate state - an environment with no reviewer gates nothing - so the apply script says so out loud rather than treating it as configured."
+        },
+        "deployment_branch_policy": { "$ref": "#/$defs/branchPolicy" },
+        "secretNames": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/envVarName" },
+          "description": "NAMES only. Never a value: no secret belongs in this repository."
+        },
+        "variableNames": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/envVarName" }
+        },
+        "because": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this environment exists and what it gates. Required: an environment nobody can explain is one nobody can safely change."
+        }
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "required": ["type", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": ["User", "Team"],
+          "description": "GitHub's own two reviewer kinds. The API wants numeric ids; the apply script resolves a login or team slug to one and refuses to guess when it cannot."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+          "description": "A user LOGIN or a team SLUG, not a display name."
+        }
+      }
+    },
+    "branchPolicy": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["protected_branches"],
+          "additionalProperties": false,
+          "properties": {
+            "protected_branches": {
+              "type": "boolean",
+              "description": "true restricts deployments to branches with protection rules. Mutually exclusive with custom_branches: GitHub rejects both at once, and this schema does too."
+            },
+            "custom_branches": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Branch name or wildcard patterns allowed to deploy."
+            }
+          },
+          "not": {
+            "allOf": [
+              { "required": ["custom_branches"] },
+              { "properties": { "protected_branches": { "const": true } } }
+            ]
+          }
+        }
+      ],
+      "description": "null means every branch may deploy - the GitHub default, and the one worth stating deliberately rather than reaching by omission."
+    },
+    "envVarName": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "An environment-variable name: what GitHub accepts, and what the workflow reads."
+    }
+  }
+}
