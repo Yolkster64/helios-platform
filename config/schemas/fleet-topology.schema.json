@@ -27,7 +27,7 @@
     },
     "taskType": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_]*(:[a-z][a-z0-9]*)?$",
+      "pattern": "^[a-z][a-z0-9_]*(:[a-z][a-z0-9_-]*)?$",
       "description": "A config/aihub.json taskRouting key: a bare task type, or one qualified by a normalized language (`<taskType>:<language>`, one ':' at most) exactly as TaskTypeRoutingStrategy.RoutingKey spells it; FleetPlanService splits a qualified pool task type before its learning read."
     },
     "workspaceProfile": {

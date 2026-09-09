@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import decimal
 import json
+import os
 import pathlib
 import re
 import signal
@@ -1586,3 +1588,150 @@ class Round11Tests(unittest.TestCase):
         issues, _ = target.validate_instance("no", {"const": "y" * 200_000}, engine="builtin")
         self.assertEqual(len(issues), 1)
         self.assertLess(len(issues[0].message), 400)
+
+
+class Round12Tests(unittest.TestCase):
+    """Round 12 of PR #252: the isolating child's own import path, a self-check timeout that is a
+    verdict, $defs shape, charged required-property checks, size bounds both engines hold, and
+    three schema rules aligned with their consumers."""
+
+    def test_the_isolating_child_does_not_import_from_the_scanned_tree(self) -> None:
+        # P1: `python -c` puts the working directory at the FRONT of sys.path and honours
+        # PYTHONPATH, so the child started while scanning an untrusted tree resolved `decimal`
+        # from that tree and ran it - the code-execution path round 1 closed for the parent,
+        # reopened by the isolation added later.
+        with tempfile.TemporaryDirectory() as directory:
+            tree = pathlib.Path(directory)
+            sentinel = tree / "EXECUTED"
+            (tree / "decimal.py").write_text(
+                f"import pathlib\npathlib.Path({str(sentinel)!r}).write_text('ran')\n", encoding="utf-8")
+            (tree / "json.py").write_text(
+                f"import pathlib\npathlib.Path({str(sentinel)!r}).write_text('ran')\n", encoding="utf-8")
+            here = pathlib.Path.cwd()
+            previous = os.environ.get("PYTHONPATH")
+            try:
+                os.chdir(tree)
+                os.environ["PYTHONPATH"] = str(tree)
+                issues, _ = target._validate_in_child({"a": 1}, {"type": "object"}, "auto")
+            finally:
+                os.chdir(here)
+                if previous is None:
+                    os.environ.pop("PYTHONPATH", None)
+                else:
+                    os.environ["PYTHONPATH"] = previous
+            self.assertEqual(issues, [])
+            self.assertFalse(sentinel.exists(), "the scanned tree's module was imported by the child")
+
+    def test_a_self_check_that_outruns_its_deadline_is_a_verdict(self) -> None:
+        # _MatchTimeout is private to this module; the CLI and validate_all.py catch SchemaError,
+        # so letting it escape the constructor aborted a whole sweep with a traceback.
+        @contextlib.contextmanager
+        def expired(_budget: float = 0.0):
+            raise target._MatchTimeout()
+            yield   # pragma: no cover - unreachable, keeps this a generator
+
+        with unittest.mock.patch.object(target, "_match_deadline", expired):
+            with self.assertRaises(target.SchemaError) as caught:
+                target.MiniValidator({"type": "object"})
+        self.assertIn("did not finish within", str(caught.exception))
+
+    def test_defs_must_be_an_object(self) -> None:
+        # python-jsonschema's own check_schema refuses this, so skipping it silently made a schema
+        # usable in one engine and unusable in the other.
+        for engine in target.available_engines():
+            with self.assertRaises(target.SchemaError, msg=engine) as caught:
+                target.validate_instance({}, {"$defs": [], "type": "object"}, engine=engine)
+            self.assertIn("object of named schemas", str(caught.exception))
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance({}, {"$defs": {}, "type": "object"}, engine=engine)
+            self.assertEqual(issues, [], engine)
+
+    def test_required_property_checks_are_charged(self) -> None:
+        # A schema with 200,000 required names spent ONE evaluation and produced 200,000 issues,
+        # so the budget could not see the work at all.
+        names = [f"p{index}" for index in range(50_000)]
+        checked = target.MiniValidator({"type": "object", "required": names})
+        checked.iter_errors({})
+        self.assertGreaterEqual(checked._evaluations, len(names),
+                                "the required loop is not charged to the budget")
+        # And past the ceiling it is a verdict rather than a list of a million issues.
+        schema = {"type": "object", "required": [f"p{index}" for index in range(1_000_001)]}
+        with self.assertRaises(target.SchemaError) as caught:
+            target.validate_instance({}, schema, engine="builtin")
+        self.assertIn("keyword evaluations", str(caught.exception))
+        # An ordinary required list is nowhere near it.
+        issues, _ = target.validate_instance({"a": 1}, {"type": "object", "required": ["a", "b"]},
+                                             engine="builtin")
+        self.assertEqual(len(issues), 1)
+
+    def test_a_size_bound_stays_inside_what_both_engines_hold(self) -> None:
+        # The C# twin reads these into a .NET int and compares them against a collection length,
+        # so a larger bound was usable here and unusable there.
+        for keyword in ("maxLength", "maxItems", "maxProperties", "minLength", "minItems"):
+            for engine in target.available_engines():
+                with self.assertRaises(target.SchemaError, msg=(keyword, engine)) as caught:
+                    target.validate_instance("x", {keyword: 2147483648}, engine=engine)
+                self.assertIn("2147483647", str(caught.exception))
+                # The largest bound both hold is a usable schema (a min* bound legitimately fails
+                # a short instance; what matters is that the SCHEMA is accepted).
+                target.validate_instance("x", {keyword: 2147483647}, engine=engine)
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance("x", {"maxLength": 2147483647}, engine=engine)
+            self.assertEqual(issues, [], engine)
+
+    def test_an_effective_assignee_prefix_is_unique(self) -> None:
+        schema = target.load_json(ROOT / "config" / "schemas" / "fleet-topology.schema.json", "schema")
+        base = target.load_json(ROOT / "config" / "fleet" / "fleet-topology.json", "manifest")
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(base, schema, engine=engine)
+            self.assertEqual(issues, [], engine)
+        # Two pools resolving to one prefix: both spawn "<prefix>-1" and write the same log path.
+        clashing = json.loads(json.dumps(base, default=str))
+        clashing["pools"][1]["assigneePrefix"] = clashing["pools"][0]["assigneePrefix"]
+        issues = target._check_fleet_pools(clashing)
+        self.assertEqual(len(issues), 1, issues)
+        self.assertIn("effective assignee prefix", issues[0].message)
+        # A pool that declares no prefix defaults to its name, so this collides too.
+        defaulted = json.loads(json.dumps(base, default=str))
+        defaulted["pools"][1].pop("assigneePrefix")
+        defaulted["pools"][0]["assigneePrefix"] = defaulted["pools"][1]["name"]
+        self.assertEqual(len(target._check_fleet_pools(defaulted)), 1)
+        # A duplicate NAME is reported once, by the name rule, not twice.
+        renamed = json.loads(json.dumps(base, default=str))
+        renamed["pools"][1]["name"] = renamed["pools"][0]["name"]
+        renamed["pools"][1]["assigneePrefix"] = renamed["pools"][0]["assigneePrefix"]
+        self.assertEqual(len(target._check_fleet_pools(renamed)), 1)
+
+    def test_a_qualified_pool_task_type_may_name_a_hyphenated_language(self) -> None:
+        # TaskTypeRoutingStrategy.NormalizeLanguage leaves objective-c alone and the aihub schema
+        # accepts it, so the topology must too.
+        schema = target.load_json(ROOT / "config" / "schemas" / "fleet-topology.schema.json", "schema")
+        base = target.load_json(ROOT / "config" / "fleet" / "fleet-topology.json", "manifest")
+        topology = json.loads(json.dumps(base, default=str))
+        topology["pools"][0]["taskTypes"] = ["code_generation:objective-c", "code_review:f_sharp"]
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(topology, schema, engine=engine)
+            self.assertEqual(issues, [], (engine, issues))
+
+    def test_the_watch_list_is_bounded_and_its_reasons_are_non_blank(self) -> None:
+        schema = target.load_json(ROOT / "config" / "schemas" / "fork-watch.schema.json", "schema")
+        base = target.load_json(ROOT / "config" / "fork-watch.json", "manifest")
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(base, schema, engine=engine)
+            self.assertEqual(issues, [], engine)
+        # fork-observation.yml walks the list serially with two 30-second requests per entry.
+        long_list = json.loads(json.dumps(base, default=str))
+        entry = long_list["repos"][0]
+        long_list["repos"] = [dict(entry, repo=f"o/r{index}") for index in range(51)]
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(long_list, schema, engine=engine)
+            self.assertTrue(issues, engine)
+        # A reason of Unicode whitespace satisfies an ASCII \S but not the consumer's str.strip().
+        blank = json.loads(json.dumps(base, default=str))
+        blank["repos"][0]["because"] = "\u00a0\u2003"
+        for engine in target.available_engines():
+            issues, _ = target.validate_instance(blank, schema, engine=engine)
+            self.assertEqual(issues, [], (engine, "the pattern alone still accepts it"))
+        issues = target._check_fork_watch(blank)
+        self.assertEqual(len(issues), 1, issues)
+        self.assertIn("str.strip()", issues[0].message)

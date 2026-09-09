@@ -345,7 +345,9 @@ internal static class ManifestSemantics
             "github-labels.schema.json" => universal.Concat(LabelNames(instance)).ToList(),
             "manifests.schema.json" => universal.Concat(MappingKeys(instance)).ToList(),
             "github-milestones.schema.json" => universal.Concat(MilestoneTitles(instance)).ToList(),
-            "fleet-topology.schema.json" => universal.Concat(FleetPoolNames(instance)).Concat(FleetCapacity(instance)).ToList(),
+            "fleet-topology.schema.json" => universal.Concat(FleetPoolNames(instance))
+                .Concat(FleetAssigneePrefixes(instance)).Concat(FleetCapacity(instance)).ToList(),
+            "fork-watch.schema.json" => universal.Concat(ForkWatchReasons(instance)).ToList(),
             "absorption-pr-watchlist.schema.json" => universal.Concat(WatchlistCandidates(instance)).ToList(),
             "model-catalog.schema.json" => universal.Concat(ModelCatalogPairs(instance)).ToList(),
             "helios-fabric.v1.schema.json" => universal.Concat(FabricSecrets(instance)).ToList(),
@@ -393,8 +395,97 @@ internal static class ManifestSemantics
     {
         "aihub.schema.json", "github-labels.schema.json", "manifests.schema.json",
         "github-milestones.schema.json", "fleet-topology.schema.json", "absorption-pr-watchlist.schema.json",
-        "model-catalog.schema.json", "helios-fabric.v1.schema.json",
+        "model-catalog.schema.json", "helios-fabric.v1.schema.json", "fork-watch.schema.json",
     };
+
+    /// <summary>
+    /// An assignee prefix is an identity: start-fleet.ps1 defaults it to the pool name and names
+    /// every worker "&lt;prefix&gt;-&lt;n&gt;", deriving its per-run log path from that name. Two pools
+    /// resolving to one prefix — by declaring the same one, or by one declaring another's name —
+    /// give distinct workers the same identity and the same files to write.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> FleetAssigneePrefixes(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("pools", out var pools)
+            || pools.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var seen = new Dictionary<string, (int Index, string Name)>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var pool in pools.EnumerateArray())
+        {
+            var position = index++;
+            if (pool.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+            var name = Text(pool, "name") ?? "";
+            var prefix = Text(pool, "assigneePrefix") ?? Text(pool, "name");
+            if (prefix is null)
+            {
+                continue;
+            }
+            // A duplicate NAME already collides by FleetPoolNames and would report the same pair
+            // twice; this rule is for the collision a name check cannot see.
+            if (seen.TryGetValue(prefix, out var owner)
+                && !string.Equals(owner.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                var first = owner.Index;
+                issues.Add(new JsonSchemaLite.Issue($"$.pools[{position}].assigneePrefix",
+                    $"'{prefix}' is already the effective assignee prefix of pool {first}; start-fleet.ps1 " +
+                    "names every worker '<prefix>-<n>' and derives its log path from that"));
+            }
+            else
+            {
+                seen.TryAdd(prefix, (position, name));
+            }
+        }
+        return issues;
+
+        static string? Text(JsonElement node, string name) =>
+            node.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            && value.GetString() is { Length: > 0 } text ? text : null;
+    }
+
+    /// <summary>
+    /// `because` must be non-blank the way its consumer reads it. fork-observation.yml's preflight
+    /// calls Python's Unicode-aware str.strip() and refuses the entry when nothing is left; the
+    /// schema's <c>\S</c> is compiled with ASCII semantics — it has to be, so the three engines
+    /// share one dialect — and a non-breaking or em space satisfies it, so the required gate
+    /// approved a manifest the workflow then rejected.
+    /// </summary>
+    private static List<JsonSchemaLite.Issue> ForkWatchReasons(JsonElement instance)
+    {
+        var issues = new List<JsonSchemaLite.Issue>();
+        if (instance.ValueKind != JsonValueKind.Object
+            || !instance.TryGetProperty("repos", out var repos)
+            || repos.ValueKind != JsonValueKind.Array)
+        {
+            return issues;
+        }
+        var index = 0;
+        foreach (var entry in repos.EnumerateArray())
+        {
+            var position = index++;
+            if (entry.ValueKind != JsonValueKind.Object
+                || !entry.TryGetProperty("because", out var because)
+                || because.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+            var text = because.GetString() ?? "";
+            if (text.Length > 0 && string.IsNullOrWhiteSpace(text))
+            {
+                issues.Add(new JsonSchemaLite.Issue($"$.repos[{position}].because",
+                    "is only whitespace once Unicode spaces are counted; fork-observation.yml's preflight " +
+                    "reads it with str.strip() and refuses the entry"));
+            }
+        }
+        return issues;
+    }
 
     // What the fleet may attempt across ALL pools, not per pool. Every per-field ceiling in the
     // topology schema is per pool, and `helios-fleet start` selects every pool by default: 100

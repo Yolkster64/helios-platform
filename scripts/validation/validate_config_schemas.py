@@ -499,6 +499,10 @@ def _catastrophic_shape(pattern: str) -> str | None:
 # Nesting deeper than this means a $ref cycle that never descends into the instance
 # ("$ref": "#", or two $defs pointing at each other); real schemas nest a few dozen levels.
 _MAX_DEPTH = 256
+# minLength / maxLength / minItems / maxItems / minProperties / maxProperties are read into a .NET
+# int by the C# twin and compared against a collection length; int.MaxValue is therefore the
+# largest bound both engines can honour, and no instance either can hold would ever reach it.
+_MAX_SIZE_BOUND = 2_147_483_647
 
 _INTEGER_KEYWORDS = ("minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties")
 _NUMBER_KEYWORDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
@@ -687,9 +691,17 @@ class MiniValidator:
         self._evaluations = 0
         self._memo: dict[tuple[int, int, str], list[Issue]] = {}
         # The self-check walks attacker-supplied structure too, so it runs under the same clock
-        # as a validation pass rather than only bounding the regex work inside it.
-        with _match_deadline(_LIBRARY_PASS_BUDGET_SECONDS):
-            self.check_schema()
+        # as a validation pass rather than only bounding the regex work inside it - and the
+        # expiry is translated here, exactly as iter_errors translates its own. _MatchTimeout is
+        # private to this module: the CLI and validate_all.py catch SchemaError, so letting it
+        # escape aborted a whole sweep with a traceback instead of failing one schema.
+        try:
+            with _match_deadline(_LIBRARY_PASS_BUDGET_SECONDS):
+                self.check_schema()
+        except _MatchTimeout:
+            raise SchemaError(
+                f"checking this schema did not finish within {_LIBRARY_PASS_BUDGET_SECONDS:g}s and was "
+                "abandoned; it is larger or more deeply structured than any manifest schema needs") from None
 
     # -- schema self-check ------------------------------------------------------------
 
@@ -724,7 +736,12 @@ class MiniValidator:
                 # No shipped schema does it, and the built-in engine has no second dialect to give.
                 raise SchemaError(f"{where}/$schema: a dialect may only be declared at the root of a schema")
             if key in _ANNOTATIONS:
-                if key in ("$defs", "definitions") and isinstance(value, dict):
+                if key in ("$defs", "definitions"):
+                    # Checked, not skipped: `"$defs": []` is refused by python-jsonschema's own
+                    # check_schema, so silently ignoring it made a schema usable here and unusable
+                    # there - and nothing would have walked the definitions either.
+                    if not isinstance(value, dict):
+                        raise SchemaError(f"{where}/{key}: must be an object of named schemas")
                     for name, sub in value.items():
                         self._walk_schema(sub, f"{where}/{key}/{name}")
                 continue
@@ -767,6 +784,13 @@ class MiniValidator:
             elif key in _INTEGER_KEYWORDS:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise SchemaError(f"{where}/{key}: must be a non-negative integer")
+                if value > _MAX_SIZE_BOUND:
+                    # The C# twin reads these into an int and compares them against a .NET
+                    # collection length, so a larger bound is unusable there while it validated
+                    # here - one schema with two verdicts. It can also never be violated: no
+                    # instance either engine can hold has that many items, characters or keys.
+                    raise SchemaError(f"{where}/{key}: must be at most {_MAX_SIZE_BOUND} "
+                                      "(the bound every consumer reads it into)")
             elif key in _NUMBER_KEYWORDS:
                 if isinstance(value, bool) or not isinstance(value, _NUMBER_TYPES):
                     raise SchemaError(f"{where}/{key}: must be a number")
@@ -1058,6 +1082,10 @@ class MiniValidator:
 
     def _validate_object(self, schema: dict[str, Any], obj: dict[str, Any], path: str, errors: list[Issue]) -> None:
         for name in schema.get("required", []):
+            # Charged like every other per-name loop: a schema with 200,000 required names spent
+            # one evaluation and produced 200,000 issues, which is the work the budget exists to
+            # bound. The C# twin charges the same way.
+            self.charge(path)
             if name not in obj:
                 errors.append(Issue(path, f"'{name}' is a required property"))
         if "minProperties" in schema and len(obj) < schema["minProperties"]:
@@ -1178,11 +1206,20 @@ def _validate_in_child(instance: Any, schema: Any, engine: str) -> tuple[list[Is
     # and the child reads it back with this module's own parser.
     payload = _canonical({"instance": instance, "schema": schema, "engine": engine})
     try:
+        # -E -P and a trusted cwd: `python -c` puts the working directory at the FRONT of
+        # sys.path and honours PYTHONPATH, so a child started while scanning an untrusted tree
+        # would resolve `json`, `decimal` or `jsonschema` from that tree and execute it before a
+        # byte of JSON was read - the same code-execution path round 1 closed for the parent,
+        # reopened by the isolation this round added. -P drops the working directory, -E ignores
+        # every PYTHON* variable, and the cwd is this module's own directory. Neither disables
+        # site-packages, so the child still finds the same jsonschema the parent has.
+        trusted_env = {name: value for name, value in os.environ.items() if not name.startswith("PYTHON")}
         finished = subprocess.run(
-            [sys.executable, "-c", _CHILD_PROGRAM, str(Path(__file__).resolve())],
+            [sys.executable, "-E", "-P", "-c", _CHILD_PROGRAM, str(Path(__file__).resolve())],
             input=payload, capture_output=True, text=True, check=False,
             timeout=_LIBRARY_PASS_BUDGET_SECONDS,
-            env={**os.environ, _ISOLATION_ENV: "1"})
+            cwd=str(Path(__file__).resolve().parent),
+            env={**trusted_env, _ISOLATION_ENV: "1"})
     except subprocess.TimeoutExpired:
         raise SchemaError(
             f"validating this instance did not finish within {_LIBRARY_PASS_BUDGET_SECONDS:g}s and the "
@@ -1778,7 +1815,52 @@ def _check_fleet_pools(instance: Any) -> list[Issue]:
             issues.append(Issue(f"$.pools[{index}].name",
                                 f"'{name}' repeats pool {first}; a pool name is its board, its assignee "
                                 "prefix and its scaling key"))
+    # An assignee prefix is an identity too: start-fleet.ps1 defaults it to the pool name and
+    # names every worker "<prefix>-<n>", with per-run log paths derived from that name. Two pools
+    # resolving to one prefix - by declaring the same one, or by one declaring another's name -
+    # give distinct workers the same identity and the same files to write.
+    prefixes: dict[str, tuple[int, str]] = {}
+    for index, pool in enumerate(pools):
+        if not isinstance(pool, dict):
+            continue
+        name = pool.get("name")
+        name = _ordinal_ignore_case(name) if isinstance(name, str) else ""
+        prefix = pool.get("assigneePrefix")
+        if not isinstance(prefix, str) or not prefix:
+            prefix = pool.get("name")
+        if not isinstance(prefix, str) or not prefix:
+            continue
+        first, first_name = prefixes.setdefault(_ordinal_ignore_case(prefix), (index, name))
+        # A duplicate NAME already collides by the rule above and would report the same pair twice;
+        # this rule is for the collision a name check cannot see.
+        if first != index and first_name != name:
+            issues.append(Issue(f"$.pools[{index}].assigneePrefix",
+                                f"'{prefix}' is already the effective assignee prefix of pool {first}; "
+                                "start-fleet.ps1 names every worker '<prefix>-<n>' and derives its log "
+                                "path from that"))
     return issues + _check_fleet_capacity(instance)
+
+
+def _check_fork_watch(instance: Any) -> list[Issue]:
+    """`because` must be non-blank the way its consumer reads it.
+
+    fork-observation.yml's preflight calls Python's Unicode-aware str.strip() and exits with
+    "because is required" when nothing is left. The schema's `\\S` is compiled with ASCII
+    semantics - it has to be, so the three engines share one dialect - and a non-breaking space or
+    an em space satisfies it, so the required gate approved a manifest the workflow then refused.
+    """
+    repos = instance.get("repos") if isinstance(instance, dict) else None
+    if not isinstance(repos, list):
+        return []
+    issues: list[Issue] = []
+    for index, entry in enumerate(repos):
+        because = entry.get("because") if isinstance(entry, dict) else None
+        if isinstance(because, str) and because and not because.strip():
+            issues.append(Issue(f"$.repos[{index}].because",
+                                "is only whitespace once Unicode spaces are counted; "
+                                "fork-observation.yml's preflight reads it with str.strip() and "
+                                "refuses the entry"))
+    return issues
 
 
 def _check_github_labels(instance: Any) -> list[Issue]:
@@ -1905,6 +1987,7 @@ _SEMANTIC_CHECKS: dict[str, Callable[[Any], list[Issue]]] = {
     "fleet-topology.schema.json": _check_fleet_pools,
     "absorption-pr-watchlist.schema.json": _check_absorption_watchlist,
     "model-catalog.schema.json": _check_model_catalog,
+    "fork-watch.schema.json": _check_fork_watch,
     "helios-fabric.v1.schema.json": _check_fabric_contract,
 }
 

@@ -186,8 +186,15 @@ internal static class JsonSchemaLite
                 }
                 if (Annotations.Contains(key))
                 {
-                    if (key is "$defs" or "definitions" && value.ValueKind == JsonValueKind.Object)
+                    if (key is "$defs" or "definitions")
                     {
+                        // Checked, not skipped: `"$defs": []` is refused by python-jsonschema's own
+                        // check_schema, so silently ignoring it made a schema usable here and
+                        // unusable there — and nothing would have walked the definitions either.
+                        if (value.ValueKind != JsonValueKind.Object)
+                        {
+                            throw new SchemaException($"{where}/{key}: must be an object of named schemas");
+                        }
                         foreach (var def in value.EnumerateObject())
                         {
                             WalkSchema(def.Value, $"{where}/{key}/{def.Name}");
@@ -277,9 +284,15 @@ internal static class JsonSchemaLite
                     case "maxItems":
                     case "minProperties":
                     case "maxProperties":
+                        // int.MaxValue is the ceiling because these are compared against a .NET
+                        // collection length; the Python twin refuses a larger bound for the same
+                        // reason, so one schema gets one verdict. A bound that large can never be
+                        // violated anyway — no instance either engine can hold reaches it.
                         if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var bound) || bound < 0)
                         {
-                            throw new SchemaException($"{where}/{key}: must be a non-negative integer");
+                            throw new SchemaException(
+                                $"{where}/{key}: must be a non-negative integer no greater than {int.MaxValue} " +
+                                "(the bound every consumer reads it into)");
                         }
                         break;
                     case "minimum":
@@ -1121,6 +1134,10 @@ internal static class JsonSchemaLite
             {
                 foreach (var name in required.EnumerateArray())
                 {
+                    // Charged like every other per-name loop: a schema with 200,000 required names
+                    // spent one evaluation and produced 200,000 issues, which is the work the
+                    // budget exists to bound. The Python twin charges the same way.
+                    CountEvaluation(path);
                     var wanted = name.GetString() ?? "";
                     if (!instance.TryGetProperty(wanted, out _))
                     {

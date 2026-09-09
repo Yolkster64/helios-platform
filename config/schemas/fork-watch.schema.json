@@ -12,6 +12,8 @@
     "repos": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 50,
+      "description": "fork-observation.yml walks this list serially, making two authenticated requests per entry with `curl --max-time 30`, so the list length is the workflow's running time. 50 is far above the shipped digest and far below a list that would hold a runner for hours.",
       "items": { "$ref": "#/$defs/watchedRepo" }
     }
   },

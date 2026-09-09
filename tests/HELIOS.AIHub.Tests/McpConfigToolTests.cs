@@ -1574,6 +1574,96 @@ public sealed class McpConfigToolTests : IDisposable
         Assert.True(Assert.Single(JsonSchemaLite.Validate(constSchema.RootElement, instance.RootElement)).Message.Length < 400);
     }
 
+    [Fact]
+    public void JsonSchemaLite_DefsMustBeAnObject()
+    {
+        // python-jsonschema's own check_schema refuses this, so skipping it silently made a schema
+        // usable here and unusable there — and nothing walked the definitions either.
+        using var broken = JsonDocument.Parse("""{ "$defs": [], "type": "object" }""");
+        using var instance = JsonDocument.Parse("{}");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(broken.RootElement, instance.RootElement));
+        Assert.Contains("object of named schemas", ex.Message);
+
+        using var empty = JsonDocument.Parse("""{ "$defs": {}, "type": "object" }""");
+        Assert.Empty(JsonSchemaLite.Validate(empty.RootElement, instance.RootElement));
+    }
+
+    [Fact]
+    public void JsonSchemaLite_RequiredPropertyChecksAreChargedToTheBudget()
+    {
+        // A schema with 300,000 required names spent one evaluation and allocated one issue per
+        // name, which is the work the budget exists to bound.
+        var names = string.Join(", ", Enumerable.Range(0, 300_000).Select(i => $"\"p{i}\""));
+        using var schema = JsonDocument.Parse($"{{ \"type\": \"object\", \"required\": [ {names} ] }}");
+        using var instance = JsonDocument.Parse("{}");
+
+        var ex = Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(schema.RootElement, instance.RootElement));
+
+        Assert.Contains("keyword evaluations", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("maxLength")]
+    [InlineData("maxItems")]
+    [InlineData("maxProperties")]
+    [InlineData("minLength")]
+    public void JsonSchemaLite_ASizeBoundStaysInsideWhatBothEnginesHold(string keyword)
+    {
+        // These are compared against a .NET collection length; the Python twin now refuses a
+        // larger bound for the same reason, so one schema gets one verdict.
+        using var tooLarge = JsonDocument.Parse($"{{ \"{keyword}\": 2147483648 }}");
+        using var instance = JsonDocument.Parse("\"x\"");
+        Assert.Contains("2147483647", Assert.Throws<JsonSchemaLite.SchemaException>(
+            () => JsonSchemaLite.Validate(tooLarge.RootElement, instance.RootElement)).Message);
+
+        // The largest bound both hold is a usable schema; a min* bound legitimately fails a
+        // short instance, so what matters here is that the SCHEMA is accepted.
+        using var largest = JsonDocument.Parse($"{{ \"{keyword}\": 2147483647 }}");
+        JsonSchemaLite.Validate(largest.RootElement, instance.RootElement);
+    }
+
+    [Fact]
+    public void FleetTopology_AnEffectiveAssigneePrefixIsUnique()
+    {
+        // start-fleet.ps1 defaults the prefix to the pool name and names every worker
+        // "<prefix>-<n>", deriving its log path from that name.
+        var root = CreateRepoRoot();
+        var shipped = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fleet", "fleet-topology.json")))!;
+        var pools = shipped["pools"]!.AsArray();
+        pools[1]!["assigneePrefix"] = pools[0]!["assigneePrefix"]!.GetValue<string>();
+        WriteManifest(root, "config/fleet/fleet-topology.json", shipped.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fleet/fleet-topology.json", null, root);
+
+        Assert.False(JsonDocument.Parse(json).RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("effective assignee prefix", json);
+    }
+
+    [Fact]
+    public void ForkWatch_ReasonsMustBeNonBlankTheWayTheWorkflowReadsThem()
+    {
+        // The schema's \S is ASCII by design (one dialect across three engines), so U+00A0
+        // satisfies it while fork-observation.yml's str.strip() refuses the entry.
+        var root = CreateRepoRoot();
+        var shipped = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(ShippedRepoRoot(), "config", "fork-watch.json")))!;
+        WriteManifest(root, "config/fork-watch.json", shipped.ToJsonString());
+        Assert.Contains("\"valid\": true",
+            HeliosConfigTools.BuildValidationJson("config/fork-watch.json", null, root));
+
+        shipped["repos"]![0]!["because"] = "  ";
+        WriteManifest(root, "config/fork-watch.json", shipped.ToJsonString());
+
+        var json = HeliosConfigTools.BuildValidationJson("config/fork-watch.json", null, root);
+
+        Assert.False(JsonDocument.Parse(json).RootElement.GetProperty("valid").GetBoolean(), json);
+        Assert.Contains("str.strip()", json);
+    }
+
     /// <summary>Temp root: the aihub.json marker plus a copy of the shipped config/schemas/.</summary>
     private string CreateRepoRoot()
     {
