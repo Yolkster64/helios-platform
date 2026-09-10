@@ -274,6 +274,33 @@ foreach ($setting in @(
     }
 }
 
+# --- pages ----------------------------------------------------------------------------
+# Its own call: Pages is not a field on the repository object. The 404 rule is
+# apply-repo-settings.ps1's and is copied deliberately - only GitHub's own `"status":"404"`
+# body means "no site". Any OTHER failed read (this proxy answers 403 on this endpoint, as
+# that script measured) is unreadable, and reporting unreadable as absent would tell the
+# owner to POST a site that already exists, which answers 409.
+$pages = Invoke-GhApi -GhArgs @("repos/$Repository/pages")
+if ($pages.ExitCode -eq 0 -and $null -ne $pages.Json) {
+    $buildType = [string](Get-OptionalProperty $pages.Json 'build_type' '')
+    if ($buildType -eq 'workflow') {
+        Add-Row -Surface 'settings:pages' -State 'in-force' -Detail 'enabled, build_type=workflow' -Owner 'apply-repo-settings.ps1'
+    }
+    else {
+        # Enabled, but deploying from somewhere other than the workflow that builds the
+        # dashboard. The site exists, so this is not absence.
+        Add-Row -Surface 'settings:pages' -State 'partial' `
+            -Detail "enabled, but build_type=$(if ($buildType) { $buildType } else { 'unreported' }) rather than workflow" `
+            -Owner 'apply-repo-settings.ps1'
+    }
+}
+elseif ([string](Get-OptionalProperty $pages.Json 'status' '') -eq '404') {
+    Add-Row -Surface 'settings:pages' -State 'absent' -Detail 'no Pages site' -Owner 'apply-repo-settings.ps1'
+}
+else {
+    Add-Row -Surface 'settings:pages' -State 'unknown' -Detail "could not read pages (HTTP $($pages.HttpStatus))" -Owner 'apply-repo-settings.ps1'
+}
+
 # --- report ---------------------------------------------------------------------------
 $notInForce = @($rows | Where-Object { $_.state -notin @('in-force', 'none-declared') })
 
