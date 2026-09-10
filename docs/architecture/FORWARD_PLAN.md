@@ -69,11 +69,19 @@ lanes are verify-only and never gate the exit code), the `auth-broker` and
 `github-operator` agents, the MCP `helios_auth_status_get` tool (diagnose-only),
 and the connector knowledge home (`connector-integrations` skill +
 `connector-steward` agent). **Remaining owner
-clicks**: run `apply-rulesets.ps1 -Apply`, enable Pages (Source: GitHub Actions),
-enable "Allow auto-merge" in repo settings — click paths in
-`CONNECTIONS_SETUP.md` § GitHub governance; the connector secrets and tenant
-admin consent below stay owner-only — the doctor reports them, it never performs
-them. Merge-queue evaluation stays deferred
+clicks**: ask `scripts/github/inventory-surfaces.ps1` rather than reading a list
+here — it reports every declared surface's live state and names the reconciler for
+each gap, and it is the reason this paragraph no longer carries a hand-maintained
+snapshot. The one it kept saying was outstanding, "enable Allow auto-merge", has
+measured *on* for some time (`OWNER_START_HERE.md` § Repository settings,
+`CONNECTIONS_SETUP.md` § Control fabric), while `delete_branch_on_merge` — measured
+*off* — was never in the list at all: a snapshot wrong in both directions is how a
+plan sends someone to do work already done and skip work that is not. Standing at
+the last measurement: the `main` ruleset and the `production` environment are not
+applied (both need `-Apply` from a credential with repository administration), and
+Pages needs Source: GitHub Actions. Click paths in `CONNECTIONS_SETUP.md` § GitHub
+governance; the connector secrets and tenant admin consent below stay owner-only —
+the doctor reports them, it never performs them. Merge-queue evaluation stays deferred
 until the required checks prove stable. **Owner lane: Claude session; ruleset
 enablement is an owner click.**
 
