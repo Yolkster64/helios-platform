@@ -77,6 +77,16 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     # human in the path while the documentation said otherwise. The name is pinned because a
     # workflow naming an environment the repository does not have gets one with no
     # protection rules - a gate in the YAML and none in reality.
+    # Naming the environment makes the OIDC subject branch-agnostic
+    # (repo:<repo>:environment:production), which REMOVES the branch restriction Azure was
+    # enforcing for free through the ref-scoped federated credential. workflow_dispatch
+    # accepts any branch, so without this guard any branch could mint a token carrying
+    # Contributor and Key Vault Secrets Officer. The environment's branch policy is meant to
+    # cover it, but that is configuration; this is not.
+    _require(str(deploy_job.get("if", "")).strip() == "github.ref == 'refs/heads/main'",
+             "jobs.deploy must be pinned to main with `if: github.ref == 'refs/heads/main'`: "
+             "the environment subject is branch-agnostic, so nothing else stops a "
+             "workflow_dispatch from a feature branch reaching the tenant")
     _require(deploy_job.get("environment") == "production",
              "jobs.deploy must run in the protected `production` environment "
              "(config/github/environments.json); an environment is the only job-level gate "
