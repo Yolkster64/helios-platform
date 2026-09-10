@@ -111,6 +111,12 @@ for arg in "$@"; do
     *auth-doctor.ps1) printf '{"lanes":[{"lane":"gh","state":"needs-owner"},{"lane":"az","state":"ready"}]}\n'; exit 0 ;;
     *auto-login.ps1)  printf '{"ownerActions":[{"Text":"set OPENAI_API_KEY"}]}\n'; exit 0 ;;
     *first-run.ps1)   printf '{"lanes":{"gh":{"state":"needs-owner"}}}\n'; exit 2 ;;
+    # The inventory reports the state of the repository today: labels applied, the ruleset
+    # and the environment not. Exit 2 is "ran and found gaps" - the surfaces lane must read
+    # the ROWS, not the exit code, and must name the gaps rather than counting them.
+    *inventory-surfaces.ps1)
+      printf '{"state":"gaps","gaps":2,"surfaces":[{"surface":"rulesets","state":"absent"},{"surface":"labels","state":"in-force"},{"surface":"environments","state":"unknown"}]}\n'
+      exit 2 ;;
   esac
 done
 exit 0
@@ -170,13 +176,29 @@ exit 1
         # The number docs/CONNECT.md and both script headers publish, not a floor: with a
         # floor of ten, four lanes could be deleted from both twins and the table would still
         # match the parity check, which compares names only.
-        Assert-Equal 14 $reportLanes.Count "$($twin.Name) reported $($reportLanes.Count) lanes, and the docs say fourteen"
+        Assert-Equal 15 $reportLanes.Count "$($twin.Name) reported $($reportLanes.Count) lanes, and the docs say fifteen"
         Assert-True ((Get-ReportField $report 'verifyOnly') -eq $true) `
             "$($twin.Name) read-only did not mark the report read-only"
         $laneOrder[$twin.Name] = (($reportLanes | ForEach-Object { Get-ReportField $_ 'name' }) -join ',')
 
         # 2. The exit contract: read-only on a keyless host has owner items, so 2 - never 1.
         Assert-True ($exit -eq 0 -or $exit -eq 2) "$($twin.Name) read-only exited $exit (expected 0 or 2)"
+
+        # 2b. The surfaces lane reads the inventory's ROWS, not its exit code. The shim exits
+        #     2 with two surfaces not in force; a lane that read $? alone, or that counted
+        #     rather than named, would pass a weaker assertion than this one.
+        $surfaceLane = @($reportLanes | Where-Object { (Get-ReportField $_ 'name') -eq 'surfaces' })
+        Assert-Equal 1 $surfaceLane.Count "$($twin.Name) did not report a surfaces lane"
+        Assert-Equal 'needs-owner' (Get-ReportField $surfaceLane[0] 'state') `
+            "$($twin.Name) surfaces lane did not read the gaps the inventory reported"
+        $surfaceDetail = [string](Get-ReportField $surfaceLane[0] 'detail')
+        foreach ($named in 'rulesets', 'environments') {
+            Assert-True ($surfaceDetail -match $named) `
+                "$($twin.Name) surfaces lane did not name the $named gap: $surfaceDetail"
+        }
+        # `labels` is in force, so naming it would be a false alarm in the owner's checklist.
+        Assert-True ($surfaceDetail -notmatch 'labels') `
+            "$($twin.Name) surfaces lane named a surface that IS in force: $surfaceDetail"
 
         # 3. It mutated nothing: not the two state files, not the state directory's existence,
         #    and not the temp directory - the first-run report a read-only run needs is a

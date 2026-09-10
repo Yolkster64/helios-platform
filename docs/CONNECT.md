@@ -50,7 +50,8 @@ report, because what is left there is a click or a decision that is yours.
 | 10 | agents | The three GitHub agents — Codex cloud reviews, Copilot dispatch by label, Claude on Foundry | you confirm once |
 | 11 | fleet | Hermes and XCore locally, from `config/fleet/fleet-topology.json`; the paid burst pool is printed, never deployed | you say when |
 | 12 | m365 | Microsoft 365: the Graph connector and declarative agent are built; enabling them writes to your tenant | you decide |
-| 13 | verify | One read-only pass, read as a report rather than an exit code | — |
+| 13 | surfaces | Of everything this repository *declares* about itself — rulesets, environments, labels, milestones, repo settings — which are actually applied. Reports, never writes | — |
+| 14 | verify | One read-only pass, read as a report rather than an exit code | — |
 
 Run it again whenever. It skips what is done, and the list gets shorter.
 

@@ -25,9 +25,10 @@
      10  agents       the GitHub agents: Codex cloud, Copilot, Claude on Foundry
      11  fleet        Hermes / XCore locally; the burst pool waits for your word
      12  m365         Microsoft 365 — tenant consent, a decision and not a key
-     13  verify       first-run.ps1 -VerifyOnly, read as a report
+     13  surfaces     inventory-surfaces.ps1 — of what this repo DECLARES, what is applied
+     14  verify       first-run.ps1 -VerifyOnly, read as a report
 
-    Lanes 8-12 are report-only: they never write, they say what is wired and what
+    Lanes 8-13 are report-only: they never write, they say what is wired and what
     is one click of yours away.
 
     Secrets: every credential is referenced by the NAME of its environment variable
@@ -47,7 +48,7 @@
 
 .PARAMETER Skip
     Lane names to skip: persistence github app oidc secrets hub codex foundry
-    connectors workspace agents fleet m365 verify.
+    connectors workspace agents fleet m365 surfaces verify.
 
 .NOTES
     HELIOS_PWSH names the interpreter the .ps1 lanes are run with, for a host that keeps
@@ -525,9 +526,58 @@ if (-not (Test-Skipped 'm365')) {
     Write-Line '   decision-gated; nothing was contacted.'
 }
 
-# 13. Verify — one read-only pass, read as a report rather than as an exit code.
+# 13. Governed surfaces — of everything this repository DECLARES about itself, what is
+#     actually applied? Every lane above answers "can I reach this?"; this one answers "is
+#     what we wrote down in force?", which is a different question and the one that went
+#     unasked while .github/rulesets/main.json read like a guarantee and enforced nothing.
+if (-not (Test-Skipped 'surfaces')) {
+    Write-Step '13. Governed surfaces'
+    $inventory = Join-Path $repoRoot 'scripts/github/inventory-surfaces.ps1'
+    $surfacesReport = $null
+    $surfacesCode = 127
+    if (Test-Path -LiteralPath $inventory) {
+        $raw = & $pwshBin -NoProfile -File $inventory -Json 2>$null
+        $surfacesCode = $LASTEXITCODE
+        try { $surfacesReport = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop }
+        catch { $surfacesReport = $null }
+    }
+    if ($surfacesCode -eq 127) {
+        Add-Lane surfaces 'needs-owner' 'the inventory could not be started on this host' `
+            'pwsh scripts/github/inventory-surfaces.ps1   # run it directly to see why'
+        Write-Line '   the inventory did not run; nothing was read.'
+    }
+    elseif ($surfacesCode -eq 1) {
+        # Exit 1 is "could not run at all" - no gh, or the repository unreadable. Deliberately
+        # NOT the same answer as "ran and found gaps"; flattening the two here would undo the
+        # distinction the inventory exists to make.
+        Add-Lane surfaces 'needs-owner' 'the inventory could not read the repository (no gh, or no access)' `
+            $ghLoginCommand
+        Write-Line '   could not read the repository; nothing is claimed either way.'
+    }
+    elseif ($null -eq $surfacesReport) {
+        Add-Lane surfaces 'needs-owner' 'the inventory ran but its report could not be parsed' `
+            'pwsh scripts/github/inventory-surfaces.ps1   # the table, one row per surface'
+        Write-Line '   report unreadable here; run the inventory directly.'
+    }
+    else {
+        $gaps = @(@(Get-OptionalProperty $surfacesReport 'surfaces' @()) |
+            Where-Object { (Get-OptionalProperty $_ 'state') -notin @('in-force', 'none-declared') } |
+            ForEach-Object { [string](Get-OptionalProperty $_ 'surface' '?') })
+        if ($gaps.Count -eq 0) {
+            Add-Lane surfaces 'ok' 'every surface this repository declares is in force'
+            Write-Line '   all declared surfaces are applied.'
+        }
+        else {
+            Add-Lane surfaces 'needs-owner' "not in force: $($gaps -join ' ')" `
+                'pwsh scripts/github/inventory-surfaces.ps1   # each row names the script that reconciles it'
+            Write-Line "   not in force: $($gaps -join ' ')"
+        }
+    }
+}
+
+# 14. Verify — one read-only pass, read as a report rather than as an exit code.
 if (-not (Test-Skipped 'verify')) {
-    Write-Step '13. Verify'
+    Write-Step '14. Verify'
     # A temporary file, not a record: read-only runs put it where the OS reclaims it rather
     # than leaving a new file in the checkout's .helios/ directory - and the directory itself
     # is only created on the path that writes into it, because creating an empty .helios/ is
