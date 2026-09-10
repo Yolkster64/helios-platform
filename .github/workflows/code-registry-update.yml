@@ -19,10 +19,13 @@ on:
         required: false
         default: '6'
 
+# Read-only, now that the push to main is gone. Those three write grants existed for that one
+# step; nothing else here calls the API, opens a pull request or publishes a package. Leaving a
+# writable token on a workflow that runs on every push to main is the capability the next
+# artifact bug would reactivate - the whole point below is that the step was one bug away from
+# executing.
 permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 jobs:
   scan-code:
@@ -59,10 +62,12 @@ jobs:
           echo "Found $FILES source files"
           echo "Registry hash: $HASH"
 
+      # Written, never uploaded and never read - it dies with the runner. Renamed off the
+      # dot-prefix anyway so that no path in this workflow teaches the pattern that broke it.
       - name: Create Snippet Index
         run: |
-          mkdir -p .registry
-          cat > .registry/index.json << 'EOF'
+          mkdir -p registry
+          cat > registry/index.json << 'EOF'
           {
             "version": "1.0",
             "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
@@ -96,9 +101,19 @@ jobs:
           pip install --upgrade pip
           pip install pyyaml jsonschema
 
+      # `registry/`, not `.registry/`. actions/upload-artifact@v4 defaults to
+      # include-hidden-files: false, so a dot-directory matches NOTHING, and the step then
+      # WARNS and SUCCEEDS without creating the artifact:
+      #   ##[warning]No files were found with the provided path: .registry/.
+      #                                            No artifacts will be uploaded.
+      # The next job's download then fails with "Artifact not found for name:
+      # snippet-registry", which is why every run of this workflow since the v4 default
+      # changed has been red - 14 runs, the last of them on 56e5374a. A green upload step
+      # that uploaded nothing is the failure mode worth naming: the error surfaced two jobs
+      # away from its cause.
       - name: Extract Snippets
         run: |
-          mkdir -p .registry/snippets
+          mkdir -p registry/snippets
           python << 'PYTHON_EOF'
           import os
           import json
@@ -125,7 +140,7 @@ jobs:
                       except Exception as e:
                           print(f"Error processing {filepath}: {e}")
           
-          with open('.registry/snippets.json', 'w') as f:
+          with open('registry/snippets.json', 'w') as f:
               json.dump(snippets, f, indent=2)
           
           print(f"Extracted {len(snippets)} snippets")
@@ -135,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: snippet-registry
-          path: .registry/
+          path: registry/
           retention-days: 30
 
   compress-registry:
@@ -151,23 +166,23 @@ jobs:
 
       - name: Compress Registry
         run: |
-          mkdir -p .registry-compressed
+          mkdir -p registry-compressed
           COMPRESSION_LEVEL="${{ github.event.inputs.compression_level || '6' }}"
           
           # Create compressed archive
-          tar -czf .registry-compressed/registry-$(date +%Y%m%d_%H%M%S).tar.gz registry-work/
+          tar -czf registry-compressed/registry-$(date +%Y%m%d_%H%M%S).tar.gz registry-work/
           
           # Generate compressed index
-          gzip -c registry-work/snippets.json > .registry-compressed/snippets.json.gz
+          gzip -c registry-work/snippets.json > registry-compressed/snippets.json.gz
           
           echo "Compression level: $COMPRESSION_LEVEL"
           echo "Original size: $(du -sh registry-work/ | cut -f1)"
-          echo "Compressed size: $(du -sh .registry-compressed/ | cut -f1)"
+          echo "Compressed size: $(du -sh registry-compressed/ | cut -f1)"
 
       - name: Generate Compression Report
         run: |
           ORIGINAL=$(du -sb registry-work/ | cut -f1)
-          COMPRESSED=$(du -sb .registry-compressed/ | cut -f1)
+          COMPRESSED=$(du -sb registry-compressed/ | cut -f1)
           RATIO=$(echo "scale=2; $ORIGINAL / $COMPRESSED" | bc)
           
           echo "## Registry Compression Report" >> $GITHUB_STEP_SUMMARY
@@ -180,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: registry-compressed
-          path: .registry-compressed/
+          path: registry-compressed/
           retention-days: 30
 
   publish-registry:
@@ -200,11 +215,11 @@ jobs:
 
       - name: Create Registry Release
         run: |
-          mkdir -p .registry
-          cp -r registry-dist/* .registry/
+          mkdir -p registry
+          cp -r registry-dist/* registry/
           
           # Create registry metadata
-          cat > .registry/registry-metadata.json << EOF
+          cat > registry/registry-metadata.json << EOF
           {
             "version": "1.0",
             "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
@@ -218,16 +233,23 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: published-registry
-          path: .registry/
+          path: registry/
           retention-days: 7
 
-      - name: Update Registry Index
-        run: |
-          git config --global user.email "helios-registry@platform.local"
-          git config --global user.name "HELIOS Registry Bot"
-          git add .registry/
-          git commit -m "chore: update code registry [skip ci]" || true
-          git push origin HEAD:${{ github.ref }} || true
+      # The registry is an ARTIFACT, not a commit. What stood here pushed straight to main:
+      #
+      #   git commit -m "chore: update code registry [skip ci]" || true
+      #   git push origin HEAD:${{ github.ref }} || true
+      #
+      # unreviewed, carrying [skip ci] so no check would run on it, bypassing all eight
+      # contexts .github/rulesets/main.json requires - and contradicting this repository's
+      # own rule that every change is reviewed before it merges. It never once executed: the
+      # artifact bug above killed the chain two jobs earlier, in all 14 runs. Repairing that
+      # bug without removing this would have turned a dead step into a live one.
+      #
+      # It would also have failed the moment the ruleset is applied - and failed SILENTLY,
+      # because `|| true` swallows the rejection. Consumers take the published-registry
+      # artifact above; nothing in this repository reads a committed registry directory.
 
       - name: Generate Publish Report
         run: |

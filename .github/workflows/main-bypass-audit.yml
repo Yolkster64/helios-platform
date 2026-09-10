@@ -1,0 +1,69 @@
+name: Main bypass audit
+
+# The compensating control for a ruleset that is not applied.
+#
+# .github/rulesets/main.json says main takes changes only through a pull request with eight
+# green contexts, and carries bypass_actors: []. None of that is in force: creating a ruleset
+# needs repository administration, which no workflow token has, so governance-apply.yml's plan
+# job reports `no existing ruleset named 'main' -> create` on every run. Until an
+# administrator credential exists, those rules describe an intention rather than a control.
+#
+# This job asks after the fact what the ruleset would have asked before it: did the commit
+# that just landed arrive through a merged pull request, and were the required contexts green
+# on that pull request's head? It cannot undo a push - nothing can, afterwards - so its
+# product is a loud, specific record: a red run on main naming the commit and the contexts
+# that never reported.
+#
+# It reads the required contexts out of the ruleset files themselves, so the audit and the
+# ruleset cannot drift. Adding a context to main.json extends this check for free, and
+# validate_ruleset_contexts.py (quality.yml) separately proves each of those contexts can
+# actually report.
+#
+# When the owner applies the ruleset, this becomes redundant rather than wrong: GitHub will
+# refuse the push and this will have nothing to report.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit to audit (defaults to the pushed commit)'
+        required: false
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: read
+
+concurrency:
+  group: main-bypass-audit-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit the commit that landed on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The audit reads ruleset FILES from this checkout and calls the API with an
+          # explicit GH_TOKEN below; it never uses git credentials. Left at the default,
+          # checkout writes the token into .git/config in the workspace, where any later step
+          # that archives the workspace would carry it out with the artifact
+          # (zizmor/artipacked). This workflow uploads nothing today - so this removes a
+          # standing credential rather than a live leak, which is the cheaper end to fix.
+          persist-credentials: false
+
+      # GITHUB_TOKEN is enough: every call is a read (commits/{sha}/pulls, check-runs,
+      # status). The audit makes no mutating call at all, and its offline suite asserts that.
+      - name: Audit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_SHA: ${{ inputs.sha }}
+        run: |
+          $sha = if ($env:AUDIT_SHA) { $env:AUDIT_SHA } else { $env:GITHUB_SHA }
+          ./scripts/github/audit-main-commit.ps1 -Repository $env:GITHUB_REPOSITORY -Sha $sha -Branch main

@@ -162,6 +162,25 @@ jobs:
       - name: Ruleset context mutation tests
         run: python3 -m unittest scripts.validation.tests.test_validate_ruleset_contexts -v
 
+      # The runtime companion of the same concern. validate_ruleset_contexts.py proves each
+      # required context CAN report; audit-main-commit.ps1 reports, after a push to main,
+      # whether the commit that landed actually came through a pull request with those
+      # contexts green - the check the ruleset would make if it were applied. `gh` is shimmed
+      # in this suite, so it reaches nothing.
+      - name: Main bypass audit contract
+        shell: pwsh
+        run: ./scripts/verify/tests/test_audit_main_commit.ps1
+
+      # And that the audit is still wired to fire at all. A gate that breaks refuses, loudly;
+      # an auditor that breaks goes quiet, and quiet is what a working auditor looks like on a
+      # clean repository - so dropping its push trigger, adding a paths filter, or no longer
+      # running the script would disarm it without anything going red.
+      - name: Main bypass audit wiring
+        run: python3 scripts/validation/validate_main_audit_wiring.py
+
+      - name: Main bypass audit wiring mutation tests
+        run: python3 -m unittest scripts.validation.tests.test_validate_main_audit_wiring -v
+
   python-typecheck:
     # Lives here, not in python-spoke.yml: that workflow is path-filtered, so its
     # job can neither be a required context (it would never report on a PR that
