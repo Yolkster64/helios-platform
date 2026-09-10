@@ -102,6 +102,18 @@ for arg in "$@"; do
     *state=all*)  printf 'HTTP/2.0 200 OK\n\n[{"title":"Control fabric","state":"closed"}]\n'; exit 0 ;;
     */milestones|*/milestones\?*)
       printf 'HTTP/2.0 200 OK\n\n[]\n'; exit 0 ;;
+    */pages)
+      case "${GH_SHIM_CASE:-all-in-force}" in
+        # GitHub's own 404 body is the ONLY thing that means "no site".
+        no-pages)     printf 'HTTP/2.0 404 Not Found\n\n{"message":"Not Found","status":"404"}\n'; exit 1 ;;
+        # This proxy answers 403 on this endpoint. Read as absence it would tell the owner to
+        # POST a site that already exists, which answers 409.
+        pages-403)    printf 'HTTP/2.0 403 Forbidden\n\n{"message":"not permitted through this proxy"}\n'; exit 1 ;;
+        # The site exists but deploys from a branch, not the workflow that builds the
+        # dashboard. Enabled-but-wrong is partial; it is not absence.
+        pages-branch) printf 'HTTP/2.0 200 OK\n\n{"build_type":"legacy"}\n'; exit 0 ;;
+        *)            printf 'HTTP/2.0 200 OK\n\n{"build_type":"workflow"}\n'; exit 0 ;;
+      esac ;;
     # `repos/OWNER/NAME` with no leading slash, so `*/repos/*` would NOT match it and the
     # repository read would fall through to `{}` - which the script would then correctly
     # report as "carries no allow_auto_merge". Last in the case: the endpoint patterns above
@@ -169,6 +181,24 @@ exit 0
     Assert-Equal 2 $offRun.Exit 'a disabled setting did not exit 2'
     Assert-True ($offRun.Out -match 'settings:auto-merge\s+absent') 'allow_auto_merge=false was not reported'
     Assert-True ($offRun.Out -match 'settings:wiki\s+in-force') 'an enabled setting was misreported'
+
+    # 7b. Pages is the one setting that is not a field on the repository object, so it has its
+    #     own call and its own three answers. The 404-only rule is apply-repo-settings.ps1's,
+    #     copied deliberately: any other failed read is unreadable, not absent.
+    Assert-True ($ok.Out -match 'settings:pages\s+in-force') 'a workflow-sourced Pages site was not reported in force'
+
+    $noPages = Invoke-Inventory -Case 'no-pages'
+    Assert-Equal 2 $noPages.Exit 'an absent Pages site did not exit 2'
+    Assert-True ($noPages.Out -match 'settings:pages\s+absent') 'GitHub''s own 404 was not read as absence'
+
+    $pages403 = Invoke-Inventory -Case 'pages-403'
+    Assert-Equal 2 $pages403.Exit 'an unreadable Pages endpoint did not exit 2'
+    Assert-True ($pages403.Out -match 'settings:pages\s+unknown') 'a 403 on pages was not reported as unknown'
+    Assert-True ($pages403.Out -notmatch 'settings:pages\s+absent') 'a 403 on pages was reported as absence'
+
+    $pagesBranch = Invoke-Inventory -Case 'pages-branch'
+    Assert-True ($pagesBranch.Out -match 'settings:pages\s+partial') 'a branch-sourced Pages site was not reported partial'
+    Assert-True ($pagesBranch.Out -notmatch 'settings:pages\s+absent') 'an existing Pages site was reported absent'
 
     # 8. Not being able to run at all is exit 1, distinct from "ran and found gaps" (2). A
     #    report nobody can trust must not look like a report of gaps.
