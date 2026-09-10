@@ -18,7 +18,17 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         self.workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
     def _validate_mutation(self, before: str, after: str, expected_error: str) -> None:
-        self.assertIn(before, self.workflow_text)
+        # The anchor must be UNIQUE, not merely present. This replaced the first occurrence,
+        # so when the verify-gate job arrived carrying the same `if: github.ref ==` line as
+        # jobs.deploy, the two ref-pin tests silently retargeted: they went on passing while
+        # testing a different job than their names claimed. A count check turns that from a
+        # quiet change of subject into a failure that says which anchor went ambiguous.
+        occurrences = self.workflow_text.count(before)
+        self.assertEqual(
+            occurrences,
+            1,
+            f"mutation anchor must appear exactly once, found {occurrences}: {before!r}",
+        )
         mutated = self.workflow_text.replace(before, after, 1)
         with tempfile.TemporaryDirectory() as temp:
             path = pathlib.Path(temp) / "helios-deploy.yml"
@@ -38,9 +48,10 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         )
 
     def test_fails_when_login_is_not_gated(self) -> None:
+        # Six steps carry this guard; the login step is named by the line that follows it.
         self._validate_mutation(
-            "        if: steps.creds.outputs.configured == 'true'",
-            "        if: github.event_name == 'push'",
+            "        if: steps.creds.outputs.configured == 'true'\n        uses: azure/login@v2",
+            "        if: github.event_name == 'push'\n        uses: azure/login@v2",
             "gated by the OIDC configuration guard",
         )
 
@@ -64,17 +75,68 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         branch, so this guard is the only thing in the repository that stops a dispatch
         from a feature branch minting a token with Contributor + Key Vault Secrets Officer.
         """
+        # Anchored on the line AND what follows it: jobs.verify-gate carries the same pin,
+        # so the bare line is ambiguous and would retarget this test at the other job.
         self._validate_mutation(
-            "    if: github.ref == 'refs/heads/main'",
-            "    # if: github.ref == 'refs/heads/main'",
+            "    if: github.ref == 'refs/heads/main'\n    # CLAUDE.md:",
+            "    # if: github.ref == 'refs/heads/main'\n    # CLAUDE.md:",
             "must be pinned to main",
         )
 
     def test_fails_when_the_ref_pin_is_widened(self) -> None:
         self._validate_mutation(
-            "    if: github.ref == 'refs/heads/main'",
-            "    if: startsWith(github.ref, 'refs/heads/')",
+            "    if: github.ref == 'refs/heads/main'\n    # CLAUDE.md:",
+            "    if: startsWith(github.ref, 'refs/heads/')\n    # CLAUDE.md:",
             "must be pinned to main",
+        )
+
+    def test_fails_without_the_gate_verification_job(self) -> None:
+        """`environment: production` is a claim; this job is what checks it.
+
+        Naming an environment GitHub does not have CREATES it with no protection rules, so
+        the YAML can read as gated while nothing holds the deployment back. That is the
+        state this repository is in until the manifest is applied, which needs a credential
+        no workflow token has - so the check has to happen at deploy time, every time.
+        """
+        self._validate_mutation(
+            "  verify-gate:\n    runs-on: ubuntu-latest",
+            "  verify-gate-disabled:\n    runs-on: ubuntu-latest",
+            "must define jobs.verify-gate",
+        )
+
+    def test_fails_when_the_verifier_names_the_environment_it_verifies(self) -> None:
+        """A verifier that named `production` would create it, then wait for the approval it
+        exists to prove is required - and an unprotected environment asks for none, so the
+        check would sail through the very state it is meant to catch."""
+        self._validate_mutation(
+            "  verify-gate:\n    runs-on: ubuntu-latest\n",
+            "  verify-gate:\n    runs-on: ubuntu-latest\n    environment: production\n",
+            "must NOT name an environment",
+        )
+
+    def test_fails_when_the_deploy_job_does_not_wait_for_the_gate_check(self) -> None:
+        # Without the needs edge the two jobs run concurrently: the deployment starts while
+        # the check is still deciding, which is the same as not checking.
+        self._validate_mutation(
+            "    needs: verify-gate",
+            "    # needs: verify-gate",
+            "must declare `needs: verify-gate`",
+        )
+
+    def test_fails_when_the_verifier_stops_running_the_gate_script(self) -> None:
+        self._validate_mutation(
+            "./scripts/github/verify-environment-gate.ps1",
+            "echo skipping the gate check #",
+            "must run scripts/github/verify-environment-gate.ps1",
+        )
+
+    def test_fails_when_the_verifier_is_not_pinned_to_main(self) -> None:
+        # A verifier that runs on branches the deploy job does not is not a problem; one that
+        # runs on FEWER is, because a skipped `needs` job lets the deploy through.
+        self._validate_mutation(
+            "    if: github.ref == 'refs/heads/main'\n    permissions:",
+            "    if: startsWith(github.ref, 'refs/heads/')\n    permissions:",
+            "same main-only pin",
         )
 
     def test_fails_when_the_deploy_job_names_a_different_environment(self) -> None:
@@ -88,7 +150,13 @@ class DeployCustodyValidatorTests(unittest.TestCase):
         )
 
     def test_fails_when_contents_permission_is_elevated(self) -> None:
-        self._validate_mutation("  contents: read", "  contents: write", "keep contents: read")
+        # Anchored to the WORKFLOW-level block: jobs.verify-gate declares its own
+        # `contents: read`, so the bare line no longer names one place.
+        self._validate_mutation(
+            "  id-token: write\n  contents: read",
+            "  id-token: write\n  contents: write",
+            "keep contents: read",
+        )
 
     def test_fails_when_resource_group_creation_runs_outside_push(self) -> None:
         self._validate_mutation(
@@ -111,8 +179,21 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "bind template and parameters digests",
         )
 
-    def test_fails_when_cli_exit_code_is_not_preserved(self) -> None:
-        self._validate_mutation("          exit \"$rc\"", "          echo \"$rc\"", "preserve az CLI exit codes")
+    def test_fails_when_what_if_exit_code_is_not_preserved(self) -> None:
+        self._validate_mutation(
+            "Azure what-if failed (exit $rc). See sanitized custody artifact for diagnostics.\"\n            exit \"$rc\"",
+            "Azure what-if failed (exit $rc). See sanitized custody artifact for diagnostics.\"\n            echo \"$rc\"",
+            "what-if step must preserve az CLI exit codes",
+        )
+
+    def test_fails_when_deploy_exit_code_is_not_preserved(self) -> None:
+        # The deploy step's own check, which the shared anchor never reached: `exit "$rc"`
+        # appears in both steps and the mutation only ever replaced the first.
+        self._validate_mutation(
+            "Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics.\"\n            exit \"$rc\"",
+            "Azure deployment failed (exit $rc). See sanitized custody artifact for diagnostics.\"\n            echo \"$rc\"",
+            "deploy step must preserve az CLI exit codes",
+        )
 
     def test_fails_when_deploy_dispatch_guard_is_broadened(self) -> None:
         self._validate_mutation(
@@ -123,16 +204,16 @@ class DeployCustodyValidatorTests(unittest.TestCase):
 
     def test_fails_when_raw_output_is_tee_d_to_record(self) -> None:
         self._validate_mutation(
-            "            --output json > \"$stdout_file\" 2>\"$stderr_file\"",
-            "            --output json 2>\"$stderr_file\" | tee \"$record\"",
+            "            --result-format ResourceIdOnly \\\n            --output json > \"$stdout_file\" 2>\"$stderr_file\"",
+            "            --result-format ResourceIdOnly \\\n            --output json 2>\"$stderr_file\" | tee \"$record\"",
             "must not archive raw command output",
         )
 
     def test_fails_when_helper_script_is_removed_from_deploy_step(self) -> None:
         self._validate_mutation(
-            "python3 scripts/validation/emit_deploy_custody_record.py",
-            "python3 -c 'print(42)'",
-            "shared deploy custody record helper",
+            "python3 scripts/validation/emit_deploy_custody_record.py \\\n            --phase deploy",
+            "python3 -c 'print(42)' \\\n            --phase deploy",
+            "deploy step must use the shared deploy custody record helper",
         )
 
     def test_fails_when_precheck_no_longer_retains_failure_evidence(self) -> None:
@@ -144,10 +225,27 @@ class DeployCustodyValidatorTests(unittest.TestCase):
 
     def test_fails_when_temp_cleanup_is_removed(self) -> None:
         self._validate_mutation(
-            "          trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT\n          set +e",
-            "          echo 'skip cleanup'\n          set +e",
-            "clean up raw temp output files",
+            "record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json\"\n"
+            "          stdout_file=\"$(mktemp)\"\n          stderr_file=\"$(mktemp)\"\n"
+            "          trap 'rm -f \"$stdout_file\" \"$stderr_file\"' EXIT",
+            "record-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json\"\n"
+            "          stdout_file=\"$(mktemp)\"\n          stderr_file=\"$(mktemp)\"\n"
+            "          echo 'skip cleanup'",
+            "deploy step must clean up raw temp output files",
         )
+
+    def test_contract_workflow_must_run_the_gate_verifier_suite(self) -> None:
+        """The verifier is the live gate while `production` is unprotected, so its suite is
+        part of the contract rather than something a later edit can quietly drop."""
+        contract_text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")
+        anchor = "./scripts/verify/tests/test_verify_environment_gate.ps1"
+        self.assertEqual(contract_text.count(anchor), 1)
+        mutated = contract_text.replace(anchor, "echo skipped", 1)
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "deploy-hardening-contract.yml"
+            path.write_text(mutated, encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "environment-gate verifier suite"):
+                target.validate_contract_workflow(path)
 
     def test_contract_workflow_must_run_unittest(self) -> None:
         contract_text = CONTRACT_WORKFLOW.read_text(encoding="utf-8")

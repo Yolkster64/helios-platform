@@ -123,6 +123,33 @@ same `az` calls) creates, idempotently:
   Officer** scoped to the provider-key vault only (data-plane RBAC for the
   vault-secret writes `infra/main.bicep` performs).
 
+The two subjects are not symmetrical, and the difference decides what enforces
+what. `ref:refs/heads/main` names a branch; `environment:production` names an
+environment and says **nothing about the ref**, so a job declaring that
+environment matches it from any branch. Before `helios-deploy.yml` named an
+environment, a `workflow_dispatch` from a feature branch matched neither subject
+and `azure/login` failed with `AADSTS70021` — the branch restriction came free
+from Azure, as a side effect of which credential the job could use. Naming the
+environment spends that, so two things in the repository now carry it instead:
+
+- `if: github.ref == 'refs/heads/main'` on the deploy job (and on the
+  `verify-gate` job in front of it), required by
+  `scripts/validation/validate_deploy_custody.py` with mutation tests for both
+  removing and *widening* it — a widened pin still reads like a pin;
+- the environment's own branch policy in
+  [`config/github/environments.json`](../../config/github/environments.json),
+  which also covers the `push` path — but that is configuration, and until an
+  administrator credential applies it, it is not in force.
+
+The `verify-gate` job is what makes the second one's absence safe rather than
+merely documented: it reads the live environment and **refuses the deployment**
+unless a `required_reviewers` rule with at least one reviewer exists. It fails
+closed — absent, no rules, an emptied reviewer list, a 403, a 5xx, no `gh` — and
+a `wait_timer` on its own is refused too, because a timer delays a deployment and
+then runs it unattended. `scripts/github/verify-environment-gate.ps1`, pinned by
+`scripts/verify/tests/test_verify_environment_gate.ps1` (44 offline cases) and by
+the `contract` job of `.github/workflows/deploy-hardening-contract.yml`.
+
 It finishes by printing the values for the exact settings
 `.github/workflows/helios-deploy.yml` reads — set them as Actions
 **variables** (identifiers, not secrets), with `gh variable set` one-liners

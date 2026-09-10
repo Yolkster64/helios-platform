@@ -32,7 +32,7 @@ Every row is a lane of the one connect command, so the table and the script neve
 
 | Surface | State | In place | Left |
 | --- | --- | --- | --- |
-| GitHub + `gh` CLI | done | App manifest flow, per-run App token in the governance workflows, personal-token fallback, OIDC to Azure, labels and milestones reconciled from manifests, the review-loop stopping rule, Codex cloud reviews on every pull request | Your App approval. Custom rulesets, environments, Projects manifests and fork sync return with the rebuilt control lane. |
+| GitHub + `gh` CLI | done | App manifest flow, per-run App token in the governance workflows, personal-token fallback, OIDC to Azure, labels and milestones reconciled from manifests, the review-loop stopping rule, Codex cloud reviews on every pull request | Your App approval — until it exists nothing that needs repository administration applies itself, and the deploy workflow refuses rather than deploying through an unprotected environment. Custom rulesets, Projects manifests and fork sync return with the rest of the control lane. |
 | Azure + Key Vault | needs you | Foundry stack in Bicep with ARM and Terraform mirrors, Key Vault under role-based access, an OIDC identity for the workflows, `azure-up` writing `.helios/azure.env`, vault-backed provider secrets by name, the operations identity script | One Cloud Shell run stores the keys and mints the operations identity. The burst pool stays a printed preview until you say deploy. |
 | Foundry (Claude and OpenAI models) | done | The `anthropic-foundry` and `azure-openai` providers over Entra with no key, Claude deployments declared as data, `Connect-ClaudeFoundry.ps1`, the owner-dispatched Foundry review workflow | The `CLAUDE_AZURE_*` variables are set by the connect run. |
 | ChatGPT / Codex | done | Cloud reviews (code and security) on every pull request, the `codex` command line as a hub lane, the `openai` and `openai-codex` API providers, Codex's configuration written by script, HELIOS's own 24 tools registered *into* Codex | An OpenAI key lights the API lane; the command-line sign-in is one code in the connect run. |
@@ -60,16 +60,20 @@ an instruction-drift check, a parser sweep, and a secret scanner.
 | #248 | Coverage: the language dimension in routing and learning, the validation sweep as a required job, an analyzer gate, reviewer agents |
 | #250 | Knowledge v2 and the absorption front door: deep per-language references, the unity skill with cost and combination reasoning |
 | #252 | Configuration schemas validated by three engines that must agree, the `helios_config_validate` tool, authoring templates, the themed workspace, and one command that connects everything |
+| #255 | The offline contract suite for both connect twins, the verdict table that renders a review when no reviewer is available, and a real fix for the red code-quality check |
+| #257 | Protected environments as the deployment authority: the manifest, the apply script and its 67-case suite, the governance item that reconciles it from `main`, and the main-only pin that naming an environment had quietly spent |
 
 ## Up next, in order
 
-1. **The follow-up to #252** — the offline contract suite for both connect twins, which found
-   four more defects in the PowerShell one; the verdict table that renders a review when no
-   reviewer is available; a real fix for the red code-quality check; and the links that make
-   [CONNECT.md](CONNECT.md) findable from every entry point. Open as a pull request.
-2. **GitHub control and identity, rebuilt** — custom rulesets, deployment environments, fork
-   sync, Projects and wiki manifests, Cloud Shell persistence, fleet host identity. The
-   prepared change was lost with a session container and is rebuilt from the recorded design.
+1. **Your one GitHub step** — `pwsh scripts/bootstrap/connect-github-app.ps1 -Repository
+   Yolkster64/helios-platform -DispatchGovernance`, from your own machine. Nothing that needs
+   repository administration can apply itself until this exists: the `production` environment
+   is absent, the `main` ruleset is uncreated, and Governance Apply correctly withholds
+   `-Apply` from all three admin items. Until you run it, `helios-deploy.yml` **refuses to
+   deploy** rather than running through an environment that gates nothing.
+2. **GitHub control and identity, the rest** — custom rulesets, fork sync, Projects and wiki
+   manifests, Cloud Shell persistence, fleet host identity. Deployment environments landed in
+   #257; the remainder is rebuilt from the recorded design.
 3. **Desktop shell phases three to six, rebuilt** — the routing and fleet pages, effects, and
    the settings page. The Windows build is your step.
 4. **Fleet learning v2** — a vector learning store (decision record first), a code-survey
@@ -110,6 +114,9 @@ an instruction-drift check, a parser sweep, and a secret scanner.
 
 No secrets in the repository: configuration carries the *name* of an environment variable or a
 Key Vault secret, never a value. No assistant, connector or bot can approve a production
-deployment; GitHub's protected environments remain the deployment authority. Nothing is
+deployment; GitHub's protected environments remain the deployment authority, and the deploy
+workflow now *checks* that rather than asserting it — a job in front of the deployment reads
+the live environment and refuses unless a reviewer is required, failing closed on every way of
+not being able to tell. Nothing is
 renamed, deployed, or granted permission without your word. Every change is reviewed before it
 merges, and a change that cannot pass its gate does not merge.

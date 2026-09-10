@@ -109,6 +109,19 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
   still exits 0, and any follow-up notes are printed; exit 2 means a precondition is missing
   (no `gh`, or a credential without administrator rights); exit 1 means something failed.
 
+  **You are not racing this.** `helios-deploy.yml` runs a `verify-gate` job in front of
+  the deploy job, and that job reads the live environment and **refuses** unless a reviewer
+  is required — so while the manifest is unapplied a push to `main` touching `infra/` stops
+  with the repair printed, instead of deploying through an environment that gates nothing.
+  It fails closed: absent, no rules, a reviewer list that has been emptied, a credential
+  that cannot read the environment, or a 5xx all refuse, because "I could not check" is not
+  a reason to reach the tenant. A wait timer on its own is refused too — it delays the
+  deployment and then runs it unattended, and a timer is not a human.
+
+  What that costs you: until you apply the manifest, `infra/` changes do not deploy. That
+  is the intended trade, and one command ends it — `connect-github-app.ps1` (step 6), after
+  which `governance-apply.yml` applies the environment from `main` on the next push.
+
 ## 3. Connectors: Slack and Linear
 
 `config/connectors.json` is the single place that says where notifications go.
