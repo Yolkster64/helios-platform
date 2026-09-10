@@ -26,9 +26,10 @@
 #  10 agents           the GitHub agents: Codex cloud, Copilot, Claude on Foundry
 #  11 fleet            Hermes / XCore locally; the burst pool waits for your word
 #  12 m365             Microsoft 365 — tenant consent, a decision and not a key
-#  13 verify           first-run.sh --verify-only
+#  13 surfaces         inventory-surfaces.ps1 — of what this repo DECLARES, what is applied
+#  14 verify           first-run.sh --verify-only
 #
-# Lanes 8-12 are REPORT-ONLY: they never write, they say what is wired and what
+# Lanes 8-13 are REPORT-ONLY: they never write, they say what is wired and what
 # is one click of yours away, so the single command covers every surface rather
 # than the ones a script can act on.
 #
@@ -63,7 +64,8 @@ usage: bash scripts/bootstrap/connect.sh [options]
   --github-code       ONLY the GitHub sign-in, in the foreground, then stop
   --json              one JSON object on stdout (implies non-interactive)
   --skip-<lane>       skip one lane: persistence github app oidc secrets hub
-                      codex foundry connectors workspace agents fleet m365 verify
+                      codex foundry connectors workspace agents fleet m365
+                      surfaces verify
   -h, --help          this text
 
   HELIOS_PWSH         the interpreter to run the .ps1 lanes with, when it is
@@ -592,10 +594,66 @@ if ! skipped m365; then
 fi
 
 # ---------------------------------------------------------------------------
-# 13. Verify — one read-only pass over every lane.
+# 13. Governed surfaces — of everything this repository DECLARES about itself, what
+#     is actually applied? Every lane above answers "can I reach this?"; this one
+#     answers "is what we wrote down in force?", which is a different question and the
+#     one that went unasked while .github/rulesets/main.json read like a guarantee and
+#     enforced nothing. A summary lane, so it sits at the end rather than among the
+#     credential lanes it reports the consequences of.
+# ---------------------------------------------------------------------------
+if ! skipped surfaces; then
+    step "13. Governed surfaces"
+    surfaces_json="$(run_pwsh_json scripts/github/inventory-surfaces.ps1 -Json)"
+    rc=$?
+    surfaces_gaps=""
+    if [ "$rc" -eq 127 ]; then
+        record surfaces needs-owner "no PowerShell on this host, so the inventory could not run" \
+            "install PowerShell 7 (https://aka.ms/powershell), then re-run this script"
+        say "   pwsh not found; nothing was read."
+    elif [ "$rc" -eq 1 ]; then
+        # Exit 1 is "could not run at all" - no gh, or the repository unreadable. That is
+        # deliberately NOT the same answer as "ran and found gaps", and flattening the two
+        # here would undo the distinction the inventory exists to make.
+        record surfaces needs-owner "the inventory could not read the repository (no gh, or no access)" \
+            "$GH_LOGIN_CMD"
+        say "   could not read the repository; nothing is claimed either way."
+    else
+        if have python3; then
+            surfaces_gaps="$(printf '%s' "$surfaces_json" | python3 -c '
+import json, sys
+try:
+    report = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+rows = report.get("surfaces")
+if not isinstance(rows, list):
+    sys.exit(1)
+print(" ".join(row.get("surface", "?") for row in rows
+                if isinstance(row, dict) and row.get("state") not in ("in-force", "none-declared")))
+' 2>/dev/null)" || surfaces_gaps="?"
+        else
+            surfaces_gaps="?"
+        fi
+        if [ "$surfaces_gaps" = "?" ]; then
+            record surfaces needs-owner "the inventory ran but its report cannot be read on this host (no python3)" \
+                "pwsh scripts/github/inventory-surfaces.ps1   # the table, one row per surface"
+            say "   report unreadable here; run the inventory directly."
+        elif [ -z "$surfaces_gaps" ]; then
+            record surfaces ok "every surface this repository declares is in force"
+            say "   all declared surfaces are applied."
+        else
+            record surfaces needs-owner "not in force: $surfaces_gaps" \
+                "pwsh scripts/github/inventory-surfaces.ps1   # each row names the script that reconciles it"
+            say "   not in force: $surfaces_gaps"
+        fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 14. Verify — one read-only pass over every lane.
 # ---------------------------------------------------------------------------
 if ! skipped verify; then
-    step "13. Verify"
+    step "14. Verify"
     # first-run looks for pwsh on PATH; this checkout may carry its own under
     # .tools/pwsh, and without it every lane it probes reports "could not run".
     verify_path="$PATH"
