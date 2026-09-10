@@ -425,6 +425,16 @@ classifier and proxy denials are never engineered around).
 | `labels` | `scripts/github/apply-labels.ps1` | `config/github/labels.json` — 21 labels: the 16 live ones (colors verbatim, blank descriptions filled) plus `automerge`, `copilot`, `dependencies`, `hygiene`, `absorption-candidate`; never deletes, never renames | `issues: write` |
 | `milestones` | `scripts/github/apply-milestones.ps1` | `config/github/milestones.json` — Control fabric, GUI train T5, Absorption tranche 5, Owner setup, each with a due date; never closes or deletes | `issues: write` |
 
+Until an administrator credential exists, **none of those rulesets is in force** — the plan
+job reports `no existing ruleset named 'main' -> create` on every run, so `main.json`'s
+"pull request required, eight checks green, nobody bypasses" is a description rather than a
+control. `.github/workflows/main-bypass-audit.yml` is the compensating control: on every push
+to `main` it asks, of the commit that just landed, what the ruleset would have asked before
+it — did it arrive through a merged pull request, and were the required contexts green on that
+pull request's head? It reads those contexts out of the ruleset files, so the two cannot
+drift. It cannot undo a push, so its product is a red run on `main` naming the commit and the
+contexts that never reported. Applying the ruleset makes it redundant rather than wrong.
+
 Before any of that applies a ruleset, `scripts/validation/validate_ruleset_contexts.py`
 checks the one thing that can brick the repository: with `bypass_actors: []`, a required
 context that never **reports** on a pull request does not fail it — it strands it,
