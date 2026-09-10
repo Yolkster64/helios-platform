@@ -48,6 +48,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The audit reads ruleset FILES from this checkout and calls the API with an
+          # explicit GH_TOKEN below; it never uses git credentials. Left at the default,
+          # checkout writes the token into .git/config in the workspace, where any later step
+          # that archives the workspace would carry it out with the artifact
+          # (zizmor/artipacked). This workflow uploads nothing today - so this removes a
+          # standing credential rather than a live leak, which is the cheaper end to fix.
+          persist-credentials: false
 
       # GITHUB_TOKEN is enough: every call is a read (commits/{sha}/pulls, check-runs,
       # status). The audit makes no mutating call at all, and its offline suite asserts that.

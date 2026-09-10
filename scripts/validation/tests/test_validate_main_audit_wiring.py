@@ -95,6 +95,31 @@ class MainAuditWiringTests(unittest.TestCase):
             "must not hold contents",
         )
 
+    def test_fails_when_the_checkout_persists_credentials(self) -> None:
+        # zizmor/artipacked: left at the default, actions/checkout writes the workflow token
+        # into .git/config in the workspace. This audit reads files and calls the API with an
+        # explicit GH_TOKEN, so the credential has no purpose there - and the one step that
+        # would carry it off the runner (an artifact upload of the workspace) is one edit away.
+        self._validate_mutation(
+            "          persist-credentials: false\n",
+            "          fetch-depth: 1\n",
+            "must set persist-credentials: false",
+        )
+
+    def test_fails_when_the_checkout_takes_no_with_block(self) -> None:
+        # Deleting the whole `with:` is the likelier regression than flipping the value, and
+        # it restores the same default.
+        text = self.workflow_text
+        start = text.index("        with:\n")
+        end = text.index("          persist-credentials: false\n") + len(
+            "          persist-credentials: false\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            path = pathlib.Path(temp) / "main-bypass-audit.yml"
+            path.write_text(text[:start] + text[end:], encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "must set persist-credentials: false"):
+                target.validate_workflow(path)
+
     def test_fails_when_the_workflow_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(AssertionError, "workflow missing"):

@@ -10,11 +10,11 @@ breaks goes quiet, and quiet is exactly what a working auditor looks like on a c
 repository - so the day it stops running is the day nothing tells you. Four ordinary edits
 disarm it without failing anything:
 
-  - drop `push: branches: [main]` (it then only runs when a human dispatches it, i.e. never)
-  - add a `paths:` filter (the tempting one: it reads as a CI saving, and it means the audit
-    skips exactly the commits nobody looked at)
-  - stop running the script, or rename it
-  - grant the job write permissions it does not need
+    - drop `push: branches: [main]` (it then only runs when a human dispatches it, i.e. never)
+    - add a `paths:` filter (the tempting one: it reads as a CI saving, and it means the
+      audit skips exactly the commits nobody looked at)
+    - stop running the script, or rename it
+    - grant the job write permissions it does not need
 
 Comments in the workflow say all of this. Comments do not fail builds. This does.
 
@@ -32,7 +32,8 @@ try:
     import yaml
 except ModuleNotFoundError as exc:  # pragma: no cover
     raise SystemExit(
-        "PyYAML is required for main-audit wiring validation. Install with: pip install pyyaml==6.0.2"
+        "PyYAML is required for main-audit wiring validation. "
+        "Install with: pip install pyyaml==6.0.2"
     ) from exc
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -69,18 +70,13 @@ def _on_block(workflow: dict[Any, Any]) -> dict[str, Any]:
     return {}  # unreachable; keeps the type checker honest
 
 
-def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
-    if not path.is_file():
-        fail(f"main-bypass audit workflow missing: {path.name}")
-    workflow = _load(path)
-    triggers = _on_block(workflow)
-
-    push = triggers.get("push")
+def _validate_push_trigger(triggers: dict[str, Any]) -> None:
     _require(
         "push" in triggers,
         "the audit must trigger on push: a commit reaches main by being pushed, and an audit "
         "that only runs on dispatch audits nothing",
     )
+    push = triggers.get("push")
     _require(isinstance(push, dict), "push: must carry a branches list naming the audited branch")
     branches = [str(b) for b in (push.get("branches") or [])]
     _require(
@@ -96,33 +92,67 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
             "from the only check that looks at what reached main",
         )
 
-    jobs = workflow.get("jobs") or {}
-    _require(isinstance(jobs, dict) and len(jobs) > 0, "the audit workflow defines no jobs")
 
+def _validate_read_only(permissions: Any, subject: str, reason: str) -> None:
+    if not isinstance(permissions, dict):
+        return
+    for scope, value in permissions.items():
+        _require(str(value) == "read", f"{subject} must not hold {scope}: {value} - {reason}")
+
+
+def _validate_checkout(step: dict[str, Any]) -> None:
+    """A checkout that persists credentials leaves the token in the workspace .git/config.
+
+    The audit reads files and calls the API with an explicit GH_TOKEN; it never uses git
+    credentials, so persisting them is a standing capability with no purpose - and the step
+    that carries it out of the runner (an artifact upload of the workspace) is one edit away.
+    """
+    with_block = step.get("with")
+    hardened = isinstance(with_block, dict) and with_block.get("persist-credentials") is False
+    _require(
+        hardened,
+        "the checkout must set persist-credentials: false - otherwise the workflow token is "
+        "written into .git/config in the workspace, where anything archiving the workspace "
+        "carries it out (zizmor/artipacked)",
+    )
+
+
+def _collect_steps(jobs: dict[str, Any]) -> str:
     runs = []
     for name, job in jobs.items():
         _require(isinstance(job, dict), f"job {name} is not a mapping")
-        permissions = job.get("permissions")
-        if isinstance(permissions, dict):
-            for scope, value in permissions.items():
-                _require(
-                    str(value) == "read",
-                    f"job {name} must not hold {scope}: {value} - an auditor that can write is "
-                    "a defect on its own",
-                )
-        for step in job.get("steps") or []:
-            if isinstance(step, dict):
-                runs.append(str(step.get("run", "")))
-    combined = "\n".join(runs)
-
-    top_permissions = workflow.get("permissions") or {}
-    _require(isinstance(top_permissions, dict), "the workflow must declare permissions")
-    for scope, value in top_permissions.items():
-        _require(
-            str(value) == "read",
-            f"workflow permissions must not hold {scope}: {value} - every call this audit makes "
-            "is a read, and its suite asserts it makes no mutating call",
+        _validate_read_only(
+            job.get("permissions"),
+            f"job {name}",
+            "an auditor that can write is a defect on its own",
         )
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            if str(step.get("uses", "")).startswith("actions/checkout@"):
+                _validate_checkout(step)
+            runs.append(str(step.get("run", "")))
+    return "\n".join(runs)
+
+
+def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
+    if not path.is_file():
+        fail(f"main-bypass audit workflow missing: {path.name}")
+    workflow = _load(path)
+
+    _validate_push_trigger(_on_block(workflow))
+
+    jobs = workflow.get("jobs") or {}
+    _require(isinstance(jobs, dict) and len(jobs) > 0, "the audit workflow defines no jobs")
+    combined = _collect_steps(jobs)
+
+    top_permissions = workflow.get("permissions")
+    _require(isinstance(top_permissions, dict), "the workflow must declare permissions")
+    _validate_read_only(
+        top_permissions,
+        "workflow permissions",
+        "every call this audit makes is a read, and its suite asserts it makes no mutating call",
+    )
 
     _require(
         "audit-main-commit.ps1" in combined,
@@ -139,6 +169,7 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
             "push-trigger-on-audited-branch",
             "no-path-filter",
             "read-only-permissions",
+            "checkout-does-not-persist-credentials",
             "runs-the-auditor",
             "suite-present",
         ],
