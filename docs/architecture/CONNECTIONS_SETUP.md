@@ -425,6 +425,16 @@ classifier and proxy denials are never engineered around).
 | `labels` | `scripts/github/apply-labels.ps1` | `config/github/labels.json` — 21 labels: the 16 live ones (colors verbatim, blank descriptions filled) plus `automerge`, `copilot`, `dependencies`, `hygiene`, `absorption-candidate`; never deletes, never renames | `issues: write` |
 | `milestones` | `scripts/github/apply-milestones.ps1` | `config/github/milestones.json` — Control fabric, GUI train T5, Absorption tranche 5, Owner setup, each with a due date; never closes or deletes | `issues: write` |
 
+Before any of that applies a ruleset, `scripts/validation/validate_ruleset_contexts.py`
+checks the one thing that can brick the repository: with `bypass_actors: []`, a required
+context that never **reports** on a pull request does not fail it — it strands it,
+unmergeable by anyone until an administrator edits the ruleset. The checker fails on a
+context no job produces, a workflow with no `pull_request` trigger, a trigger carrying
+`paths` / `paths-ignore` (absent is not the same as skipped, which GitHub counts as
+satisfied), and a trigger whose `branches` miss the branch the ruleset gates. It runs in
+`quality.yml`'s Automation Wiring Validation job — which feeds the required
+`Quality Check Summary` context, so the guard is gated by the thing it protects.
+
 Every script is dry-run by default, prints the exact `gh api` call **before**
 executing it under `-Apply`, never aborts the pass on one failed item, and exits
 0 (the run did what it could — including a dry run with changes pending, which is

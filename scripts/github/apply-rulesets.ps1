@@ -68,6 +68,16 @@
     / arm-freshness / terraform-validate) on an irrelevant diff, and GitHub treats
     a skipped required check as satisfied. Merge that first, then apply.
 
+    That constraint is now CHECKED rather than remembered:
+    scripts/validation/validate_ruleset_contexts.py reads every ruleset here and
+    every workflow, and fails if a required context is produced by no job, if its
+    workflow has no pull_request trigger, if that trigger carries paths /
+    paths-ignore (absent is not the same as skipped), or if its branches miss the
+    branch the ruleset gates. It runs in quality.yml's Automation Wiring
+    Validation job, which feeds the required Quality Check Summary context - so
+    the guard is gated by the thing it protects, and a change that would strand
+    every merge fails before it lands rather than after the ruleset is applied.
+
 .PARAMETER Apply
     Execute the `gh api` calls. Without it the script only prints them (dry run).
 
