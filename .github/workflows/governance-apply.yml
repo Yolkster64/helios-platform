@@ -1,5 +1,5 @@
 # Governance apply: reconciles the repository's checked-in GitHub truth with the
-# live repository through the four idempotent scripts under scripts/github/:
+# live repository through the five idempotent scripts under scripts/github/:
 #
 #   rulesets    apply-rulesets.ps1       .github/rulesets/*.json      needs repo ADMIN
 #   settings    apply-repo-settings.ps1  Pages/auto-merge/wiki flags  needs repo ADMIN
@@ -18,18 +18,18 @@
 #                                  GETs repos/{repo}/pages, which the Pages permission
 #                                  gates; without it the GET is a 403 and the plan
 #                                  would report Pages out of sync on every PR.
-#   apply  (push to main,          Credentials are chosen PER SCRIPT. Rulesets and
-#           workflow_dispatch,     settings run with the first admin credential that
-#           schedule)              exists: the HELIOS GitHub App installation token
-#                                  (minted per run by the runner's first step when the
-#                                  HELIOS_APP_CLIENT_ID variable and the
-#                                  HELIOS_APP_PRIVATE_KEY secret are both stored), else
-#                                  HELIOS_ADMIN_TOKEN, else GITHUB_TOKEN (dry-run only
-#                                  plus a "needs an admin credential" row naming the
-#                                  owner step, app path first). Labels and milestones
-#                                  ALWAYS run with GITHUB_TOKEN (issues: write is
-#                                  granted below), so a dead or under-scoped admin
-#                                  credential can never take them down.
+#   apply  (push to main,          Credentials are chosen PER SCRIPT. Rulesets,
+#           workflow_dispatch,     settings and environments run with the first admin
+#           schedule)              credential that exists: the HELIOS GitHub App
+#                                  installation token (minted per run by the runner's
+#                                  first step when the HELIOS_APP_CLIENT_ID variable
+#                                  and the HELIOS_APP_PRIVATE_KEY secret are both
+#                                  stored), else HELIOS_ADMIN_TOKEN, else GITHUB_TOKEN
+#                                  (dry-run only plus a "needs an admin credential" row
+#                                  naming the owner step, app path first). Labels and
+#                                  milestones ALWAYS run with GITHUB_TOKEN (issues:
+#                                  write is granted below), so a dead or under-scoped
+#                                  admin credential can never take them down.
 #                                  The app is the durable authority: a private GitHub
 #                                  App, helios-control-<owner>, registered once by
 #                                  scripts/bootstrap/connect-github-app.ps1 from the
@@ -61,7 +61,7 @@
 # right after such a merge, and the daily `schedule` below applies the checked-in
 # truth unattended (idempotent: an in-sync repository produces only "in sync" rows).
 #
-# Exit-code contract shared by all four scripts and honored by the runner:
+# Exit-code contract shared by all five scripts and honored by the runner:
 #   0 = success or clean dry run          -> row "applied" (mutations ran), "in sync
 #                                            (dry-run)" (nothing pending), or "dry-run:
 #                                            N pending change(s)" (the script printed N

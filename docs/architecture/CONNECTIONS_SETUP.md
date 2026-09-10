@@ -388,18 +388,21 @@ its dry run; the exact commands it prints are ledgered, and the apply happens
 where the credential is real: an Actions job on `main` (rule 5 of the train:
 classifier and proxy denials are never engineered around).
 
-### `governance-apply.yml`: four scripts, one authority split
+### `governance-apply.yml`: five scripts, one authority split
 
 | Item | Script | Truth it applies | Credential |
 |---|---|---|---|
 | `rulesets` | `scripts/github/apply-rulesets.ps1` | `.github/rulesets/*.json` (create, or PUT by name) | repo admin |
 | `settings` | `scripts/github/apply-repo-settings.ps1` | Pages source = Actions, `allow_auto_merge`, `has_wiki`, `delete_branch_on_merge`, the `automerge` label; `boards` is report-only | repo admin |
+| `environments` | `scripts/github/apply-environments.ps1` | `config/github/environments.json` — the deployment gate `.github/workflows/helios-deploy.yml` names: required reviewer, `prevent_self_review`, and the branch policy pinning deployments to `main`; never deletes an environment, and reports (never resolves) secret and variable NAMES | repo admin |
 | `labels` | `scripts/github/apply-labels.ps1` | `config/github/labels.json` — 21 labels: the 16 live ones (colors verbatim, blank descriptions filled) plus `automerge`, `copilot`, `dependencies`, `hygiene`, `absorption-candidate`; never deletes, never renames | `issues: write` |
 | `milestones` | `scripts/github/apply-milestones.ps1` | `config/github/milestones.json` — Control fabric, GUI train T5, Absorption tranche 5, Owner setup, each with a due date; never closes or deletes | `issues: write` |
 
 Every script is dry-run by default, prints the exact `gh api` call **before**
 executing it under `-Apply`, never aborts the pass on one failed item, and exits
-0 (clean), 1 (an item failed; replay list printed) or 2 (precondition or
+0 (the run did what it could — including a dry run with changes pending, which is
+why the runner counts the printed `would run:` lines rather than reading the exit
+code as "clean"), 1 (an item failed; replay list printed) or 2 (precondition or
 credential missing). The workflow honors the same contract:
 
 - **`plan` job** — `pull_request` touching `.github/rulesets/**`,
@@ -411,19 +414,20 @@ credential missing). The workflow honors the same contract:
   (06:17 UTC: the drift net for merges that raise no push event; GitHub keeps
   scheduled runs off on forks unless enabled), or `workflow_dispatch` with `apply`
   (boolean, default false, which makes it a plan run with the real token) and
-  `scope` (`all|rulesets|settings|labels|milestones`): for the two admin items
-  `GH_TOKEN` is, in order of precedence, the HELIOS GitHub App installation
-  token — minted in the runner's first step by `actions/create-github-app-token@v3`
-  when the `HELIOS_APP_CLIENT_ID` variable and the `HELIOS_APP_PRIVATE_KEY`
-  secret are both stored, scoped to this repository and to Administration,
-  Contents, Issues, Pull requests, Pages write + Metadata read, revoked when
-  the job ends — else `HELIOS_ADMIN_TOKEN` when the owner has stored the PAT,
-  else `github.token`; labels and milestones always apply with `github.token`
-  (`contents: read`, `issues: write`, `pages: read`). Rulesets and settings
-  apply **only** with one of the two real admin credentials; without either they
-  print their dry run and the summary row reads "needs an admin credential" with
-  the app path spelled out first and the PAT as the fallback. Exit 2 is
-  reported, never red, with one exception: a stored credential that is rejected.
+  `scope` (`all|rulesets|settings|environments|labels|milestones`): for the three
+  admin items `GH_TOKEN` is, in order of precedence, the HELIOS GitHub App
+  installation token — minted in the runner's first step by
+  `actions/create-github-app-token@v3` when the `HELIOS_APP_CLIENT_ID` variable
+  and the `HELIOS_APP_PRIVATE_KEY` secret are both stored, scoped to this
+  repository and to Administration, Contents, Issues, Pull requests, Pages
+  write + Metadata read, revoked when the job ends — else `HELIOS_ADMIN_TOKEN`
+  when the owner has stored the PAT, else `github.token`; labels and milestones
+  always apply with `github.token` (`contents: read`, `issues: write`,
+  `pages: read`). Rulesets, settings and environments apply **only** with one of
+  the two real admin credentials; without either they print their dry run and
+  the summary row reads "needs an admin credential" with the app path spelled
+  out first and the PAT as the fallback. Exit 2 is reported, never red, with one
+  exception: a stored credential that is rejected.
   An app credential that no longer mints (app uninstalled, key rotated,
   installation narrowed) fails the mint step, so the job is red before any
   script runs and the annotation names the repair — it never degrades to the

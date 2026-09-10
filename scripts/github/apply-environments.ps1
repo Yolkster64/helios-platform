@@ -12,6 +12,12 @@
     an environment and never removes a protection rule the manifest does not mention -
     absence here means unmanaged, not "set it to nothing".
 
+    The allowed branch PATTERNS are compared too, from their own endpoint, because a custom
+    policy allowing feature/* has the same shape in the environment body as one allowing
+    only main. A pattern the manifest wants and the repository lacks is added under -Apply;
+    one the repository allows and the manifest does not is reported for you to remove, since
+    removing it is a DELETE and this script makes none.
+
     Why this exists: CLAUDE.md states that GitHub protected environments remain deployment
     authority, and .github/workflows/helios-deploy.yml names `production` on the job that
     runs `az deployment group create`. Naming an environment GitHub does not have CREATES
@@ -46,9 +52,15 @@
     pwsh scripts/github/apply-environments.ps1 -Apply
 
 .NOTES
-    Exit codes: 0 = every environment is in sync and nothing is left for you;
-    2 = owner items remain (they are listed, each with its command);
-    1 = a call failed for a reason that is not yours to fix.
+    Exit codes: 0 = the run did what it could, which INCLUDES a dry run with pending changes
+    and an apply that left follow-up notes (setting a variable, pasting a secret) - those are
+    listed but do not change the code; 2 = a PRECONDITION is missing (no gh, no administrator
+    credential); 1 = something failed, including a reviewer this manifest names that GitHub
+    does not have.
+
+    Exit 2 is deliberately narrow because .github/workflows/governance-run.yml reads exit 2
+    from an admin item during -Apply as "this admin credential was rejected" and tells the
+    owner to rotate a token. Only a genuine credential/precondition fault may say that.
 #>
 [CmdletBinding()]
 param(
@@ -209,7 +221,10 @@ function Resolve-Reviewer {
 
 function Get-BranchPolicyShape {
     # The comparable shape of a branch policy: GitHub echoes extra keys, and null and
-    # "every branch may deploy" are the same state said two ways.
+    # "every branch may deploy" are the same state said two ways. This is the SHAPE only -
+    # the branch patterns live on their own endpoint and are compared separately, because a
+    # live policy allowing feature/* has the same shape as one allowing only main while
+    # granting far more.
     param($Policy)
     if ($null -eq $Policy) { return 'any-branch' }
     $protected = Get-OptionalProperty $Policy 'protected_branches' $false
@@ -218,6 +233,52 @@ function Get-BranchPolicyShape {
     if ($protected -eq $true) { return 'protected-branches' }
     if ($custom) { return 'custom-branches' }
     return 'any-branch'
+}
+
+function Get-WantedBranchPatterns {
+    # The manifest's friendly key. GitHub's own body carries only the two booleans; the
+    # PATTERNS are a separate endpoint, which is why this translation has to exist rather
+    # than the manifest key being passed through.
+    param($Policy)
+    if ($null -eq $Policy) { return @() }
+    return @(Get-OptionalProperty $Policy 'custom_branches' @())
+}
+
+function Get-LiveBranchPatterns {
+    # GET .../environments/{env}/deployment-branch-policies -> the names actually allowed.
+    #
+    # Returns @{ Ok; Patterns } rather than the array itself: PowerShell UNROLLS an empty
+    # array returned from a function into $null, so `return @()` for "no patterns allowed"
+    # is indistinguishable from `return $null` for "the read failed" - and those are opposite
+    # verdicts. An environment with a custom policy and no patterns permits NOTHING; one that
+    # could not be read permits we-do-not-know.
+    param([Parameter(Mandatory)][string]$EnvName)
+    if (-not $script:gh) { return @{ Ok = $false; Patterns = @() } }
+    $reply = Invoke-GhApi -GhArgs @("repos/$Repository/environments/$EnvName/deployment-branch-policies")
+    if ($reply.ExitCode -ne 0) { return @{ Ok = $false; Patterns = @() } }
+    $names = @(@(Get-OptionalProperty $reply.Json 'branch_policies' @()) |
+        ForEach-Object { [string](Get-OptionalProperty $_ 'name' '') } | Where-Object { $_ })
+    return @{ Ok = $true; Patterns = $names }
+}
+
+function ConvertTo-EnvironmentBody {
+    # The PUT body as JSON. -F cannot express deployment_branch_policy, which is a nested
+    # OBJECT requiring BOTH booleans - so the whole body goes through a file, the way
+    # apply-rulesets.ps1 sends a ruleset. Sending it with the key omitted would leave a
+    # hand-made policy in place; sending null clears it, which is what "any branch" means.
+    param([int]$WaitTimer, [bool]$PreventSelfReview, $Resolved, $Policy)
+    $body = [ordered]@{
+        wait_timer          = $WaitTimer
+        prevent_self_review = $PreventSelfReview
+        reviewers           = @($Resolved | ForEach-Object { [ordered]@{ type = $_.Type; id = $_.Id } })
+    }
+    $shape = Get-BranchPolicyShape $Policy
+    $body['deployment_branch_policy'] = switch ($shape) {
+        'protected-branches' { [ordered]@{ protected_branches = $true;  custom_branch_policies = $false } }
+        'custom-branches'    { [ordered]@{ protected_branches = $false; custom_branch_policies = $true  } }
+        default              { $null }
+    }
+    return ($body | ConvertTo-Json -Depth 6 -Compress)
 }
 
 $failed = $false
@@ -253,6 +314,7 @@ foreach ($env in $environments) {
     }
 
     $live = $null
+    $unreadable = $false
     if ($script:gh) {
         $reply = Invoke-GhApi -GhArgs @("repos/$Repository/environments/$name")
         if ($reply.ExitCode -eq 0) { $live = $reply.Json }
@@ -263,19 +325,38 @@ foreach ($env in $environments) {
             $script:precondition = $true
         }
         else {
-            Write-Line "   live: lookup failed (HTTP $($reply.HttpStatus))"
-            $failed = $true
+            # Not $failed: the siblings treat an unreadable live state as unknown and exit 0
+            # (apply-rulesets warns, apply-repo-settings counts it), and run_item maps exit 1
+            # to "FAILED (item failed)" which would red the whole governance workflow on every
+            # pull request for one transient 5xx. It is reported and the environment is left
+            # alone, because a PUT without a diff is a blind write.
+            Write-Line "   live: could not be read (HTTP $($reply.HttpStatus)); leaving this environment alone"
+            Add-OwnerAction "re-run when GitHub answers for environment '$name': pwsh scripts/github/apply-environments.ps1"
+            $unreadable = $true
         }
     }
 
+    $wantPatterns = @(Get-WantedBranchPatterns $policy)
+    $extraPatterns = @()
+    # Everything the manifest wants is missing until a live read says otherwise. Starting
+    # this at @() meant an ABSENT environment - the only case that will ever run here for
+    # real, since `production` does not exist yet - was created with custom_branch_policies
+    # true and NO patterns: a policy that matches no branch, so every deployment would be
+    # refused by the gate that was supposed to admit main.
+    $missingPatterns = @($wantPatterns)
     $inSync = $false
     if ($live) {
         $liveWait = 0
         $liveReviewerIds = @()
+        $livePreventSelf = $false
         foreach ($rule in @(Get-OptionalProperty $live 'protection_rules' @())) {
             switch ([string](Get-OptionalProperty $rule 'type' '')) {
                 'wait_timer' { $liveWait = [int](Get-OptionalProperty $rule 'wait_timer' 0) }
                 'required_reviewers' {
+                    # prevent_self_review rides on this rule. It was sent but never compared,
+                    # so the control the manifest's `because` specifically names could drift
+                    # to false and this script would still print "in sync".
+                    $livePreventSelf = [bool](Get-OptionalProperty $rule 'prevent_self_review' $false)
                     foreach ($rr in @(Get-OptionalProperty $rule 'reviewers' @())) {
                         $id = Get-OptionalProperty (Get-OptionalProperty $rr 'reviewer' $null) 'id' $null
                         if ($id) { $liveReviewerIds += [int]$id }
@@ -285,46 +366,149 @@ foreach ($env in $environments) {
         }
         $wantIds = @($resolved | ForEach-Object { $_.Id })
         $sameReviewers = (@($liveReviewerIds | Sort-Object) -join ',') -eq (@($wantIds | Sort-Object) -join ',')
-        $samePolicy = (Get-BranchPolicyShape (Get-OptionalProperty $live 'deployment_branch_policy' $null)) -eq (Get-BranchPolicyShape $policy)
-        $inSync = ($liveWait -eq $waitTimer) -and $sameReviewers -and $samePolicy -and $unresolved.Count -eq 0
-        Write-Line "   live: wait_timer=$liveWait reviewers=$($liveReviewerIds.Count) branch-policy=$(Get-BranchPolicyShape (Get-OptionalProperty $live 'deployment_branch_policy' $null))"
+        $liveShape = Get-BranchPolicyShape (Get-OptionalProperty $live 'deployment_branch_policy' $null)
+        $sameShape = $liveShape -eq (Get-BranchPolicyShape $policy)
+
+        # The patterns, not just the shape: "custom branches" allowing feature/* has the same
+        # shape as one allowing only main.
+        # Two flags rather than one, because the two kinds of difference have opposite
+        # owners. A MISSING pattern is this script's to add (a POST it makes under -Apply).
+        # An EXTRA one WIDENS the gate and can only go away with a DELETE, which this script
+        # never makes. Folding both into one "same patterns" boolean meant an extra pattern
+        # printed the PUT - a call that cannot remove it - so -Apply reported `applied.` over
+        # a gate that was still wide, and the next dry run printed the same useless PUT
+        # again, forever. `$patternsKnown` is a third state: the read failed, which is not
+        # "they differ" and not "they match".
+        $patternsKnown = $true
+        if ($liveShape -eq 'custom-branches' -or $wantPatterns.Count -gt 0) {
+            $patternRead = Get-LiveBranchPatterns -EnvName $name
+            if (-not $patternRead.Ok) {
+                # Not knowing which patterns exist is not the same as knowing they are
+                # missing. POSTing them blind would 422 on any that already exist, and
+                # run_item turns that exit 1 into a red governance row - for one transient
+                # read failure. The environment body is still written (a PUT is idempotent);
+                # the patterns wait for a run that can see them.
+                $patternsKnown = $false
+                $missingPatterns = @()
+                Write-Line '   branch patterns: could not be read; leaving the patterns alone this run'
+            }
+            else {
+                $livePatterns = @($patternRead.Patterns)
+                $missingPatterns = @($wantPatterns | Where-Object { $_ -notin $livePatterns })
+                $extraPatterns = @($livePatterns | Where-Object { $_ -notin $wantPatterns })
+                Write-Line "   branch patterns: live=[$($livePatterns -join ', ')] want=[$($wantPatterns -join ', ')]"
+                foreach ($extra in $extraPatterns) {
+                    # An extra pattern WIDENS the gate, so it is never left as "in sync" - but
+                    # deleting is destructive, so it is the owner's call with the exact command.
+                    Add-OwnerAction ("environment '$name' also allows deployments from '$extra', which the manifest does not: " +
+                        "review it, then remove it with gh api --method DELETE repos/$Repository/environments/$name/deployment-branch-policies/<id>")
+                }
+            }
+        }
+
+        $inSync = ($liveWait -eq $waitTimer) -and $sameReviewers -and $sameShape -and $patternsKnown `
+            -and $missingPatterns.Count -eq 0 -and ($livePreventSelf -eq $preventSelf) -and $unresolved.Count -eq 0
+        Write-Line "   live: wait_timer=$liveWait reviewers=$($liveReviewerIds.Count) branch-policy=$liveShape prevent_self_review=$livePreventSelf"
     }
 
     Write-Line "   want: wait_timer=$waitTimer reviewers=$($resolved.Count) branch-policy=$(Get-BranchPolicyShape $policy) prevent_self_review=$preventSelf"
 
+    if ($unreadable) {
+        $results.Add([pscustomobject]@{ name = $name; state = 'unknown' }) | Out-Null
+        continue
+    }
+
     if ($inSync) {
+        if ($extraPatterns.Count -gt 0) {
+            # Everything this script owns matches; what is left is a DELETE it will not make.
+            # Neither available word is true on its own here - "in sync" hides a gate wider
+            # than the manifest, and "would change" promises a call that would not narrow it -
+            # so the state says which it is and the removal is listed above as the owner's.
+            Write-Line ("   in sync apart from $($extraPatterns.Count) branch pattern(s) only you can remove: " +
+                ($extraPatterns -join ', '))
+            $results.Add([pscustomobject]@{ name = $name; state = 'needs-owner' }) | Out-Null
+            continue
+        }
         Write-Line '   in sync; no call made.'
         $results.Add([pscustomobject]@{ name = $name; state = 'in-sync' }) | Out-Null
         continue
     }
 
     if ($unresolved.Count -gt 0) {
-        Write-Line '   SKIPPED: a reviewer could not be resolved, and a partial write would shrink the gate.'
-        $results.Add([pscustomobject]@{ name = $name; state = 'blocked' }) | Out-Null
+        # exit 1, not 2: a reviewer the manifest names and GitHub does not have is a fault in
+        # THIS FILE, not a missing credential. governance-run.yml renders exit 2 from an admin
+        # item as "your admin token was revoked - rotate it", which would send the owner
+        # rotating a healthy token over a typo, or over a Team reviewer on a user-owned
+        # account (which has no teams at all, so that lookup 404s by construction).
+        Write-Line '   FAILED: a reviewer could not be resolved, and a partial write would shrink the gate.'
+        $results.Add([pscustomobject]@{ name = $name; state = 'failed' }) | Out-Null
+        $failed = $true
         continue
     }
 
-    $bodyArgs = @('--method', 'PUT', "repos/$Repository/environments/$name",
-                  '-F', "wait_timer=$waitTimer", '-F', "prevent_self_review=$($preventSelf.ToString().ToLowerInvariant())")
-    $replay = "$script:GhApiReplay --method PUT repos/$Repository/environments/$name -F wait_timer=$waitTimer -F prevent_self_review=$($preventSelf.ToString().ToLowerInvariant())"
-    foreach ($r in $resolved) {
-        $bodyArgs += @('-F', "reviewers[][type]=$($r.Type)", '-F', "reviewers[][id]=$($r.Id)")
-        $replay += " -F 'reviewers[][type]=$($r.Type)' -F 'reviewers[][id]=$($r.Id)'"
+    # Names only, never values: the owner sets these, and this script never reads one.
+    # Listed BEFORE the write, so the dry run reports them too. They used to be added after
+    # the PUT, which meant the preview showed one call and hid the five variables that go
+    # with it - the owner only learned about them by running -Apply, which is the opposite
+    # of what a dry run is for. An environment already in sync skips this block (it never
+    # reaches here), so a clean run stays quiet.
+    foreach ($secret in @(Get-OptionalProperty $env 'secretNames' @())) {
+        Add-OwnerAction "gh secret set $secret --env $name --repo $Repository   # value entered at the prompt; never stored in this repository"
     }
+    foreach ($variable in @(Get-OptionalProperty $env 'variableNames' @())) {
+        Add-OwnerAction "gh variable set $variable --env $name --repo $Repository   # or confirm the repository-level variable already covers it"
+    }
+
+    $bodyJson = ConvertTo-EnvironmentBody -WaitTimer $waitTimer -PreventSelfReview $preventSelf `
+        -Resolved $resolved -Policy $policy
+    $replay = "$script:GhApiReplay --method PUT repos/$Repository/environments/$name --input - <<< '$bodyJson'"
 
     if (-not $Apply) {
         Write-Line "   would run: $replay"
-        if ($policy) {
-            Write-Line '   (the deployment branch policy is a second call; -Apply prints and makes both)'
+        foreach ($pattern in $missingPatterns) {
+            Write-Line ("   would run: $script:GhApiReplay --method POST " +
+                "repos/$Repository/environments/$name/deployment-branch-policies -f name='$pattern'")
         }
         $results.Add([pscustomobject]@{ name = $name; state = 'would-change' }) | Out-Null
         continue
     }
 
-    $reply = Invoke-GhApi -GhArgs $bodyArgs -Mutating
+    # --input, not -F: deployment_branch_policy is a nested object requiring BOTH booleans,
+    # which -F cannot express. It was omitted entirely before, so custom_branches never
+    # reached GitHub and the item could never converge - it reported "applied" and then
+    # "would change" again on the very next run, forever.
+    $bodyFile = (New-TemporaryFile).FullName
+    try {
+        Set-Content -LiteralPath $bodyFile -Value $bodyJson -Encoding utf8 -NoNewline
+        $reply = Invoke-GhApi -GhArgs @('--method', 'PUT', "repos/$Repository/environments/$name",
+                                        '--input', $bodyFile) -Mutating
+    }
+    finally { Remove-Item -LiteralPath $bodyFile -Force -ErrorAction SilentlyContinue }
+
     if ($reply.ExitCode -eq 0) {
         Write-Line '   applied.'
-        $results.Add([pscustomobject]@{ name = $name; state = 'applied' }) | Out-Null
+        # The patterns are their own endpoint; the PUT above only said WHICH KIND of policy.
+        $patternFailed = $false
+        foreach ($pattern in $missingPatterns) {
+            $add = Invoke-GhApi -GhArgs @('--method', 'POST',
+                "repos/$Repository/environments/$name/deployment-branch-policies",
+                '-f', "name=$pattern") -Mutating
+            if ($add.ExitCode -eq 0) { Write-Line "   branch pattern '$pattern' allowed." }
+            else {
+                Write-Line "   FAILED to add branch pattern '$pattern' (HTTP $($add.HttpStatus))"
+                $patternFailed = $true
+            }
+        }
+        if ($patternFailed) { $failed = $true }
+        # `applied.` alone would claim the environment now matches the manifest. If a pattern
+        # this script will not delete still allows deployments the manifest does not, it does
+        # not - and re-running would say `applied.` again with nothing changed.
+        if (-not $patternFailed -and $extraPatterns.Count -gt 0) {
+            Write-Line ("   $($extraPatterns.Count) branch pattern(s) still allow deployments the manifest does not: " +
+                ($extraPatterns -join ', ') + ' — removing one is a DELETE, listed for you above.')
+        }
+        $state = if ($patternFailed) { 'failed' } elseif ($extraPatterns.Count -gt 0) { 'needs-owner' } else { 'applied' }
+        $results.Add([pscustomobject]@{ name = $name; state = $state }) | Out-Null
     }
     else {
         Write-Line "   FAILED (HTTP $($reply.HttpStatus)): $([string](Get-OptionalProperty $reply.Json 'message' 'no message'))"
@@ -334,14 +518,6 @@ foreach ($env in $environments) {
             $script:precondition = $true
         }
         else { $failed = $true }
-    }
-
-    # Names only, never values: the owner sets these, and this script never reads one.
-    foreach ($secret in @(Get-OptionalProperty $env 'secretNames' @())) {
-        Add-OwnerAction "gh secret set $secret --env $name --repo $Repository   # value entered at the prompt; never stored in this repository"
-    }
-    foreach ($variable in @(Get-OptionalProperty $env 'variableNames' @())) {
-        Add-OwnerAction "gh variable set $variable --env $name --repo $Repository   # or confirm the repository-level variable already covers it"
     }
 }
 
@@ -356,8 +532,14 @@ if ($ownerActions.Count -gt 0) {
 # environment and printed the PUT it would make signed off with "every environment matches".
 # The pending set is its own question, and is answered separately.
 $pendingCount = @($results | Where-Object { $_.state -eq 'would-change' }).Count
+$ownerCount = @($results | Where-Object { $_.state -eq 'needs-owner' }).Count
 if ($pendingCount -gt 0) {
     Write-Line "$pendingCount environment(s) would change. Nothing was changed: re-run with -Apply to make the call(s) above."
+}
+elseif ($ownerCount -gt 0) {
+    # Otherwise this run would end on the owner list with no verdict at all: no pending call
+    # to report and no clean sign-off to print, which reads as though the script forgot to say.
+    Write-Line "$ownerCount environment(s) need a change only you can make (listed above); no call was made for them."
 }
 elseif ($ownerActions.Count -eq 0) {
     Write-Line 'Nothing left for you: every environment in the manifest matches the repository.'

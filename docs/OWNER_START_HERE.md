@@ -105,7 +105,9 @@ All under `https://github.com/Yolkster64/helios-platform` → **Settings**.
   Until it is applied the environment exists with **no protection rules at all** —
   naming an environment GitHub does not have creates an unprotected one, so the gate
   reads as present in the YAML and holds nothing back in reality. The dry run says so
-  in those words. Exit 0 means nothing is left for you, 2 that items remain.
+  in those words. Exit 0 means the run did what it could — a preview with changes pending
+  still exits 0, and any follow-up notes are printed; exit 2 means a precondition is missing
+  (no `gh`, or a credential without administrator rights); exit 1 means something failed.
 
 ## 3. Connectors: Slack and Linear
 
@@ -239,7 +241,7 @@ calls; it runs on its own too) does the rest:
 
 Why an app rather than a PAT: the workflow mints an installation token per run
 (`actions/create-github-app-token@v3`, scoped to this repository and to
-exactly the permissions the four scripts need, revoked when the job ends), so
+exactly the permissions the five scripts need, revoked when the job ends), so
 nothing long-lived sits in a password manager; rotation is a key swap on the
 app page (`https://github.com/settings/apps/<slug>`: generate a new private
 key, delete the old one, then

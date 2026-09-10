@@ -92,8 +92,12 @@
             "custom_branches": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string", "minLength": 1 },
-              "description": "Branch name or wildcard patterns allowed to deploy."
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._*/-]+$"
+              },
+              "description": "Branch name or wildcard patterns allowed to deploy. The character set is narrower than git's because apply-environments.ps1 PRINTS each pattern inside a single-quoted `gh api ... -f name='<pattern>'` line for the owner to paste; a quote or a space in a pattern would produce a replay command that does something other than what the report says."
             }
           },
           "not": {
