@@ -437,7 +437,7 @@ contexts that never reported. Applying the ruleset makes it redundant rather tha
 
 To ask that question of every surface at once rather than one reconciler at a time, run
 `scripts/github/inventory-surfaces.ps1`. It is read-only, and it reports per surface —
-rulesets, environments, labels, milestones, Pages, and the scalar repository settings — whether the
+rulesets, environments, labels, milestones, Pages, whether the wiki has ever been initialized, and the scalar repository settings — whether the
 thing this repository declares actually exists live, naming the reconciler that owns each gap.
 Exit 0 means everything declared is in force; exit 2 means it ran and found gaps; exit 1 means
 it could not run at all, which is deliberately not the same answer. An unreadable surface is

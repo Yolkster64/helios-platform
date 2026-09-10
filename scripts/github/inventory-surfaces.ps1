@@ -274,6 +274,44 @@ foreach ($setting in @(
     }
 }
 
+# --- wiki initialization ----------------------------------------------------------------
+# `has_wiki` above is a FEATURE TOGGLE, not a wiki. GitHub creates <repo>.wiki.git only when
+# the first page is created in the UI, and `.github/workflows/wiki-generator.yml` CLONES that
+# repo - so until that one click happens the sync job logs a notice and exits GREEN, on every
+# run, forever. Reporting the toggle alone as "in force" is precisely the false reassurance
+# this inventory exists to remove, and the row above was giving it.
+#
+# There is no REST endpoint for this: the wiki is a git repository, so the probe is a git one.
+# `git ls-remote` WITHOUT a token in the URL, unlike the workflow: git's own credential helper
+# supplies the credential, so this script still never reads a token value.
+if ((Get-OptionalProperty $repo.Json 'has_wiki' $false) -eq $true) {
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $git) {
+        Add-Row -Surface 'wiki:initialized' -State 'unknown' -Detail 'git is not on PATH, so the wiki repository could not be probed' -Owner 'owner: create the first page'
+    }
+    else {
+        $wikiUrl = "https://github.com/$Repository.wiki.git"
+        $wikiOut = @(& $git.Source 'ls-remote' '--heads' $wikiUrl 2>&1)
+        $wikiCode = $LASTEXITCODE
+        $wikiText = ($wikiOut -join "`n")
+        if ($wikiCode -eq 0) {
+            Add-Row -Surface 'wiki:initialized' -State 'in-force' -Detail 'the wiki repository exists, so Wiki Sync has somewhere to push' -Owner 'wiki-generator.yml'
+        }
+        elseif ($wikiText -match 'not found|does not exist|Repository not found') {
+            Add-Row -Surface 'wiki:initialized' -State 'absent' `
+                -Detail "$Repository.wiki.git does not exist; Wiki Sync green-skips on every run until the first page is created" `
+                -Owner "owner: open https://github.com/$Repository/wiki and create the first page, then re-run Wiki Sync"
+        }
+        else {
+            # Authentication failures land here, and they are not evidence of absence: telling
+            # the owner to create a page that already exists is the same false instruction the
+            # 404-only rule avoids everywhere else in this script.
+            Add-Row -Surface 'wiki:initialized' -State 'unknown' `
+                -Detail "the wiki repository could not be probed (git exit $wikiCode)" -Owner 'wiki-generator.yml'
+        }
+    }
+}
+
 # --- pages ----------------------------------------------------------------------------
 # Its own call: Pages is not a field on the repository object. The 404 rule is
 # apply-repo-settings.ps1's and is copied deliberately - only GitHub's own `"status":"404"`
