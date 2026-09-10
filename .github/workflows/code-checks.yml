@@ -31,13 +31,16 @@ jobs:
           fetch-depth: 0
       
       # You cannot install the shell you are already running. This step declares
-      # `shell: pwsh`, and `pwsh` IS PowerShell 7 (5.1 is `powershell`), so reaching the
-      # step at all proves 7 is present - and on 2026-09-09 the hosted Windows image began
-      # shipping its own 7.6.6, which made `choco install powershell-core` fail outright
-      # ("already installed by another mechanism and is a different version") and took the
-      # five substantive checks down with it, exactly as the Pester install used to.
-      # A choco fallback would be unreachable: were pwsh missing, this step could not start.
-      # So it verifies, and says which version the rest of the job will use.
+      # `shell: pwsh`, and `pwsh` is the PowerShell 6+ binary (5.1 is `powershell`), so
+      # reaching the step at all proves PowerShell Core is present - the version check below
+      # is what actually pins it to 7. On 2026-09-09 the hosted Windows image began shipping
+      # its own PowerShell 7.6.6 through a non-chocolatey installer, so
+      # `choco install powershell-core` failed outright ("already installed by another
+      # mechanism and is a different version" - chocolatey compares its own package records,
+      # not the running binary) and took the five substantive checks down with it, exactly as
+      # the Pester install used to. A choco fallback would be unreachable anyway: were pwsh
+      # missing, this step could not start. So it verifies, and says which version the rest
+      # of the job will use.
       - name: Verify PowerShell 7
         shell: pwsh
         run: |
