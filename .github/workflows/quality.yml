@@ -171,6 +171,16 @@ jobs:
         shell: pwsh
         run: ./scripts/verify/tests/test_audit_main_commit.ps1
 
+      # And that the audit is still wired to fire at all. A gate that breaks refuses, loudly;
+      # an auditor that breaks goes quiet, and quiet is what a working auditor looks like on a
+      # clean repository - so dropping its push trigger, adding a paths filter, or no longer
+      # running the script would disarm it without anything going red.
+      - name: Main bypass audit wiring
+        run: python3 scripts/validation/validate_main_audit_wiring.py
+
+      - name: Main bypass audit wiring mutation tests
+        run: python3 -m unittest scripts.validation.tests.test_validate_main_audit_wiring -v
+
   python-typecheck:
     # Lives here, not in python-spoke.yml: that workflow is path-filtered, so its
     # job can neither be a required context (it would never report on a PR that

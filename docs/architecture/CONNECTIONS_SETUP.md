@@ -435,6 +435,13 @@ pull request's head? It reads those contexts out of the ruleset files, so the tw
 drift. It cannot undo a push, so its product is a red run on `main` naming the commit and the
 contexts that never reported. Applying the ruleset makes it redundant rather than wrong.
 
+An auditor fails differently from a gate, so it carries its own wiring check.
+`scripts/validation/validate_main_audit_wiring.py` fails when the audit loses its
+`push: branches: [main]` trigger, gains a `paths` / `paths-ignore` filter, stops running
+`audit-main-commit.ps1`, or takes any write permission — because a broken gate refuses loudly
+while a broken auditor simply goes quiet, and quiet is what a working auditor looks like on a
+clean repository. It runs in the same Automation Wiring Validation job.
+
 Before any of that applies a ruleset, `scripts/validation/validate_ruleset_contexts.py`
 checks the one thing that can brick the repository: with `bypass_actors: []`, a required
 context that never **reports** on a pull request does not fail it — it strands it,
