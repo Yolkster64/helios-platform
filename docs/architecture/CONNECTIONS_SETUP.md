@@ -435,6 +435,15 @@ pull request's head? It reads those contexts out of the ruleset files, so the tw
 drift. It cannot undo a push, so its product is a red run on `main` naming the commit and the
 contexts that never reported. Applying the ruleset makes it redundant rather than wrong.
 
+To ask that question of every surface at once rather than one reconciler at a time, run
+`scripts/github/inventory-surfaces.ps1`. It is read-only, and it reports per surface —
+rulesets, environments, labels, milestones, and the scalar repository settings — whether the
+thing this repository declares actually exists live, naming the reconciler that owns each gap.
+Exit 0 means everything declared is in force; exit 2 means it ran and found gaps; exit 1 means
+it could not run at all, which is deliberately not the same answer. An unreadable surface is
+reported `unknown` rather than `absent`, because "absent" is an instruction to create something
+that may already be there.
+
 An auditor fails differently from a gate, so it carries its own wiring check.
 `scripts/validation/validate_main_audit_wiring.py` fails when the audit loses its
 `push: branches: [main]` trigger, gains a `paths` / `paths-ignore` filter, stops running

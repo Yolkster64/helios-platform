@@ -181,6 +181,14 @@ jobs:
       - name: Main bypass audit wiring mutation tests
         run: python3 -m unittest scripts.validation.tests.test_validate_main_audit_wiring -v
 
+      # The read-only inventory that answers which of these surfaces are actually in force.
+      # Shimmed gh, so it reaches nothing; the property it pins is that an unreadable answer
+      # reports `unknown`, never `absent` - the direction that would send an owner to create
+      # something that already exists.
+      - name: Surface inventory contract
+        shell: pwsh
+        run: ./scripts/verify/tests/test_inventory_surfaces.ps1
+
   python-typecheck:
     # Lives here, not in python-spoke.yml: that workflow is path-filtered, so its
     # job can neither be a required context (it would never report on a PR that
