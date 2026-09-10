@@ -25,7 +25,7 @@ Self-hosted jobs use the single `runs-on: helios-runners` label (the ARC scale-s
 - Windows-only GUI projects build through `src/gui/HELIOS.Shell.sln` on Windows runners and remain excluded from the portable Linux solution.
 - The legacy root project recursively globs C# files. Until HC-002 removes it, every new C# directory outside `src/ai`, `src/mcp`, and the existing exclusions must update its `<Compile Remove>` guards in the same commit.
 - No secrets in Git. Provider configuration stores environment-variable or Key Vault references only. Bicep uses secure parameters and must not output secret values.
-- Root-level `*_COMPLETE`, `*_REPORT`, and `*_SUMMARY` documents are historical. Trust `docs/CONSOLIDATION_BLUEPRINT.md`, `docs/architecture`, and `docs/migration/yolkster-control-cutover`.
+- Root-level `*_COMPLETE`, `*_REPORT`, and `*_SUMMARY` documents are historical, and any `docs/` file still carrying `{{PLACEHOLDER}}` text is an unfilled generated template rather than documentation — 39 of them measured 2026-09-10, including `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/QUICK_START.md` and all of `docs/security/`; `docs/TEMPLATES_SUMMARY.md` reports itself `✅ COMPLETE` under a `{{GENERATION_DATE}}` header. Trust `docs/CONSOLIDATION_BLUEPRINT.md`, `docs/architecture`, and `docs/migration/yolkster-control-cutover`.
 - GitHub protected environments remain deployment authority. Slack, Linear, SharePoint, Azure DevOps, Claude, Codex, Copilot, Hermes, and XCore cannot approve production.
 
 ## Repository cutover
