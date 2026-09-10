@@ -49,7 +49,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          # This job installs a linter and reads files; it never uses git credentials.
+          # Left at the default, checkout writes the workflow token into .git/config in
+          # the workspace, where anything archiving the workspace carries it out
+          # (zizmor/artipacked, flagged when this file was touched — the same trap the
+          # comment below describes for Markdown, in another linter).
+          #
+          # Only this job is changed: the flag is what CI reported, and the other
+          # checkouts here are untouched deliberately. `security-scan` in particular
+          # must NOT be hardened blindly — it diffs against DEFAULT_BRANCH, and on a
+          # private repository that can need the credential this option removes.
+          persist-credentials: false
+
       # Plain npm install instead of the Docker-based action — same rationale
       # as ci-validation.yml: docker.io pulls flake on runners. Blocking: the
       # curated list below is clean, and a regression in one of these documents
