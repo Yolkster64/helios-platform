@@ -49,11 +49,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          # This job installs a linter and reads files; it never uses git credentials.
+          # Left at the default, checkout writes the workflow token into .git/config in
+          # the workspace, where anything archiving the workspace carries it out
+          # (zizmor/artipacked, flagged when this file was touched — the same trap the
+          # comment below describes for Markdown, in another linter).
+          #
+          # Only this job is changed: the flag is what CI reported, and the other
+          # checkouts here are untouched deliberately. `security-scan` in particular
+          # must NOT be hardened blindly — it diffs against DEFAULT_BRANCH, and on a
+          # private repository that can need the credential this option removes.
+          persist-credentials: false
+
       # Plain npm install instead of the Docker-based action — same rationale
       # as ci-validation.yml: docker.io pulls flake on runners. Blocking: the
       # curated list below is clean, and a regression in one of these documents
       # must reach the required summary rather than hide behind continue-on-error.
+      #
+      # Why CURATED rather than every *.md, and what to do when a PR you did not
+      # break goes red on Markdown — measured 2026-09-10 over all 881 tracked
+      # Markdown files with this same config:
+      #
+      #   672 of 881 files carry at least one violation (25,856 in total),
+      #   almost entirely MD022 / MD031 / MD032 — a heading, fence or list with
+      #   no blank line around it.
+      #
+      # So this list is containment, not an oversight: pointing the job at `**/*.md`
+      # would red the branch permanently. The consequence to know about is that the
+      # OTHER linter, super-linter in the `security-scan` job below, lints the files a
+      # pull request CHANGES — so a document outside this list is linted for the first
+      # time by the pull request that touches it, arriving with whatever it already had.
+      # That is not the author's defect, but it is the author's red check, because
+      # security-scan feeds the required `Quality Check Summary`.
+      #
+      # The fix is one command and it only moves blank lines, never prose:
+      #
+      #   npx markdownlint-cli@0.33.0 --config .markdownlint.json --fix <file>
+      #
+      # Clean it in the same pull request that touched the file; leaving it hands the
+      # next editor a red check they did not cause either. Sweeping all 672 at once is
+      # deliberately not the plan — a diff nobody can review, across documents nobody is
+      # otherwise changing. They get cleaned as they are edited.
       - name: Run Markdown Linter
         run: |
           npm install --global --no-fund --no-audit markdownlint-cli@0.33.0
@@ -254,6 +291,11 @@ jobs:
           # about the same file. Other linters keep super-linter's defaults (a missing
           # rules file falls back to the bundled template).
           LINTER_RULES_PATH: .
+          # For Markdown this is the ONLY linter most documents ever meet: the
+          # markdown-lint job above covers eleven named files. 672 of the 881 tracked
+          # Markdown files carry pre-existing violations, so touching one reds this job
+          # for lines the author did not write. The `--fix` one-liner and the reasoning
+          # are in that job's header comment.
           MARKDOWN_CONFIG_FILE: .markdownlint.json
           # The slim image carries no C# linter, so a VALIDATE_CSHARP flag here
           # was inert; C# is gated by dotnet-build.yml (build + tests).
