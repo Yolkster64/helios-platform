@@ -59,6 +59,17 @@ the click path): `docs/architecture/CONNECTIONS_SETUP.md` § Control fabric.
 | `close-duplicate-issues.ps1` | Issues `-From` 54 `-To` 92: the `[GH-<n>] …` twins Linear's GitHub integration re-imported. The loop marker is built from `config/connectors.json` `linear.titlePrefix` (the key `linear-sync.yml` reads; escaped, `{number}` → `(\d+)`; built-in `^\[GH-(\d+)\]` only when the file/key is absent, and the "loop marker" line says which). Loop duplicate only when open + title marker + body `GitHub (system of record)` line + original `#n` open; then `duplicate` label, ONE comment with the footer (every comment page read, `per_page=100&page=N`), `PATCH state=closed state_reason=duplicate duplicate_issue_id=<original .id>` (each step idempotent). OWNER STEP FIRST: Linear → Settings → Integrations → GitHub → team John → issue sync OFF, or they reopen. `-Repository`, `-Json`, `-From`/`-To`, `-SessionUrl` (optional session link under the footer; any other shape = exit 1), `-ConnectorsPath`. | Table of number / action / original; measured: 36 candidates, 3 skipped (#77, #85, #87: originals closed), 0 unreadable; with a scratch `[LIN-{number}]` prefix (trailing space included): 0 candidates, 39 `skip:not-loop-title` | push (`.permissions.push`): an owner login or the PAT; needs reads even for the dry run (exit 2 without them) | 0 / 1 (invalid range or a mutation failed) / 2 |
 | `GitHubIntegration.psm1` | Legacy metrics/board simulation module (upstream `M0nado` defaults). Not a shared home for the scripts above and not part of the control fabric. | n/a | n/a | n/a |
 
+**Before a ruleset is applied**, `python3 scripts/validation/validate_ruleset_contexts.py`
+answers the one question that can brick this repository: does every context
+`.github/rulesets/*.json` requires actually REPORT on every pull request it gates? With
+`bypass_actors: []` a context that never reports does not fail a pull request, it strands it -
+unmergeable by anyone, including the owner, until an administrator edits the ruleset. The
+checker fails on a context no job produces, a workflow with no `pull_request` trigger, a
+trigger carrying `paths` / `paths-ignore` (absent is not the same as skipped), and a trigger
+whose `branches` miss the branch the ruleset gates. It runs in `quality.yml`'s Automation
+Wiring Validation job, which feeds the required `Quality Check Summary` context, and its own
+mutation tests (`scripts/validation/tests/test_validate_ruleset_contexts.py`) run beside it.
+
 Restore a pruned stale branch from its archive tag:
 
 ```bash

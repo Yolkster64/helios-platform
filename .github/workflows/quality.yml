@@ -149,6 +149,19 @@ jobs:
           python3 .claude/skills/automation-wiring/scripts/validate_all.py \
             .github/workflows config .vscode .devcontainer infra
 
+      # The required-status-check contract, checked rather than commented. A ruleset waits
+      # for each context it names; `.github/rulesets/main.json` carries `bypass_actors: []`,
+      # so a context that never REPORTS on some pull request does not fail it - it strands
+      # it, unmergeable by anyone until an administrator edits the ruleset. Renaming a job,
+      # or adding a `paths:` filter to a workflow's pull_request trigger (which looks like a
+      # pure CI saving), is enough to arm that. This job's own context feeds the required
+      # `Quality Check Summary`, so the guard is gated by the thing it protects.
+      - name: Required ruleset contexts always report
+        run: python3 scripts/validation/validate_ruleset_contexts.py
+
+      - name: Ruleset context mutation tests
+        run: python3 -m unittest scripts.validation.tests.test_validate_ruleset_contexts -v
+
   python-typecheck:
     # Lives here, not in python-spoke.yml: that workflow is path-filtered, so its
     # job can neither be a required context (it would never report on a PR that
