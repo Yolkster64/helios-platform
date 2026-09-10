@@ -131,6 +131,22 @@ exit 0
 '@ -replace "`r`n", "`n" | Set-Content -LiteralPath (Join-Path $bin 'gh') -NoNewline -Encoding utf8
     & chmod +x (Join-Path $bin 'gh')
 
+    # git is shimmed too: the wiki is a git repository, not a REST resource, so the only probe
+    # for "has the first page ever been created" is ls-remote against <repo>.wiki.git.
+    @'
+#!/usr/bin/env bash
+printf 'git %s\n' "$*" >> "$GH_SHIM_LOG"
+case "${GH_SHIM_CASE:-all-in-force}" in
+  # GitHub's answer for a wiki nobody has ever opened.
+  no-wiki)   echo "remote: Repository not found." >&2; exit 128 ;;
+  # An auth failure is NOT evidence of absence: telling the owner to create a page that
+  # already exists is the same false instruction the 404-only rule avoids elsewhere.
+  wiki-auth) echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2; exit 128 ;;
+  *) printf 'a1b2c3d4\trefs/heads/master\n'; exit 0 ;;
+esac
+'@ -replace "`r`n", "`n" | Set-Content -LiteralPath (Join-Path $bin 'git') -NoNewline -Encoding utf8
+    & chmod +x (Join-Path $bin 'git')
+
     $env:GH_SHIM_LOG = $log
     $env:PATH = "$bin$([IO.Path]::PathSeparator)$savedPath"
     $decoy = 'ghp_' + ('F' * 32)
@@ -181,6 +197,28 @@ exit 0
     Assert-Equal 2 $offRun.Exit 'a disabled setting did not exit 2'
     Assert-True ($offRun.Out -match 'settings:auto-merge\s+absent') 'allow_auto_merge=false was not reported'
     Assert-True ($offRun.Out -match 'settings:wiki\s+in-force') 'an enabled setting was misreported'
+
+    # 7a. has_wiki is a FEATURE TOGGLE, not a wiki. GitHub creates <repo>.wiki.git only when
+    #     someone makes the first page, and wiki-generator.yml CLONES that repo - so until then
+    #     the sync job logs a notice and exits green on every run. Reporting the toggle alone
+    #     as in force is the false reassurance this inventory exists to remove.
+    Assert-True ($ok.Out -match 'wiki:initialized\s+in-force') 'an existing wiki repository was not reported'
+    Assert-True ($ok.Log -match 'git ls-remote') 'the wiki repository was never probed'
+    # Never with a token in the URL - unlike the workflow, which embeds one. git's own
+    # credential helper supplies it, so this script still reads no token value.
+    Assert-True ($ok.Log -notmatch 'x-access-token') 'the wiki probe embedded a token in the URL'
+
+    $noWiki = Invoke-Inventory -Case 'no-wiki'
+    Assert-Equal 2 $noWiki.Exit 'an uninitialized wiki did not exit 2'
+    Assert-True ($noWiki.Out -match 'wiki:initialized\s+absent') 'an uninitialized wiki was not reported'
+    Assert-True ($noWiki.Out -match 'green-skips') 'the consequence - a job that passes while doing nothing - was not stated'
+    Assert-True ($noWiki.Out -match 'create the first page') 'the one owner click was not named'
+    # The toggle is still true, and saying so alongside is the point: enabled is not initialized.
+    Assert-True ($noWiki.Out -match 'settings:wiki\s+in-force') 'the wiki toggle was misreported'
+
+    $wikiAuth = Invoke-Inventory -Case 'wiki-auth'
+    Assert-True ($wikiAuth.Out -match 'wiki:initialized\s+unknown') 'an unreadable wiki probe was not reported as unknown'
+    Assert-True ($wikiAuth.Out -notmatch 'wiki:initialized\s+absent') 'an auth failure was reported as an uninitialized wiki'
 
     # 7b. Pages is the one setting that is not a field on the repository object, so it has its
     #     own call and its own three answers. The 404-only rule is apply-repo-settings.ps1's,
