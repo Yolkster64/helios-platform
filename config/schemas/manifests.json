@@ -18,6 +18,11 @@
       "consumer": "scripts/github/apply-milestones.ps1"
     },
     {
+      "manifest": "config/github/environments.json",
+      "schema": "config/schemas/github-environments.schema.json",
+      "consumer": "scripts/github/apply-environments.ps1, .github/workflows/helios-deploy.yml"
+    },
+    {
       "manifest": "config/connectors.json",
       "schema": "config/schemas/connectors.schema.json",
       "consumer": ".github/workflows/notify-slack.yml, .github/workflows/linear-sync.yml, scripts/bootstrap/auth-doctor.ps1"

@@ -30,11 +30,24 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Setup PowerShell 7
-        run: |
-          $ProgressPreference = "SilentlyContinue"
-          choco install powershell-core -y
+      # You cannot install the shell you are already running. This step declares
+      # `shell: pwsh`, and `pwsh` is the PowerShell 6+ binary (5.1 is `powershell`), so
+      # reaching the step at all proves PowerShell Core is present - the version check below
+      # is what actually pins it to 7. On 2026-09-09 the hosted Windows image began shipping
+      # its own PowerShell 7.6.6 through a non-chocolatey installer, so
+      # `choco install powershell-core` failed outright ("already installed by another
+      # mechanism and is a different version" - chocolatey compares its own package records,
+      # not the running binary) and took the five substantive checks down with it, exactly as
+      # the Pester install used to. A choco fallback would be unreachable anyway: were pwsh
+      # missing, this step could not start. So it verifies, and says which version the rest
+      # of the job will use.
+      - name: Verify PowerShell 7
         shell: pwsh
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition)) at $((Get-Process -Id $PID).Path)"
+          if ($PSVersionTable.PSVersion.Major -lt 7) {
+            throw "This job needs PowerShell 7; the runner started it under $($PSVersionTable.PSVersion)."
+          }
       
       # continue-on-error: only "Run Unit Tests" below needs Pester, and a transient PSGallery
       # lookup ("No match was found ... module name 'Pester'") used to fail this step, which has

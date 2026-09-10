@@ -72,6 +72,25 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
     deploy_job = jobs.get("deploy")
     _require(isinstance(deploy_job, dict), "deploy workflow must define jobs.deploy")
     _ensure_permissions_are_read_only(deploy_job, "deploy job")
+    # The environment IS the deployment authority (CLAUDE.md). Nothing checked this before,
+    # which is how the workflow ran `az deployment group create` on a push to main with no
+    # human in the path while the documentation said otherwise. The name is pinned because a
+    # workflow naming an environment the repository does not have gets one with no
+    # protection rules - a gate in the YAML and none in reality.
+    # Naming the environment makes the OIDC subject branch-agnostic
+    # (repo:<repo>:environment:production), which REMOVES the branch restriction Azure was
+    # enforcing for free through the ref-scoped federated credential. workflow_dispatch
+    # accepts any branch, so without this guard any branch could mint a token carrying
+    # Contributor and Key Vault Secrets Officer. The environment's branch policy is meant to
+    # cover it, but that is configuration; this is not.
+    _require(str(deploy_job.get("if", "")).strip() == "github.ref == 'refs/heads/main'",
+             "jobs.deploy must be pinned to main with `if: github.ref == 'refs/heads/main'`: "
+             "the environment subject is branch-agnostic, so nothing else stops a "
+             "workflow_dispatch from a feature branch reaching the tenant")
+    _require(deploy_job.get("environment") == "production",
+             "jobs.deploy must run in the protected `production` environment "
+             "(config/github/environments.json); an environment is the only job-level gate "
+             "that puts a human in front of az deployment group create")
     steps = deploy_job.get("steps") or []
     _require(isinstance(steps, list) and steps, "jobs.deploy.steps must be a non-empty list")
 

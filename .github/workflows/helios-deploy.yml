@@ -26,6 +26,33 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # main only, enforced HERE rather than inherited from Azure.
+    #
+    # `workflow_dispatch` above accepts any branch. Until this job named an environment, a
+    # dispatch from a feature branch presented the OIDC subject
+    # `repo:<repo>:ref:refs/heads/<that-branch>`, which matches neither federated credential,
+    # so azure/login failed (AADSTS70021) and the branch restriction came free from Azure.
+    # Naming the environment changes the subject to the BRANCH-AGNOSTIC
+    # `repo:<repo>:environment:production`, which does match - so the free restriction is
+    # gone and any branch could mint a token holding Contributor and Key Vault Secrets
+    # Officer. The environment's own branch policy is meant to cover that, but it is
+    # configuration that may not be applied yet; this line is not.
+    if: github.ref == 'refs/heads/main'
+    # CLAUDE.md: "GitHub protected environments remain deployment authority." This line is
+    # what that sentence points at - without it a push to main touching infra/ reaches the
+    # tenant with no human in the path. The environment's reviewers and branch policy are
+    # config/github/environments.json, applied by scripts/github/apply-environments.ps1.
+    #
+    # An environment is a JOB-level gate, and this job runs both what-if and deploy, so the
+    # read-only preview waits for the same approval. That is the deliberate trade: the
+    # alternative is splitting the job, which would fork the custody chain that
+    # scripts/validation/validate_deploy_custody.py pins across its steps. Splitting it is
+    # worth doing on its own, with that validator moved in the same change.
+    #
+    # NOTE: naming an environment GitHub does not have creates it with NO protection rules.
+    # The gate is only real once the owner applies the manifest; `apply-environments.ps1`
+    # (dry run by default) prints exactly what is missing.
+    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4

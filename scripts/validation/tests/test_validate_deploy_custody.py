@@ -44,6 +44,49 @@ class DeployCustodyValidatorTests(unittest.TestCase):
             "gated by the OIDC configuration guard",
         )
 
+    def test_fails_when_the_deploy_job_leaves_the_protected_environment(self) -> None:
+        """The environment is the only thing standing between a push to main and the tenant.
+
+        CLAUDE.md calls protected environments the deployment authority, and until this
+        check existed nothing enforced that: the job ran `az deployment group create` with
+        no environment named at all, so the sentence was true only of the documentation.
+        """
+        self._validate_mutation(
+            "    environment: production",
+            "    # environment: production",
+            "protected `production` environment",
+        )
+
+    def test_fails_when_the_deploy_job_is_not_pinned_to_main(self) -> None:
+        """Removing the ref pin re-opens what naming the environment closed.
+
+        The environment subject is branch-agnostic, and workflow_dispatch accepts any
+        branch, so this guard is the only thing in the repository that stops a dispatch
+        from a feature branch minting a token with Contributor + Key Vault Secrets Officer.
+        """
+        self._validate_mutation(
+            "    if: github.ref == 'refs/heads/main'",
+            "    # if: github.ref == 'refs/heads/main'",
+            "must be pinned to main",
+        )
+
+    def test_fails_when_the_ref_pin_is_widened(self) -> None:
+        self._validate_mutation(
+            "    if: github.ref == 'refs/heads/main'",
+            "    if: startsWith(github.ref, 'refs/heads/')",
+            "must be pinned to main",
+        )
+
+    def test_fails_when_the_deploy_job_names_a_different_environment(self) -> None:
+        # A workflow naming an environment the repository does not have gets one with NO
+        # protection rules, so a renamed or misspelled environment is an ungated deploy that
+        # still looks gated in the YAML.
+        self._validate_mutation(
+            "    environment: production",
+            "    environment: prod",
+            "protected `production` environment",
+        )
+
     def test_fails_when_contents_permission_is_elevated(self) -> None:
         self._validate_mutation("  contents: read", "  contents: write", "keep contents: read")
 
