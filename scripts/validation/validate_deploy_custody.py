@@ -91,6 +91,33 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
              "jobs.deploy must run in the protected `production` environment "
              "(config/github/environments.json); an environment is the only job-level gate "
              "that puts a human in front of az deployment group create")
+
+    # Naming the environment is a claim about the repository, and the repository does not have
+    # to honour it: an environment GitHub does not have is CREATED, unprotected, on first use.
+    # So the claim is checked before the deploy runs, by a job that does not name the
+    # environment - one that did would create the thing it is verifying and then wait for the
+    # approval it exists to prove is required.
+    gate_job = jobs.get("verify-gate")
+    _require(isinstance(gate_job, dict),
+             "deploy workflow must define jobs.verify-gate: `environment: production` is only "
+             "a gate if the environment actually requires a reviewer, and naming one GitHub "
+             "does not have creates it with no protection rules")
+    _ensure_permissions_are_read_only(gate_job, "verify-gate job")
+    _require("environment" not in gate_job,
+             "jobs.verify-gate must NOT name an environment: it would create the environment "
+             "it is checking for, and wait for the approval it exists to prove is required")
+    _require(str(gate_job.get("if", "")).strip() == "github.ref == 'refs/heads/main'",
+             "jobs.verify-gate must carry the same main-only pin as jobs.deploy, or a "
+             "dispatch from another branch skips the gate check and runs the deploy")
+    gate_runs = "\n".join(str(step.get("run", "")) for step in (gate_job.get("steps") or []))
+    _require("scripts/github/verify-environment-gate.ps1" in gate_runs,
+             "jobs.verify-gate must run scripts/github/verify-environment-gate.ps1")
+
+    needs = deploy_job.get("needs")
+    needs_list = [needs] if isinstance(needs, str) else list(needs or [])
+    _require("verify-gate" in needs_list,
+             "jobs.deploy must declare `needs: verify-gate`; without the edge the gate check "
+             "runs alongside the deployment instead of in front of it")
     steps = deploy_job.get("steps") or []
     _require(isinstance(steps, list) and steps, "jobs.deploy.steps must be a non-empty list")
 
@@ -190,6 +217,7 @@ def validate_workflow(path: pathlib.Path = WORKFLOW) -> dict[str, Any]:
         "status": "passed",
         "workflow": workflow_path,
         "checks": [
+            "environment-gate-verified",
             "oidc-guard",
             "audience-hardening",
             "no-stored-secret",
@@ -213,6 +241,12 @@ def validate_contract_workflow(path: pathlib.Path = CONTRACT_WORKFLOW) -> None:
              "contract workflow must run validate_deploy_custody.py")
     _require("test_emit_deploy_custody_record" in runs,
              "contract workflow must run deploy custody helper tests")
+    # The gate verifier is the only thing standing between a push to main and the tenant
+    # while `production` is unprotected, so its offline suite is part of this contract rather
+    # than something a later change could quietly drop.
+    _require("test_verify_environment_gate.ps1" in runs,
+             "contract workflow must run the environment-gate verifier suite "
+             "(scripts/verify/tests/test_verify_environment_gate.ps1)")
     _require("unittest" in runs,
              "contract workflow must run deploy custody regression tests")
 

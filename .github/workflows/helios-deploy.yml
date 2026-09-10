@@ -24,8 +24,46 @@ env:
   AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
 
 jobs:
+  # The gate, checked rather than assumed. `environment: production` on the deploy job below
+  # makes CLAUDE.md's "protected environments remain deployment authority" true of the YAML;
+  # it does not make it true of the repository, because naming an environment GitHub does not
+  # have CREATES one with no protection rules. That is the state this repository is in today:
+  # `production` does not exist, and applying the manifest needs repository administration,
+  # which no workflow token has - so governance-apply.yml correctly withholds -Apply until
+  # the owner installs the HELIOS App or stores a PAT.
+  #
+  # Until then this job is what stands in the gap. It reads the environment and exits 1
+  # unless a reviewer is required, so a deployment cannot reach the tenant with nobody
+  # approving it. It deliberately does NOT name the environment: a verifier that named it
+  # would create the very thing it is checking for, and would then wait for the approval it
+  # exists to prove is required.
+  verify-gate:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Refuse to deploy through an environment with no reviewer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The repository arrives as an environment variable rather than a ${{ }} expression
+        # interpolated into the command line - the idiom governance-run.yml uses, and the one
+        # that does not put a context value where a shell parses it. Actions always sets
+        # GITHUB_REPOSITORY; if it somehow did not, the read 404s and this job refuses, which
+        # is the same answer it gives to every other way of not knowing.
+        run: ./scripts/github/verify-environment-gate.ps1 -Repository $env:GITHUB_REPOSITORY -EnvironmentName production
+
   deploy:
     runs-on: ubuntu-latest
+    # Nothing in this job may start before the gate above is known to exist. A `needs:` edge
+    # rather than a first step, because a step would run INSIDE the environment - GitHub would
+    # have created it, and paused for an approval, before the check could say there is nobody
+    # to approve.
+    needs: verify-gate
     # main only, enforced HERE rather than inherited from Azure.
     #
     # `workflow_dispatch` above accepts any branch. Until this job named an environment, a

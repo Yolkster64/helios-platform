@@ -13,6 +13,8 @@ on:
       - 'config/schemas/github-environments.schema.json'
       - 'scripts/github/apply-environments.ps1'
       - 'scripts/verify/tests/test_apply_environments.ps1'
+      - 'scripts/github/verify-environment-gate.ps1'
+      - 'scripts/verify/tests/test_verify_environment_gate.ps1'
   push:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - 'config/schemas/github-environments.schema.json'
       - 'scripts/github/apply-environments.ps1'
       - 'scripts/verify/tests/test_apply_environments.ps1'
+      - 'scripts/github/verify-environment-gate.ps1'
+      - 'scripts/verify/tests/test_verify_environment_gate.ps1'
   workflow_dispatch:
 
 permissions:
@@ -57,3 +61,10 @@ jobs:
       - name: Verify the environment-manifest apply contract
         shell: pwsh
         run: ./scripts/verify/tests/test_apply_environments.ps1
+
+      # And this is the script that refuses to deploy when those rules are not there. Same
+      # shimmed gh, and the property it pins is one-sided: exit 0 only when a reviewer is
+      # required, exit 1 for every other state INCLUDING every way of not being able to tell.
+      - name: Verify the deployment gate refuses an unprotected environment
+        shell: pwsh
+        run: ./scripts/verify/tests/test_verify_environment_gate.ps1
