@@ -2,37 +2,13 @@
     x:Class="HELIOS.Shell.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-
-    <!-- NavigationView shell (GUI_THEME_ANALYSIS.md): three pages planned — AI Hub
-         dashboard (implemented), Routing and Fleet (PR6 roadmap, disabled placeholders). -->
-    <NavigationView
-        x:Name="Nav"
-        PaneDisplayMode="Left"
-        IsBackButtonVisible="Collapsed"
-        IsSettingsVisible="False"
-        OpenPaneLength="220"
-        SelectionChanged="OnNavSelectionChanged">
-
+    <NavigationView x:Name="Nav" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" OpenPaneLength="220" SelectionChanged="OnNavSelectionChanged">
         <NavigationView.MenuItems>
-            <NavigationViewItem x:Name="AIHubNavItem" Content="AI Hub" Tag="aihub">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE99A;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-            <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False"
-                                ToolTipService.ToolTip="Task-routing grid — roadmap PR6">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE8AB;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
-            <NavigationViewItem Content="Fleet" Tag="fleet" IsEnabled="False"
-                                ToolTipService.ToolTip="Xcore-9s pool state — roadmap PR6">
-                <NavigationViewItem.Icon>
-                    <FontIcon Glyph="&#xE7F4;" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
+            <NavigationViewItem x:Name="AIHubNavItem" Content="AI Hub" Tag="aihub"><NavigationViewItem.Icon><FontIcon Glyph="&#xE99A;" /></NavigationViewItem.Icon></NavigationViewItem>
+            <NavigationViewItem x:Name="FabricControlNavItem" Content="Fabric Control" Tag="fabric"><NavigationViewItem.Icon><FontIcon Glyph="&#xE950;" /></NavigationViewItem.Icon></NavigationViewItem>
+            <NavigationViewItem Content="Routing" Tag="routing" IsEnabled="False" ToolTipService.ToolTip="Task-routing grid — roadmap PR6"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8AB;" /></NavigationViewItem.Icon></NavigationViewItem>
+            <NavigationViewItem Content="Fleet" Tag="fleet" IsEnabled="False" ToolTipService.ToolTip="Xcore-9s pool state — roadmap PR6"><NavigationViewItem.Icon><FontIcon Glyph="&#xE7F4;" /></NavigationViewItem.Icon></NavigationViewItem>
         </NavigationView.MenuItems>
-
         <Frame x:Name="ContentFrame" Background="{ThemeResource SurfaceBrush}" />
     </NavigationView>
 </Window>

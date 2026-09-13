@@ -1,0 +1,50 @@
+name: HELIOS Shell Windows Build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/gui/**'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'nuget.config'
+      - '.github/workflows/gui-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helios-shell-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-shell:
+    name: Build WinUI 3 Fabric Control shell
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup .NET from global.json
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          global-json-file: global.json
+
+      # Windows App SDK PRI generation resolves packaging tasks from the Visual Studio
+      # MSBuild tree. `dotnet build` points those targets at the .NET SDK directory,
+      # where Microsoft.Build.Packaging.Pri.Tasks.dll is not installed on hosted runners.
+      - name: Setup Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+
+      - name: Restore and build HELIOS Shell
+        shell: pwsh
+        run: |
+          msbuild src/gui/HELIOS.Shell.sln `
+            /restore `
+            /m `
+            /nologo `
+            /p:Configuration=Release `
+            /p:Platform=x64

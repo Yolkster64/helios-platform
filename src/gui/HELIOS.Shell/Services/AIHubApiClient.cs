@@ -77,7 +77,7 @@ public sealed class AIHubApiClient : IDisposable
 
     public void Dispose() => _http.Dispose();
 
-    private static Uri ResolveBaseAddress()
+    public static Uri ResolveBaseAddress()
     {
         var raw = Environment.GetEnvironmentVariable(BaseUrlEnvVar);
         if (!string.IsNullOrWhiteSpace(raw)
