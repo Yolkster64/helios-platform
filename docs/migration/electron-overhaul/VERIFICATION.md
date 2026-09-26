@@ -52,6 +52,16 @@ uses a compatible fuses dependency, and the standard Squirrel lifecycle helper
 handles Windows shortcut setup/removal. PR build jobs use hosted runners so new
 branch code does not execute on a long-lived credential-bearing runner.
 
+The initial PR run also exposed assumptions in the existing generic Node workflows:
+Node 18, forced Jest arguments, raw module paths in artifact names, multiline
+matrix output, and registry lookups for private modules. The CI follow-up adapts
+those checks to the two new nested packages without disabling their test gates.
+At initial head `8a5f8819d2745e118ecd8cd712aa585727b2e61c`, the dedicated
+[Linux, macOS, and Windows Forge jobs](https://github.com/Yolkster64/helios-platform/actions/runs/36217591416)
+all passed, including unsigned artifact creation. Consult subsequent PR checks
+for final-head results; a package build is still distinct from a launched
+installer or UI test.
+
 ## External surfaces
 
 GitHub, Slack, and Linear reads were reachable. SharePoint site/file metadata was
