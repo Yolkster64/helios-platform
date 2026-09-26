@@ -6,7 +6,31 @@ currently buildable cross-platform slice combines a .NET 10 AI hub, F# policy lo
 optional C++ native accelerator, a dependency-free Python analytics/advisory spoke, REST,
 CLI, MCP, Docker, and review-only Azure infrastructure.
 
-## 60-second quickstart
+## Electron workbench overhaul
+
+The active desktop direction is now **Electron + Electron Forge**, with Electron
+Fiddle for focused UI and API experiments. The new `apps/desktop` workbench is the
+home for all HELIOS product UI: profiles, launcher, settings, AIHub, plugins, USB
+planning, and the future Windows shell. C#, F#, Python, and C++ remain service and
+native specialists behind that interface. The previous WinUI source is preserved
+for migration evidence; it is not the new application's fallback UI.
+
+```bash
+npm --prefix apps/desktop ci
+npm --prefix apps/desktop start
+npm --prefix apps/desktop test
+npm --prefix apps/desktop run package
+```
+
+The initial workbench supports offline profile and layout work, a built-in module
+catalog, and an explicitly configured local AIHub health check. Connector catalogs
+and links do not mean desktop OAuth or live integration is complete. USB execution,
+privileged native adapters, Explorer replacement, and signed distribution follow
+the acceptance gates in the [Electron migration plan](docs/migration/electron-overhaul/README.md).
+See [ADR-0011](docs/architecture/ADR-0011-ELECTRON-WORKBENCH.md) for the full decision
+and `experiments/electron-fiddle/profile-lab` for the first Fiddle lab.
+
+## 60-second service quickstart
 
 ```bash
 git clone https://github.com/Yolkster64/helios-platform
@@ -60,7 +84,8 @@ Windows management product.
 - `src/core/HELIOS.Platform` is deliberately excluded because it has hundreds of
   pre-existing compile errors. The legacy root status/phase reports are historical, not
   evidence that those subsystems are deployed.
-- The WinUI 3 shell lives in `src/gui/HELIOS.Shell.sln` and requires Windows.
+- Electron is the active product UI under `apps/desktop`; this first migration slice is not a complete operating-system shell or fully connected production client.
+- The previous WinUI 3 shell is preserved in `src/gui/HELIOS.Shell.sln` and still requires Windows to build.
 - Azure and Microsoft 365 mutations are never performed by a build or catalog command.
   Validate Bicep and inspect a `what-if` before any separately approved deployment.
 - Recovered engine names marked `prototype` or `concept` are proposal vocabulary. Only
@@ -81,12 +106,14 @@ engineering contract.
 | Agent fleet | `pwsh scripts/fleet/start-fleet.ps1 -DryRun` (also `seed-absorption-tasks` / `fleet-status` / `scale-fleet` / `stop-fleet`) | [HERMES_FLEET_AND_XCORE.md](docs/architecture/HERMES_FLEET_AND_XCORE.md), [CLOUD_SHELL_AND_LOCAL_FLEET.md](docs/architecture/CLOUD_SHELL_AND_LOCAL_FLEET.md) |
 | Absorption program | `config/absorption/pr-watchlist.json` → the keyless `Absorption Benchmark` workflow (or `pwsh scripts/absorption/absorb-pr.ps1 -PrNumber <N>` locally — it executes the candidate's build code, so reserve that for reviewed PRs on credential-free hosts) → `helios-ai absorb-status` | [ABSORPTION_PIPELINE.md](docs/architecture/ABSORPTION_PIPELINE.md), [ABSORPTION_LEDGER.md](docs/architecture/ABSORPTION_LEDGER.md) · start here: [docs/absorption/START_HERE.md](docs/absorption/START_HERE.md) |
 | Infrastructure | `infra/main.bicep` (source of truth) + `infra/arm/` (generated) + `infra/terraform/` (mirror) | [infra/README.md](infra/README.md) |
-| GUI shell (**Windows-only**) | `dotnet build src/gui/HELIOS.Shell.sln -c Debug -p:Platform=x64` on Windows | [src/gui/README.md](src/gui/README.md), [GUI_THEME_ANALYSIS.md](docs/architecture/GUI_THEME_ANALYSIS.md) |
+| Electron workbench | `npm --prefix apps/desktop start` | [Electron migration](docs/migration/electron-overhaul/README.md), [ADR-0011](docs/architecture/ADR-0011-ELECTRON-WORKBENCH.md) |
+| Preserved WinUI shell (**Windows-only**) | `dotnet build src/gui/HELIOS.Shell.sln -c Debug -p:Platform=x64` on Windows | [src/gui/README.md](src/gui/README.md), [GUI_THEME_ANALYSIS.md](docs/architecture/GUI_THEME_ANALYSIS.md) |
 | Setup & bootstrap | `pwsh scripts/setup/setup-all.ps1` + `scripts/bootstrap/` (`connect-devices.ps1` for the logins) | [GETTING_STARTED.md](docs/GETTING_STARTED.md), [scripts/bootstrap/README.md](scripts/bootstrap/README.md), [OWNER_START_HERE.md](docs/OWNER_START_HERE.md) |
 | Codespaces (zero install) | **Code → Codespaces → Create**; the devcontainer builds the hub and symlinks `helios-ai` | [.github/CODESPACES_GUIDE.md](.github/CODESPACES_GUIDE.md) |
 
 ## Prerequisites
 
+- Node.js and npm compatible with `apps/desktop/package.json` for the Electron workbench
 - .NET SDK 10 (`global.json` pins 10.0.100)
 - PowerShell 7 (`pwsh`) for the automation layer under `scripts/`
 - Python 3.10 or newer

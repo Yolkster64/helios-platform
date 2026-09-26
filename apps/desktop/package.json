@@ -1,0 +1,30 @@
+{
+  "name": "helios-desktop",
+  "productName": "HELIOS Workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron workbench for the HELIOS control fabric",
+  "author": "HELIOS Development Team",
+  "license": "MIT",
+  "main": "main/index.cjs",
+  "engines": { "node": ">=22.16" },
+  "scripts": {
+    "start": "electron-forge start",
+    "test": "node --test test/*.test.cjs",
+    "check": "node scripts/check.cjs",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "1.0.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/maker-zip": "7.11.2",
+    "@electron-forge/plugin-fuses": "7.11.2",
+    "@electron/fuses": "1.8.0",
+    "electron": "44.4.5",
+    "jsdom": "30.1.1"
+  }
+}

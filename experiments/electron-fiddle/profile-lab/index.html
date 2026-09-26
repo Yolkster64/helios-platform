@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+    <title>HELIOS · Profile Lab</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="renderer.js" defer></script>
+  </head>
+  <body data-profile="developer">
+    <main class="lab">
+      <header class="masthead">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">H</span><div><p class="eyebrow">HELIOS / EXPERIMENT 01</p><h1>Profile Lab</h1></div></div>
+        <p class="mode"><span aria-hidden="true"></span>Local visual experiment</p>
+      </header>
+
+      <section class="stage" aria-labelledby="profile-title">
+        <canvas id="atmosphere" aria-hidden="true"></canvas>
+        <div class="stage-grid" aria-hidden="true"></div>
+        <div class="stage-copy">
+          <p class="eyebrow">YOUR WORKSPACE, YOUR FREQUENCY</p>
+          <h2 id="profile-title">Developer</h2>
+          <p id="profile-description">A clear signal for building, inspecting and connecting.</p>
+          <p class="stage-note">Palette and motion preview. Profile selection changes this scene only.</p>
+        </div>
+        <div class="scene-label" aria-hidden="true"><span id="scene-name">ION FIELD</span><span>ETHER / 01</span></div>
+      </section>
+
+      <section class="profile-section" aria-labelledby="profile-label">
+        <div class="section-heading"><h2 id="profile-label">Choose a profile</h2><p>Six identities. One workbench.</p></div>
+        <div class="profiles" role="group" aria-label="Visual profile">
+          <button type="button" class="profile" data-profile="sysadmin" aria-pressed="false"><span class="swatch"></span><span>Sysadmin</span><small>Control</small></button>
+          <button type="button" class="profile" data-profile="developer" aria-pressed="true"><span class="swatch"></span><span>Developer</span><small>Create</small></button>
+          <button type="button" class="profile" data-profile="studio" aria-pressed="false"><span class="swatch"></span><span>Studio</span><small>Compose</small></button>
+          <button type="button" class="profile" data-profile="gamer" aria-pressed="false"><span class="swatch"></span><span>Gamer</span><small>Explore</small></button>
+          <button type="button" class="profile" data-profile="core" aria-pressed="false"><span class="swatch"></span><span>Core</span><small>Focus</small></button>
+          <button type="button" class="profile" data-profile="ai-server" aria-pressed="false"><span class="swatch"></span><span>AI/Server</span><small>Orchestrate</small></button>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="Scene controls">
+        <div class="intensity"><label for="intensity">Light intensity <output id="intensity-value" for="intensity">65%</output></label><input id="intensity" type="range" min="20" max="100" value="65" step="5"></div>
+        <label class="motion-option"><input id="reduced-motion" type="checkbox">Reduced motion</label>
+        <button id="pause" class="pause" type="button" aria-pressed="false">Pause motion</button>
+      </section>
+      <footer><p id="scene-status" role="status" aria-live="polite">Developer selected. Motion is running.</p><p>No services connected · No system changes</p></footer>
+    </main>
+  </body>
+</html>

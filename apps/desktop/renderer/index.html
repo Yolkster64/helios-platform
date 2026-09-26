@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>HELIOS Workbench</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to workspace</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workspace navigation">
+        <a class="brand" href="#overview" aria-label="HELIOS home">
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 2 36 11v18L20 38 4 29V11Z"/><path d="M12 12v16m16-16v16M12 20h16"/></svg>
+          <span>HELIOS<small>CONTROL WORKBENCH</small></span>
+        </a>
+        <div class="workspace-label"><span class="workspace-dot"></span>Personal workspace<span class="workspace-key">01</span></div>
+        <div class="nav-caption">WORKSPACE</div>
+        <nav class="nav-list" aria-label="Main">
+          <button class="nav-button active" data-panel="overview" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview<span class="nav-shortcut">01</span></button>
+          <button class="nav-button" data-panel="connections"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 15 6-6m-7 4-2 2a4 4 0 0 0 6 6l3-3m1-7 2-2a4 4 0 0 0-6-6L9 6"/></svg>Connections<span class="nav-shortcut">02</span></button>
+          <button class="nav-button" data-panel="workbench"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v14H3zM8 7V3h8v4M3 12h18m-10 0v3h2v-3"/></svg>Workbench<span class="nav-shortcut">03</span></button>
+          <button class="nav-button" data-panel="usb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h8v13H8zM9 3h6v5H9zM11 3v3m2-3v3m-3 11h4"/></svg>USB planner<span class="nav-shortcut">04</span></button>
+          <button class="nav-button" data-panel="lab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8m-6 0v7l-6 9a1.5 1.5 0 0 0 1.3 2h13.4a1.5 1.5 0 0 0 1.3-2l-6-9V3M7 15h10"/></svg>Lab<span class="nav-shortcut">05</span></button>
+        </nav>
+        <div class="sidebar-note"><span class="tiny-label">THE NEW FOUNDATION</span><strong>One shell.<br />Room for everything.</strong><p>Electron desktop.<br />Your tools, connected by design.</p></div>
+        <div class="sidebar-bottom">
+          <button class="profile-summary" data-panel="workbench" aria-label="Change active profile"><span class="avatar" id="profile-avatar">D</span><span><strong id="sidebar-profile">Developer</strong><small>Workspace profile</small></span><span aria-hidden="true">⌄</span></button>
+          <div class="runtime-label"><span class="status-dot"></span><span id="runtime-label">Starting local workspace</span></div>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="breadcrumb">Workspace<span>/</span><strong id="breadcrumb-title">Overview</strong></div>
+          <div class="topbar-actions"><span class="build-tag">ELECTRON EDITION</span><button class="button button-quiet small" id="refresh-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m10-4a7 7 0 0 0-12-3L4 8m16 8-3 3a7 7 0 0 1-12-3"/></svg>Check status</button></div>
+        </header>
+        <main id="main-content" tabindex="-1">
+          <div id="notice" class="notice" role="status" hidden></div>
+          <section class="panel" id="panel-overview" aria-labelledby="overview-heading">
+            <div class="page-heading"><div><span class="eyebrow">YOUR CONTROL CENTER</span><h1 id="overview-heading">Everything, in orbit.</h1><p>A modular home for your code, connections, and next idea.</p></div><span class="local-badge"><span class="status-dot"></span><span id="mode-label">Local workspace</span></span></div>
+            <div class="hero-card">
+              <div class="hero-copy"><span class="hero-kicker"><span class="line"></span>HELLO, BUILDER</span><h2>Your workbench.<br /><span>Your way.</span></h2><p>Switch profiles. Shape your workspace.<br />Bring every part of HELIOS into one place.</p><div class="hero-actions"><button class="button button-primary" data-panel="workbench">Open workbench<span aria-hidden="true">↗</span></button><button class="button button-quiet" data-panel="connections">Explore connections<span aria-hidden="true">→</span></button></div><div class="hero-footnote"><span class="status-dot"></span><span id="hero-profile">Developer profile active</span><span class="separator">/</span><span>Local first</span></div></div>
+              <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div><div class="orbit-node node-one"></div><div class="orbit-node node-two"></div><div class="orbit-node node-three"></div><div class="orbital-label orbital-label-top">HELIOS / CORE</div><svg class="blade" viewBox="0 0 240 300"><defs><linearGradient id="blade-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e2ffff"/><stop offset="55%" stop-color="#5cedeb"/><stop offset="100%" stop-color="#17778b"/></linearGradient></defs><path class="blade-shadow" d="m139 17 23 135-41 36-10-105z"/><path class="blade-edge" d="m139 17 23 135-41 36-10-105z"/><path class="blade-inner" d="m138 43 10 103-21 18-3-77z"/><circle class="blade-ring-outer" cx="114" cy="189" r="42"/><circle class="blade-ring-inner" cx="114" cy="189" r="26"/><path class="blade-grip" d="m91 226 19 6-23 56-15-7z"/><path class="blade-detail" d="m79 263 18 7m-14-17 18 7m-14-17 18 7M76 186l19-25m37 55 21-24"/><circle class="blade-core" cx="114" cy="189" r="7"/></svg><div class="orbital-label orbital-label-bottom">A NEW PHASE BEGINS</div><div class="art-coordinate coordinate-one">26.09</div><div class="art-coordinate coordinate-two">∞</div></div>
+            </div>
+            <div class="section-heading"><h2>Workspace at a glance</h2><span>Built around your workflow</span></div>
+            <div class="summary-grid"><button class="summary-card" data-panel="connections"><span class="card-icon">⌘</span><span class="card-kicker">CONNECTIONS</span><strong id="connection-summary">Configuration needed</strong><span class="card-description">Review services and their capabilities</span><span class="card-arrow" aria-hidden="true">↗</span></button><button class="summary-card" data-panel="workbench"><span class="card-icon">◇</span><span class="card-kicker">ACTIVE PROFILE</span><strong id="profile-summary">Developer</strong><span class="card-description">A workspace that moves with you</span><span class="card-arrow" aria-hidden="true">↗</span></button><button class="summary-card" data-panel="lab"><span class="card-icon">⌁</span><span class="card-kicker">EXPERIMENT & BUILD</span><strong>Start in the Lab</strong><span class="card-description">Forge your app. Explore with Fiddle.</span><span class="card-arrow" aria-hidden="true">↗</span></button></div>
+            <div class="overview-bottom"><section class="surface"><div class="section-heading surface-heading"><h2>Your connections</h2><button class="text-button" data-panel="connections">View all <span aria-hidden="true">→</span></button></div><div class="connection-list" id="overview-connections"></div></section><section class="surface integration-surface"><span class="eyebrow">LOCAL INTEGRATION BRIDGE</span><div class="bridge-symbol" aria-hidden="true">⌁</div><h2 id="bridge-heading">Waiting for a status check</h2><p id="bridge-detail">Inspect the local integration configuration to see what is ready.</p><div class="bridge-meta" id="bridge-meta">No check recorded</div></section></div>
+          </section>
+          <section class="panel" id="panel-connections" aria-labelledby="connections-heading" hidden>
+            <div class="page-heading"><div><span class="eyebrow">BRING YOUR TOOLS TOGETHER</span><h1 id="connections-heading">Connections</h1><p>Clear capabilities. Real status. A place for every service.</p></div><span class="local-badge">Configuration inventory</span></div>
+            <div class="callout"><span class="callout-symbol" aria-hidden="true">↗</span><div><strong>Your accounts stay with their providers.</strong><p>This foundation shows connector readiness. Authentication and remote actions depend on configured service adapters; opening a provider does not connect an account.</p></div></div>
+            <div class="connection-grid" id="connection-grid"></div>
+            <div class="surface reference-strip"><div><strong>Open your tools</strong><p>Launch a provider in your default browser.</p></div><div class="reference-actions"><button class="button button-secondary" data-resource="github">GitHub ↗</button><button class="button button-secondary" data-resource="chatgpt">ChatGPT ↗</button></div></div>
+          </section>
+          <section class="panel" id="panel-workbench" aria-labelledby="workbench-heading" hidden>
+            <div class="page-heading"><div><span class="eyebrow">MAKE SPACE FOR YOUR FLOW</span><h1 id="workbench-heading">Workbench</h1><p>Choose a profile, tune the interface, and select your modules.</p></div><span class="local-badge">Preferences saved locally</span></div>
+            <div class="section-heading"><h2>Choose your profile</h2><span>One workspace, six perspectives</span></div><div class="profile-grid" id="profile-grid" role="group" aria-label="Workspace profiles"></div>
+            <div class="section-heading"><h2>Workspace modules</h2><span>Local preferences · adapter execution is separate</span></div><div class="plugin-grid" id="plugin-grid"></div>
+            <div class="surface settings-surface"><div class="section-heading surface-heading"><h2>Comfort & focus</h2><span>Small changes, better flow</span></div><label class="setting-row"><span><strong>Compact layout</strong><small>Keep more of your workspace in view.</small></span><input type="checkbox" id="compact-toggle" class="switch" /></label><label class="setting-row"><span><strong>Reduced motion</strong><small>Keep decorative effects still.</small></span><input type="checkbox" id="motion-toggle" class="switch" /></label></div>
+          </section>
+          <section class="panel" id="panel-usb" aria-labelledby="usb-heading" hidden>
+            <div class="page-heading"><div><span class="eyebrow">PLAN BEFORE YOU BUILD</span><h1 id="usb-heading">USB planner</h1><p>Sketch a portable workspace, from recovery to your next project.</p></div><span class="local-badge">Planning only</span></div>
+            <div class="callout"><span class="callout-symbol" aria-hidden="true">◇</span><div><strong>A capacity sketch, with no disk operations.</strong><p>These are illustrative allocations, not a bootable image or a validated Windows installation layout. No device is detected, partitioned, formatted, or changed.</p></div></div>
+            <div class="planner-grid"><form id="planner-form" class="surface planner-form"><h2>Define your workspace</h2><label class="field-label" for="capacity">Nominal device capacity</label><select id="capacity"><option value="64">64 GiB</option><option value="128" selected>128 GiB</option><option value="256">256 GiB</option><option value="512">512 GiB</option><option value="1024">1 TiB</option></select><label class="field-label" for="usb-profile">Workspace profile</label><select id="usb-profile"></select><label class="field-label range-heading" for="vault-share">Vault allocation <output id="vault-output" for="vault-share">20%</output></label><input type="range" id="vault-share" min="0" max="50" step="5" value="20"/><label class="checkbox-label"><input id="include-recovery" type="checkbox" checked/>Reserve 8 GiB for recovery files</label><p class="input-hint">GiB is a planning unit here. Actual usable capacity, filesystem requirements, and installation requirements need validation against your device.</p><button type="submit" class="button button-primary">Update capacity sketch <span aria-hidden="true">→</span></button></form><section class="surface plan-preview" aria-labelledby="plan-heading"><div class="section-heading surface-heading"><h2 id="plan-heading">Capacity sketch</h2><span id="plan-capacity">128 GiB</span></div><div class="capacity-bar" id="capacity-bar" role="img" aria-label="Proposed capacity allocation"></div><div class="plan-legend" id="plan-legend"></div><div class="plan-total"><span>Unallocated in this sketch</span><strong id="plan-unallocated">0 GiB</strong></div><div class="plan-note"><strong id="plan-profile">Developer workspace</strong><p id="plan-note">Workspace allocation is a placeholder for files and tools.</p></div><button class="button button-secondary" id="export-plan">Download planning JSON <span aria-hidden="true">↓</span></button><p class="input-hint">Exports this sketch only. It contains no scripts or device instructions.</p></section></div>
+          </section>
+          <section class="panel" id="panel-lab" aria-labelledby="lab-heading" hidden>
+            <div class="page-heading"><div><span class="eyebrow">WHERE IDEAS TAKE SHAPE</span><h1 id="lab-heading">The Lab</h1><p>A small space to explore the new desktop foundation.</p></div><span class="local-badge">Reference workspace</span></div>
+            <div class="lab-grid"><section class="surface lab-card"><span class="tool-emblem" aria-hidden="true">F<span>↗</span></span><span class="eyebrow">BUILD & PACKAGE</span><h2>Electron Forge</h2><p>The desktop build foundation: start locally, package the app, and prepare platform installers.</p><button class="button button-secondary" data-resource="forge">Open Forge reference ↗</button></section><section class="surface lab-card"><span class="tool-emblem fiddle-emblem" aria-hidden="true">ƒ</span><span class="eyebrow">EXPLORE & PROTOTYPE</span><h2>Electron Fiddle</h2><p>Try focused Electron experiments in the standalone Fiddle app before bringing them into HELIOS.</p><button class="button button-secondary" data-resource="fiddle">Open Fiddle reference ↗</button></section></div>
+            <section class="surface contract-surface"><div><span class="eyebrow">SMALL, EXPLICIT CONTRACTS</span><h2>The renderer meets the bridge.</h2><p>The interface requests bounded actions from the preload bridge. Provider credentials and native operations belong outside the renderer.</p><div class="contract-tags"><span>Context isolated</span><span>Typed boundaries</span><span>Local preferences</span></div></div><div class="code-panel"><div class="code-title"><span class="code-dot"></span>renderer / example.js<span>READ ONLY</span></div><pre><code>const snapshot = await window.helios
+  .getSnapshot();
+
+await window.helios.setPreferences({
+  profile: 'developer',
+  reducedMotion: true
+});</code></pre></div></section>
+            <div class="surface lab-boundary"><span class="callout-symbol" aria-hidden="true">⌘</span><div><strong>Extend the platform through reviewed modules.</strong><p>Module switches store preferences. They do not install extensions or execute arbitrary code. Fiddle experiments run separately; import reviewed code through the repository.</p></div></div>
+          </section>
+        </main>
+        <footer class="workspace-footer"><span>HELIOS <span class="footer-divider">/</span> A workspace for what comes next.</span><span id="version-label">Desktop foundation</span></footer>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>
