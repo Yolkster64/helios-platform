@@ -1,6 +1,14 @@
 # ADR-0010: WinUI 3 Is the Only Active HELIOS Desktop Architecture
 
-Status: Accepted
+Status: Superseded for active product UI by [ADR-0011](ADR-0011-ELECTRON-WORKBENCH.md), 2026-09-26.
+
+The decision below records the previous WinUI direction. The owner now requires
+Electron + Forge for the complete HELIOS product interface. Keep the existing
+`src/gui` tree, `config/ui/winui3-only.v1.json`, and its cutover validator intact
+as scoped legacy-tree and provenance guards until a reviewed archival change.
+They do not prohibit `apps/desktop`, validate Electron, or authorize a WinUI
+fallback in the new workbench. The prior separate-GUI extraction is reassessed
+after Electron parity; repository renaming and production permissions are unchanged.
 
 ## Decision
 

@@ -59,9 +59,9 @@ jobs:
             echo "Discovered Node.js modules: $MODULES"
           fi
 
-          echo "modules=$MODULES" >> $GITHUB_OUTPUT
-          echo "node-version=18" >> $GITHUB_OUTPUT
-          echo "has-modules=$HAS_MODULES" >> $GITHUB_OUTPUT
+          echo "modules=$MODULES" >> "$GITHUB_OUTPUT"
+          echo "node-version=24" >> "$GITHUB_OUTPUT"
+          echo "has-modules=$HAS_MODULES" >> "$GITHUB_OUTPUT"
           echo "Build matrix configured"
 
   build:
@@ -72,6 +72,8 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.setup.outputs.modules) }}
       fail-fast: false
+    env:
+      MODULE_DIR: ${{ matrix.module }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -88,6 +90,16 @@ jobs:
         if: matrix.module == '__no_node_modules__'
         run: echo "No Node.js modules were detected, so this build entry is intentionally a no-op."
 
+      - name: Prepare Module Artifact Name
+        id: module-artifact
+        if: matrix.module != '__no_node_modules__'
+        run: |
+          # Artifact names cannot contain path separators. A digest also keeps
+          # distinct module paths unique when their sanitized names collide.
+          MODULE_SLUG=$(printf '%s' "$MODULE_DIR" | tr -c 'A-Za-z0-9._-' '-')
+          MODULE_DIGEST=$(printf '%s' "$MODULE_DIR" | sha256sum | cut -c1-12)
+          printf 'name=%s-%s\n' "$MODULE_SLUG" "$MODULE_DIGEST" >> "$GITHUB_OUTPUT"
+
       - name: Setup NPM Build Cache
         if: github.event.inputs.clean_build != 'true' && hashFiles(format('{0}/package-lock.json', matrix.module)) != ''
         uses: actions/cache@v4
@@ -103,16 +115,18 @@ jobs:
             ${{ runner.os }}-npm-
 
       - name: Display Environment
+        env:
+          CLEAN_BUILD: ${{ github.event.inputs.clean_build }}
         run: |
           echo "Node version: $(node --version)"
           echo "NPM version: $(npm --version)"
-          echo "Module: ${{ matrix.module }}"
-          echo "Clean build: ${{ github.event.inputs.clean_build }}"
+          printf 'Module: %s\n' "$MODULE_DIR"
+          printf 'Clean build: %s\n' "$CLEAN_BUILD"
 
       - name: Install Dependencies
         if: matrix.module != '__no_node_modules__'
         run: |
-          cd ${{ matrix.module }}
+          cd -- "$MODULE_DIR"
           if [ -f package-lock.json ]; then
             npm ci --prefer-offline --no-audit
           else
@@ -123,7 +137,7 @@ jobs:
         if: matrix.module != '__no_node_modules__'
         continue-on-error: true
         run: |
-          cd ${{ matrix.module }}
+          cd -- "$MODULE_DIR"
           if [ -f "package.json" ] && grep -q '"lint"' package.json; then
             npm run lint
           else
@@ -133,7 +147,7 @@ jobs:
       - name: Build Module
         if: matrix.module != '__no_node_modules__'
         run: |
-          cd ${{ matrix.module }}
+          cd -- "$MODULE_DIR"
           if [ -f "package.json" ] && grep -q '"build"' package.json; then
             npm run build
           else
@@ -143,9 +157,10 @@ jobs:
       - name: Run Tests
         if: matrix.module != '__no_node_modules__'
         run: |
-          cd ${{ matrix.module }}
+          cd -- "$MODULE_DIR"
           if [ -f "package.json" ] && grep -q '"test"' package.json; then
-            npm test -- --coverage --passWithNoTests
+            # Each package owns its test runner and flags (Node test, Jest, etc.).
+            npm test
           else
             echo "No test script found"
           fi
@@ -153,7 +168,7 @@ jobs:
       - name: Generate Coverage Report
         if: always() && matrix.module != '__no_node_modules__'
         run: |
-          cd ${{ matrix.module }}
+          cd -- "$MODULE_DIR"
           if [ -d "coverage" ]; then
             echo "Coverage report generated"
             find coverage -name "*.json" -o -name "*.html" | head -10
@@ -163,7 +178,7 @@ jobs:
         if: always() && matrix.module != '__no_node_modules__'
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.module }}
+          name: build-artifacts-${{ steps.module-artifact.outputs.name }}
           path: |
             ${{ matrix.module }}/dist/
             ${{ matrix.module }}/build/
@@ -174,7 +189,7 @@ jobs:
         if: always() && matrix.module != '__no_node_modules__'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.module }}
+          name: coverage-${{ steps.module-artifact.outputs.name }}
           path: ${{ matrix.module }}/coverage/
           if-no-files-found: warn
           retention-days: 7

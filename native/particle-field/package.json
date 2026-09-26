@@ -1,0 +1,20 @@
+{
+  "name": "@helios/particle-field",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional, disabled-by-default Node-API particle integration for a future Electron utility process",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "gypfile": false,
+  "engines": { "node": "^22.22.2 || ^24.15.0 || >=26.0.0" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:gyp": "node-gyp rebuild",
+    "test": "node --test test/*.test.cjs",
+    "test:loader": "node --test test/loader.test.cjs"
+  },
+  "devDependencies": {
+    "node-api-headers": "1.9.0",
+    "node-gyp": "13.0.2"
+  }
+}

@@ -47,15 +47,19 @@ jobs:
         id: discover
         run: |
           echo "Discovering components..."
-          COMPONENTS=$(find . -name "package.json" -o -name "manifest.json" | jq -R 'split("/")[1:3] | join("/")' | sort -u | jq -s .)
-          echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
-          echo "count=$(echo $COMPONENTS | jq 'length')" >> $GITHUB_OUTPUT
-          echo "Found $(echo $COMPONENTS | jq 'length') components"
+          COMPONENTS=$(find . -type d \( -name .git -o -name node_modules -o -name out -o -name dist -o -name build \) -prune -o \
+            -type f \( -name package.json -o -name manifest.json \) -printf '%h\0' |
+            jq -Rsc 'split("\u0000") | map(select(length > 0) | sub("^\\./"; "")) | unique')
+          COUNT=$(jq 'length' <<< "$COMPONENTS")
+          echo "components=$COMPONENTS" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Found $COUNT components"
 
   validate-versions:
     name: Validate Component Versions
     runs-on: ubuntu-latest
     needs: discover-components
+    if: needs.discover-components.outputs.component_count != '0'
     strategy:
       matrix:
         component: ${{ fromJson(needs.discover-components.outputs.components) }}
@@ -70,33 +74,46 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '24'
+          cache: ${{ hashFiles(format('{0}/package-lock.json', matrix.component)) != '' && 'npm' || '' }}
+          cache-dependency-path: ${{ matrix.component }}/package-lock.json
 
       - name: Extract Version Info
         id: version-info
+        env:
+          COMPONENT: ${{ matrix.component }}
         run: |
-          MANIFEST_FILE="${{ matrix.component }}/manifest.json"
-          PACKAGE_FILE="${{ matrix.component }}/package.json"
-          
-          if [ -f "$MANIFEST_FILE" ]; then
-            VERSION=$(jq -r '.version' "$MANIFEST_FILE")
-            COMPONENT_NAME=$(jq -r '.name' "$MANIFEST_FILE")
-          elif [ -f "$PACKAGE_FILE" ]; then
-            VERSION=$(jq -r '.version' "$PACKAGE_FILE")
-            COMPONENT_NAME=$(jq -r '.name' "$PACKAGE_FILE")
+          MANIFEST_FILE="$COMPONENT/manifest.json"
+          PACKAGE_FILE="$COMPONENT/package.json"
+
+          if [ -f "$PACKAGE_FILE" ]; then
+            VERSION_FILE="$PACKAGE_FILE"
+            REGISTRY_CHECK=true
+          elif [ -f "$MANIFEST_FILE" ]; then
+            VERSION_FILE="$MANIFEST_FILE"
+            REGISTRY_CHECK=false
           else
-            echo "::error::No version manifest found for ${{ matrix.component }}"
+            echo "::error::No version manifest found for $COMPONENT"
             exit 1
           fi
-          
-          echo "name=$COMPONENT_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "component=${{ matrix.component }}" >> $GITHUB_OUTPUT
+
+          jq -e 'type == "object" and
+            (.name | type == "string" and length > 0 and (test("[\r\n]") | not)) and
+            (.version | type == "string" and length > 0 and (test("[\r\n]") | not)) and
+            ((has("private") | not) or (.private | type == "boolean"))' "$VERSION_FILE" > /dev/null
+          VERSION=$(jq -r '.version' "$VERSION_FILE")
+          COMPONENT_NAME=$(jq -r '.name' "$VERSION_FILE")
+          PRIVATE=$(jq -r '.private == true' "$VERSION_FILE")
+          echo "name=$COMPONENT_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "component=$COMPONENT" >> "$GITHUB_OUTPUT"
+          echo "private=$PRIVATE" >> "$GITHUB_OUTPUT"
+          echo "registry_check=$REGISTRY_CHECK" >> "$GITHUB_OUTPUT"
 
       - name: Validate Version Format
+        env:
+          VERSION: ${{ steps.version-info.outputs.version }}
         run: |
-          VERSION="${{ steps.version-info.outputs.version }}"
           if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
             echo "::error::Invalid version format: $VERSION"
             exit 1
@@ -104,30 +121,57 @@ jobs:
           echo "✓ Version format valid: $VERSION"
 
       - name: Check for Conflicts
+        env:
+          COMPONENT_NAME: ${{ steps.version-info.outputs.name }}
+          VERSION: ${{ steps.version-info.outputs.version }}
+          PRIVATE: ${{ steps.version-info.outputs.private }}
+          REGISTRY_CHECK: ${{ steps.version-info.outputs.registry_check }}
         run: |
-          COMPONENT="${{ steps.version-info.outputs.component }}"
-          VERSION="${{ steps.version-info.outputs.version }}"
-          
-          # Check if version is already published
-          npm view "${{ steps.version-info.outputs.name }}@$VERSION" > /dev/null 2>&1
-          if [ $? -eq 0 ]; then
+          if [ "$PRIVATE" = true ]; then
+            echo "Skipping npm registry lookup for private package $COMPONENT_NAME; local validation still applies."
+            exit 0
+          fi
+          if [ "$REGISTRY_CHECK" != true ]; then
+            echo "Skipping npm registry lookup for manifest-only component $COMPONENT_NAME."
+            exit 0
+          fi
+
+          REGISTRY_OUTPUT=$(mktemp)
+          REGISTRY_ERROR=$(mktemp)
+          trap 'rm -f "$REGISTRY_OUTPUT" "$REGISTRY_ERROR"' EXIT
+          if npm view "$COMPONENT_NAME@$VERSION" version --json > "$REGISTRY_OUTPUT" 2> "$REGISTRY_ERROR"; then
             echo "::warning::Version $VERSION already published"
+          else
+            REGISTRY_STATUS=$?
+            if jq -e '.error.code == "E404"' "$REGISTRY_OUTPUT" > /dev/null 2>&1; then
+              echo "Version $VERSION is not published on the configured npm registry."
+            else
+              echo "::error::npm registry lookup failed for $COMPONENT_NAME (exit $REGISTRY_STATUS); publication status could not be verified."
+              exit "$REGISTRY_STATUS"
+            fi
           fi
 
       - name: Verify Dependencies
+        env:
+          COMPONENT: ${{ steps.version-info.outputs.component }}
         run: |
-          COMPONENT="${{ steps.version-info.outputs.component }}"
           if [ -f "$COMPONENT/package.json" ]; then
             echo "Checking dependencies for $COMPONENT..."
-            jq '.dependencies, .devDependencies' "$COMPONENT/package.json" || true
+            jq -e 'all([.dependencies, .devDependencies, .optionalDependencies, .peerDependencies][];
+              . == null or (type == "object" and all(.[]; type == "string" and length > 0)))' \
+              "$COMPONENT/package.json" > /dev/null
           fi
 
       - name: Report Version Info
         if: github.event.inputs.verbose == 'true'
+        env:
+          COMPONENT_NAME: ${{ steps.version-info.outputs.name }}
+          VERSION: ${{ steps.version-info.outputs.version }}
+          COMPONENT: ${{ steps.version-info.outputs.component }}
         run: |
-          echo "Component: ${{ steps.version-info.outputs.name }}"
-          echo "Version: ${{ steps.version-info.outputs.version }}"
-          echo "Location: ${{ steps.version-info.outputs.component }}"
+          echo "Component: $COMPONENT_NAME"
+          echo "Version: $VERSION"
+          echo "Location: $COMPONENT"
 
   generate-report:
     name: Generate Version Report
@@ -141,26 +185,39 @@ jobs:
           submodules: true
 
       - name: Build Summary
+        env:
+          COMPONENT_COUNT: ${{ needs.discover-components.outputs.component_count }}
+          DISCOVERY_RESULT: ${{ needs.discover-components.result }}
+          VALIDATION_RESULT: ${{ needs.validate-versions.result }}
         run: |
-          echo "## Component Version Check Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Total Components**: ${{ needs.discover-components.outputs.component_count }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_STEP_SUMMARY
-          echo "**Status**: ${{ needs.validate-versions.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Validation Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Version format validation: ✓ Passed" >> $GITHUB_STEP_SUMMARY
-          echo "- Dependency checks: ✓ Completed" >> $GITHUB_STEP_SUMMARY
-          echo "- Conflict detection: ✓ Completed" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Component Version Check Report"
+            echo ""
+            echo "**Total Components**: ${COMPONENT_COUNT:-unknown}"
+            echo "**Timestamp**: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "**Discovery Status**: $DISCOVERY_RESULT"
+            echo "**Validation Status**: $VALIDATION_RESULT"
+            echo ""
+            if [ "$VALIDATION_RESULT" = success ]; then
+              echo "Local version and dependency metadata validation passed."
+              echo "Registry checks skip private and manifest-only components; published versions produce warnings. See job logs for details."
+            else
+              echo "Validation did not complete successfully. See job logs for failed, cancelled, or skipped checks."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          COMPONENT_COUNT: ${{ needs.discover-components.outputs.component_count }}
+          DISCOVERY_RESULT: ${{ needs.discover-components.result }}
+          VALIDATION_RESULT: ${{ needs.validate-versions.result }}
         with:
           script: |
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ✓ Component Version Validation\n\n- Total components validated: ${{ needs.discover-components.outputs.component_count }}\n- All version formats valid\n- No conflicts detected\n\n[View detailed report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+              body: `## Component Version Validation\n\n- Components discovered: ${process.env.COMPONENT_COUNT || 'unknown'}\n- Discovery: ${process.env.DISCOVERY_RESULT}\n- Validation: ${process.env.VALIDATION_RESULT}\n\nPrivate and manifest-only components skip npm registry checks. Published versions produce warnings; see the jobs for details.\n\n[View detailed report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
             })

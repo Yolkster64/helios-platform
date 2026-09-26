@@ -78,6 +78,8 @@ coverage/
 node_modules/
 packages/
 package-lock.json
+!apps/desktop/package-lock.json
+!native/particle-field/package-lock.json
 yarn.lock
 poetry.lock
 pip-log.txt
